@@ -1,0 +1,6 @@
+Screenshot ID: ss_020733snm
+Captured: 2026-04-05
+Description: DocumentReviewPage - "Save Draft" button clicked. Sonner toast notification
+"Changes saved as draft" visible in top-right corner with green checkmark icon.
+No browser alert() dialog was triggered.
+URL: http://localhost:3002/documents/1

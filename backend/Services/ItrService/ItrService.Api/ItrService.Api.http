@@ -1,0 +1,6 @@
+@ItrService.Api_HostAddress = http://localhost:5136
+
+GET {{ItrService.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

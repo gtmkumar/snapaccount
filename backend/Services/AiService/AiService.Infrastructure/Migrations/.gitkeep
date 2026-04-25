@@ -1,0 +1,2 @@
+# EF Core migrations directory
+# Run: dotnet ef migrations add InitialCreate --project AiService.Infrastructure --startup-project AiService.Api

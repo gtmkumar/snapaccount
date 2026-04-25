@@ -1,0 +1,7 @@
+Screenshot ID: ss_8837j0yk9
+Captured: 2026-04-05
+Description: DocumentReviewPage - "Reject" button clicked. Inline red confirmation banner appears
+between the top action bar and the document viewer panel. Banner shows:
+"Are you sure you want to reject this document? This action cannot be undone."
+with Cancel and Confirm Reject (red) buttons. No window.confirm() dialog was triggered.
+URL: http://localhost:3002/documents/1

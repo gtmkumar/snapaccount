@@ -1,0 +1,5 @@
+/**
+ * Expo Router entry — delegates to the React Navigation app
+ */
+import App from '../../../App';
+export default App;

@@ -1,0 +1,276 @@
+# SnapAccount — Docker Compose Dev Overrides
+# Applied automatically alongside docker-compose.yml during local development.
+# Enables: hot-reload volumes, debug ports, relaxed health checks, verbose logging.
+#
+# Do NOT commit real secrets — use .env for local values.
+
+version: "3.9"
+
+services:
+
+  postgres:
+    # Expose postgres metrics port for local pgAdmin / DBeaver connections
+    ports:
+      - "5432:5432"
+    # Extra init SQL for dev: create all schemas + enable pgvector
+    volumes:
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+      - ./database/dev-seed:/docker-entrypoint-initdb.d/seed:ro
+
+  # ── Dev overrides for all backend services ──
+  # Hot reload via `dotnet watch` — mount source code as volume.
+  # Each service gets a debug port (50001+N).
+
+  auth-service:
+    build:
+      target: build           # stop at build stage — no publish/runtime stage needed for watch
+      args:
+        SERVICE_NAME: AuthService
+    command: ["dotnet", "watch", "--project", "src/AuthService/AuthService.csproj", "run", "--no-launch-profile"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+      Logging__LogLevel__Microsoft.EntityFrameworkCore: Information
+    volumes:
+      - ./backend:/src
+      - ${HOME}/.nuget/packages:/root/.nuget/packages:ro
+    ports:
+      - "5001:8080"
+      - "50001:50001"  # debug port
+    healthcheck:
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  document-service:
+    build:
+      target: build
+      args:
+        SERVICE_NAME: DocumentService
+    command: ["dotnet", "watch", "--project", "src/DocumentService/DocumentService.csproj", "run", "--no-launch-profile"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+    volumes:
+      - ./backend:/src
+      - ${HOME}/.nuget/packages:/root/.nuget/packages:ro
+    ports:
+      - "5002:8080"
+      - "50002:50002"
+    healthcheck:
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  accounting-service:
+    build:
+      target: build
+      args:
+        SERVICE_NAME: AccountingService
+    command: ["dotnet", "watch", "--project", "src/AccountingService/AccountingService.csproj", "run", "--no-launch-profile"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+    volumes:
+      - ./backend:/src
+      - ${HOME}/.nuget/packages:/root/.nuget/packages:ro
+    ports:
+      - "5003:8080"
+      - "50003:50003"
+    healthcheck:
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  gst-service:
+    build:
+      target: build
+      args:
+        SERVICE_NAME: GstService
+    command: ["dotnet", "watch", "--project", "src/GstService/GstService.csproj", "run", "--no-launch-profile"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+    volumes:
+      - ./backend:/src
+      - ${HOME}/.nuget/packages:/root/.nuget/packages:ro
+    ports:
+      - "5004:8080"
+      - "50004:50004"
+    healthcheck:
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  loan-service:
+    build:
+      target: build
+      args:
+        SERVICE_NAME: LoanService
+    command: ["dotnet", "watch", "--project", "src/LoanService/LoanService.csproj", "run", "--no-launch-profile"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+    volumes:
+      - ./backend:/src
+      - ${HOME}/.nuget/packages:/root/.nuget/packages:ro
+    ports:
+      - "5005:8080"
+      - "50005:50005"
+    healthcheck:
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  itr-service:
+    build:
+      target: build
+      args:
+        SERVICE_NAME: ItrService
+    command: ["dotnet", "watch", "--project", "src/ItrService/ItrService.csproj", "run", "--no-launch-profile"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+    volumes:
+      - ./backend:/src
+      - ${HOME}/.nuget/packages:/root/.nuget/packages:ro
+    ports:
+      - "5006:8080"
+      - "50006:50006"
+    healthcheck:
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  chat-service:
+    build:
+      target: build
+      args:
+        SERVICE_NAME: ChatService
+    command: ["dotnet", "watch", "--project", "src/ChatService/ChatService.csproj", "run", "--no-launch-profile"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+    volumes:
+      - ./backend:/src
+      - ${HOME}/.nuget/packages:/root/.nuget/packages:ro
+    ports:
+      - "5007:8080"
+      - "50007:50007"
+    healthcheck:
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  notification-service:
+    build:
+      target: build
+      args:
+        SERVICE_NAME: NotificationService
+    command: ["dotnet", "watch", "--project", "src/NotificationService/NotificationService.csproj", "run", "--no-launch-profile"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+    volumes:
+      - ./backend:/src
+      - ${HOME}/.nuget/packages:/root/.nuget/packages:ro
+    ports:
+      - "5008:8080"
+      - "50008:50008"
+    healthcheck:
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  report-service:
+    build:
+      target: build
+      args:
+        SERVICE_NAME: ReportService
+    command: ["dotnet", "watch", "--project", "src/ReportService/ReportService.csproj", "run", "--no-launch-profile"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+    volumes:
+      - ./backend:/src
+      - ${HOME}/.nuget/packages:/root/.nuget/packages:ro
+    ports:
+      - "5009:8080"
+      - "50009:50009"
+    healthcheck:
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  subscription-service:
+    build:
+      target: build
+      args:
+        SERVICE_NAME: SubscriptionService
+    command: ["dotnet", "watch", "--project", "src/SubscriptionService/SubscriptionService.csproj", "run", "--no-launch-profile"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+    volumes:
+      - ./backend:/src
+      - ${HOME}/.nuget/packages:/root/.nuget/packages:ro
+    ports:
+      - "5010:8080"
+      - "50010:50010"
+    healthcheck:
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  ai-service:
+    build:
+      target: build
+      args:
+        SERVICE_NAME: AiService
+    command: ["dotnet", "watch", "--project", "src/AiService/AiService.csproj", "run", "--no-launch-profile"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+    volumes:
+      - ./backend:/src
+      - ${HOME}/.nuget/packages:/root/.nuget/packages:ro
+    ports:
+      - "5011:8080"
+      - "50011:50011"
+    healthcheck:
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  # ── React Admin — Vite dev server (hot reload) ──
+  admin-panel:
+    build:
+      context: ./src/admin
+      dockerfile: Dockerfile
+      target: deps   # just install deps; Vite handles serving
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "8080"]
+    environment:
+      NODE_ENV: development
+      VITE_API_BASE_URL: http://localhost:5001
+    volumes:
+      - ./src/admin:/app
+      - /app/node_modules   # anonymous volume to prevent host override of node_modules
+    ports:
+      - "3000:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 5

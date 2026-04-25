@@ -1,0 +1,1 @@
+{"nodes": [{"id": "backend_shared_snapaccount_shared_domain_domainevent_cs", "label": "DomainEvent.cs", "file_type": "code", "source_file": "backend/Shared/SnapAccount.Shared.Domain/DomainEvent.cs", "source_location": "L1"}], "edges": [], "raw_calls": []}

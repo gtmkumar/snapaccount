@@ -1,0 +1,329 @@
+# SnapAccount — Continuous Deployment to Staging
+# Triggered on push to `develop` branch.
+# Flow: Build Docker images → Push to Artifact Registry → Deploy to Cloud Run (staging).
+#
+# Authentication: GitHub OIDC → GCP Workload Identity Federation (keyless — no SA keys).
+
+name: CD Staging
+
+on:
+  push:
+    branches:
+      - develop
+
+concurrency:
+  group: cd-staging
+  cancel-in-progress: false   # don't cancel in-flight staging deploys
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: asia-south1
+  ARTIFACT_REGISTRY: asia-south1-docker.pkg.dev
+  REGISTRY_REPO: snapaccount/services
+  ENVIRONMENT: staging
+  CLOUD_RUN_SUFFIX: -staging
+
+permissions:
+  contents: read
+  id-token: write   # OIDC token for keyless GCP auth
+
+jobs:
+
+  # ─────────────────────────────────────────────
+  # Job 1: Resolve image tag
+  # ─────────────────────────────────────────────
+  prepare:
+    name: Prepare Build Context
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+      short_sha: ${{ steps.tag.outputs.short_sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: tag
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          TAG="staging-${SHORT_SHA}-$(date +%Y%m%d%H%M%S)"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Image tag: ${TAG}"
+
+  # ─────────────────────────────────────────────
+  # Job 2: Authenticate & build all service images
+  # ─────────────────────────────────────────────
+  build-push:
+    name: Build & Push — ${{ matrix.service.name }}
+    runs-on: ubuntu-latest
+    needs: prepare
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: AuthService
+            cloud_run_name: auth-service
+          - name: DocumentService
+            cloud_run_name: document-service
+          - name: AccountingService
+            cloud_run_name: accounting-service
+          - name: GstService
+            cloud_run_name: gst-service
+          - name: LoanService
+            cloud_run_name: loan-service
+          - name: ItrService
+            cloud_run_name: itr-service
+          - name: ChatService
+            cloud_run_name: chat-service
+          - name: NotificationService
+            cloud_run_name: notification-service
+          - name: ReportService
+            cloud_run_name: report-service
+          - name: SubscriptionService
+            cloud_run_name: subscription-service
+          - name: AiService
+            cloud_run_name: ai-service
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          build-args: SERVICE_NAME=${{ matrix.service.name }}
+          push: true
+          tags: |
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/${{ matrix.service.cloud_run_name }}:${{ needs.prepare.outputs.image_tag }}
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/${{ matrix.service.cloud_run_name }}:staging-latest
+          cache-from: type=gha,scope=${{ matrix.service.name }}-staging
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}-staging
+          labels: |
+            git.sha=${{ github.sha }}
+            git.ref=${{ github.ref }}
+            build.environment=staging
+            build.timestamp=${{ github.event.head_commit.timestamp }}
+
+  # ─────────────────────────────────────────────
+  # Job 3: Build & push React Admin
+  # ─────────────────────────────────────────────
+  build-push-admin:
+    name: Build & Push — Admin Panel
+    runs-on: ubuntu-latest
+    needs: prepare
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Fetch Firebase config from Secret Manager (staging)
+        id: firebase_config
+        run: |
+          echo "FIREBASE_WEB_API_KEY=$(gcloud secrets versions access latest --secret=firebase-web-api-key-staging)" >> "$GITHUB_ENV"
+          echo "FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=firebase-auth-domain)" >> "$GITHUB_ENV"
+          echo "FIREBASE_APP_ID=$(gcloud secrets versions access latest --secret=firebase-web-app-id-staging)" >> "$GITHUB_ENV"
+
+      - name: Build and push admin image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/admin
+          file: ./src/admin/Dockerfile
+          build-args: |
+            VITE_API_BASE_URL=https://api-staging.snapaccount.in
+            VITE_FIREBASE_API_KEY=${{ env.FIREBASE_WEB_API_KEY }}
+            VITE_FIREBASE_AUTH_DOMAIN=${{ env.FIREBASE_AUTH_DOMAIN }}
+            VITE_FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}
+            VITE_FIREBASE_APP_ID=${{ env.FIREBASE_APP_ID }}
+          push: true
+          tags: |
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/admin-panel:${{ needs.prepare.outputs.image_tag }}
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/admin-panel:staging-latest
+          cache-from: type=gha,scope=admin-panel-staging
+          cache-to: type=gha,mode=max,scope=admin-panel-staging
+
+  # ─────────────────────────────────────────────
+  # Job 4: Run database migrations (staging)
+  # ─────────────────────────────────────────────
+  run-migrations:
+    name: Run DB Migrations (Staging)
+    runs-on: ubuntu-latest
+    needs: [build-push]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Run migration Cloud Run Job (staging)
+        run: |
+          gcloud run jobs execute snapaccount-db-migrate-staging \
+            --region=${{ env.GCP_REGION }} \
+            --wait \
+            --format="json"
+
+  # ─────────────────────────────────────────────
+  # Job 5: Deploy all services to Cloud Run (staging)
+  # ─────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy to Cloud Run — ${{ matrix.service.cloud_run_name }}-staging
+    runs-on: ubuntu-latest
+    needs: [prepare, build-push, run-migrations]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - cloud_run_name: auth-service
+            sa: auth-service-sa
+            port: 8080
+          - cloud_run_name: document-service
+            sa: document-service-sa
+            port: 8080
+          - cloud_run_name: accounting-service
+            sa: accounting-service-sa
+            port: 8080
+          - cloud_run_name: gst-service
+            sa: gst-service-sa
+            port: 8080
+          - cloud_run_name: loan-service
+            sa: loan-service-sa
+            port: 8080
+          - cloud_run_name: itr-service
+            sa: itr-service-sa
+            port: 8080
+          - cloud_run_name: chat-service
+            sa: chat-service-sa
+            port: 8080
+          - cloud_run_name: notification-service
+            sa: notification-service-sa
+            port: 8080
+          - cloud_run_name: report-service
+            sa: report-service-sa
+            port: 8080
+          - cloud_run_name: subscription-service
+            sa: subscription-service-sa
+            port: 8080
+          - cloud_run_name: ai-service
+            sa: ai-service-sa
+            port: 8080
+
+    steps:
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run (staging)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ matrix.service.cloud_run_name }}-staging
+          image: ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/${{ matrix.service.cloud_run_name }}:${{ needs.prepare.outputs.image_tag }}
+          region: ${{ env.GCP_REGION }}
+          service_account: ${{ matrix.service.sa }}@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          flags: >-
+            --port=${{ matrix.service.port }}
+            --min-instances=0
+            --max-instances=3
+            --concurrency=80
+            --cpu=1
+            --memory=512Mi
+            --vpc-connector=snapaccount-vpc-connector
+            --vpc-egress=private-ranges-only
+            --ingress=internal-and-cloud-load-balancing
+            --no-allow-unauthenticated
+            --set-secrets=ASPNETCORE_DB_CONNECTION=db-connection-string-staging:latest,ASPNETCORE_REDIS_CONNECTION=redis-connection-string-staging:latest
+            --update-labels=environment=staging,git-sha=${{ needs.prepare.outputs.short_sha }}
+
+  deploy-admin-staging:
+    name: Deploy Admin Panel to Cloud Run (staging)
+    runs-on: ubuntu-latest
+    needs: [prepare, build-push-admin]
+
+    steps:
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy admin panel to Cloud Run (staging)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: admin-panel-staging
+          image: ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/admin-panel:${{ needs.prepare.outputs.image_tag }}
+          region: ${{ env.GCP_REGION }}
+          flags: >-
+            --port=8080
+            --min-instances=0
+            --max-instances=2
+            --concurrency=100
+            --cpu=1
+            --memory=256Mi
+            --ingress=all
+            --allow-unauthenticated
+            --update-labels=environment=staging,git-sha=${{ needs.prepare.outputs.short_sha }}
+
+  notify-staging:
+    name: Notify Staging Deployment
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-admin-staging]
+    if: always()
+
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "### Staging Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Image tag:** ${{ needs.prepare.outputs.image_tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Git SHA:** ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Region:** ${{ env.GCP_REGION }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status:** ${{ needs.deploy-staging.result }}" >> "$GITHUB_STEP_SUMMARY"

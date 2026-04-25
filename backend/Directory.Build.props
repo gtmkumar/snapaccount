@@ -1,0 +1,16 @@
+<Project>
+  <!--
+    Global build properties for all SnapAccount backend projects.
+    Pins EF Core packages to a consistent version across all 11 microservices
+    to eliminate MSB3277 assembly version conflict warnings.
+    All Infrastructure projects reference Npgsql.EntityFrameworkCore.PostgreSQL 10.*
+    which pulls EF Core Relational 10.0.5; the Api projects must agree.
+  -->
+  <ItemGroup>
+    <!-- Pin EF Core to latest 10.x uniformly across all projects that reference it transitively.
+         This eliminates the MSB3277 10.0.4 vs 10.0.5 EF Core Relational version conflict. -->
+    <PackageReference Update="Microsoft.EntityFrameworkCore" Version="10.*" />
+    <PackageReference Update="Microsoft.EntityFrameworkCore.Relational" Version="10.*" />
+    <PackageReference Update="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.*" />
+  </ItemGroup>
+</Project>

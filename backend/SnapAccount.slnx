@@ -1,0 +1,83 @@
+<Solution>
+  <Folder Name="/Services/" />
+  <Folder Name="/Services/AccountingService/">
+    <Project Path="Services/AccountingService/AccountingService.Api/AccountingService.Api.csproj" />
+    <Project Path="Services/AccountingService/AccountingService.Application/AccountingService.Application.csproj" />
+    <Project Path="Services/AccountingService/AccountingService.Domain/AccountingService.Domain.csproj" />
+    <Project Path="Services/AccountingService/AccountingService.Infrastructure/AccountingService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/AiService/">
+    <Project Path="Services/AiService/AiService.Api/AiService.Api.csproj" />
+    <Project Path="Services/AiService/AiService.Application/AiService.Application.csproj" />
+    <Project Path="Services/AiService/AiService.Domain/AiService.Domain.csproj" />
+    <Project Path="Services/AiService/AiService.Infrastructure/AiService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/AuthService/">
+    <Project Path="Services/AuthService/AuthService.Api/AuthService.Api.csproj" />
+    <Project Path="Services/AuthService/AuthService.Application/AuthService.Application.csproj" />
+    <Project Path="Services/AuthService/AuthService.Domain/AuthService.Domain.csproj" />
+    <Project Path="Services/AuthService/AuthService.Infrastructure/AuthService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/CallbackService/">
+    <Project Path="Services/CallbackService/CallbackService.Api/CallbackService.Api.csproj" />
+    <Project Path="Services/CallbackService/CallbackService.Application/CallbackService.Application.csproj" />
+    <Project Path="Services/CallbackService/CallbackService.Domain/CallbackService.Domain.csproj" />
+    <Project Path="Services/CallbackService/CallbackService.Infrastructure/CallbackService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/ChatService/">
+    <Project Path="Services/ChatService/ChatService.Api/ChatService.Api.csproj" />
+    <Project Path="Services/ChatService/ChatService.Application/ChatService.Application.csproj" />
+    <Project Path="Services/ChatService/ChatService.Domain/ChatService.Domain.csproj" />
+    <Project Path="Services/ChatService/ChatService.Infrastructure/ChatService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/DocumentService/">
+    <Project Path="Services/DocumentService/DocumentService.Api/DocumentService.Api.csproj" />
+    <Project Path="Services/DocumentService/DocumentService.Application/DocumentService.Application.csproj" />
+    <Project Path="Services/DocumentService/DocumentService.Domain/DocumentService.Domain.csproj" />
+    <Project Path="Services/DocumentService/DocumentService.Infrastructure/DocumentService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/GstService/">
+    <Project Path="Services/GstService/GstService.Api/GstService.Api.csproj" />
+    <Project Path="Services/GstService/GstService.Application/GstService.Application.csproj" />
+    <Project Path="Services/GstService/GstService.Domain/GstService.Domain.csproj" />
+    <Project Path="Services/GstService/GstService.Infrastructure/GstService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/ItrService/">
+    <Project Path="Services/ItrService/ItrService.Api/ItrService.Api.csproj" />
+    <Project Path="Services/ItrService/ItrService.Application/ItrService.Application.csproj" />
+    <Project Path="Services/ItrService/ItrService.Domain/ItrService.Domain.csproj" />
+    <Project Path="Services/ItrService/ItrService.Infrastructure/ItrService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/LoanService/">
+    <Project Path="Services/LoanService/LoanService.Api/LoanService.Api.csproj" />
+    <Project Path="Services/LoanService/LoanService.Application/LoanService.Application.csproj" />
+    <Project Path="Services/LoanService/LoanService.Domain/LoanService.Domain.csproj" />
+    <Project Path="Services/LoanService/LoanService.Infrastructure/LoanService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/NotificationService/">
+    <Project Path="Services/NotificationService/NotificationService.Api/NotificationService.Api.csproj" />
+    <Project Path="Services/NotificationService/NotificationService.Application/NotificationService.Application.csproj" />
+    <Project Path="Services/NotificationService/NotificationService.Domain/NotificationService.Domain.csproj" />
+    <Project Path="Services/NotificationService/NotificationService.Infrastructure/NotificationService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/ReportService/">
+    <Project Path="Services/ReportService/ReportService.Api/ReportService.Api.csproj" />
+    <Project Path="Services/ReportService/ReportService.Application/ReportService.Application.csproj" />
+    <Project Path="Services/ReportService/ReportService.Domain/ReportService.Domain.csproj" />
+    <Project Path="Services/ReportService/ReportService.Infrastructure/ReportService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Services/SubscriptionService/">
+    <Project Path="Services/SubscriptionService/SubscriptionService.Api/SubscriptionService.Api.csproj" />
+    <Project Path="Services/SubscriptionService/SubscriptionService.Application/SubscriptionService.Application.csproj" />
+    <Project Path="Services/SubscriptionService/SubscriptionService.Domain/SubscriptionService.Domain.csproj" />
+    <Project Path="Services/SubscriptionService/SubscriptionService.Infrastructure/SubscriptionService.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Shared/">
+    <Project Path="Shared/SnapAccount.Shared.Api/SnapAccount.Shared.Api.csproj" />
+    <Project Path="Shared/SnapAccount.Shared.Application/SnapAccount.Shared.Application.csproj" />
+    <Project Path="Shared/SnapAccount.Shared.Domain/SnapAccount.Shared.Domain.csproj" />
+    <Project Path="Shared/SnapAccount.Shared.Infrastructure/SnapAccount.Shared.Infrastructure.csproj" />
+  </Folder>
+  <Project Path="AppHost/AppHost.csproj" />
+  <Project Path="ServiceDefaults/ServiceDefaults.csproj" />
+</Solution>

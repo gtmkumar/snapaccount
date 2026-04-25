@@ -1,0 +1,377 @@
+# SnapAccount — Continuous Deployment to Production
+# Triggered on push to `main` branch.
+# Requires MANUAL APPROVAL via GitHub Environments before deploying.
+#
+# Flow:
+#   push to main → build images → push to Artifact Registry
+#   → [MANUAL APPROVAL GATE] → run migrations → deploy to Cloud Run prod
+#
+# Prerequisites:
+#   - Create a GitHub Environment named "production" with required reviewers set.
+#   - All GCP vars/secrets configured (see infra/README.md).
+
+name: CD Production
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false   # never cancel a production deploy in progress
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: asia-south1
+  ARTIFACT_REGISTRY: asia-south1-docker.pkg.dev
+  REGISTRY_REPO: snapaccount/services
+  ENVIRONMENT: production
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+
+  # ─────────────────────────────────────────────
+  # Job 1: Resolve image tag
+  # ─────────────────────────────────────────────
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+      short_sha: ${{ steps.tag.outputs.short_sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: tag
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          TAG="prod-${SHORT_SHA}-$(date +%Y%m%d%H%M%S)"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+  # ─────────────────────────────────────────────
+  # Job 2: Build & push all service images
+  # ─────────────────────────────────────────────
+  build-push:
+    name: Build & Push — ${{ matrix.service.name }}
+    runs-on: ubuntu-latest
+    needs: prepare
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: AuthService
+            cloud_run_name: auth-service
+          - name: DocumentService
+            cloud_run_name: document-service
+          - name: AccountingService
+            cloud_run_name: accounting-service
+          - name: GstService
+            cloud_run_name: gst-service
+          - name: LoanService
+            cloud_run_name: loan-service
+          - name: ItrService
+            cloud_run_name: itr-service
+          - name: ChatService
+            cloud_run_name: chat-service
+          - name: NotificationService
+            cloud_run_name: notification-service
+          - name: ReportService
+            cloud_run_name: report-service
+          - name: SubscriptionService
+            cloud_run_name: subscription-service
+          - name: AiService
+            cloud_run_name: ai-service
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          build-args: SERVICE_NAME=${{ matrix.service.name }}
+          push: true
+          tags: |
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/${{ matrix.service.cloud_run_name }}:${{ needs.prepare.outputs.image_tag }}
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/${{ matrix.service.cloud_run_name }}:latest
+          cache-from: type=gha,scope=${{ matrix.service.name }}-prod
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}-prod
+          labels: |
+            git.sha=${{ github.sha }}
+            git.ref=${{ github.ref }}
+            build.environment=production
+
+  build-push-admin:
+    name: Build & Push — Admin Panel
+    runs-on: ubuntu-latest
+    needs: prepare
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+
+      - name: Fetch Firebase config from Secret Manager (prod)
+        run: |
+          echo "FIREBASE_WEB_API_KEY=$(gcloud secrets versions access latest --secret=firebase-web-api-key-prod)" >> "$GITHUB_ENV"
+          echo "FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=firebase-auth-domain)" >> "$GITHUB_ENV"
+          echo "FIREBASE_APP_ID=$(gcloud secrets versions access latest --secret=firebase-web-app-id-prod)" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push admin image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/admin
+          file: ./src/admin/Dockerfile
+          build-args: |
+            VITE_API_BASE_URL=https://api.snapaccount.in
+            VITE_FIREBASE_API_KEY=${{ env.FIREBASE_WEB_API_KEY }}
+            VITE_FIREBASE_AUTH_DOMAIN=${{ env.FIREBASE_AUTH_DOMAIN }}
+            VITE_FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}
+            VITE_FIREBASE_APP_ID=${{ env.FIREBASE_APP_ID }}
+          push: true
+          tags: |
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/admin-panel:${{ needs.prepare.outputs.image_tag }}
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/admin-panel:latest
+          cache-from: type=gha,scope=admin-panel-prod
+          cache-to: type=gha,mode=max,scope=admin-panel-prod
+
+  # ─────────────────────────────────────────────
+  # Job 3: MANUAL APPROVAL GATE
+  # GitHub Environment "production" must have required reviewers.
+  # Deployment pauses here until an authorized reviewer approves.
+  # ─────────────────────────────────────────────
+  approval-gate:
+    name: Awaiting Production Approval
+    runs-on: ubuntu-latest
+    needs: [build-push, build-push-admin]
+    environment: production   # <-- triggers approval requirement
+
+    steps:
+      - name: Approval granted
+        run: |
+          echo "Production deployment approved."
+          echo "Image tag: ${{ needs.prepare.outputs.image_tag }}"
+
+  # ─────────────────────────────────────────────
+  # Job 4: Run database migrations (production)
+  # ─────────────────────────────────────────────
+  run-migrations:
+    name: Run DB Migrations (Production)
+    runs-on: ubuntu-latest
+    needs: [prepare, approval-gate]
+
+    steps:
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CD_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Run migration Cloud Run Job (production)
+        run: |
+          gcloud run jobs execute snapaccount-db-migrate-prod \
+            --region=${{ env.GCP_REGION }} \
+            --wait \
+            --format="json"
+
+  # ─────────────────────────────────────────────
+  # Job 5: Deploy to Cloud Run (production)
+  # ─────────────────────────────────────────────
+  deploy-production:
+    name: Deploy — ${{ matrix.service.cloud_run_name }}
+    runs-on: ubuntu-latest
+    needs: [prepare, run-migrations]
+
+    strategy:
+      fail-fast: false
+      max-parallel: 4   # rolling deploy — don't restart all 11 at once
+      matrix:
+        service:
+          - cloud_run_name: auth-service
+            sa: auth-service-sa
+            min_instances: 1
+            max_instances: 10
+          - cloud_run_name: document-service
+            sa: document-service-sa
+            min_instances: 1
+            max_instances: 10
+          - cloud_run_name: accounting-service
+            sa: accounting-service-sa
+            min_instances: 1
+            max_instances: 8
+          - cloud_run_name: gst-service
+            sa: gst-service-sa
+            min_instances: 1
+            max_instances: 10
+          - cloud_run_name: loan-service
+            sa: loan-service-sa
+            min_instances: 1
+            max_instances: 5
+          - cloud_run_name: itr-service
+            sa: itr-service-sa
+            min_instances: 1
+            max_instances: 8
+          - cloud_run_name: chat-service
+            sa: chat-service-sa
+            min_instances: 1
+            max_instances: 10
+          - cloud_run_name: notification-service
+            sa: notification-service-sa
+            min_instances: 1
+            max_instances: 5
+          - cloud_run_name: report-service
+            sa: report-service-sa
+            min_instances: 0
+            max_instances: 5
+          - cloud_run_name: subscription-service
+            sa: subscription-service-sa
+            min_instances: 1
+            max_instances: 5
+          - cloud_run_name: ai-service
+            sa: ai-service-sa
+            min_instances: 0
+            max_instances: 8
+
+    steps:
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CD_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run (production)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ matrix.service.cloud_run_name }}
+          image: ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/${{ matrix.service.cloud_run_name }}:${{ needs.prepare.outputs.image_tag }}
+          region: ${{ env.GCP_REGION }}
+          service_account: ${{ matrix.service.sa }}@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          flags: >-
+            --port=8080
+            --min-instances=${{ matrix.service.min_instances }}
+            --max-instances=${{ matrix.service.max_instances }}
+            --concurrency=80
+            --cpu=1
+            --memory=512Mi
+            --vpc-connector=snapaccount-vpc-connector
+            --vpc-egress=private-ranges-only
+            --ingress=internal-and-cloud-load-balancing
+            --no-allow-unauthenticated
+            --set-secrets=ASPNETCORE_DB_CONNECTION=db-connection-string-prod:latest,ASPNETCORE_REDIS_CONNECTION=redis-connection-string-prod:latest
+            --update-labels=environment=production,git-sha=${{ needs.prepare.outputs.short_sha }}
+
+  deploy-admin-production:
+    name: Deploy Admin Panel (production)
+    runs-on: ubuntu-latest
+    needs: [prepare, approval-gate]
+
+    steps:
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CD_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy admin panel to Cloud Run (production)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: admin-panel
+          image: ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/admin-panel:${{ needs.prepare.outputs.image_tag }}
+          region: ${{ env.GCP_REGION }}
+          flags: >-
+            --port=8080
+            --min-instances=1
+            --max-instances=5
+            --concurrency=100
+            --cpu=1
+            --memory=256Mi
+            --ingress=all
+            --allow-unauthenticated
+            --update-labels=environment=production,git-sha=${{ needs.prepare.outputs.short_sha }}
+
+  # ─────────────────────────────────────────────
+  # Job 6: Post-deploy verification
+  # ─────────────────────────────────────────────
+  post-deploy-verify:
+    name: Post-Deploy Health Checks
+    runs-on: ubuntu-latest
+    needs: [deploy-production, deploy-admin-production]
+    if: success()
+
+    steps:
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CD_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify Cloud Run services are healthy
+        run: |
+          SERVICES=(auth-service document-service accounting-service gst-service loan-service itr-service chat-service notification-service report-service subscription-service ai-service)
+          for svc in "${SERVICES[@]}"; do
+            STATUS=$(gcloud run services describe "${svc}" \
+              --region=${{ env.GCP_REGION }} \
+              --format="value(status.conditions[0].status)" 2>/dev/null || echo "Unknown")
+            echo "${svc}: ${STATUS}"
+          done
+
+      - name: Production deployment summary
+        run: |
+          echo "### Production Deployment Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Image tag:** ${{ needs.prepare.outputs.image_tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Git SHA:** ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Region:** ${{ env.GCP_REGION }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Deployed by:** ${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Timestamp:** $(date -u)" >> "$GITHUB_STEP_SUMMARY"

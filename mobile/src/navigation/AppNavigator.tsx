@@ -1,0 +1,185 @@
+/**
+ * App Navigator (Bottom Tab Navigator)
+ * 5 tabs: Home, Documents, GST/ITR, Loan, More
+ */
+
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../constants/colors';
+
+// Stack navigators
+import { HomeStack } from './HomeStack';
+import { DocumentStack } from './DocumentStack';
+import { GstStack } from './GstStack';
+import { LoanStack } from './LoanStack';
+import { MoreStack } from './MoreStack';
+
+export type AppTabParamList = {
+  HomeTab: undefined;
+  DocumentsTab: undefined;
+  GstTab: undefined;
+  LoanTab: undefined;
+  MoreTab: undefined;
+};
+
+const Tab = createBottomTabNavigator<AppTabParamList>();
+
+interface TabIconProps {
+  iconName: React.ComponentProps<typeof Ionicons>['name'];
+  iconNameFocused: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  focused: boolean;
+  badge?: number;
+}
+
+function TabIcon({ iconName, iconNameFocused, label, focused, badge }: TabIconProps) {
+  return (
+    <View style={styles.tabIconContainer}>
+      <View>
+        <Ionicons
+          name={focused ? iconNameFocused : iconName}
+          size={24}
+          color={focused ? Colors.brand[500] : Colors.neutral[400]}
+        />
+        {badge !== undefined && badge > 0 && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
+          </View>
+        )}
+      </View>
+      <Text style={[styles.tabLabel, focused && styles.tabLabelFocused]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+export function AppNavigator() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: styles.tabBar,
+        tabBarShowLabel: false,
+      }}
+    >
+      <Tab.Screen
+        name="HomeTab"
+        component={HomeStack}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              iconName="home-outline"
+              iconNameFocused="home"
+              label="Home"
+              focused={focused}
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="DocumentsTab"
+        component={DocumentStack}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              iconName="folder-outline"
+              iconNameFocused="folder"
+              label="Documents"
+              focused={focused}
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="GstTab"
+        component={GstStack}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              iconName="bar-chart-outline"
+              iconNameFocused="bar-chart"
+              label="GST/ITR"
+              focused={focused}
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="LoanTab"
+        component={LoanStack}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              iconName="business-outline"
+              iconNameFocused="business"
+              label="Loans"
+              focused={focused}
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="MoreTab"
+        component={MoreStack}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              iconName="menu-outline"
+              iconNameFocused="menu"
+              label="More"
+              focused={focused}
+            />
+          ),
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+const styles = StyleSheet.create({
+  tabBar: {
+    height: 56,
+    backgroundColor: Colors.neutral[0],
+    borderTopWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 8,
+    paddingBottom: 0,
+  },
+  tabIconContainer: {
+    alignItems: 'center',
+    paddingTop: 8,
+  },
+  tabLabel: {
+    fontSize: 10,
+    color: Colors.neutral[400],
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  tabLabelFocused: {
+    color: Colors.brand[500],
+    fontWeight: '600',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: Colors.error[600],
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: Colors.neutral[0],
+    fontSize: 9,
+    fontWeight: '700',
+  },
+});

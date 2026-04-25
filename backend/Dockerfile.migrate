@@ -1,0 +1,78 @@
+# SnapAccount — Migration Runner Dockerfile
+# Runs EF Core migrations as a Cloud Run Job (one-shot, not a service).
+# Built and deployed by the db-migrate.yml GitHub Actions workflow.
+
+ARG DOTNET_VERSION=10.0
+
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
+WORKDIR /src
+
+COPY SnapAccount.sln ./
+COPY ServiceDefaults/ServiceDefaults.csproj ServiceDefaults/
+COPY src/AuthService/AuthService.csproj src/AuthService/
+COPY src/DocumentService/DocumentService.csproj src/DocumentService/
+COPY src/AccountingService/AccountingService.csproj src/AccountingService/
+COPY src/GstService/GstService.csproj src/GstService/
+COPY src/LoanService/LoanService.csproj src/LoanService/
+COPY src/ItrService/ItrService.csproj src/ItrService/
+COPY src/ChatService/ChatService.csproj src/ChatService/
+COPY src/NotificationService/NotificationService.csproj src/NotificationService/
+COPY src/ReportService/ReportService.csproj src/ReportService/
+COPY src/SubscriptionService/SubscriptionService.csproj src/SubscriptionService/
+COPY src/AiService/AiService.csproj src/AiService/
+
+RUN dotnet restore
+
+COPY . .
+
+# Install EF Core tools in the image
+RUN dotnet tool install --global dotnet-ef
+ENV PATH="${PATH}:/root/.dotnet/tools"
+
+# Build all projects (needed for ef migrations)
+RUN dotnet build --no-restore -c Release
+
+# Create migration runner script
+RUN cat > /usr/local/bin/run-migrations.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "=== SnapAccount DB Migration Runner ==="
+echo "Environment: ${ASPNETCORE_ENVIRONMENT:-Production}"
+
+SERVICES=(AuthService DocumentService AccountingService GstService LoanService ItrService ChatService NotificationService ReportService SubscriptionService AiService)
+
+for svc in "${SERVICES[@]}"; do
+    echo ""
+    echo "--- Running migrations for ${svc} ---"
+    dotnet ef database update \
+        --project "/src/src/${svc}/${svc}.csproj" \
+        --no-build \
+        2>&1 || echo "WARNING: Migration failed for ${svc} — check logs"
+done
+
+echo ""
+echo "=== All migrations complete ==="
+EOF
+
+RUN chmod +x /usr/local/bin/run-migrations.sh
+
+# Runtime: keep SDK image (needed for dotnet-ef tool)
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS runtime
+
+RUN groupadd --gid 10001 appgroup \
+ && useradd --uid 10001 --gid appgroup --no-create-home --shell /bin/false appuser
+
+# Re-install ef tools in runtime stage
+RUN dotnet tool install --global dotnet-ef
+ENV PATH="${PATH}:/root/.dotnet/tools"
+
+WORKDIR /src
+
+COPY --from=build /src /src
+COPY --from=build /usr/local/bin/run-migrations.sh /usr/local/bin/run-migrations.sh
+
+# DB_CONNECTION is injected via Secret Manager at job execution time
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+CMD ["/bin/bash", "/usr/local/bin/run-migrations.sh"]

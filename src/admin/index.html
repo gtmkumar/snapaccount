@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="SnapAccount Admin Panel — SME Financial Platform Operations" />
+    <title>SnapAccount Admin</title>
+    <!-- Blocking theme pre-flash prevention — must run before any CSS paint -->
+    <script>
+      (function() {
+        var stored = localStorage.getItem('snapaccount.theme');
+        var pref = stored || 'system';
+        var effective;
+        if (pref === 'dark') {
+          effective = 'dark';
+        } else if (pref === 'light') {
+          effective = 'light';
+        } else {
+          effective = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        if (effective === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

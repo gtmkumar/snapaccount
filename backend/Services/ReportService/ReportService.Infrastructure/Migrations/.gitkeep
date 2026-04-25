@@ -1,0 +1,2 @@
+# EF Core migrations directory
+# Run: dotnet ef migrations add InitialCreate --project ReportService.Infrastructure --startup-project ReportService.Api

@@ -1,0 +1,96 @@
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
+using LoanService.Infrastructure;
+using LoanService.Infrastructure.Webhooks;
+using Microsoft.AspNetCore.RateLimiting;
+using Scalar.AspNetCore;
+using Serilog;
+using SnapAccount.Shared.Api;
+using SnapAccount.Shared.Infrastructure.Auth;
+using System.Reflection;
+using System.Threading.RateLimiting;
+
+Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateBootstrapLogger();
+
+try
+{
+    var builder = WebApplication.CreateBuilder(args);
+
+    builder.Host.UseSerilog((ctx, lc) => lc
+        .ReadFrom.Configuration(ctx.Configuration)
+        .WriteTo.Console()
+        .Enrich.WithProperty("Service", "LoanService"));
+
+    // Infrastructure layer (wires Application + EF + adapters + messaging)
+    builder.Services.AddLoanInfrastructure(builder.Configuration);
+
+    // DisbursementWebhookHandler scoped (uses ILoanServiceDbContext)
+    builder.Services.AddScoped<DisbursementWebhookHandler>();
+
+    builder.Services.AddOpenApi();
+    builder.Services.AddHealthChecks();
+
+    // SEC-002: Restrict CORS to known origins
+    builder.Services.AddCors(options =>
+        options.AddDefaultPolicy(p =>
+            p.WithOrigins(
+                    builder.Configuration["AllowedOrigins:AdminPanel"] ?? "https://admin.snapaccount.in",
+                    builder.Configuration["AllowedOrigins:Mobile"] ?? "https://snapaccount.in")
+             .AllowAnyMethod()
+             .AllowAnyHeader()
+             .AllowCredentials()));
+
+    builder.Services.AddAuthorization();
+    builder.Services.AddHttpContextAccessor();
+
+    // SEC-011: Rate limiting
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.AddFixedWindowLimiter("standard", opt =>
+        {
+            opt.PermitLimit = 100;
+            opt.Window = TimeSpan.FromMinutes(1);
+            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            opt.QueueLimit = 0;
+        });
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    });
+
+    // SEC-004: Firebase Admin SDK initialisation (handled in AddLoanInfrastructure, guard here too)
+    if (FirebaseApp.DefaultInstance == null)
+    {
+        var credentialJson = builder.Configuration["Firebase:ServiceAccountJson"];
+        var credential = string.IsNullOrEmpty(credentialJson)
+            ? GoogleCredential.GetApplicationDefault()
+            : GoogleCredential.FromJson(credentialJson);
+        FirebaseApp.Create(new AppOptions { Credential = credential });
+    }
+
+    builder.Services.AddExceptionHandler<CustomExceptionHandler>();
+    builder.Services.AddProblemDetails();
+
+    var app = builder.Build();
+
+    if (app.Environment.IsDevelopment())
+    {
+        app.MapOpenApi();
+        app.MapScalarApiReference();
+    }
+
+    app.UseCors();
+    app.UseRateLimiter();
+
+    // SEC-004: Firebase JWT validation middleware
+    app.UseMiddleware<FirebaseAuthMiddleware>();
+    app.UseAuthorization();
+    app.UseExceptionHandler();
+
+    app.MapHealthChecks("/healthz");
+
+    // Auto-discover and register all EndpointGroupBase subclasses
+    app.MapEndpoints(Assembly.GetExecutingAssembly());
+
+    app.Run();
+}
+catch (Exception ex) { Log.Fatal(ex, "LoanService failed to start."); }
+finally { Log.CloseAndFlush(); }

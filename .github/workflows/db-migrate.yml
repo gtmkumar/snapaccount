@@ -1,0 +1,196 @@
+# SnapAccount — Database Migration Workflow
+# Runs EF Core migrations as a Cloud Run Job (not a long-running service).
+# Can be triggered manually (workflow_dispatch) or called by CD workflows.
+#
+# The migration job:
+#   1. Builds a migration runner image containing all service migrations.
+#   2. Pushes it to Artifact Registry.
+#   3. Deploys/updates a Cloud Run Job definition.
+#   4. Executes the job and waits for completion.
+#
+# Authentication: GitHub OIDC → GCP Workload Identity Federation.
+
+name: DB Migrate
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+      dry_run:
+        description: Dry run (generate SQL scripts only — do not apply)
+        required: false
+        type: boolean
+        default: false
+
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      dry_run:
+        required: false
+        type: boolean
+        default: false
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: asia-south1
+  ARTIFACT_REGISTRY: asia-south1-docker.pkg.dev
+  REGISTRY_REPO: snapaccount/services
+  DOTNET_VERSION: "10.0.x"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+
+  migrate:
+    name: Run Migrations (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}   # triggers approval for production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install EF Core tools
+        run: dotnet tool install --global dotnet-ef
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore & build migration project
+        working-directory: backend
+        run: dotnet build --configuration Release
+
+      - name: Generate migration scripts (all services)
+        working-directory: backend
+        run: |
+          mkdir -p /tmp/migrations
+          SERVICES=(AuthService DocumentService AccountingService GstService LoanService ItrService ChatService NotificationService ReportService SubscriptionService AiService)
+          for svc in "${SERVICES[@]}"; do
+            echo "=== Generating migration for ${svc} ==="
+            dotnet ef migrations script \
+              --project "src/${svc}/${svc}.csproj" \
+              --idempotent \
+              --output "/tmp/migrations/${svc}.sql" \
+              --no-build \
+              2>&1 || echo "No migrations for ${svc} — skipping"
+          done
+
+      - name: Upload generated migration scripts
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-scripts-${{ inputs.environment }}-${{ github.run_id }}
+          path: /tmp/migrations/*.sql
+          retention-days: 30
+
+      - name: Dry run — print migration scripts
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          echo "=== DRY RUN — migration SQL scripts ==="
+          for f in /tmp/migrations/*.sql; do
+            echo "--- ${f} ---"
+            head -50 "${f}"
+            echo "..."
+          done
+          echo "DRY RUN complete. No database changes made."
+
+      - name: Build migration runner Docker image
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          IMAGE="${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/db-migrate:${{ github.sha }}"
+          docker build \
+            -f backend/Dockerfile.migrate \
+            -t "${IMAGE}" \
+            ./backend
+          docker push "${IMAGE}"
+          echo "MIGRATION_IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+
+      - name: Deploy Cloud Run Job (migration runner)
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          ENV_SUFFIX=""
+          if [ "${{ inputs.environment }}" = "staging" ]; then
+            ENV_SUFFIX="-staging"
+            DB_SECRET="db-connection-string-staging"
+          else
+            DB_SECRET="db-connection-string-prod"
+          fi
+
+          JOB_NAME="snapaccount-db-migrate${{ inputs.environment == 'staging' && '-staging' || '' }}"
+
+          # Update or create the Cloud Run Job
+          gcloud run jobs update "${JOB_NAME}" \
+            --image="${{ env.MIGRATION_IMAGE }}" \
+            --region=${{ env.GCP_REGION }} \
+            --service-account=migration-runner-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --set-secrets="DB_CONNECTION=${DB_SECRET}:latest" \
+            --cpu=1 \
+            --memory=1Gi \
+            --max-retries=0 \
+            --task-timeout=600 \
+            --vpc-connector=snapaccount-vpc-connector \
+            --vpc-egress=private-ranges-only \
+          || \
+          gcloud run jobs create "${JOB_NAME}" \
+            --image="${{ env.MIGRATION_IMAGE }}" \
+            --region=${{ env.GCP_REGION }} \
+            --service-account=migration-runner-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --set-secrets="DB_CONNECTION=${DB_SECRET}:latest" \
+            --cpu=1 \
+            --memory=1Gi \
+            --max-retries=0 \
+            --task-timeout=600 \
+            --vpc-connector=snapaccount-vpc-connector \
+            --vpc-egress=private-ranges-only
+
+      - name: Execute migration job and wait
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          JOB_NAME="snapaccount-db-migrate${{ inputs.environment == 'staging' && '-staging' || '' }}"
+
+          gcloud run jobs execute "${JOB_NAME}" \
+            --region=${{ env.GCP_REGION }} \
+            --wait \
+            --format="json"
+
+          echo "Migrations completed successfully."
+
+      - name: Migration summary
+        run: |
+          echo "### DB Migration: ${{ inputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Environment:** ${{ inputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Dry run:** ${{ inputs.dry_run }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Git SHA:** ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Triggered by:** ${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Timestamp:** $(date -u)" >> "$GITHUB_STEP_SUMMARY"

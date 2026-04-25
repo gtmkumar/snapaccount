@@ -1,0 +1,28 @@
+node_modules/
+.expo/
+dist/
+web-build/
+ios/
+android/
+
+# Firebase credential files — must NEVER be committed
+google-services.json
+GoogleService-Info.plist
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Native builds
+*.ipa
+*.apk
+*.aab
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

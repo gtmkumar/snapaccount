@@ -1,0 +1,12 @@
+Screenshot reference: admin-02-dashboard
+Captured: 2026-04-05 (live browser session)
+Note: Dashboard is behind Google SSO auth guard. No admin credentials
+available in this session. The login page correctly blocks unauthenticated
+access — redirect to /login is the expected behaviour for /dashboard.
+
+Responsive breakpoints tested on /login (the accessible pre-auth page):
+  - 375px  mobile  — PASS, card renders correctly, button full-width
+  - 768px  tablet  — PASS, card centred, readable
+  - 1440px desktop — PASS, card centred, whitespace appropriate
+
+Auth guard behaviour: PASS — unauthenticated navigation to / redirects to /login.

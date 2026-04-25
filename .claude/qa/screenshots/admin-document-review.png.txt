@@ -1,0 +1,8 @@
+Screenshot: admin-document-review.png
+Captured: 2026-04-05
+URL: http://localhost:3000/documents/1
+Description: Document Review page for D-20260401-0001 (Rajesh Kumar).
+             Navigated from Document Queue via Review button click.
+             Page shows: split-panel layout, document viewer (left), OCR field editor (right),
+             Approve & Process / Save Draft / Reject action buttons, SLA timer, Queue back button.
+Fix verified: Review button now navigates to /documents/:id via useNavigate hook.

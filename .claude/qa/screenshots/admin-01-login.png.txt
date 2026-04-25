@@ -1,0 +1,24 @@
+Screenshot reference: admin-01-login
+Captured: 2026-04-05 (live browser session)
+Screenshot ID: ss_4640k8mqc (desktop 1512x774)
+URL: http://localhost:5173/login
+Breakpoints verified:
+  - 1512px desktop — ss_4640k8mqc
+  - 375px mobile  — ss_34499djjc
+  - 768px tablet  — ss_1778zfj0b
+  - 1440px wide   — ss_9942rbi9l
+
+Content verified on page:
+  - SnapAccount "SA" logo mark
+  - "SnapAccount" heading + "Admin Panel" subheading
+  - "Welcome back" card
+  - "Sign in with Google" button
+  - "Access restricted to authorized SnapAccount staff only."
+  - Footer: "SnapAccount Admin Panel — Secure Financial Operations"
+
+App-level JS errors: 0
+Console errors (app): 0
+Console errors (extension): 1 (Chrome extension mfidniedemcgceagapgdekdbmanojomk — unrelated to app)
+React root present: true
+CSS loaded: true (2 stylesheets)
+Tailwind compiled: true

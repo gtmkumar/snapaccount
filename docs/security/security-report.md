@@ -1,0 +1,1849 @@
+# SnapAccount Security Review Report
+
+> **Classification:** INTERNAL — Restricted
+> **Reviewer:** security-reviewer agent
+> **Last Updated:** 2026-04-25
+
+---
+
+## Cumulative Summary (All Phases)
+
+| Phase | CRITICAL | HIGH | MEDIUM | LOW | INFO | Status |
+|-------|----------|------|--------|-----|------|--------|
+| 4 (original audit) | 3 | 9 | 8 | 5 | 0 | Complete — all findings documented in security-audit.md |
+| 5 (re-audit / fix verification) | 0 | 1 | 1 | 1 | 2 | Complete |
+| 6 (6A+6E final gate) | 0 | 4 | 5 | 3 | 3 | Complete |
+| 6 (re-audit 2026-04-25) | 0 | 0 | 0 | 0 | 0 | Complete — 4 HIGH confirmed fixed; no new findings |
+| 6B+6D (2026-04-25) | 0 | 3 | 3 | 1 | 1 | Complete — NO-GO |
+| 6B+6D re-audit (2026-04-25) | 0 | 0 | 0 | 0 | 0 | Complete — GO; 4 confirmed fixed, 0 new findings |
+| 6C (2026-04-25) | 0 | 1 | 5 | 0 | 2 | Complete — NO-GO |
+| 6C re-audit (2026-04-25) | 0 | 0 | 0 | 0 | 0 | Complete — GO; 4 confirmed fixed, 0 new findings |
+| 6F Final Gate (2026-04-25) | 0 | 1 | 5 | 1 | 2 | Complete — NO-GO (SEC-051 HIGH + prior deferred unresolved) |
+| 6F Re-audit after hotfixes (2026-04-25) | 0 | 0 | 0 | 0 | 2 | Complete — **GO** — 1 HIGH + 7 MED confirmed fixed; 0 new HIGH/MED/LOW |
+| **Total (Phases 4–6F)** | **3** | **20** | **27** | **12** | **12** | — |
+| **Total open (pre-prod blockers)** | **0** | **1** (NEW-002) | **4** (SEC-030/031/032/041; others deferred) | **5** (SEC-035/036/037/056/NEW-003) | **3** (INFO-001/006/007) | All Phase 6 gate blockers cleared |
+
+---
+
+## Phase 5 Security Review — Fix Verification
+
+**Scope:** Re-audit of all 25 Phase 4 findings after Phase 5 fixes; new issues introduced by fixes
+**Review Date:** 2026-04-05
+**Reviewer:** security-reviewer agent
+
+---
+
+### Verification Table
+
+| ID | Severity | Expected Fix | Verified? | Evidence |
+|----|----------|-------------|-----------|---------|
+| SEC-001 | Critical | HMAC-SHA256 webhook with `CryptographicOperations.FixedTimeEquals` | YES — with caveat | `backend/Services/SubscriptionService/SubscriptionService.Api/Program.cs` lines 104–114. HMAC-SHA256 implemented; `CryptographicOperations.FixedTimeEquals` present. Caveat noted below (NEW-001). |
+| SEC-002 | Critical | `WithOrigins(...)` instead of `AllowAnyOrigin()` | YES | `backend/Services/AuthService/AuthService.Api/Program.cs` lines 72–79; `backend/Services/SubscriptionService/SubscriptionService.Api/Program.cs` lines 25–32; `backend/Services/GstService/GstService.Api/Program.cs` lines 23–30. All use `WithOrigins(AdminPanel, Mobile)` with config fallback. |
+| SEC-003 | Critical | Hangfire dashboard has `HangfireRoleAuthorizationFilter` | YES | `backend/Services/AuthService/AuthService.Api/Program.cs` lines 132–135. `DashboardOptions { Authorization = [new HangfireRoleAuthorizationFilter("SYSTEM_ADMIN")] }` in place. |
+| SEC-004 | High | All stub services have `FirebaseAuthMiddleware` + `RequireAuthorization()` | YES | Verified in GstService (`Program.cs` lines 67–84) and SubscriptionService (`Program.cs` lines 69–81). All stub endpoints call `.RequireAuthorization()`. Webhook endpoint correctly exempt with HMAC verification instead. |
+| SEC-005 | High | `RandomNumberGenerator.GetInt32(100000, 1000000)` | YES | `backend/Services/AuthService/AuthService.Infrastructure/Services/OtpService.cs` line 42. |
+| SEC-006 | High | Root `.gitignore` covers `.env*`, credential files, `*.pem`, `appsettings.*.json` | YES | `/Users/gtmkumar/Documents/source/snapaccount/.gitignore` present. Covers `.env`, `.env.local`, `.env.*.local`, `.env.development`, `.env.production`, `google-services.json`, `GoogleService-Info.plist`, `service-account*.json`, `*.pfx`, `*.p12`, `*.pem`, `*.key`, `appsettings.Development.json`, `appsettings.Local.json`, `appsettings.Staging.json`, `appsettings.Production.json`, and `**/bin/`. |
+| SEC-007 | High | `AccountDeletionRequestedEventHandler` publishes to Pub/Sub | YES | `backend/Services/AuthService/AuthService.Application/EventHandlers/AccountDeletionRequestedEventHandler.cs` lines 29–44. Publishes to `account-deletion-events` topic via `IEventPublisher`. Pub/Sub failure is caught and logged without blocking deletion. |
+| SEC-008 | High | `RequestAccountDeletionCommandHandler` calls `RevokeRefreshTokensAsync` | YES — with new defect | `backend/Services/AuthService/AuthService.Application/Commands/RequestAccountDeletion/RequestAccountDeletionCommandHandler.cs` lines 29–35. Firebase revocation is called. New defect noted (NEW-002): the comment says "Non-fatal" but the code returns the failure result, making Firebase revocation fatal to the deletion flow. |
+| SEC-009 | High | `GoogleCredential.GetApplicationDefaultAsync()` | YES | `backend/Shared/SnapAccount.Shared.Infrastructure/Storage/GoogleCloudStorageService.cs` lines 52–58. `GoogleCredential.GetApplicationDefaultAsync(ct)` used; `UrlSigner.FromCredential(credential)` pattern in place. |
+| SEC-010 | High | PostgreSQL rules exist to block DELETE and UPDATE on `shared.audit_log` | YES | `database/shared/V2__audit_log_immutability.sql` lines 10–16. Both `no_delete_audit_log` and `no_update_audit_log` rules created with `DO INSTEAD NOTHING`. |
+| SEC-011 | High | `AddRateLimiter` configured on all services | YES | `backend/Services/AuthService/AuthService.Api/Program.cs` lines 82–93 (sliding window, 5 req / 10 min, applied to OTP endpoints at lines 155 and 164). SubscriptionService and GstService use fixed window (100 req/min). |
+| SEC-012 | High | `PermissionBehavior<TRequest, TResponse>` implements `IPipelineBehavior` | YES | `backend/Services/AuthService/AuthService.Application/Behaviors/PermissionBehavior.cs`. `[RequiresPermissionAttribute]` and `PermissionBehavior<TRequest, TResponse>` both implemented. Registered in MediatR pipeline at `AuthService.Api/Program.cs` line 56. |
+| SEC-013 | Medium | `AesPanEncryptionService.cs` with AES-256 | YES | `backend/Services/AuthService/AuthService.Infrastructure/Services/AesPanEncryptionService.cs`. AES-256-CBC with PKCS7 padding; IV prepended to ciphertext; 32-byte key enforced; key sourced from config (GCP Secret Manager in prod). |
+| SEC-014 | Medium | `mobile/src/lib/pinnedHttpClient.ts` exists | YES — placeholder certs | `mobile/src/lib/pinnedHttpClient.ts` exists. `react-native-ssl-pinning` integrated. `PINNED_CERTS` array contains `sha256/PLACEHOLDER_HASH_1==` and `sha256/PLACEHOLDER_HASH_2==` — placeholder values not replaced with real hashes. Bug-log acknowledges this: "placeholder cert hashes need replacing by DevOps before prod build." See INFO-001. |
+| SEC-015 | Medium | `useSensitiveScreen` found on sensitive screens | YES | Hook at `mobile/src/hooks/usePreventScreenCapture.ts` wraps `expo-screen-capture`. Found on 9 files: `ITRDashboardScreen.tsx`, `GstDashboardScreen.tsx`, `Gstr3bScreen.tsx`, `GstApprovalScreen.tsx`, `LoanHubScreen.tsx`, `LoanEligibilityScreen.tsx`, `LoanStatusScreen.tsx`, `ReportDetailScreen.tsx`, and the hook file itself. |
+| SEC-016 | Medium | `IsolationLevel.Serializable` transaction in `AddDeviceCommandHandler` | YES | `backend/Services/AuthService/AuthService.Application/Commands/AddDevice/AddDeviceCommandHandler.cs` line 21. `GetByIdWithSerializableTransactionAsync` called, per comment at lines 17–20. |
+| SEC-017 | Medium | `infra/scripts/deploy-admin.sh` and `docs/devops/admin-panel-security.md` exist | PARTIAL | Both files exist. Cloud Armor policy creation scripted. Script explicitly warns at lines 97–103 that LB/NEG wiring is a manual step. `--allow-unauthenticated --ingress=all` remains on Cloud Run service (line 71–72 of deploy-admin.sh) — Cloud Armor only effective once LB is wired. Consistent with bug-log status PARTIAL. |
+| SEC-018 | Medium | `#{DB_PASSWORD}#` placeholder in `appsettings.json`, no plaintext password | YES | `backend/Services/AuthService/AuthService.Api/appsettings.json` line 10 uses `#{DB_PASSWORD}#`. The `bin/Release/net10.0/appsettings.json` copy retains the old plaintext password but is covered by `**/bin/` in `.gitignore` and is not a source file. |
+| SEC-019 | Medium | `database/shared/V3__audit_log_partition_automation.sql` partition function exists | YES | File present. `shared.create_audit_log_partitions(months_ahead)` function creates monthly partitions up to N months ahead. Immediately calls `SELECT shared.create_audit_log_partitions(12)` on migration run. |
+| SEC-020 | Medium | `TaxComputation` entity has `ComputationHash` field | YES | `backend/Services/ItrService/ItrService.Domain/Entities/TaxComputation.cs` line 40. SHA-256 of canonical JSON inputs computed on `Create()` (line 81); `VerifyIntegrity()` method uses `CryptographicOperations.FixedTimeEquals` (lines 89–92). |
+| SEC-021 | Low | `database/auth/V2__fix_otp_hash_comment.sql` corrects bcrypt comment | YES | `database/auth/V2__fix_otp_hash_comment.sql`. `COMMENT ON COLUMN auth.otp_request.otp_hash` updated to accurately describe SHA-256 with phone+OTP composite input. |
+| SEC-022 | Low | Warning log in `FirebaseAuthMiddleware` catch block | YES | `backend/Shared/SnapAccount.Shared.Infrastructure/Auth/FirebaseAuthMiddleware.cs` lines 36–41. `logger.LogWarning(...)` logs the path when a token is present but invalid. |
+| SEC-023 | Low | `partialize` strips `panNumber: undefined` from persisted state | YES | `mobile/src/store/authStore.ts` lines 132–156. `panNumber: undefined` explicitly set on `user`, `currentOrganization`, and all entries in `organizations[]` array. `firebaseToken` also excluded. |
+| SEC-024 | Low | `document-service-sa` uses `objectCreator` + `objectViewer` instead of `objectAdmin` | YES | `infra/setup.sh` lines 501–507. Comment documents the downgrade rationale; `roles/storage.objectCreator` and `roles/storage.objectViewer` granted. Note: existing GCP projects require manual IAM revoke per bug-log. |
+| SEC-025 | Low | HSTS header or HTTP redirect in `src/admin/nginx.conf` | YES | `src/admin/nginx.conf` line 77. `Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"` header added. Comment explains redirect is enforced at Cloud LB; commented-out block with `X-Forwarded-Proto` redirect logic provided for non-GCP deployments. |
+
+---
+
+### New Issues Introduced by Phase 5 Fixes
+
+#### [HIGH] NEW-002: Firebase Revocation Failure Blocks Account Deletion
+- **File:** `backend/Services/AuthService/AuthService.Application/Commands/RequestAccountDeletion/RequestAccountDeletionCommandHandler.cs`
+- **Line:** 33–35
+- **Description:** The inline comment at line 33 states "Non-fatal: log but do not block deletion if Firebase revocation fails", but the implementation immediately returns the failure result (`if (revokeResult.IsFailure) return revokeResult`). This means a transient Firebase API error or network timeout will cause the entire account deletion flow to fail and return an error to the user. The user's local refresh tokens have already been revoked at line 25, but the `auth.user` record is never marked as deleted (line 37 is not reached). This creates an inconsistent state: local tokens revoked, Firebase session still active, account not soft-deleted. From a DPDP Act 2023 perspective, a user exercising their Right to Erasure can be denied deletion by a Firebase service hiccup.
+- **Recommended Fix:** Demote the Firebase revocation failure to a warning log only — do not return the failure result. Continue to `userRepository.UpdateAsync(user, cancellationToken)`. A background retry job should handle Firebase revocation for accounts where it failed. This matches the intent of the inline comment.
+- **Reference:** DPDP Act 2023, Section 12 (Right to Erasure); CWE-754 (Improper Check for Unusual or Exceptional Conditions)
+
+#### [MEDIUM] NEW-001: SEC-001 HMAC Comparison Uses Hex String Bytes, Not Decoded Bytes
+- **File:** `backend/Services/SubscriptionService/SubscriptionService.Api/Program.cs`
+- **Line:** 108–113
+- **Description:** `CryptographicOperations.FixedTimeEquals` is called with `Encoding.UTF8.GetBytes(signature)` and `Encoding.UTF8.GetBytes(expectedSignature)` — both arguments are UTF-8 byte representations of lowercase hex strings, not decoded raw hash bytes. This is not a security bypass vulnerability (both sides encode the same way, and a timing-safe comparison of hex strings is still correct). However, the comparison is length-sensitive: if the received `X-Razorpay-Signature` header has different length than the computed hex (e.g., the Razorpay header is uppercase or contains a trailing newline), `FixedTimeEquals` returns `false` immediately without comparing content, partially defeating the timing-safe intent. The standard practice is to decode both hex strings to `byte[]` before comparing, which also ensures both buffers are always the same length (32 bytes for SHA-256).
+- **Recommended Fix:** Replace the comparison with:
+  ```
+  var receivedBytes = Convert.FromHexString(signature);
+  var expectedBytes = Convert.FromHexString(expectedSignature);
+  if (!CryptographicOperations.FixedTimeEquals(receivedBytes, expectedBytes))
+      return Results.Unauthorized();
+  ```
+  Also add a length pre-check and a `try/catch` around `Convert.FromHexString` to handle malformed header values gracefully.
+- **Reference:** CWE-208 (Observable Timing Discrepancy); OWASP Cryptographic Failures
+
+#### [LOW] NEW-003: AES-256-CBC Used Instead of AES-256-GCM for PAN Encryption
+- **File:** `backend/Services/AuthService/AuthService.Infrastructure/Services/AesPanEncryptionService.cs`
+- **Line:** 38–48
+- **Description:** PAN is encrypted with AES-256-CBC (PKCS7 padding). CBC mode provides confidentiality but not integrity — a padding oracle attack or ciphertext manipulation could corrupt or forge encrypted PAN values without detection. AES-256-GCM (Authenticated Encryption with Associated Data) is the current recommended mode as it provides both confidentiality and integrity in a single operation, and is supported natively by `System.Security.Cryptography.AesGcm` in .NET.
+- **Recommended Fix:** Migrate to `AesGcm` with a 12-byte nonce and 16-byte tag. Storage format: `Base64( Nonce[12] || Tag[16] || Ciphertext )`. The GCM tag prevents ciphertext tampering and eliminates padding oracle risk.
+- **Reference:** CWE-326 (Inadequate Encryption Strength); NIST SP 800-38D
+
+#### [INFO] INFO-001: Certificate Pinning Uses Placeholder Hashes
+- **File:** `mobile/src/lib/pinnedHttpClient.ts`
+- **Line:** 49–52
+- **Description:** `PINNED_CERTS` contains `sha256/PLACEHOLDER_HASH_1==` and `sha256/PLACEHOLDER_HASH_2==`. The pinning infrastructure is correctly implemented but will not pin to any real certificate until replaced. In development/staging this is acceptable, but these must be replaced with actual SHA-256 public-key hashes before any production build. The file header includes a clear rotation procedure.
+- **Recommended Fix:** DevOps engineer must extract the production API certificate's public key hash and update these values before the production build. Add a CI check that fails the build if either placeholder string is still present in a production-targeted build.
+
+#### [INFO] INFO-002: SEC-015 Missing `useSensitiveScreen` on AccountingService Screens
+- **File:** `mobile/src/screens/` (accounting-related screens)
+- **Description:** The `useSensitiveScreen` hook was applied to ITR, GST, and Loan screens (confirmed in 8 screens). Accounting screens (balance sheet, P&L, trial balance, journal entries) were not enumerated in the grep results. If accounting screens exist that display financial data, they should also call `useSensitiveScreen`. This is informational — accounting screens may be server-rendered reports opened in a WebView and thus inherit different protections.
+- **Recommended Fix:** Audit all screens displaying financial data (balance sheet, P&L, bank details, journal entries) and apply `useSensitiveScreen` uniformly.
+
+---
+
+### Phase 5 Summary
+
+| Severity | Phase 4 Findings | Fixed | Still Open | New Issues |
+|----------|-----------------|-------|------------|------------|
+| Critical | 3 | 3 | 0 | 0 |
+| High | 9 | 9 | 0 | 1 (NEW-002) |
+| Medium | 8 | 7 | 1 (SEC-017 PARTIAL) | 1 (NEW-001) |
+| Low | 5 | 5 | 0 | 1 (NEW-003) |
+| Info | 0 | — | — | 2 (INFO-001, INFO-002) |
+
+**CRITICAL: 0 FIXED / 0 OPEN | HIGH: 9 FIXED / 1 OPEN (new) | MEDIUM: 7 FIXED / 2 OPEN | LOW: 5 FIXED / 1 OPEN (new) | INFO: 2**
+
+---
+
+### Overall Verdict
+
+**BLOCKERS REMAIN**
+
+One HIGH-severity finding was introduced by Phase 5 (NEW-002) and must be fixed before approval. The three original Critical findings are all resolved. SEC-017 remains PARTIAL by design (LB wiring is a manual infrastructure step, documented).
+
+**Must fix before approval:**
+1. **NEW-002 (HIGH)** — `RequestAccountDeletionCommandHandler` makes Firebase revocation fatal to account deletion, contradicting the inline comment and creating inconsistent state. Fix is a one-line change: remove `return revokeResult` and log a warning instead.
+
+**Fix before production build (not a blocker for code approval, but a blocker for go-live):**
+2. **NEW-001 (MEDIUM)** — HMAC comparison uses UTF-8-encoded hex strings; should decode to raw bytes before `FixedTimeEquals`.
+3. **INFO-001** — Placeholder certificate hashes in `pinnedHttpClient.ts` must be replaced before production.
+
+**Recommended (post-launch):**
+4. **NEW-003 (LOW)** — Migrate PAN encryption from AES-256-CBC to AES-256-GCM.
+5. **INFO-002** — Verify `useSensitiveScreen` coverage on accounting screens.
+
+---
+
+*Report generated: 2026-04-05*
+*Phase 5 review updated: 2026-04-05*
+
+---
+
+## Phase 6 (6A + 6E) Security Review
+
+**Scope:** AccountingService (new), NotificationService (new handlers + adapters), CallbackService (new 12th microservice), GstService (3/6 stubs converted), Admin frontend (3 Callback pages, NotificationCenter, GstReturnReviewPage), Mobile (CameraScreen, RequestCallbackModal/Status, pushTokenManager, notificationRouter), Infra (Cloud Scheduler + Pub/Sub recurring jobs, Secret Manager placeholders, CallbackService Cloud Run), DB migrations 016/017/018.
+**Review Date:** 2026-04-25
+**Reviewer:** security-reviewer agent
+
+---
+
+### Section 1 — Backend Service Checklist
+
+#### AccountingService
+
+| Control | Result | Notes |
+|---------|--------|-------|
+| FirebaseAuthMiddleware applied | PASS | Program.cs line 82 |
+| RequireAuthorization() on all endpoints | PASS | All 7 endpoints wired |
+| Org-scoped queries | PASS | OrganizationId from ICurrentUser passed to all queries |
+| PermissionBehavior registered | FAIL — see SEC-026 | No PermissionBehavior in DI; no [RequiresPermission] on any accounting command |
+| Rate limiting | PASS | "standard" 100/min on all endpoints |
+| DPDP erasure cascade | PARTIAL — see SEC-027 | accounting.ledger_entries not in erasure handler |
+| PII in logs | PASS | No PAN/GSTIN/Aadhaar observed in log statements |
+| Secrets via Secret Manager | PASS | DB password via placeholder; Firebase via ADC |
+| Idempotency (dedupe_hash) | PASS | OcrResultSubscriber computes SHA-256(documentId || payloadHash) per P6-HANDOFF-03 |
+| Pub/Sub AuthN | PASS | SubscriberClient uses ADC / Workload Identity |
+| Input validation | PASS | FluentValidation present on commands |
+
+#### NotificationService
+
+| Control | Result | Notes |
+|---------|--------|-------|
+| FirebaseAuthMiddleware applied | PASS | Program.cs line 81 |
+| RequireAuthorization() on all endpoints | PARTIAL — see SEC-028 | /dlq and /dlq/{id}/retry have RequireAuthorization but no role/permission gate; any authenticated user can access DLQ |
+| Org-scoped queries | N/A | Notification service is user-scoped; inbox filtered by ICurrentUser.UserId |
+| PermissionBehavior registered | FAIL — see SEC-026 | Same issue as AccountingService; no PermissionBehavior in DI |
+| Rate limiting | PASS | "standard" 100/min on all endpoints |
+| DPDP erasure cascade | PARTIAL — see SEC-027 | notification.* tables not referenced in AccountDeletionRequestedEventHandler |
+| PII in logs | PASS | Phone masked to first 6 chars; email masked to user@**** |
+| Secrets via Secret Manager | PASS | Msg91:ApiKey, SendGrid:ApiKey via IConfiguration (Secret Manager in prod) |
+| DLT gate for SMS | PASS | Both fan-out pipeline and adapter enforce DltTemplateId not empty |
+| Idempotency (event dedupe) | PASS | SHA-256 dedupe key per (userId, eventCode, channel), 6h window |
+| Template PII leakage review | PASS — see INFO-001 | 26 catalog entries reviewed; no template embeds tax amounts, refund amounts, or account numbers |
+| MSG91 DLT compliance | PASS | DLT gate blocks dispatch until template registered |
+| Pub/Sub AuthN (RecurringJobsSubscriber) | PASS | ADC / Workload Identity |
+| In-process dedupe for recurring jobs | LOW — see SEC-031 | HashSet<string> dedupe resets on restart; effective only within a process lifetime |
+
+#### CallbackService
+
+| Control | Result | Notes |
+|---------|--------|-------|
+| FirebaseAuthMiddleware applied | PASS | Program.cs line 77 |
+| RequireAuthorization() on all endpoints | PASS | All 11 endpoints wired |
+| Org-scoped list query | PASS | ListCallbacks passes ICurrentUser.OrganizationId |
+| GetCallbackById — IDOR risk | FAIL — see SEC-029 | Query fetches by ID only; no org_id or user_id ownership check |
+| State transition commands — IDOR | FAIL — see SEC-029 | AssignCallback, CompleteCallback, CancelCallback etc fetch by ID only; any authenticated user can manipulate any callback |
+| PermissionBehavior registered | FAIL — see SEC-026 | No PermissionBehavior in DI; no [RequiresPermission] on any command |
+| Rate limiting | PASS | "standard" 100/min on all endpoints |
+| DPDP erasure cascade | FAIL — see SEC-027 | callback.call_notes and callbacks.user_id not in erasure handler (P6-HANDOFF-05 unresolved) |
+| PII in logs | PASS | No sensitive data logged in observed handlers |
+| Secrets via Secret Manager | PASS | DB password via placeholder pattern |
+| Input validation | PASS | FluentValidation; IssueDescription capped at 1000 chars; note Content capped at 5000 chars |
+| Callback audit trail | PARTIAL — see SEC-030 | assignments_log table exists in DB; application-layer handler (AssignCallbackCommand) does not write to it |
+| KPI MV org filter | PASS (placeholder) | GetKpiSnapshot returns placeholder with organizationId — no data exposed; MV query deferred |
+
+#### GstService (3/6 stub conversions)
+
+| Control | Result | Notes |
+|---------|--------|-------|
+| PermissionBehavior | PASS | FileReturnCommand has [RequiresPermission("gst.returns.file")] |
+| Auth middleware | PASS (inherited from Phase 4/5 review) | |
+| Input validation | PASS | FluentValidation present |
+
+---
+
+### Section 2 — Frontend (Admin) Checklist
+
+| Control | Result | Notes |
+|---------|--------|-------|
+| All API calls via src/admin/src/lib/ | PASS | callbackApi.ts and notificationApi.ts use shared api instance |
+| No hardcoded URLs | PASS | Base URL from VITE_API_BASE_URL env var per callbackApi.ts comment |
+| No dangerouslySetInnerHTML with untrusted input | PASS | No occurrences found in new pages |
+| CSRF: tokens in Authorization header | PASS | Shared axios instance uses Bearer token pattern |
+| Server-side org filter authoritative | PASS | listCallbacks passes params; server enforces OrganizationId |
+| Zod validation on API responses | PASS | callbackApi.ts and notificationApi.ts use z.parse() on all responses |
+| i18n — no hardcoded user-visible strings | PASS | All new pages use t() from react-i18next |
+| PAN/Aadhaar masked in UI | N/A | Callback/notification pages do not display PAN or Aadhaar |
+| DLQ endpoint in notificationApi — type safety | LOW — see SEC-032 | getNotificationDlq returns `res.data as { items: unknown[]; totalCount: number }` with no Zod parse |
+
+---
+
+### Section 3 — Mobile Checklist
+
+| Control | Result | Notes |
+|---------|--------|-------|
+| SecureStore for FCM token | PASS | pushTokenManager.ts uses SecureStore.setItemAsync for REGISTERED_TOKEN_KEY and DEVICE_ID_KEY |
+| No AsyncStorage for sensitive data | PASS | No AsyncStorage usage found in new mobile files |
+| Certificate pinning still in place | PASS (Phase 5 finding, unchanged) | react-native-ssl-pinning; new endpoints use same base URL |
+| Screenshot prevention on RequestCallbackModal | FAIL — see SEC-033 | useSensitiveScreen not applied to RequestCallbackModalScreen; screen may contain financial reason text |
+| Screenshot prevention on CallbackStatus | FAIL — see SEC-033 | Same — CallbackStatusScreen not checked for useSensitiveScreen |
+| Deep-link id validation in notificationRouter | FAIL — see SEC-034 | id extracted from notification payload and passed directly to navigation without UUID format validation |
+| FCM token rotation listener | PASS | addPushTokenListener wired; registerTokenIfNew deduplicates via SecureStore |
+| No PII in console.log | PASS | pushTokenManager logs only status messages; no tokens, phone numbers or user data logged in full |
+| i18n — no hardcoded strings | PASS | RequestCallbackModalScreen uses t() throughout |
+
+---
+
+### Section 4 — Infra Checklist
+
+| Control | Result | Notes |
+|---------|--------|-------|
+| Secret Manager placeholders created | PASS | msg91-api-key, msg91-sender-id, sendgrid-api-key, firebase-admin-json in setup.sh lines 442–462 |
+| No real secret values committed | PASS | All values are placeholder strings |
+| CallbackService SA created | PASS | callback-service-sa created at setup.sh line 502 |
+| CallbackService IAM: least privilege | PASS | pubsub.publisher + pubsub.subscriber + secretmanager.secretAccessor only |
+| Cloud Scheduler → Pub/Sub via OIDC | PASS | pubsub-scheduler-recurring-jobs.sh line 186 uses --oidc-service-account-email |
+| Cloud Run services in asia-south1 | PASS | REGION="asia-south1" in setup.sh line 29; cloud-run-services.sh uses same region |
+| CallbackService Cloud Run defined | PASS | cloud-run-services.sh lines 238–245 |
+
+---
+
+### Section 5 — Cross-Cutting Checklist
+
+| Control | Result | Notes |
+|---------|--------|-------|
+| 26 notification templates — PII leakage | PASS | Event catalog reviewed; all entries are generic titles (e.g., "GST Return Due in 7 Days") with no tax amounts, refund values, or account numbers embedded |
+| MSG91 DLT compliance gate in code | PASS | Fan-out pipeline checks DltTemplateId before dispatch; adapter adds defensive check |
+| Callback audit trail (who-requested) | PARTIAL — see SEC-030 | DB schema has assignments_log; application-layer not writing to it |
+| Callback state-machine immutability | PARTIAL — see SEC-030 | DB schema is append-only for assignments_log; application layer does not populate it |
+| DPDP cascade for new tables | FAIL — see SEC-027 | callback.* and notification.* not in erasure event handler |
+
+---
+
+### Findings
+
+#### [HIGH] SEC-026 — PermissionBehavior Not Registered in AccountingService, NotificationService, or CallbackService
+
+- **Files:** `AccountingService.Infrastructure/DependencyInjection.cs`, `NotificationService` (DI not read but confirmed via grep returning empty), `CallbackService.Infrastructure/DependencyInjection.cs`
+- **Lines:** CallbackService DI line 23 (AddCallbackApplicationServices); AccountingService DI line 67 (end of method, no PermissionBehavior)
+- **Description:** The shared `DependencyInjection.cs` (line 53) explicitly documents that `PermissionBehavior` must be registered per-service after calling `AddApplicationServices()`. None of the three new services register it. As a result, the `[RequiresPermission]` attribute on commands is silently ignored — any authenticated user can invoke privileged commands such as `CloseFiscalYear`, `ReversePosting`, `ReviewPosting`, and all callback state transitions without role checks. The GstService stub conversions (e.g., `FileReturnCommand`) already use `[RequiresPermission("gst.returns.file")]` correctly, proving the pattern is known but was not applied to Phase 6A+6E services.
+- **Severity:** HIGH — RBAC bypass on financial write operations.
+- **Recommended Fix:** In each service's `Infrastructure/DependencyInjection.cs` (or `Program.cs`), after `AddApplicationServices()`, register `PermissionBehavior` via `cfg.AddOpenBehavior(typeof(PermissionBehavior<,>))` within the MediatR configuration. Apply `[RequiresPermission("accounting.*")]` attributes to privileged commands (`CloseFiscalYear`, `ReversePosting`, `ReviewPosting`, `BootstrapCoa`); apply `[RequiresPermission("callbacks.agent")]` to `AssignCallback`, `CompleteCallback`, `EscalateCallback`; apply `[RequiresPermission("notifications.operator")]` to no commands currently but gate DLQ retry.
+- **Agent:** backend-agent
+- **Reference:** SEC-012 (Phase 4), OWASP A01:2021 Broken Access Control
+
+#### [HIGH] SEC-027 — DPDP Right-to-Erasure Cascade Missing for callback.* and notification.* Tables (P6-HANDOFF-05)
+
+- **File:** `backend/Services/AuthService/AuthService.Application/Users/EventHandlers/AccountDeletionRequestedEventHandler.cs`
+- **Lines:** 21–47
+- **Description:** The `AccountDeletionRequestedEventHandler` publishes to `account-deletion-events` Pub/Sub topic. This was the Phase 5 fix for SEC-007. However, the downstream consumer services must subscribe and implement erasure logic for their own tables. As of Phase 6, two new data stores contain user PII that is not covered: (1) `callback.call_notes` — notes authored by or about a user; must be soft-deleted (`deleted_at = NOW()`). (2) `callback.callbacks.user_id` — must be anonymized to NULL with `anonymized_at` and `anonymization_reason = 'DPDP_ORG_ERASURE'` columns (both columns exist in migration 018, so the schema is ready). (3) `notification.notification_log` — contains `user_id` and rendered notification body which may contain user-specific data. (4) `notification.dlq_items` — contains `user_id` and original send payload. The DB columns for anonymization exist; enforcement is application-layer only and has not been implemented. This is P6-HANDOFF-05 confirmed unresolved.
+- **Severity:** HIGH — DPDP Act 2023 Right to Erasure violation; regulatory non-compliance.
+- **Recommended Fix:** backend-agent must implement `AccountDeletionEventConsumer` in both CallbackService and NotificationService that subscribes to `account-deletion-events` and: (a) soft-deletes `callback.call_notes` where `author_id = userId`; (b) sets `callback.callbacks.user_id = NULL, anonymized_at = NOW(), anonymization_reason = 'DPDP_ORG_ERASURE'` where `user_id = userId`; (c) sets `notification.notification_log.user_id = NULL` and nulls rendered body where `user_id = userId`; (d) sets `notification.dlq_items.user_id = NULL` where `user_id = userId`.
+- **Agent:** backend-agent
+- **Reference:** DPDP Act 2023 Section 17; SEC-007 (Phase 4); P6-HANDOFF-05
+
+#### [HIGH] SEC-028 — DLQ Endpoints Accessible to Any Authenticated User (Missing Operator-Role Gate)
+
+- **File:** `backend/Services/NotificationService/NotificationService.Api/Endpoints/Notifications.cs`
+- **Lines:** 67–80 (GetDlq), 74–80 (RetryDlqItem)
+- **Description:** `GET /notifications/dlq` and `POST /notifications/dlq/{id}/retry` use `.RequireAuthorization()` only, with no permission attribute or role check. Any authenticated mobile user can enumerate all failed notification delivery records (which may include other users' event codes, channels, and error messages) and trigger arbitrary retry dispatches. The DLQ is explicitly described as "operator review" tooling. The RLS policy `dlq_items_user_isolation` provides some protection at DB layer (user_id = current_user OR user_id IS NULL), but this relies on `app.current_user_id` being set correctly by the ORM session and does not prevent an authenticated user from seeing NULL-user_id system-level DLQ entries.
+- **Severity:** HIGH — Unauthorized information disclosure and ability to trigger unintended notification dispatches.
+- **Recommended Fix:** Add `[RequiresPermission("notifications.operator")]` to `GetDlqQuery` and `RetryDlqItemCommand`. Register PermissionBehavior in NotificationService DI (per SEC-026). Additionally, once PermissionBehavior is active, ensure that the `notifications.operator` permission is only assignable to SYSTEM_ADMIN / CA roles.
+- **Agent:** backend-agent
+- **Reference:** OWASP A01:2021 Broken Access Control; CWE-862 Missing Authorization
+
+#### [HIGH] SEC-029 — IDOR on GetCallbackById and All Callback State Transition Endpoints
+
+- **File:** `backend/Services/CallbackService/CallbackService.Api/Endpoints/Callbacks.cs`
+- **Lines:** 157–161 (GetCallbackById), 163–168 (AssignCallback), 170–175 (ConfirmCallback), 177–181 (CompleteCallback), 183–188 (EscalateCallback), 190–195 (CancelCallback), 197–202 (RescheduleCallback), 205–211 (AddNote)
+- **Description:** `GetCallbackById` does not inject `ICurrentUser` and passes only the GUID to the query handler. The handler fetches by `c.Id == callbackId` with no `org_id` or `user_id` ownership check. Any authenticated user who knows or guesses a callback UUID can read the full detail including phone number, issue description, call notes (including internal notes), and resolution summary belonging to another organization. All state-transition endpoints (Assign, Confirm, Complete, Escalate, Cancel, Reschedule, AddNote) have the same pattern — they send only the GUID to their command handlers without checking ownership. The DB-layer RLS policy (`callbacks_org_or_assignee_isolation`) provides protection only when `app.current_user_id` is set in the Postgres session, which EF Core does not do by default without an interceptor.
+- **Severity:** HIGH — Cross-organization data exposure and unauthorized state manipulation; IDOR.
+- **Recommended Fix:** (1) Inject `ICurrentUser` into `GetCallbackById`, `AssignCallback`, `ConfirmCallback`, `CompleteCallback`, `EscalateCallback`, `CancelCallback`, `RescheduleCallback`, and `AddNote` endpoint handlers. (2) Pass `currentUser.OrganizationId` (or for agent operations `currentUser.UserId`) to each query/command. (3) In each handler, add `&& (c.OrganizationId == request.OrganizationId || c.AssignedAgentId == request.RequestingUserId)` to the EF Core `FirstOrDefaultAsync` predicate. (4) Alternatively, implement a `SetCurrentUserIdInterceptor` (analogous to `AuditableEntityInterceptor`) that sets `SET LOCAL app.current_user_id = ...` on each DB command, enabling RLS to enforce ownership at the DB layer.
+- **Agent:** backend-agent
+- **Reference:** OWASP A01:2021 Broken Access Control; CWE-639 Authorization Bypass Through User-Controlled Key
+
+#### [MEDIUM] SEC-030 — Callback Audit Trail Not Written by Application Layer
+
+- **File:** `backend/Services/CallbackService/CallbackService.Application/Callbacks/Commands/AssignCallback/AssignCallbackCommand.cs` (representative; same pattern in all transition commands)
+- **Lines:** 23–42
+- **Description:** Migration 018 creates `callback.assignments_log` as an append-only audit table tracking who assigned whom, when, and why. The `AssignCallbackCommandHandler` (and all other transition handlers) updates `callback.callbacks` but never inserts a row into `assignments_log`. This means the "who-assigned, who-completed, who-escalated" audit trail required by the Phase 6E scope is absent at runtime. The `callback.callbacks` table has `updated_by` column but this is insufficient — it records only the last actor, not the full history.
+- **Severity:** MEDIUM — Compliance gap; audit trail integrity requirement unmet.
+- **Recommended Fix:** Each state-transition handler that modifies `callback.callbacks` must also insert a corresponding row into `callback.assignments_log`. For non-assignment transitions (complete, escalate, cancel), a more general `callback_state_transitions` append-only table may be appropriate, or the `shared.audit_log` table can be used. At minimum, AssignCallbackCommandHandler must insert into `assignments_log` with `(callback_id, from_user_id = old assigned_to, to_user_id = req.AgentId, assigned_by = currentUser.UserId, assigned_at = NOW())`.
+- **Agent:** backend-agent
+- **Reference:** SEC-010 (Phase 4 — shared.audit_log append-only pattern); CWE-778 Insufficient Logging
+
+#### [MEDIUM] SEC-031 — RecurringJobsSubscriber In-Process Dedupe Resets on Restart
+
+- **File:** `backend/Services/NotificationService/NotificationService.Infrastructure/Messaging/RecurringJobsSubscriber.cs`
+- **Lines:** 23, 39–47
+- **Description:** The `_processedEventIds` HashSet used for deduplication is an instance field, scoped to the process lifetime. On Cloud Run instance restart or scale-out to multiple instances, the dedupe state is lost and previously delivered Pub/Sub messages with the same `MessageId` could be processed again. Cloud Run scales horizontally and restarts regularly. For recurring job triggers (GST deadline, ITR reminders), double-dispatch may cause users to receive duplicate push/SMS/email notifications.
+- **Severity:** MEDIUM — Double-send risk on scale-out or restart; user experience and TRAI DLT compliance impact (sending identical SMS twice within minutes).
+- **Recommended Fix:** Replace the in-process HashSet with a short-TTL Redis `SET NX EX` check using the Pub/Sub `MessageId` as key (TTL = 10 minutes). Redis is already provisioned in the infra (setup.sh). Alternatively, persist processed event IDs to a `notification.processed_pubsub_events` table with a partial index on `(message_id, processed_at)` and a TTL-based purge job.
+- **Agent:** backend-agent
+- **Reference:** P6E-RISK-01 note on idempotency; CWE-362 Race Condition
+
+#### [MEDIUM] SEC-032 — BootstrapCoa Endpoint Has No Authorization Check on Organization Ownership
+
+- **File:** `backend/Services/AccountingService/AccountingService.Api/Endpoints/Accounting.cs`
+- **Lines:** 145–151
+- **Description:** `POST /accounting/organizations/{id}/bootstrap-coa` accepts an arbitrary organization UUID from the URL path and sends it directly to the command handler without any check that the calling user belongs to or owns that organization. Any authenticated user can trigger COA bootstrap for any organization UUID. While bootstrapping an already-bootstrapped org is idempotent (will return existing records), it could be used to probe valid organization IDs or cause unintended state in a fresh organization.
+- **Severity:** MEDIUM — Unauthorized cross-org action; information disclosure.
+- **Recommended Fix:** Inject `ICurrentUser` and verify `id == currentUser.OrganizationId` before dispatching the command. Add `[RequiresPermission("accounting.coa.bootstrap")]` to `BootstrapOrganizationChartOfAccountsCommand` (once PermissionBehavior is registered per SEC-026).
+- **Agent:** backend-agent
+- **Reference:** OWASP A01:2021; CWE-639
+
+#### [MEDIUM] SEC-033 — Screenshot Prevention Missing on RequestCallbackModalScreen and CallbackStatusScreen
+
+- **File:** `mobile/src/screens/callbacks/RequestCallbackModalScreen.tsx`, `mobile/src/screens/callbacks/CallbackStatusScreen.tsx`
+- **Lines:** RequestCallbackModalScreen (entire component — no `useSensitiveScreen` hook call found)
+- **Description:** `RequestCallbackModalScreen` accepts free-text `issueDescription` (up to 500 chars) which users are expected to describe financial issues (GST, ITR, loan problems). This constitutes sensitive personal/financial information. `CallbackStatusScreen` displays callback status, assigned agent name, scheduled time, and potentially issue description. Neither screen applies `useSensitiveScreen()` (the `expo-screen-capture` hook applied to 8 screens in Phase 5 per SEC-015). A screenshot of these screens while the app is in the background or during screen recording would expose financial issue descriptions and callback scheduling details.
+- **Severity:** MEDIUM — Sensitive financial context data exposed via screenshots.
+- **Recommended Fix:** Apply `useSensitiveScreen()` from `hooks/useSensitiveScreen` at the top of both `RequestCallbackModalScreen` and `CallbackStatusScreen`, consistent with the pattern established for sensitive screens in Phase 5.
+- **Agent:** mobile-dev
+- **Reference:** SEC-015 (Phase 4)
+
+#### [MEDIUM] SEC-034 — Deep-Link id Parameter Not Validated in notificationRouter
+
+- **File:** `mobile/src/notifications/notificationRouter.ts`
+- **Lines:** 44–49 (callback case), 51–56 (document case)
+- **Description:** The notification router extracts `id` from the FCM push payload data (`const { type, id } = data`) and passes it directly to React Navigation without format validation. A maliciously crafted push notification (or a compromised FCM message) could supply an `id` value that is not a valid UUID — for example an excessively long string, a path traversal sequence (`../../admin`), or a script fragment. While React Navigation's typed route parameters provide some protection, the `as (...args: any[]) => void` cast bypasses TypeScript type checking entirely. This allows arbitrary string values to flow into navigation state.
+- **Severity:** MEDIUM — Deep-link injection risk; may cause navigation to unintended screens or trigger unvalidated API calls downstream.
+- **Recommended Fix:** Add UUID format validation before navigation: `const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if (id && UUID_RE.test(id)) { navigate(...) }`. Remove the `as any` cast and use the typed `navigationRef.navigate` overload. Reject silently (log warning) if `id` fails validation.
+- **Agent:** mobile-dev
+- **Reference:** CWE-601 URL Redirection / Open Redirect; OWASP Mobile Top 10 M1
+
+#### [LOW] SEC-035 — snapaccount_admin BYPASSRLS Role Not Defined in Any Migration or Init Script (P6-HANDOFF-06)
+
+- **Files:** All files in `database/migrations/` and `database/init/`
+- **Description:** P6-HANDOFF-06 requires that `notification.dlq_items` operator tooling run under a `snapaccount_admin` role with `BYPASSRLS`. The migration 017 comment (line 148) references "operators use an elevated backend connection that bypasses RLS" but the `snapaccount_admin` role with `BYPASSRLS` privilege is not defined in any migration, init script, or setup.sh. The only reference to this role is in `database/shared/cloud-scheduler-partition-job.md` as an environment variable name. Without this role being created, the DLQ endpoint used by operators will either fail RLS checks (if the EF Core session user is a low-privilege role) or operators will be using the superuser `postgres` role, which is a security anti-pattern.
+- **Severity:** LOW — Operational risk and security hygiene; not immediately exploitable but leaves the BYPASSRLS pattern undocumented and unverifiable.
+- **Recommended Fix:** db-engineer must add to `database/init/00_extensions_and_schemas.sql` (or a new `database/init/01_roles.sql`): `CREATE ROLE snapaccount_admin WITH BYPASSRLS LOGIN; GRANT CONNECT ON DATABASE snapaccount TO snapaccount_admin; GRANT USAGE ON SCHEMA notification, callback TO snapaccount_admin;` and document in CLAUDE.md that the NotificationService DLQ tooling must connect with this role. The `NotificationService.Infrastructure/DependencyInjection.cs` should support a separate admin connection string for operator-mode endpoints.
+- **Agent:** db-engineer
+- **Reference:** P6-HANDOFF-06; PostgreSQL BYPASSRLS
+
+#### [LOW] SEC-036 — FCM Push Data Payload Exposes Event Code in Cleartext to Device Notification Tray
+
+- **File:** `backend/Services/NotificationService/NotificationService.Infrastructure/Adapters/FcmPushAdapter.cs`
+- **Lines:** 41–44
+- **Description:** The FCM `data` payload includes `event_code` (e.g., `ITR_REFUND_CREDITED`, `LOAN_EMI_DUE`) and `locale` as plaintext key-value pairs. On Android, `data` messages may be visible in the notification shade or accessible via notification history APIs if the app is not the active receiver. While event codes are not PII themselves, they can reveal sensitive context (e.g., a `LOAN_EMI_DUE` event on a shared device screen implies the user has an outstanding loan). More critically, if a future developer adds `amount` or `account_number` to the data map, it will be exposed immediately.
+- **Severity:** LOW — Minimal current risk; preventive hygiene.
+- **Recommended Fix:** Restrict the `data` map to navigation-intent fields only (`type`, `id`). Move `event_code` to an internal-only field if needed for analytics, or remove it from the push payload. Establish a code convention that no financial values (amounts, account numbers, GSTIN) may be added to FCM data maps.
+- **Agent:** backend-agent
+- **Reference:** OWASP Mobile Top 10 M2; CWE-200
+
+#### [LOW] SEC-037 — OcrResultSubscriber Uses Hardcoded Fallback Account UUIDs
+
+- **File:** `backend/Services/AccountingService/AccountingService.Infrastructure/Messaging/OcrResultSubscriber.cs`
+- **Lines:** 88–90
+- **Description:** When `SuggestedDebitAccountId` or `SuggestedCreditAccountId` are null in the OCR payload, the subscriber falls back to hardcoded UUIDs `00000000-0000-0000-0000-000000001200` (Accounts Receivable) and `00000000-0000-0000-0000-000000004100` (Revenue). These are synthetic UUIDs that almost certainly do not correspond to actual `accounting.account` rows. If the per-org COA bootstrap has not been run, EF Core will throw a foreign key violation at post time, or worse — if these UUIDs coincidentally exist in a test org's accounts table, incorrect postings will be silently accepted.
+- **Severity:** LOW — Data integrity risk rather than security; included because incorrect financial postings can mask fraud or trigger audit findings.
+- **Recommended Fix:** Replace the hardcoded fallback with a `Result.Failure` if `SuggestedDebitAccountId` or `SuggestedCreditAccountId` is null and no per-org mapping has been configured. NACK the Pub/Sub message so it is retried after Phase 6B mapping service is available.
+- **Agent:** backend-agent
+
+#### [INFO] INFO-001 — Notification Template Catalog: 26 Events Reviewed, No PII Leakage Found
+
+- **File:** `backend/Services/NotificationService/NotificationService.Application/Catalog/NotificationEventCatalog.cs`
+- **Description:** All 26 event catalog entries reviewed. Event names and categories are generic (e.g., "GST Return Due in 7 Days", "ITR Refund Credited", "Callback Scheduled"). No template embeds tax amounts, refund values, account numbers, PAN, GSTIN, or Aadhaar. The `Variables` dictionary mechanism allows callers to inject values at dispatch time — it is the caller's responsibility to not pass sensitive values; this is noted for future code review.
+- **Status:** PASS
+
+#### [INFO] INFO-002 — Dedup Window Is Date-of-Send Only; Does Not Prevent Repeated Quiet-Hours Suppression
+
+- **File:** `backend/Services/NotificationService/NotificationService.Application/Notifications/Commands/SendNotification/SendNotificationCommand.cs`
+- **Lines:** 83–96
+- **Description:** The 6-hour dedup window is checked before quiet-hours suppression. This means if a notification is suppressed by quiet hours (not sent), the dedup key is still not written to the log (because `Suppressed` status is not persisted to `NotificationLog`). A notification suppressed at 11 PM for quiet hours will be retried at the next fan-out call — which is correct behavior. No security issue, noted for product awareness.
+- **Status:** INFO only
+
+#### [INFO] INFO-003 — Cloud Scheduler OIDC Confirmed; Pub/Sub Topic-Level IAM Not Verified
+
+- **File:** `infra/pubsub-scheduler-recurring-jobs.sh` line 186
+- **Description:** Cloud Scheduler jobs use OIDC (`--oidc-service-account-email`) to authenticate to the Pub/Sub push endpoint. This is correct. The setup.sh comment notes that topic-level IAM binding is applied in `pubsub-scheduler-recurring-jobs.sh` rather than project-level, maintaining least privilege. The actual `gcloud pubsub topics add-iam-policy-binding` call was not visible in the lines read; devops-engineer should confirm it is present.
+- **Status:** INFO — confirm topic-level binding exists in pubsub-scheduler-recurring-jobs.sh
+
+---
+
+### Handoff Decisions
+
+#### P6-HANDOFF-04 — MV RLS Decision: ACCEPT API-Layer Filter with Mandatory Test
+
+**Decision:** ACCEPTED — API-layer `org_id` filter (option a).
+
+**Rationale:** PostgreSQL does not support row-level security on materialized views. The `callback.kpi_daily_snapshot` MV aggregates data at `(org_id, snapshot_date)` granularity, meaning each row is already org-scoped by the GROUP BY key. The `GetKpiSnapshot` endpoint in `Callbacks.cs` line 213 currently returns a placeholder, but the existing `ListCallbacks` and API pattern confirm that `ICurrentUser.OrganizationId` is always available at the endpoint layer. Requiring a `SECURITY INVOKER` SQL function wrapper (option b) would add a DB migration, require a new DB role, and add latency with no practical advantage given the MV's pre-aggregated structure.
+
+**Conditions for acceptance:**
+1. The full KPI query implementation (when completed) MUST add a `WHERE org_id = @orgId` clause parameterized from `ICurrentUser.OrganizationId`. This must be verified in the Phase 6B backend review.
+2. backend-agent must add an integration test asserting that an authenticated user from Org A cannot see KPI data for Org B.
+3. This decision is documented in `docs/security/phase-6-mv-rls-decision.md`.
+
+**Decision filed to:** `docs/security/phase-6-mv-rls-decision.md` (separate file)
+
+#### P6-HANDOFF-05 — DPDP Erasure Cascade: FAIL — Callbacks and Notifications Not Covered
+
+**Finding:** The `AccountDeletionRequestedEventHandler` publishes to `account-deletion-events` but neither `CallbackService` nor `NotificationService` has a subscriber implementing erasure. The DB columns for anonymization (`anonymized_at`, `anonymization_reason`) exist in migration 018. This is filed as **SEC-027** (HIGH).
+
+#### P6-HANDOFF-06 — notification.dlq_items BYPASSRLS Role Audit: NOT CONFIRMED
+
+**Finding:** The `snapaccount_admin` role with `BYPASSRLS` is referenced in documentation but is not defined in any migration or init script. This is filed as **SEC-035** (LOW). The `dlq_items_user_isolation` RLS policy is in place and correctly restricts user-scoped rows. The gap is for operator/system access to NULL-user_id rows. The DLQ GetDlq endpoint currently has no permission gate (SEC-028, HIGH) so the BYPASSRLS question is secondary to fixing the missing role-check first.
+
+---
+
+### Phase 6 Summary
+
+CRITICAL: 0 | HIGH: 4 (SEC-026, SEC-027, SEC-028, SEC-029) | MEDIUM: 5 (SEC-030, SEC-031, SEC-032, SEC-033, SEC-034) | LOW: 3 (SEC-035, SEC-036, SEC-037) | INFO: 3 (INFO-001, INFO-002, INFO-003)
+
+**Go / No-Go Recommendation:** CONDITIONAL NO-GO
+
+The four HIGH findings must be resolved before production deployment:
+- SEC-026: PermissionBehavior not registered — financial write commands unprotected
+- SEC-027: DPDP erasure not extended to callback/notification tables — regulatory violation
+- SEC-028: DLQ accessible to any authenticated user — data exposure
+- SEC-029: IDOR on GetCallbackById and all state-transition commands — cross-org data access
+
+The five MEDIUM findings (SEC-030 through SEC-034) should be resolved before go-live but are not blockers for staging deployment.
+
+Staging deployment is acceptable for QA/integration testing provided:
+1. The staging DB does not contain real user PII.
+2. The DLQ endpoint is not exposed in the staging admin panel until SEC-028 is fixed.
+
+---
+
+*Phase 6 review completed: 2026-04-25*
+*Next review: Phase 6B/6C or upon fix verification of SEC-026 through SEC-029*
+
+---
+
+## Phase 6F Review (2026-04-25)
+
+**Scope:** ChatService (16 REST endpoints + SignalR hub at /hubs/chat, Redis backplane, AccountDeletionSubscriber), SubscriptionService (13 endpoints, state machine), /search aggregator (auth-schema fan-out via GlobalSearchQuery), /reports/{id}/share-link (CreateShareLinkCommand, 15-min TTL), /notifications/celebrations (FireCelebrationCommand), Admin frontend (CommandPalette/cmd+k, RoleGuard, DarkMode, PartnerBanksSettings, 8 Settings sections), Mobile (ChatDetailScreen + SignalR client, ChatListScreen, notificationRouter Phase-6F extensions), DB migration 029 (chat canonical tables + BEFORE DELETE triggers), migration 030 (chat indexes + tsvector).
+**Review Date:** 2026-04-25
+**Reviewer:** security-reviewer agent
+
+---
+
+### Section 1 — ChatService Backend
+
+| Control | Result | Evidence |
+|---------|--------|----------|
+| FirebaseAuthMiddleware applied | PASS | Program.cs line 81 |
+| RequireAuthorization() on all endpoints | PASS | All 16 REST endpoints + MapHub require auth |
+| [Authorize] on ChatHub | PASS | ChatHub.cs line 17 |
+| JoinThread participant check | PASS | ChatHub.cs lines 79–88: DB query verifies caller is thread_participant before AddToGroupAsync |
+| PermissionBehavior registered | PASS | DependencyInjection.cs (Application layer) line 20: `AddTransient(typeof(IPipelineBehavior<,>), typeof(PermissionBehavior<,>))` |
+| [RequiresPermission] on assign/resolve/escalate | PASS | AssignThreadCommand: `[RequiresPermission("chat.thread.assign")]`; ResolveThreadCommand: `[RequiresPermission("chat.thread.resolve")]`; EscalateThreadCommand: `[RequiresPermission("chat.thread.escalate")]` |
+| IDOR: org-scoped queries (sampled 5 handlers) | PASS | GetThreadDetail, GetMessages, SendMessage, AssignThread, ResolveThread — all filter `t.OrganizationId == orgId` inline; Error.NotFound on mismatch |
+| Participant check on SendMessage | PASS | SendMessageCommandHandler lines 70–71: `!thread.Participants.Any(p => p.UserId == currentUser.UserId)` → Error.Forbidden |
+| Idempotency (client_message_id) | PASS | SendMessageCommandHandler lines 74–83: dedup on (thread_id, client_message_id); returns existing message |
+| SearchHistory org-scoped | PASS | SearchHistoryQueryHandler line 65: `x.Thread.OrganizationId == orgId` filter applied; no cross-org leak |
+| DPDP AccountDeletionSubscriber | PASS | AccountDeletionSubscriber.cs: anonymizes sender_user_id + stamps anonymized_at + soft-deletes ThreadParticipants |
+| DB BEFORE DELETE triggers (migration 029) | PASS | Migration 029 lines 154–165: `chat.threads_block_delete()` trigger; lines 234–241: `chat.messages_block_delete()` trigger |
+| Redis presence TTL 30s | PASS | PresenceService.cs line 15: `TimeSpan.FromSeconds(30)` |
+| Rate limiting on SendMessage | MEDIUM — see SEC-053 | "standard" 100 req/min shared policy; no dedicated tight window for message flooding |
+| Rate limiting on SignalR hub methods | MEDIUM — see SEC-051 | No rate limiting on Hub methods (JoinThread, Heartbeat, SendMessage-via-hub if added); only REST endpoints rate-limited |
+| Redis private-network only | PASS | Cloud Run VPC connector required (wired in infra); Redis connection string from config, not hardcoded |
+
+### Section 2 — SubscriptionService
+
+| Control | Result | Evidence |
+|---------|--------|----------|
+| FirebaseAuthMiddleware applied | PASS | Program.cs line 80 |
+| PermissionBehavior registered | PASS | DependencyInjection.cs line 20 |
+| [RequiresPermission] on plan CRUD | PASS | CreatePlanCommand: `[RequiresPermission("subscription.plan.create")]`; UpdatePlanCommand checked (pattern confirmed) |
+| Org-scoped IDOR (cancel/upgrade/downgrade) | PASS | CancelSubscriptionCommandHandler: `.Where(s => s.Id == ... && s.OrganizationId == orgId)` |
+| State machine invalid transitions return Conflict | PARTIAL | Subscription.cs domain model enforces via exceptions caught by Result pattern; Conflict status code mapped in MapError |
+| **Razorpay webhook HMAC (SEC-001 regression)** | **FAIL — see SEC-051** | No webhook endpoint exists in SubscriptionService 6F build. POST /subscriptions/{id}/payments is Firebase-JWT-authenticated; Razorpay cannot call it. SEC-001 HMAC is effectively disabled. |
+| AccountDeletionSubscriber for subscriptions | FAIL — see SEC-052 | No AccountDeletionSubscriber in SubscriptionService.Infrastructure.DependencyInjection.cs; subscription.subscriptions.organization_id and subscription.invoices are not in erasure cascade |
+
+### Section 3 — /search Aggregator
+
+| Control | Result | Evidence |
+|---------|--------|----------|
+| ICurrentUser org-scoping | PASS | GlobalSearchQueryHandler lines 60–88: non-admin restricted to own user_id; admin restricted to own org |
+| Cross-org data leak prevention | PASS | User search for admins filtered by org membership; org search for admins filters by org; non-admins see only themselves |
+| Rate limiting | PASS | Search.cs: `.RequireRateLimiting("standard")` |
+| No URL reflection of query (XSS) | PASS | Query sent via API call only (CommandPalette.tsx); not reflected in URL |
+| Input validation min length | PASS | GlobalSearchQueryValidator: MinimumLength(2); MaximumLength(200) |
+
+### Section 4 — /reports/{id}/share-link
+
+| Control | Result | Evidence |
+|---------|--------|----------|
+| TTL ≤ 15 min (SEC-046 carry-forward) | PASS | CreateShareLinkCommandHandler line 60: `TimeSpan.FromMinutes(15)`; SEC-046 comment present |
+| Org-scoped before generating signed URL | PASS | `j.OrgId == orgId` in EF query before generating URL |
+
+### Section 5 — /notifications/celebrations
+
+| Control | Result | Evidence |
+|---------|--------|----------|
+| Server-side replay prevention (per-user × per-kind) | PASS | FireCelebrationCommandHandler lines 61–69: query by (userId, eventCode); returns AlreadyFired=true on duplicate |
+| AllowedKinds server-validated | PASS | FireCelebrationCommandValidator: static AllowedKinds array; case-insensitive `.Must()` check |
+| No PII in celebration event code | PASS | Event codes are generic category names (e.g., `celebration.first_gst_filed`); no user data embedded |
+
+### Section 6 — Admin Frontend
+
+| Control | Result | Evidence |
+|---------|--------|----------|
+| CommandPalette: query sent via API only (no URL reflection) | PASS | CommandPalette.tsx: `api.get('/search', { params: { q: query } })` — query not written to URL |
+| CommandPalette: Zod validation on API response | PASS | SearchResponseSchema.parse(res.data) at line 109 |
+| RoleGuard: client-side only (backend must enforce too) | PASS | RoleGuard correctly warns this is UI-only; backend enforces PermissionBehavior + RequiresPermission independently |
+| RoleGuard: loading/unauth handled | PASS | Loading spinner while `user == null`; unauthenticated redirects to /login with next param |
+| PartnerBanksSettings: write-only secret pattern | PASS | Input type="password" for API Key, Client Secret, Password; no read-back of stored secrets |
+| PayloadViewer SEC-045: OAuth token masking | FAIL — still OPEN | PayloadViewer.tsx line 134: `<pre>{payload}</pre>` renders raw payload verbatim after displaying "OAuth token is masked" text. Bearer tokens visible in admin UI. Deferred from 6C, not fixed in 6F. |
+| Settings PATCH endpoints org-scoped + permission-checked | INFO — see INFO-004 | PATCH /auth/feature-flags, /auth/config/ai, /auth/org/settings, /auth/config/whatsapp, /auth/config/language do not exist in any backend service (AuthService has only 2 endpoint files); Settings UI calls ghost endpoints |
+| No dangerouslySetInnerHTML with untrusted content | PASS | Email body rendered in `<iframe sandbox="">` (line 117); JSON rendered via JsonTree recursive renderer |
+| No XSS in search results rendered | PASS | Results rendered as text/string interpolation via JSX — no innerHTML |
+
+### Section 7 — Mobile
+
+| Control | Result | Evidence |
+|---------|--------|----------|
+| ChatDetailScreen useSensitiveScreen | PASS | ChatDetailScreen.tsx line 218: `useSensitiveScreen()` applied |
+| SEC-033 FIXED: RequestCallbackModalScreen useSensitiveScreen | PASS — FIXED | RequestCallbackModalScreen.tsx line 79: `useSensitiveScreen()` confirmed |
+| SignalR JWT token factory | FAIL — see SEC-054 | ChatDetailScreen.tsx line 232: `buildChatHubConnection(HUB_BASE_URL, async () => null)` — token factory always returns null; SignalR hub will connect without auth token; hub's `[Authorize]` will reject the connection |
+| notificationRouter: UUID validation on new chat/loan types | FAIL — see SEC-034 (still OPEN) | Lines 64–74: `threadId` (chat) and `loanId` (loan) passed to navigation without UUID_RE validation, same as pre-existing `id` (callback/document); pattern not fixed for Phase 6F extensions |
+| SEC-048: biometric (Alert.alert placeholder) | OPEN | LoanConsentScreen.tsx line 7: "Biometric: Alert fallback (expo-local-authentication not yet installed — P6-HANDOFF-24)" — still unchanged in 6F |
+| SEC-050: consent_text_version dynamic fetch | OPEN | LoanConsentScreen.tsx line 46: `const CONSENT_VERSION = '1.4'` still hardcoded; comment on line 44 says "in production, fetch this from backend consent catalog" |
+| No AsyncStorage for sensitive chat data | PASS | Hub token factory returns null (avoids storage issue); REST calls use apiClient (Bearer JWT from FirebaseAuth) |
+| No PII in console.log | PASS | No console.log of message bodies or user IDs observed in ChatDetailScreen |
+
+### Section 8 — Database (Migration 029)
+
+| Control | Result | Evidence |
+|---------|--------|----------|
+| BEFORE DELETE triggers on chat.messages | PASS | migration 029 lines 234–241: `trg_chat_messages_block_delete` trigger defined |
+| BEFORE DELETE triggers on chat.threads | PASS | migration 029 lines 162–165: `trg_chat_threads_block_delete` trigger defined |
+| anonymized_at / anonymization_reason columns | PASS | chat.messages schema (lines 190–193): `anonymized_at TIMESTAMPTZ`, `anonymized_by UUID`, `anonymization_reason VARCHAR(100)` |
+| Audit timestamps on all chat tables | PASS | created_at/updated_at/deleted_at on all 6 tables |
+| client_message_id UNIQUE constraint | PASS | Composite UNIQUE on (thread_id, client_message_id) in ChatMessageConfiguration |
+
+### Section 9 — Cross-Cutting Regression Check
+
+| Prior Finding | Status | Evidence |
+|--------------|--------|----------|
+| SEC-026 (PermissionBehavior) | CONFIRMED-FIXED | ChatService + SubscriptionService both register PermissionBehavior in DI |
+| SEC-027 (DPDP callback/notification) | CONFIRMED-FIXED | AccountDeletionSubscribers verified in Phase 6 re-audit; ChatService adds new subscriber |
+| SEC-028 (DLQ gate) | CONFIRMED-FIXED | RetryDlqItemCommand: `[RequiresPermission("notification.dlq.manage")]` still present |
+| SEC-029 (IDOR callbacks) | CONFIRMED-FIXED | Pattern stable; no regression observed |
+| SEC-038 (IDOR GstService notices) | CONFIRMED-FIXED (Phase 6B re-audit) | No regression in 6F code |
+| SEC-039 (IDOR ItrService filings) | CONFIRMED-FIXED (Phase 6B re-audit) | No regression in 6F code |
+| SEC-040 (DPDP GstService/ItrService) | CONFIRMED-FIXED (Phase 6B re-audit) | No regression in 6F code |
+| SEC-043 (gst-write-strict rate limit) | CONFIRMED-FIXED (Phase 6B re-audit) | No regression in 6F code |
+| SEC-044 (webhook null-bypass LoanService) | CONFIRMED-FIXED (Phase 6C re-audit) | No regression in 6F code |
+| SEC-046 (15-min TTL) | CONFIRMED-FIXED | CreateShareLinkCommand confirmed 15-min TTL |
+| SEC-047 (disbursedAmount in push) | CONFIRMED-FIXED (Phase 6C re-audit) | No regression in 6F code |
+| SEC-049 (watermark) | CONFIRMED-FIXED (Phase 6C re-audit) | No regression in 6F code |
+| **SEC-001 (Razorpay HMAC)** | **REGRESSION — see SEC-051** | No webhook endpoint exists in SubscriptionService 6F build |
+| SEC-033 (useSensitiveScreen callbacks) | CONFIRMED-FIXED in 6F | RequestCallbackModalScreen.tsx line 79 verified |
+| SEC-041 (ItrService client PAN cipher) | OPEN — SEC-041 TODO comment still present | UploadForm16Command.cs line 53: "SEC-041 TODO" |
+| SEC-042 (admin localStorage draft) | OPEN — not checked in 6F scope | Out of 6F scope; deferred |
+| SEC-045 (PayloadViewer oauth masking) | OPEN — still unmasked in 6F | PayloadViewer.tsx line 134 verified |
+| SEC-048 (biometric Alert.alert) | OPEN | LoanConsentScreen.tsx comment line 7 still present |
+| SEC-050 (consent_text_version hardcoded) | OPEN | LoanConsentScreen.tsx line 46: still '1.4' |
+| SEC-034 (deep-link UUID validation) | OPEN and extended | notificationRouter.ts: threadId + loanId added without UUID validation in 6F |
+
+---
+
+### Findings
+
+#### [HIGH] SEC-051 — Razorpay Webhook HMAC Verification Eliminated (SEC-001 Regression)
+
+- **File:** `backend/Services/SubscriptionService/SubscriptionService.Api/Endpoints/Subscriptions.cs`
+- **Line:** 108–114 (POST /subscriptions/{id}/payments)
+- **Description:** The Phase 5 fix for SEC-001 implemented Razorpay webhook HMAC-SHA256 verification using `CryptographicOperations.FixedTimeEquals`. In Phase 6F, the `SubscriptionService` has been rebuilt from scratch and no Razorpay webhook endpoint exists. The `POST /subscriptions/{id}/payments` endpoint at line 108 is Firebase-JWT-authenticated (`RequireAuthorization()`). Razorpay cannot supply a Firebase JWT — it calls with an `X-Razorpay-Signature` HMAC header. This means: (1) Razorpay cannot actually trigger subscription renewals via webhook; (2) if any future developer adds an anonymous endpoint for the webhook, the HMAC verification is not present to protect it; (3) the `RecordPaymentCommand` docstring at line 11 falsely claims "SEC-001 HMAC verified" when there is no such endpoint. This is a critical architectural regression — subscriptions cannot be renewed by Razorpay event, breaking the core billing flow. Any authenticated user can call `POST /subscriptions/{id}/payments` with an arbitrary payment ID to fraudulently mark their subscription as renewed.
+- **Severity:** HIGH — Financial fraud vector (any authenticated user can renew any subscription in their org with fake payment data); SEC-001 regression; billing broken.
+- **Recommended Fix:** Restore a dedicated Razorpay webhook endpoint (`POST /subscriptions/webhooks/razorpay`) that: (a) is anonymous (no `RequireAuthorization()`); (b) reads `X-Razorpay-Signature` header; (c) computes `HMAC-SHA256(payload, webhook_secret)`; (d) compares with `CryptographicOperations.FixedTimeEquals` using decoded bytes; (e) only then dispatches `RecordPaymentCommand` internally. Remove `RequireAuthorization()` from the webhook path and add it only to operator/manual payment endpoints. The `AppHost.cs` already references a Razorpay webhook HMAC secret at line 105 — use it.
+- **Agent:** backend-agent
+- **Reference:** SEC-001 (Phase 4/5); CWE-862 Missing Authorization; OWASP A01:2021
+
+#### [MEDIUM] SEC-052 — SubscriptionService Missing AccountDeletionSubscriber (DPDP Erasure Gap)
+
+- **File:** `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/DependencyInjection.cs`
+- **Lines:** All — no `AddHostedService<AccountDeletionSubscriber>()` call exists
+- **Description:** `subscription.subscriptions` stores `organization_id` and Razorpay payment metadata. `subscription.invoices` stores `organization_id`, billing amounts (INR), GST amounts, and Razorpay payment IDs. When a user invokes their DPDP Act 2023 right to erasure, the AuthService publishes to `account-deletion-events`. The SubscriptionService has no subscriber, so subscription records and invoice history linked to the deleted user's organization are not processed. Per RBI/GSTN regulations, subscription invoices must be retained 7 years but the user reference within them must be anonymized. No anonymization columns exist in the subscription.subscriptions or subscription.invoices tables.
+- **Severity:** MEDIUM — DPDP Act 2023 compliance gap; the impact is lower than HIGH because subscriptions are org-scoped (not user-scoped), so the primary PII is the organization record rather than individual user data.
+- **Recommended Fix:** Add `AccountDeletionSubscriber` to SubscriptionService.Infrastructure that: (a) anonymizes `subscription.subscriptions.razorpay_customer_id = NULL` where `org_id` matches the deleted user's org (if user is the org owner); (b) retains invoice records but nulls any user_id-linked fields. Add `anonymized_at` and `anonymization_reason` columns to both tables via a new migration. Register with `AddHostedService<AccountDeletionSubscriber>()`.
+- **Agent:** backend-agent
+- **Reference:** DPDP Act 2023 Section 17; pattern from SEC-027, SEC-040
+
+#### [MEDIUM] SEC-053 — SendMessage REST Endpoint Shares General Rate-Limit Policy (No Anti-Flood Dedicated Window)
+
+- **File:** `backend/Services/ChatService/ChatService.Api/Endpoints/Chat.cs`
+- **Line:** 60–63 (SendMessage endpoint uses "standard" policy)
+- **Description:** `POST /chat/threads/{id}/messages` shares the "standard" 100-requests-per-minute fixed-window policy with all other chat endpoints (GetInbox, GetThread, GetMessages, MarkRead, etc.). A user can send 100 messages per minute per IP, which is functionally unlimited for messaging abuse. Phase 6B GstService correctly introduced a dedicated "gst-write-strict" (30 req/min) policy for write endpoints that trigger expensive operations — the same pattern should apply to message send, which triggers SignalR hub broadcasts and DB writes.
+- **Severity:** MEDIUM — Abuse/flooding risk; SignalR broadcasts amplify load; no per-user message throttle.
+- **Recommended Fix:** Register a dedicated `"chat-send"` rate-limit policy (e.g., 20 messages per minute per user, sliding window) and apply it to `POST /chat/threads/{id}/messages` only. Keep "standard" for read endpoints.
+- **Agent:** backend-agent
+- **Reference:** SEC-043 pattern (Phase 6B gst-write-strict); OWASP API Security Top 10 — API4:2023 Unrestricted Resource Consumption
+
+#### [MEDIUM] SEC-054 — SignalR JWT Token Factory Returns Null in ChatDetailScreen
+
+- **File:** `mobile/src/screens/chat/ChatDetailScreen.tsx`
+- **Line:** 232
+- **Description:** `buildChatHubConnection(HUB_BASE_URL, async () => null)` passes a token factory that always returns `null`. The `ChatHub` on the server has `[Authorize]` and `RequireAuthorization()` — connections without a valid JWT are rejected. This means the SignalR real-time feature is non-functional in the current build. At runtime, `startChatHub()` will throw or silently fail (hub returns 401/403 on negotiation), leaving users without real-time message delivery. The comment reads "token injected in real app via FirebaseAuth" but no injection mechanism is wired; the `getToken` callback is never populated with a real auth token.
+- **Severity:** MEDIUM — Real-time functionality broken in current build; if this is mistakenly deployed, chat messages are delivered only via REST polling fallback, not SignalR; and if the hub connection is somehow established against a misconfigured server without auth, unauthenticated real-time access becomes possible.
+- **Recommended Fix:** Replace the null factory with the actual Firebase token retrieval. The `authStore` (which uses SecureStore) holds the Firebase token. The token factory should call `auth.currentUser?.getIdToken()` from `@react-native-firebase/auth` or read from the `authStore`. Example: `buildChatHubConnection(HUB_BASE_URL, async () => { return await auth().currentUser?.getIdToken() ?? null; })`. This must be wired before the 6F mobile build ships.
+- **Agent:** mobile-dev
+- **Reference:** SEC-001 pattern (token validation); OWASP Mobile Top 10 M1
+
+#### [MEDIUM] SEC-055 — notificationRouter 6F Extensions Inherit SEC-034 UUID Validation Gap
+
+- **File:** `mobile/src/notifications/notificationRouter.ts`
+- **Lines:** 64–74
+- **Description:** Phase 6F added two new deep-link cases: `chat_message_received` (passes `threadId` to ChatDetail navigation) and `loan_disbursed`/`loan_approved` (passes `loanId` to LoanStatus navigation). Neither `threadId` nor `loanId` has UUID format validation. The existing SEC-034 finding documented this gap for `id` (callback/document). Rather than fixing the existing issue, the 6F extension duplicates it. A maliciously crafted push notification (compromised FCM channel or Pub/Sub injection) could pass non-UUID values into navigation state.
+- **Severity:** MEDIUM — Extends known SEC-034 attack surface to two additional routes; combined risk of deep-link injection on 4 navigable routes.
+- **Recommended Fix:** Add `const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;` at module scope and validate `threadId`, `loanId`, `id` before calling `nav(...)`. Silently drop (log warning) on validation failure. Remove all `as any` casts.
+- **Agent:** mobile-dev
+- **Reference:** SEC-034 (Phase 6); CWE-601; OWASP Mobile Top 10 M1
+
+#### [LOW] SEC-056 — Settings API Calls Ghost Endpoints Not Implemented in Backend
+
+- **File:** `src/admin/src/lib/settingsApi.ts`
+- **Lines:** 57 (PATCH /auth/org/settings), 77 (PATCH /auth/config/ai), 91 (PATCH /auth/feature-flags/{flag}), 109 (PATCH /auth/config/language), 128 (PATCH /auth/config/whatsapp)
+- **Description:** The admin Settings page calls five PATCH endpoints in AuthService that do not exist in any backend service. `AuthService.Api/Endpoints/` contains only `Auth.cs` and `Search.cs`. No feature-flag, AI config, org settings, language, or WhatsApp config endpoint is defined. API calls will receive 404 responses. This is noted as a security finding because: (a) the absence of a backend endpoint for feature-flag toggling means there is no server-side enforcement of flag changes made in the UI; and (b) if stub endpoints are added later without proper permission gating, they become an unprotected privilege escalation path.
+- **Severity:** LOW — Functional gap more than security issue currently; security risk materializes only when endpoints are created without gates.
+- **Recommended Fix:** Ensure all Settings PATCH endpoints, when implemented, have `[RequiresPermission("admin.settings.*")]` attributes and are gated to `SYSTEM_ADMIN` role. Track implementation in Phase 7 scope.
+- **Agent:** backend-agent
+
+#### [INFO] INFO-004 — SEC-045 (PayloadViewer OAuth Masking) Deferred Again — Third Phase Unresolved
+
+- **File:** `src/admin/src/components/ui/PayloadViewer.tsx`
+- **Line:** 134
+- **Description:** SEC-045 was first filed in Phase 6C, deferred to 6F, and is now entering its third deferred phase without resolution. The `oauth-token` kind renders the raw payload in a `<pre>` tag after displaying a "masked" label — the opposite of masking. Live bearer tokens from bank API responses visible in the admin UI. This is a pre-production blocker.
+- **Status:** ESCALATION — Frontend-dev must resolve in Phase 7 stabilization. If token display is needed, show only `iss`, `exp`, `scope` claims parsed from the JWT. Never render the raw token string.
+
+#### [INFO] INFO-005 — ChatService: No Dedicated Rate Limit on SignalR Hub Methods
+
+- **File:** `backend/Services/ChatService/ChatService.Infrastructure/SignalR/ChatHub.cs`
+- **Description:** The `[Authorize]` attribute ensures authenticated access. However, hub methods `JoinThread`, `Heartbeat`, and any future hub-level send method have no application-layer rate limit. ASP.NET Core's `IRateLimiter` does not apply to SignalR hub method invocations (only to HTTP endpoints). A connected client could call `JoinThread` in a tight loop to spam group membership operations. Redis `Groups.AddToGroupAsync` is not idempotent at the StackExchange.Redis layer — repeated calls increment reference counts.
+- **Severity:** INFO — Structural gap to be addressed with a custom hub filter in Phase 7.
+- **Recommended Fix:** Implement a custom `IHubFilter` that checks a per-connection invocation counter stored in Redis (or in-memory for the connection lifetime) and rejects hub method calls above a threshold (e.g., 30 JoinThread calls / connection lifetime).
+
+---
+
+### Deferred Items Status (from prior phases)
+
+| ID | Severity | Was | Status in 6F |
+|----|----------|-----|-------------|
+| SEC-033 | Medium | useSensitiveScreen on callback screens | FIXED — RequestCallbackModalScreen.tsx line 79 confirmed |
+| SEC-034 | Medium | UUID validation on deep-link id | STILL OPEN; 6F extended scope to threadId + loanId without fix |
+| SEC-041 | Medium | ItrService client PAN cipher | STILL OPEN — TODO comment remains |
+| SEC-042 | Medium | Admin localStorage draft | OUT OF 6F SCOPE — deferred to Phase 7 |
+| SEC-045 | Medium | PayloadViewer OAuth masking | STILL OPEN — third deferred phase |
+| SEC-048 | Medium | Real biometric (expo-local-authentication) | STILL OPEN — Alert.alert fallback unchanged |
+| SEC-050 | Medium | consent_text_version hardcoded | STILL OPEN — '1.4' hardcoded |
+
+---
+
+### Phase 6F Summary
+
+CRITICAL: 0 | HIGH: 1 (SEC-051) | MEDIUM: 5 (SEC-052, SEC-053, SEC-054, SEC-055, plus deferred SEC-041/045/048/050/034 still open) | LOW: 1 (SEC-056) | INFO: 2 (INFO-004, INFO-005)
+
+**New findings in 6F:** HIGH: 1, MEDIUM: 3 new (SEC-052, SEC-053, SEC-054), MEDIUM extensions: 1 (SEC-055), LOW: 1 (SEC-056), INFO: 2
+
+### Go / No-Go Recommendation: NO-GO
+
+**Blocking for final Phase 6 approval:**
+
+1. **SEC-051 (HIGH)** — Razorpay webhook HMAC regression. SEC-001 HMAC fix is effectively reverted. Subscription renewals broken; any authenticated user can fraudulently mark subscription paid. Must restore the unauthenticated webhook endpoint with HMAC verification before production.
+
+**Must fix before production (deferred no longer acceptable after final gate):**
+
+2. **SEC-054 (MEDIUM)** — SignalR JWT token factory returns null; real-time chat non-functional in current mobile build.
+3. **SEC-048 (MEDIUM)** — Real biometric gate still Alert.alert(); now appearing in THREE consecutive phase reviews without fix.
+4. **SEC-045 (MEDIUM)** — PayloadViewer renders raw OAuth token; now appearing in THREE consecutive phase reviews.
+
+**Remaining open Mediums (accept for prod with tracking):**
+
+5. SEC-052 — SubscriptionService DPDP erasure gap.
+6. SEC-053 — SendMessage flood potential.
+7. SEC-055 — notificationRouter UUID validation on new routes.
+8. SEC-034 — all deep-link routes unvalidated.
+9. SEC-041 — client PAN cipher in ItrService.
+10. SEC-050 — consent_text_version hardcoded.
+
+---
+
+*Phase 6F review completed: 2026-04-25*
+
+---
+
+## Phase 6 Re-Audit — 2026-04-25 (Fix Verification: SEC-026..029)
+
+**Scope:** Focused re-audit of the 4 HIGH findings from Phase 6. Backend-agent hotfix applied (173/173 unit tests pass, 0 errors/0 warnings). SEC-034 status updated per qa-mobile P6-QA-MOBILE-01.
+**Review Date:** 2026-04-25
+**Reviewer:** security-reviewer agent
+**Full memo:** `docs/security/phase-6-re-audit.md`
+
+### SEC-026 — CONFIRMED-FIXED
+
+PermissionBehavior registered in all three services (AccountingService, NotificationService, CallbackService). Each `DependencyInjection.cs` calls `cfg.AddOpenBehavior(typeof(PermissionBehavior<,>))` after `AddApplicationServices()`. Each service's `PermissionBehavior.cs` is identical and correct: it reads `RequiresPermissionAttribute` via reflection, checks `ICurrentUser.IsAuthenticated` then `ICurrentUser.HasPermission()`, and returns `Result.Failure(Error.Unauthorized/Forbidden)` when either check fails — fails closed. Representative commands verified: `CloseFiscalYearCommand` carries `[RequiresPermission("accounting.fiscal_year.close")]`; `AssignCallbackCommand` carries `[RequiresPermission("callback.assign")]`.
+
+**Status: CONFIRMED-FIXED**
+
+### SEC-027 — CONFIRMED-FIXED
+
+`AccountDeletionSubscriber` (implementing `BackgroundService`) added to both `CallbackService.Infrastructure` and `NotificationService.Infrastructure`. Both are registered via `services.AddHostedService<AccountDeletionSubscriber>()` in their respective `DependencyInjection.cs` files. Callback subscriber: soft-deletes `call_notes` where `AuthorId == userId`; calls `cb.Anonymize("DPDP_ORG_ERASURE")` on all matching callbacks. The `Callback` domain entity has `UserId` typed as `Guid?` and exposes a correct `Anonymize(string reason)` method that sets `UserId = null`, `AnonymizedAt = DateTime.UtcNow`, and `AnonymizationReason = reason`. Notification subscriber: soft-deletes `notification_log` and `dlq_items` where `UserId == userId`. Both subscribers deserialize the event correctly, handle malformed payloads by ACKing to avoid redelivery loops, and NACK on exception to trigger retry.
+
+**Status: CONFIRMED-FIXED**
+
+### SEC-028 — CONFIRMED-FIXED
+
+`[RequiresPermission("notification.dlq.manage")]` is present on both `GetDlqQuery` (line 15) and `RetryDlqItemCommand` (line 17). With PermissionBehavior now registered in NotificationService (SEC-026 fix), the end-to-end gate is active. Any call to the DLQ endpoints by a user without the `notification.dlq.manage` permission will be rejected by the pipeline with `Error.Forbidden` before the handler executes.
+
+**Status: CONFIRMED-FIXED**
+
+### SEC-029 — CONFIRMED-FIXED
+
+`GetCallbackByIdQueryHandler` scopes the EF `FirstOrDefaultAsync` predicate inline with `&& (orgId == null || c.OrganizationId == orgId)` — no fetch-then-check pattern; cross-org requests return `NotFound` at the query level. Mutation handlers (`AssignCallbackCommandHandler`, `CompleteCallbackCommandHandler`, `EscalateCallbackCommandHandler`) each inject `ICurrentUser`, perform a post-fetch org ownership check (`if (currentUser.OrganizationId.HasValue && callback.OrganizationId != currentUser.OrganizationId)`), and return `Error.NotFound` (not `Error.Forbidden`) to avoid existence leak. Pattern consistent across all sampled handlers.
+
+**Note on orgId == null bypass:** The guard `orgId == null || c.OrganizationId == orgId` means a caller with no OrganizationId claim can read any callback. This is deliberate — SYSTEM_ADMIN and operator roles may have null OrganizationId. Acceptable given they must hold the `callback.assign` / `callback.complete` permissions (enforced by SEC-026). Flagged as a low-risk observation, not a new finding.
+
+**Status: CONFIRMED-FIXED**
+
+### SEC-034 — REMAINS OPEN (updated per P6-QA-MOBILE-01)
+
+`mobile/src/notifications/notificationRouter.ts` lines 44–56: the `id` value extracted from the FCM push notification payload is passed directly to `navigation.navigate('CallbackStatus', { callbackId: id })` and `navigation.navigate('DocumentDetail', { documentId: id })` without any UUID format validation. The `as (...args: any[]) => void` cast at lines 47 and 54 explicitly bypasses TypeScript's type system. This was not part of the backend hotfix scope. qa-mobile's P6-QA-MOBILE-01 independently confirms the gap via unit test — the test in `mobile/__tests__/notifications/notificationRouter.test.ts` asserts the current unvalidated behavior as documentation of the bug, not as a passing fix. When mobile-dev applies the UUID regex guard, that test must be inverted to assert that non-UUID ids do NOT trigger navigation.
+
+**Owner:** mobile-dev
+**Status: OPEN (Medium severity) — must be fixed before production release**
+
+### Deferred Findings (5 MEDIUM + 3 LOW)
+
+All five MEDIUM findings (SEC-030 through SEC-034) and three LOW findings (SEC-035 through SEC-037) from the original Phase 6 review are confirmed still open and unchanged. The hotfix did not touch any files in the MEDIUM/LOW scope, so no regression risk exists. These remain deferred to a post-staging follow-up pass.
+
+### Phase 6 Re-Audit Summary
+
+CONFIRMED-FIXED: SEC-026 (HIGH), SEC-027 (HIGH), SEC-028 (HIGH), SEC-029 (HIGH)
+STILL-OPEN: SEC-034 (MEDIUM, unchanged — mobile-dev), SEC-030/031/032/033 (MEDIUM, deferred), SEC-035/036/037 (LOW, deferred)
+NEW CRITICAL/HIGH: NONE
+
+**Go / No-Go: GO**
+
+All 4 HIGH blockers confirmed fixed by source-code inspection. No new Critical or High findings observed. Staging deployment is clear. Production deployment requires SEC-034, SEC-033, SEC-030 resolved, and INFO-001 placeholder cert hashes replaced before any production build.
+
+*Re-audit completed: 2026-04-25*
+
+---
+
+## Phase 6B + 6D Security Review (2026-04-25)
+
+**Scope**: GstService (26 endpoints, Mock+Production GSTN/IRP/EWB adapters), ItrService (17 endpoints, TaxComputationEngine, AY-versioned slabs), Admin frontend (3 GST pages, 3 ITR pages, CaTaxComputationPanelPage), Mobile (3 GST screens, 9 ITR screens, notificationRouter regression check)
+**Review Date**: 2026-04-25
+**Reviewer**: security-reviewer agent
+
+---
+
+### Re-confirmation of SEC-026..029
+
+| ID | Status | Evidence |
+|----|--------|----------|
+| SEC-026 | CONFIRMED-FIXED | `GstService.Application/DependencyInjection.cs` line 22: `PermissionBehavior<,>` registered as `IPipelineBehavior<,>` after shared pipeline. `[RequiresPermission]` decorators confirmed on `GenerateEInvoiceCommand`, `CreateEWayBillCommand`, `FileNilReturnCommand`, `RespondToNoticeCommand`, `AssignNoticeToCaCommand`. |
+| SEC-027 | CONFIRMED-FIXED (partial) | GstService and ItrService still lack AccountDeletionSubscribers — see SEC-038/039. CallbackService + NotificationService subscribers confirmed in place from Phase 6A+6E fix. |
+| SEC-028 | CONFIRMED-FIXED | Not in scope for Phase 6B/6D (NotificationService unchanged). |
+| SEC-029 | REGRESSION — see SEC-038 | The IDOR pattern re-appears in GstService notice handlers and all ItrService filing handlers. The fix pattern from SEC-029 (inject ICurrentUser, filter by org_id) was not applied to Phase 6B/6D new handlers. |
+
+---
+
+### Findings
+
+#### [HIGH] SEC-038 — IDOR on GST Notice Handlers (GetNotice, RespondToNotice, AssignNoticeToCa)
+
+- **Files**:
+  - `backend/Services/GstService/GstService.Application/Notices/Queries/GetNotice/GetNoticeQuery.cs` line 51
+  - `backend/Services/GstService/GstService.Application/Notices/Commands/RespondToNotice/RespondToNoticeCommand.cs` line 43
+  - `backend/Services/GstService/GstService.Application/Notices/Commands/AssignNoticeToCa/AssignNoticeToCaCommand.cs` line 36
+- **Description**: All three handlers query `gst.notices` by `n.Id == request.NoticeId` only. There is no `OrganizationId` filter and no `ICurrentUser` injection. Any authenticated user who knows (or brute-forces) a notice UUID can read its full contents including attachments metadata, file a response on it, and re-assign it to any CA. The endpoint returns `OrganizationId` in the DTO, confirming cross-tenant data exposure. This is the same IDOR class as SEC-029 which was fixed in the CallbackService — the fix pattern was not carried forward to the GstService Phase 6B handlers.
+- **Recommended Fix**: Inject `ICurrentUser` into each handler. Add `&& n.OrganizationId == currentUser.OrganizationId` to the EF Where clause. Return `Error.NotFound` (not `Forbidden`) on mismatch to avoid existence leakage — consistent with the SEC-029 fix in CallbackService handlers.
+- **Reference**: CWE-639 (Authorization Bypass Through User-Controlled Key), OWASP API3:2023 Broken Object Level Authorization.
+
+#### [HIGH] SEC-039 — IDOR on ITR Filing Handlers (all 10 mutation/query handlers)
+
+- **Files**:
+  - `backend/Services/ItrService/ItrService.Application/Filings/Queries/GetFiling/GetFilingQuery.cs` line 28
+  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/ComputeTax/ComputeTaxCommand.cs` line 65
+  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/SubmitForCaReview/SubmitForCaReviewCommand.cs` line 24
+  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/CaApprove/CaApproveCommand.cs` (analogous pattern)
+  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/CaReject/CaRejectCommand.cs` (analogous pattern)
+  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/MarkFiled/MarkFiledCommand.cs` line 27
+  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/MarkEVerified/MarkEVerifiedCommand.cs` (analogous pattern)
+  - `backend/Services/ItrService/ItrService.Application/Form16/Commands/UploadForm16/UploadForm16Command.cs` line 43
+  - `backend/Services/ItrService/ItrService.Application/Notices/Commands/RespondToNotice/RespondToNoticeCommand.cs` (analogous pattern)
+  - `backend/Services/ItrService/ItrService.Application/Filings/Queries/ListFilings/ListFilingsQuery.cs` line 29
+- **Description**: Every ITR filing handler loads records by `FilingId` or `AssesseeId` from the request body — there is no `ICurrentUser` injection and no check that the filing's `AssesseeId` belongs to the authenticated user. An authenticated user can compute tax on another user's filing (modifying it), submit it for CA review, mark it as filed with a forged acknowledgement number, or read the full filing detail. `ListFilingsQuery` filters by caller-supplied `assesseeId` query parameter, not the authenticated identity — any user can list any other user's filings by supplying their `assesseeId`. This affects all 17 ITR endpoints.
+- **Recommended Fix**: Inject `ICurrentUser` into all handlers. For `ListFilings`: replace `request.AssesseeId` filter with a lookup of the current user's assessee record first, then scope to that assessee. For all mutation handlers: after loading the filing, verify `filing.AssesseeId == currentUser's assesseeId` (looked up from itr.assessee_profiles). Return `Error.NotFound` on mismatch.
+- **Reference**: CWE-639, OWASP API3:2023.
+
+#### [HIGH] SEC-040 — DPDP: No AccountDeletionSubscriber in GstService or ItrService
+
+- **Files**:
+  - `backend/Services/GstService/GstService.Infrastructure/DependencyInjection.cs` (missing subscriber registration)
+  - `backend/Services/ItrService/ItrService.Infrastructure/DependencyInjection.cs` line 79 (ItrRecurringJobsSubscriber registered; no AccountDeletionSubscriber)
+- **Description**: Neither GstService nor ItrService has an `AccountDeletionSubscriber` BackgroundService subscribing to the `account-deletion-events` Pub/Sub topic. Both services store PII subject to DPDP Act 2023 Right to Erasure: GstService holds `gst.invoices` (customer/supplier GSTIN, names), `gst.notices` (notice body, response text, attachment metadata); ItrService holds `itr.assessee_profiles` (PAN ciphertext, full name, email, phone, DOB, address), `itr.filings` (computation JSON with salary/income breakdown), `itr.form_16_extracts` (employer PAN cipher, salary figures), `itr.notices` (notice body, response attachments). P6-HANDOFF-16 and P6-HANDOFF-21 explicitly required these subscribers; they are present in CallbackService and NotificationService from the SEC-027 fix but were not applied to the two Phase 6B/6D services.
+- **Recommended Fix**: Implement `AccountDeletionSubscriber : BackgroundService` in both `GstService.Infrastructure/Messaging/` and `ItrService.Infrastructure/Messaging/`. Subscribe to `account-deletion-events`. For GstService: soft-delete `gst.invoices` rows with matching `organization_id`; null-out `gst.notices` body/response/attachments + set `anonymized_at`. For ItrService: soft-delete `itr.assessee_profiles`; null `full_name`, `email`, `phone`, `dob`, `address`, `pan` cipher in profile; null computation JSON in filings; purge `form_16_extracts.parsed_json`; null notice bodies. Register both subscribers in the respective `DependencyInjection.cs`. Follow the pattern established in CallbackService.Infrastructure for idempotent handling.
+- **Reference**: DPDP Act 2023 Section 12 (Right of erasure), CWE-212 (Improper Removal of Sensitive Information Before Storage or Transfer).
+
+#### [MEDIUM] SEC-041 — Form 16 Upload Accepts Client-Submitted PAN Cipher Without Server-Side Encryption
+
+- **File**: `backend/Services/ItrService/ItrService.Application/Form16/Commands/UploadForm16/UploadForm16Command.cs` lines 37–54
+- **Description**: The `UploadForm16Command` accepts `EmployeePanCipher` directly from the request body and stores it verbatim via `Form16Extract.Create(...)`. The validator (`RuleFor(x => x.EmployeePanCipher).NotEmpty()`) only checks presence, not ciphertext format or integrity. A client can submit an arbitrary string — including a plaintext PAN, an empty string (as the mobile currently does at `Form16UploadScreen.tsx` line 68), or crafted binary data — and it will be stored in `itr.form_16_extracts.employee_pan_cipher`. The backend has `IPanEncryptionService` (SEC-013 pattern) available but the handler does not call it. The mobile client is expected to supply pre-encrypted ciphertext but there is no server-side enforcement that the ciphertext is valid AES-256-CBC output.
+- **Recommended Fix**: The handler should accept raw PAN (or the GCS URI from which Document AI extracts PAN server-side), call `IPanEncryptionService.Encrypt()` on the backend, and store the resulting ciphertext. Never trust a client-supplied ciphertext as the canonical encrypted value. If the design intent is that OCR runs server-side (via Document AI), the `EmployeePanCipher` parameter should be removed from the command entirely and populated post-OCR.
+- **Reference**: CWE-311 (Missing Encryption of Sensitive Data), OWASP A02:2021 Cryptographic Failures.
+
+#### [MEDIUM] SEC-042 — GST Notice Response Draft Stored in localStorage
+
+- **File**: `src/admin/src/pages/gst/NoticeDetailPage.tsx` lines 30, 108, 148–152
+- **Description**: The notice response composer auto-saves draft content (subject, body, channel, reference) to `localStorage` under the key `snap_gst_notice_draft_{noticeId}`. `localStorage` is persistent, unencrypted browser storage accessible to all JavaScript on the same origin. The response body may contain legally sensitive content about the GST notice dispute. If the admin panel ever has an XSS vulnerability (even transient), the draft content is immediately available to any injected script. `localStorage` is also synchronised across browser tabs and persists after session termination. The `SessionStorage` API would be a safer alternative for transient draft state, or the draft should be server-persisted.
+- **Recommended Fix**: Replace `localStorage` with `sessionStorage` for draft persistence. `sessionStorage` is tab-scoped and cleared on session end. If cross-session draft recovery is a product requirement, persist the draft server-side via a debounced PATCH to a backend draft endpoint, and do not store notice body content in browser storage at all.
+- **Reference**: CWE-922 (Insecure Storage of Sensitive Information), OWASP A02:2021.
+
+#### [MEDIUM] SEC-034 — notificationRouter Deep-Link id Not UUID-Validated (Carry-forward, No Regression)
+
+- **File**: `mobile/src/notifications/notificationRouter.ts` lines 45–54
+- **Description**: Confirmed still OPEN from Phase 6A+6E review. Lines 46 and 52 pass `id` from the FCM data payload directly to `navigationRef.navigate(...)` without UUID format validation. The Phase 6B/6D additions (`itr` and `gst` type handlers at lines 38–42) do not use `id` parameters and are safe. The pre-existing `callback` and `document` cases remain unfixed. Detailed description in original finding.
+- **Recommended Fix**: Add UUID regex guard before each navigate call: `const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if (!id || !UUID_RE.test(id)) break;` in the `callback` and `document` case branches.
+- **Reference**: CWE-20 (Improper Input Validation), OWASP Mobile M1.
+
+#### [LOW] SEC-043 — e-Invoice and GST Notice Endpoints Use Standard Rate-Limit Policy Only
+
+- **File**: `backend/Services/GstService/GstService.Api/Endpoints/Gst.cs` lines 96–103
+- **Description**: `POST /gst/e-invoices` and `POST /gst/notices` apply `.RequireRateLimiting("standard")` — the same policy as all other GST endpoints. The checklist requirement specified that these two endpoints should have stricter rate limiting given their cost and abuse vectors: e-invoice generation triggers external IRP API calls (throttled by NIC at ~100/min per GSTIN); notice creation at volume could be used to create noise for compliance teams. The "standard" policy from GstService Program.cs is a fixed-window general policy, not a tighter per-GSTIN or per-org window for these high-value operations.
+- **Recommended Fix**: Add a named rate-limit policy (e.g., `"gst-write"` at 20 req/min per IP or org) and apply `.RequireRateLimiting("gst-write")` on `POST /gst/e-invoices`, `POST /gst/e-way-bills`, and `POST /gst/notices`. This prevents runaway IRP API cost and notice spam.
+- **Reference**: OWASP API4:2023 Unrestricted Resource Consumption.
+
+#### [INFO] INFO-002 — Form16UploadScreen Sends Empty employeePanCipher (Mobile MVP Placeholder)
+
+- **File**: `mobile/src/screens/itr/Form16UploadScreen.tsx` line 68
+- **Description**: The mobile Form 16 upload passes `employeePanCipher: ''` (empty string). The backend validator currently requires `NotEmpty()` on this field (line 33 of `UploadForm16Command.cs`), so this would be rejected in production. This is a placeholder MVP gap — the mobile does not yet have PAN encryption plumbed end-to-end. The `itr.ts` client comment at line 35 confirms: "AES-256-CBC ciphertext from IPanEncryptionService — NEVER raw PAN". Combined with SEC-041, the full PAN encryption flow (server-side encryption after OCR) should be prioritised before any production Form 16 feature launch.
+- **Recommended Fix**: Resolve SEC-041 first (move PAN encryption server-side). Once encryption is server-side, the mobile no longer needs to supply `EmployeePanCipher` and the field should be removed from the mobile API contract.
+
+---
+
+### Phase 6B + 6D Checklist Results
+
+#### GstService — 26 endpoints
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| RequireAuthorization on all 26 endpoints | PASS | All endpoints in Gst.cs carry `.RequireAuthorization()` |
+| RequireRateLimiting on all endpoints | PASS | All carry `.RequireRateLimiting("standard")` |
+| PermissionBehavior registered in DI | PASS | `GstService.Application/DependencyInjection.cs` line 22 |
+| `[RequiresPermission]` on FileNilReturn, RespondToNotice, AssignNoticeToCa, GenerateEInvoice, CreateEWayBill | PASS | Confirmed on all five command classes |
+| Notice IDOR — GetNotice filters by OrganizationId | FAIL | SEC-038: no org-scope filter in any of the 3 notice handlers |
+| Notice attachments — handler validates attachments_jsonb shape | PASS | Metadata-only GCS URI stored; no raw bytes accepted; GcsUri regex on UploadForm16 |
+| IRP/EWB adapters redact tokens before persisting | PASS | `RedactSensitiveFields()` regex in both ProductionIrpClient and ProductionEwbClient |
+| Rate limiting stricter on POST /gst/e-invoices and POST /gst/notices | FAIL | SEC-043: standard policy only |
+| DPDP cascade for gst.invoices + gst.notices | FAIL | SEC-040: no AccountDeletionSubscriber |
+
+#### ItrService — 17 endpoints
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| RequireAuthorization on all 17 endpoints | PASS | All endpoints in Itr.cs carry `.RequireAuthorization()` |
+| PAN stored via IPanEncryptionService (not plaintext) | PARTIAL | UpdateProfileCommand stores client-supplied PanCipher; UploadForm16 stores client-supplied cipher — see SEC-041 |
+| TaxComputationEngine reads from itr.tax_slab_versions — no hardcoded slabs | PASS | TaxComputationEngine.cs reads DB, no hardcoded constants |
+| tax_slab_version_id + computation_hash pinned on every result | PASS | ComputeTaxCommand.cs line 94: `filing.PinComputation(...)` |
+| itr_v_uri TTL — stable object key, on-demand signed URL | PASS | FilingConfiguration stores ItrVObjectKey (max 500); GetFilingQuery explicitly does not return URI (P6-HANDOFF-20 noted in doc comment) |
+| DPDP cascade for itr.assessee_profiles + itr.filings + itr.form_16_extracts + itr.notices | FAIL | SEC-040: no AccountDeletionSubscriber |
+| PermissionBehavior registered in DI | PASS | ItrService.Application/DependencyInjection.cs (analogous to GstService pattern) |
+| `[RequiresPermission]` on all required commands | PASS | UpdateProfile, ComputeTax, SubmitForCaReview, CaApprove, CaReject, MarkFiled, MarkEVerified, RespondToNotice all carry attribute |
+| Filing handlers scope by authenticated user (IDOR check) | FAIL | SEC-039: no ICurrentUser injection in any of the 10 filing handlers |
+| Form 16 OCR — server-side, not trusting client parsed JSON | FAIL | SEC-041: backend stores client-submitted PAN cipher; OCR integration deferred |
+| Refund polling subscriber — idempotent on event_id | PASS | ItrRefundPollingHandler checks existing RefundStatusEntry by FilingId before creating |
+| Filing state machine — invalid transitions return Result.Failure | PASS | Filing.SubmitForCaReview(), ApproveByCa(), MarkFiled() return Result with conflict errors |
+
+#### Admin Frontend
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| All API calls via src/admin/src/lib/* | PASS | NoticeDetailPage uses gstApi; CaTaxComputationPanelPage uses itrApi |
+| No dangerouslySetInnerHTML with untrusted content | PASS | Not found in any Phase 6B/6D pages |
+| Auth tokens in Authorization header (not cookies) | PASS | Confirmed from prior phases — apiClient pattern unchanged |
+| CaTaxComputationPanelPage debounced recompute — no cross-org leakage | PASS | Server scopes result by filingId; sequence ref prevents stale results |
+| PdfViewer uses signed GCS URLs | PASS | NoticeDetailPage line 344: renders `notice.attachments[0].signedUrl` |
+| HsnSacTypeahead search query reflected in URL | PASS | Query passed via TanStack Query key only, not URL params — no XSS reflection vector |
+| Response draft storage | FAIL | SEC-042: draft stored in localStorage |
+
+#### Mobile
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| SecureStore for tokens | PASS | Unchanged from prior phases |
+| PAN: panCipher passed through as-is (no raw PAN) | PASS (with INFO-002) | itr.ts comment and type confirm cipher-only; mobile sends empty string MVP placeholder |
+| Form 16 upload — employeePanCipher empty in MVP | INFO | INFO-002: placeholder; will be rejected by backend validator |
+| Deep-link router SEC-034 — no regression | PASS (open) | SEC-034 still open; new itr/gst handlers in router are safe (no id param) |
+| No PII in logs — ITR screens | PASS | No console.log/error calls found in any itr/ screen files |
+| useSensitiveScreen on Form16UploadScreen | PASS | `useSensitiveScreen()` called at line 48 |
+
+#### Cross-cutting
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| New GST/ITR notification events in catalog | PASS | 6 GST + 6 ITR events in catalog; templates use {{message}} placeholder — no raw PII fields |
+| DLT compliance for SMS templates | INFO (existing) | P6E-RISK-02 still open — DLT template IDs seeded as null |
+| Cloud Scheduler Pub/Sub jobs — OIDC auth | PASS | Confirmed from Phase 6A+6E devops review; no new schedulers in 6B/6D |
+
+---
+
+### Phase 6B + 6D Summary
+
+CRITICAL: 0 | HIGH: 3 (SEC-038, SEC-039, SEC-040) | MEDIUM: 3 (SEC-041, SEC-042, SEC-034 carry-forward) | LOW: 1 (SEC-043) | INFO: 1 (INFO-002)
+
+**Go / No-Go: NO-GO**
+
+Three HIGH findings must be resolved before this phase can be approved for staging:
+
+1. **SEC-038** — IDOR on all three GST notice handlers. Any authenticated user can read/modify any org's notices. Fix: inject ICurrentUser, add org-scope filter.
+2. **SEC-039** — IDOR on all ITR filing handlers. Any authenticated user can compute tax on, submit, or mark-filed another user's ITR. Fix: inject ICurrentUser, scope by assessee ownership.
+3. **SEC-040** — DPDP Right-to-Erasure cascade missing in GstService and ItrService. Both services hold PAN ciphertext, salary data, and notice body content with no deletion path. Fix: implement AccountDeletionSubscriber in both services following the SEC-027 pattern.
+
+The remaining MEDIUM/LOW findings (SEC-041, SEC-042, SEC-043) and INFO-002 are pre-production blockers that should be resolved before any production launch but do not block staging.
+
+*Review completed: 2026-04-25*
+
+---
+
+### Re-audit (after backend hotfix, 2026-04-25)
+
+**Scope**: Focused verification of SEC-038, SEC-039, SEC-040, SEC-043 (4 HIGH/LOW blockers marked FIXED by backend-agent). Spot-check of SEC-041 (deferred TODO), SEC-042 (admin draft storage), SEC-034 (deep-link UUID validation). No new application code changed in mobile, admin, or infra.
+**Review Date**: 2026-04-25
+**Reviewer**: security-reviewer agent
+**Test baseline**: 240/240 unit tests pass, 0 build errors, 0 warnings (per backend-agent hotfix report)
+
+---
+
+#### SEC-038 — CONFIRMED-FIXED
+
+**Files read**:
+- `backend/Services/GstService/GstService.Application/Notices/Queries/GetNotice/GetNoticeQuery.cs`
+- `backend/Services/GstService/GstService.Application/Notices/Commands/RespondToNotice/RespondToNoticeCommand.cs`
+- `backend/Services/GstService/GstService.Application/Notices/Commands/AssignNoticeToCa/AssignNoticeToCaCommand.cs`
+- `tests/unit/GstService/GstNoticeIdorTests.cs`
+
+**Evidence**:
+
+`GetNoticeQueryHandler` (line 42) injects `ICurrentUser` via primary constructor. The EF query at line 53 applies an inline org-scope filter: `n.OrganizationId == currentUser.OrganizationId && n.DeletedAt == null` — no fetch-then-check; cross-org requests cannot retrieve the entity at the query level. Returns `Error.NotFound` on miss (not `Error.Forbidden`) to avoid existence leak.
+
+`RespondToNoticeCommandHandler` (line 35) injects `ICurrentUser`. Fetches by `n.Id` first (line 42), then post-fetch check at line 50: `if (notice.OrganizationId != currentUser.OrganizationId)` returns `Error.NotFound`. Comment on line 49 explicitly references SEC-038.
+
+`AssignNoticeToCaCommandHandler` (line 28) follows identical pattern: `ICurrentUser` injected, post-fetch org check at line 43, `Error.NotFound` on mismatch. Comment on line 42 references SEC-038.
+
+Test file `GstNoticeIdorTests.cs`: 7 tests present, seeding a notice owned by `_orgId` and asserting behavior for same-org and different-org callers. Cross-org `GetNotice_DifferentOrg_ReturnsNotFound` (line 60), `RespondToNotice_DifferentOrg_ReturnsNotFound` (line 100), `AssignNoticeToCa_DifferentOrg_ReturnsNotFound` (line 130) all assert `result.IsSuccess == false` and `error.Code.StartsWith("GstNotice.NotFound")`. Same-org success tests also present.
+
+**Status: CONFIRMED-FIXED**
+
+---
+
+#### SEC-039 — CONFIRMED-FIXED (3 handlers sampled)
+
+**Files read**:
+- `backend/Services/ItrService/ItrService.Application/Filings/Queries/GetFiling/GetFilingQuery.cs`
+- `backend/Services/ItrService/ItrService.Application/Filings/Queries/ListFilings/ListFilingsQuery.cs`
+- `backend/Services/ItrService/ItrService.Application/Filings/Commands/CaApprove/CaApproveCommand.cs`
+- `tests/unit/ItrService/FilingIdorTests.cs`
+
+**Evidence**:
+
+`GetFilingQueryHandler` (line 27): `ICurrentUser` injected. Filing fetched by `f.Id`. Post-fetch, assessee is looked up by `f.AssesseeId`; if `assessee is null || assessee.OrganizationId != currentUser.OrganizationId` returns `Error.NotFound("Filing.NotFound", ...)`. Comment at line 37 references SEC-039.
+
+`ListFilingsQueryHandler` (line 29): `ICurrentUser` injected. Verifies assessee org ownership before listing: `if (assessee is null || assessee.OrganizationId != currentUser.OrganizationId)` returns `new ListFilingsResponse([], 0, ...)` — empty list (not error) consistent with the specified behavior to avoid existence leak on the assessee. Comment at line 34 references SEC-039.
+
+`CaApproveCommandHandler` (line 18): `ICurrentUser` injected. Same pattern as GetFiling: post-fetch assessee ownership check at line 29; `Error.NotFound` returned on cross-org. Comment at line 26 references SEC-039.
+
+Test file `FilingIdorTests.cs`: 9 tests present, covering GetFiling, ListFilings, SubmitForCaReview, CaApprove, CaReject, MarkFiled, MarkEVerified, ComputeTax — all assert cross-org returns `NotFound` or empty list. `ListFilings_DifferentOrg_ReturnsEmptyList` (line 99) explicitly asserts `IsSuccess == true` with `TotalCount == 0` and empty `Items` — correct behavior. All 9 tests verify the expected outcome.
+
+**Status: CONFIRMED-FIXED**
+
+---
+
+#### SEC-040 — CONFIRMED-FIXED
+
+**Files read**:
+- `backend/Services/GstService/GstService.Infrastructure/Messaging/AccountDeletionSubscriber.cs`
+- `backend/Services/ItrService/ItrService.Infrastructure/Messaging/AccountDeletionSubscriber.cs`
+- `backend/Services/GstService/GstService.Infrastructure/DependencyInjection.cs`
+- `backend/Services/ItrService/ItrService.Infrastructure/DependencyInjection.cs`
+- `tests/unit/GstService/GstDpdpErasureTests.cs`
+- `tests/unit/ItrService/ItrDpdpErasureTests.cs`
+
+**Evidence — GstService**:
+
+`GstService.Infrastructure/Messaging/AccountDeletionSubscriber.cs`: Implements `BackgroundService`. Subscribes to `account-deletion-events` via configurable subscription name (`PUBSUB_SUBSCRIPTION_ACCOUNT_DELETION_GST` env var, default `gst-service-account-deletion-sub`). `EraseUserDataAsync` (line 100) performs: (1) soft-deletes `gst.gst_invoices` where `CreatedBy == userIdString` (line 111); (2) soft-deletes `gst.gst_notices` where `CreatedBy == userIdString`, with GCS attachment deletion (line 122); (3) anonymizes notices where `RespondedBy == userId` via `notice.AnonymizeRespondent()` (line 140); (4) cascades to soft-delete `gst.e_invoices` and `gst.e_way_bills` tied to erased invoice IDs (lines 144–167). Malformed messages are ACKed (line 74) to prevent redelivery loops; exceptions NACK (line 91). DI: `GstService.Infrastructure/DependencyInjection.cs` line 103: `services.AddHostedService<AccountDeletionSubscriber>()` confirmed present with SEC-040 comment.
+
+**Evidence — ItrService**:
+
+`ItrService.Infrastructure/Messaging/AccountDeletionSubscriber.cs`: Same `BackgroundService` pattern. Subscription name configurable (`PUBSUB_SUBSCRIPTION_ACCOUNT_DELETION_ITR`, default `itr-service-account-deletion-sub`). `EraseUserDataAsync` (line 99) performs: (1) finds assessee profiles by `UserId == userIdString`, calls `assessee.Anonymize("DPDP_ERASURE")` then sets `DeletedAt` (line 117); (2) soft-deletes and anonymizes filings for erased assessees (line 128); (3) soft-deletes and anonymizes `form_16_extracts` for erased filings (line 145); (4) soft-deletes and anonymizes `itr.notices` for erased assessees (line 153); (5) anonymizes `refund_status_log` entries by nulling `CreatedBy`/`UpdatedBy` (line 169). DI: `ItrService.Infrastructure/DependencyInjection.cs` line 82: `services.AddHostedService<AccountDeletionSubscriber>()` confirmed present with SEC-040 comment.
+
+**Tests**: `GstDpdpErasureTests.cs` (4 tests) verifies `GstNotice.AnonymizeRespondent()` clears `RespondedBy`, idempotency, and soft-delete behavior. `ItrDpdpErasureTests.cs` (6 tests) verifies `Assessee.Anonymize()`, `Filing.Anonymize()`, `Form16Extract.Anonymize()`, `ItrNotice.Anonymize()`, and two EF-in-memory tests confirming the subscriber's scoped cascade behavior including cross-user non-interference. All test assertions are substantive.
+
+**Observation — GstService scope**:
+
+The subscriber erases invoices/notices where `CreatedBy == userId`. This aligns with `gst.invoices` customer/supplier PII (P6-HANDOFF-16). It does not soft-delete org-level invoices that the user did not personally create. This is consistent with the DPDP Act 2023 requirement applying to personal data about the data principal, not all org data the user ever interacted with. Acceptable.
+
+**Status: CONFIRMED-FIXED**
+
+---
+
+#### SEC-043 — CONFIRMED-FIXED
+
+**Files read**:
+- `backend/Services/GstService/GstService.Api/Program.cs`
+- `backend/Services/GstService/GstService.Api/Endpoints/Gst.cs`
+
+**Evidence**:
+
+`Program.cs` lines 43–61: `AddRateLimiter` registers two policies. `"standard"` (line 45): 100 req/min, fixed window. `"gst-write-strict"` (line 53): 30 req/min, fixed window. Comment at line 52 explicitly references SEC-043. `options.RejectionStatusCode = 429` set (line 60). `app.UseRateLimiter()` called at line 79.
+
+`Gst.cs` endpoints: `POST /notices` (line 93): `.RequireRateLimiting("gst-write-strict")`. `POST /e-invoices` (line 104): `.RequireRateLimiting("gst-write-strict")`. Comments on lines 92 and 103 reference SEC-043. All other endpoints use `"standard"`.
+
+**Note**: The original finding (SEC-043) was classified LOW (not HIGH as stated in the bug-log FIXED entry — the bug-log entry re-labels it). The fix correctly addresses the substance of the finding. The `"gst-write-strict"` policy is 30 req/min vs the 30 req/min specified — matches the hotfix description exactly.
+
+**One observation**: `POST /gst/e-way-bills` remains on `"standard"` (line 108). E-way bill creation also triggers the EWB external API and could benefit from the stricter policy. This is not a regression from the finding as filed (the finding named `/gst/e-invoices` and `/gst/notices` only), but is flagged as an INFO observation below.
+
+**Status: CONFIRMED-FIXED**
+
+---
+
+#### SEC-041 — DEFERRED: TODO PRESENT, STATUS OPEN
+
+**File read**: `backend/Services/ItrService/ItrService.Application/Form16/Commands/UploadForm16/UploadForm16Command.cs`
+
+The handler was located at `UploadForm16Command.cs` (handler and command co-located, not a separate `*CommandHandler.cs` file). Lines 53–55 contain:
+
+```
+// SEC-041 TODO: EmployeePanCipher should be server-side encrypted via IPanEncryptionService
+// (not client-supplied cipher). Deferred: requires adding IPanEncryptionService to
+// ItrService.Application.Interfaces + Infrastructure implementation + DI wiring.
+```
+
+The TODO is present and correctly documents the deferred scope. The code still stores `request.EmployeePanCipher` verbatim (line 56). The SEC-039 ownership check is also present at lines 48–51 (ICurrentUser injected, assessee org check). The deferred status is consistent with the hotfix report.
+
+**Status: OPEN (Medium) — deferred to Phase 6F. TODO comment confirmed present. Acceptable per scope agreement.**
+
+---
+
+#### SEC-042 — STILL OPEN (unfixed by this hotfix)
+
+**File read**: `src/admin/src/pages/gst/NoticeDetailPage.tsx`
+
+Lines 30, 108, 148–152 unchanged. `DRAFT_STORAGE_PREFIX = 'snap_gst_notice_draft_'` (line 30). `storageKey` assigned at line 108. `localStorage.getItem(storageKey)` on mount (line 131). `localStorage.setItem(storageKey, ...)` in `saveDraft` callback (line 149). `localStorage.removeItem(storageKey)` on successful submit (line 180).
+
+No change to `sessionStorage` was made. This hotfix was scoped to backend only; frontend-dev did not receive a task for SEC-042.
+
+**Status: OPEN (Medium) — carries to Phase 6F. Not a blocker for this hotfix approval gate.**
+
+---
+
+#### SEC-034 — CONFIRMED NOT REGRESSED
+
+**File read**: `mobile/src/notifications/notificationRouter.ts`
+
+File is identical to the version reviewed in the Phase 6 re-audit of 2026-04-25. Lines 44–56: `callback` and `document` cases still pass `id` directly to `navigationRef.navigate` without UUID validation. The `gst` (line 37) and `itr` (line 41) cases added in Phase 6B do not use `id` parameters — they navigate to dashboards only. No regression introduced by Phase 6B/6D mobile work.
+
+**Status: OPEN (Medium) — no regression. Carries to Phase 6F (mobile-dev). Not a blocker for this hotfix approval gate.**
+
+---
+
+#### INFO — E-Way Bill Rate Limiting (Observation Only)
+
+`POST /gst/e-way-bills` at `Gst.cs` line 108 uses `.RequireRateLimiting("standard")` (100 req/min). The EWB external API is subject to NIC rate limiting similarly to the IRP. This was not part of SEC-043 as filed and is not a regression. Flagged informally for backend-agent to consider applying `"gst-write-strict"` in Phase 6F.
+
+**Severity: INFO (not a new finding)**
+
+---
+
+### Re-audit Summary
+
+| ID | Severity | Status After Hotfix |
+|----|----------|---------------------|
+| SEC-038 | HIGH | CONFIRMED-FIXED — ICurrentUser injected; inline org-scope EF filter on GetNotice; post-fetch org check on RespondToNotice + AssignNoticeToCa; 7 IDOR unit tests verified |
+| SEC-039 | HIGH | CONFIRMED-FIXED — ICurrentUser injected in all sampled handlers; assessee ownership check pattern consistent; ListFilings returns empty list (not error) for cross-org; 9 IDOR unit tests verified |
+| SEC-040 | HIGH | CONFIRMED-FIXED — AccountDeletionSubscriber implemented in both GstService and ItrService; both registered via AddHostedService<> in DI; full erasure cascade per P6-HANDOFF-16 and P6-HANDOFF-21; 10 domain + integration tests verified |
+| SEC-043 | LOW | CONFIRMED-FIXED — "gst-write-strict" policy (30 req/min) registered in Program.cs; applied to POST /gst/notices and POST /gst/e-invoices in Gst.cs |
+| SEC-041 | MEDIUM | OPEN — deferred to Phase 6F; TODO comment confirmed present at correct location |
+| SEC-042 | MEDIUM | OPEN — admin localStorage draft not fixed; frontend hotfix not in scope |
+| SEC-034 | MEDIUM | OPEN — no regression; UUID validation still absent in notificationRouter.ts |
+
+**CONFIRMED-FIXED: 4 (SEC-038 HIGH, SEC-039 HIGH, SEC-040 HIGH, SEC-043 LOW)**
+**STILL-OPEN: 3 (SEC-041 Med/deferred, SEC-042 Med/deferred, SEC-034 Med/deferred)**
+**NEW FINDINGS: 0**
+
+### Go / No-Go
+
+**GO**
+
+All 4 findings that were blocking this hotfix approval gate are CONFIRMED-FIXED by source-code inspection. 240/240 tests pass. The three remaining OPEN items (SEC-041, SEC-042, SEC-034) are all Medium severity and are explicitly deferred to Phase 6F — this deferral is within the acceptance criteria specified by the orchestrator. No new Critical or High findings were discovered during this re-audit.
+
+Phase 6B + 6D is clear for staging approval.
+
+*Re-audit completed: 2026-04-25*
+
+---
+
+## Phase 6C Security Review (2026-04-25)
+
+**Scope:** LoanService (13 endpoints, state machine, EligibilityEngine, bank adapters, disbursement webhook, AccountDeletionSubscriber), ReportService (LoanPackage PDF, signed URLs, sha256 hash), NotificationService (3 new loan events), Admin frontend (PartnerBanksSettingsPage, PayloadViewer, PdfViewerWebPackagePane, LoanDetailPage), Mobile (6 loan screens, consent flow, biometric gates), Database migrations 026–028.
+**Review Date:** 2026-04-25
+**Reviewer:** security-reviewer agent
+
+---
+
+### Pattern Cross-Reference: Prior Phase Fixes Inherited from Day 1
+
+The following patterns from SEC-026..029 (Phase 6A+6E) and SEC-038..043 (Phase 6B+6D) were verified in Phase 6C code:
+
+| Prior SEC | Pattern | Phase 6C Status |
+|-----------|---------|-----------------|
+| SEC-026 | PermissionBehavior registered in DI | CONFIRMED — `LoanService.Application/DependencyInjection.cs` line 20 |
+| SEC-026 | `[RequiresPermission]` on all write commands | CONFIRMED — all 11 commands decorated |
+| SEC-029 | ICurrentUser injected; EF inline org filter on queries | CONFIRMED — all sampled handlers apply OrgId predicate |
+| SEC-027 | AccountDeletionSubscriber exists and wired | CONFIRMED — `AddHostedService<AccountDeletionSubscriber>()` in Infrastructure DI line 104 |
+| SEC-027 | Anonymize-only (no hard-delete attempt) | CONFIRMED — no Delete calls; comment warns against deleting from consents/status_log |
+| SEC-038/039 | IDOR pattern prevented on resource-by-ID handlers | CONFIRMED — all sampled handlers apply org filter; eligibility cross-org check at line 47-49 |
+| SEC-040 | DPDP subscriber for new service | CONFIRMED — LoanService AccountDeletionSubscriber present and registered |
+| P6-HANDOFF-28 | Status transition logs in same unit of work | CONFIRMED — all state-machine commands add ApplicationStatusLog before SaveChangesAsync |
+| P6-HANDOFF-27 | ICredentialEncryptionService with AES-GCM | CONFIRMED — CredentialEncryptionService uses `AesGcm`; nonce 12 bytes / tag 16 bytes |
+
+---
+
+### Findings
+
+#### [HIGH] SEC-044: Disbursement Webhook HMAC Verification Bypassable When WebhookSecretRef Is Null
+
+- **File:** `backend/Services/LoanService/LoanService.Infrastructure/Webhooks/DisbursementWebhookHandler.cs`
+- **Line:** 58–75
+- **Description:** The HMAC-SHA256 signature verification block is guarded by `if (!string.IsNullOrEmpty(bank.WebhookSecretRef))`. If a partner bank record has a null or empty `WebhookSecretRef` — through admin error, partial configuration, or deliberate omission — the entire signature verification is silently skipped and the webhook is processed as legitimate. An attacker who can send HTTP to the webhook endpoint and knows a valid `bankId` (UUID, guessable from the admin UI or by enumeration) can record any disbursement amount for any loan application assigned to that bank, with zero authentication. This endpoint is intentionally unauthenticated (no JWT), so the HMAC is the sole trust boundary. Additionally, the implementation uses hex-string byte comparison (same as SEC-001/NEW-001 pattern) rather than decoded raw bytes — the constant-time comparison is length-sensitive to case normalization, not a bypass but a deficiency in the pattern.
+- **Impact:** Unauthorized disbursement recording; financial data integrity violation; potential fraud trigger for LOAN_DISBURSED notifications.
+- **Recommended Fix:** (1) Reject the webhook when `WebhookSecretRef` is null or empty: `if (string.IsNullOrEmpty(bank.WebhookSecretRef)) return WebhookProcessingResult.Rejected("Bank webhook secret is not configured.");` (2) Add a NOT NULL constraint or application-layer validation on `WebhookSecretRef` when creating REST/webhook-enabled PartnerBank records. (3) Replace UTF-8 hex-string comparison with `Convert.FromHexString` on both sides as recommended for SEC-001.
+- **Reference:** CWE-306 (Missing Authentication), CWE-347 (Improper Verification of Cryptographic Signature)
+
+---
+
+#### [MEDIUM] SEC-045: OAuth Token Displayed Unmasked in PayloadViewer
+
+- **File:** `src/admin/src/components/ui/PayloadViewer.tsx`
+- **Line:** 129–136
+- **Description:** The `oauth-token` kind branch renders the full `payload` string in a `<pre>` block with no masking. The component JSDoc states "OAuth tokens are never displayed — only masked + scopes shown" but the code contradicts this. The JSON kind auto-redacts via `redactJson`, but the `oauth-token` path bypasses redaction entirely. Any admin who opens Bank Communications detail for an OAuth-adapter bank reads the live bearer token from the DOM.
+- **Impact:** Bearer token exposure; can be used to impersonate SnapAccount to the partner bank REST API.
+- **Recommended Fix:** In the `oauth-token` branch, render only scopes and expiry (if parseable from payload) and mask the token to `Bearer ***${last6chars}`. Never render the full token string in the DOM.
+- **Reference:** CWE-312 (Cleartext Storage of Sensitive Information); OWASP A02:2021
+
+---
+
+#### [MEDIUM] SEC-046: Signed URL TTL Is 1 Hour — Exceeds 15-Minute Maximum
+
+- **File:** `backend/Services/LoanService/LoanService.Application/LoanApplications/Queries/GetPackageDownloadUrl/GetPackageDownloadUrlQuery.cs` line 45; `backend/Services/ReportService/ReportService.Application/Reports/Queries/GetDownloadUrl/GetDownloadUrlQuery.cs` line 46
+- **Description:** Both handlers use `TimeSpan.FromHours(1)`. P6-HANDOFF-20 specifies a maximum of 15 minutes for signed URLs exposing PII-containing documents. LoanPackage PDFs contain PAN, Aadhaar references, bank account numbers, and income data. A 1-hour window significantly increases the exposure window for URL leakage via browser history, referrer headers, or accidental forwarding.
+- **Recommended Fix:** Change `TimeSpan.FromHours(1)` to `TimeSpan.FromMinutes(15)` in both handlers. The mobile client already uses `staleTime:0 / gcTime:0` ensuring fresh URL fetch per view.
+- **Reference:** OWASP A01:2021; P6-HANDOFF-20
+
+---
+
+#### [MEDIUM] SEC-047: LoanDisbursed Notification Passes DisbursedAmount to Push Channel
+
+- **File:** `backend/Services/NotificationService/NotificationService.Infrastructure/Messaging/LoanEventsSubscriber.cs`
+- **Line:** 123–130
+- **Description:** `DispatchNotificationAsync` builds a `variables` dictionary including `["disbursedAmount"] = $"₹{payload.DisbursedAmount.Value:N2}"`. This is passed to `SendNotificationCommand` for `LOAN_DISBURSED`, which uses Push (FCM) channel (`NotificationEventCatalog.cs` line 37). If the FCM template uses `{{disbursedAmount}}`, the exact rupee amount appears in the push notification body and is visible on device lock screens. The checklist explicitly required push body must NOT include disbursed_amount. Even if the current template does not use it, the variable is present and can leak if the template is updated without a security review.
+- **Impact:** Financial PII on device lock screen; DPDP Act 2023 data minimization violation.
+- **Recommended Fix:** Remove `disbursedAmount` from the variables dictionary for Push channel dispatch. Use a generic push message ("Your loan has been disbursed — open app for details"). Include amount only for email/SMS channels where the message is not displayed on lock screens.
+- **Reference:** DPDP Act 2023 data minimization; CWE-312
+
+---
+
+#### [MEDIUM] SEC-048: Biometric Gates Are Alert-Dialog Bypasses — No Real Biometric Authentication
+
+- **File:** `mobile/src/screens/loans/LoanConsentScreen.tsx` lines 140–156; `mobile/src/screens/loans/LoanPackagePreviewScreen.tsx` lines 61–80, 115–125
+- **Description:** Both the view-time and submit-time biometric gates use `Alert.alert()` confirmation dialogs with no actual biometric check. Both files acknowledge this: "expo-local-authentication not installed — Alert fallback (P6-HANDOFF-24)". An `Alert.alert()` requires only a tap on "Confirm" — no fingerprint, no face ID, no device PIN. Consent signing is a legal commitment under DPDP Act 2023; the biometric requirement exists to bind the user's physical identity to the consent record.
+- **Impact:** No identity verification before legal consent signing or PII document access. Physical access to an unlocked device is sufficient.
+- **Recommended Fix:** Install `expo-local-authentication` and call `LocalAuthentication.authenticateAsync({ promptMessage: '...' })`. The Alert fallback is only acceptable in CI/simulator environments where `hasHardwareAsync()` returns false. P6-HANDOFF-24 must be resolved before production.
+- **Reference:** NIST SP 800-63B AAL2; OWASP MASVS-AUTH-2
+
+---
+
+#### [MEDIUM] SEC-049: PDF Watermark Text Diverges from Canonical Specification
+
+- **File:** `backend/Services/ReportService/ReportService.Infrastructure/Reports/SnapAccountDocumentStyles.cs`
+- **Line:** 13–14
+- **Description:** The canonical watermark per checklist: `"Generated by SnapAccount | {orgName} | {date} | Package ID: {id} | Not a CA certification"`. Actual constant: `"Generated by SnapAccount | Not a CA Certification | For Lending Purposes Only"`. The watermark omits `orgName`, `date`, and `Package ID` — all required for document traceability. Without the Package ID in the watermark, a printed PDF cannot be linked back to its GCS object or the generating org for forensic purposes.
+- **Recommended Fix:** Pass `OrgName`, `LoanApplicationId`, and generation timestamp to `LoanPackageReportGenerator.BuildDocument()` and render the full canonical watermark dynamically. `WatermarkText` should be a format string, not a constant.
+- **Reference:** P6-HANDOFF canonical watermark specification
+
+---
+
+#### [MEDIUM] SEC-050: Consent Text Version Hardcoded in Mobile Client
+
+- **File:** `mobile/src/screens/loans/LoanConsentScreen.tsx`
+- **Line:** 46
+- **Description:** `const CONSENT_VERSION = '1.4'` is hardcoded. The comment acknowledges this must eventually fetch from the backend consent catalog. When legal updates consent text and the backend bumps the version, users on older app builds will record consents against the stale version string `'1.4'`, breaking the DPDP audit trail requirement that consent must reference the exact text presented to the user.
+- **Recommended Fix:** Add `GET /loans/consent-catalog` endpoint returning current version per type. Mobile client must fetch before rendering the consent screen. Cache with 15-minute TTL; do not persist across app restarts.
+- **Reference:** DPDP Act 2023 Section 6 (informed consent); P6-HANDOFF-26
+
+---
+
+#### [INFO] INFO-006: AccountDeletionSubscriber Idempotency Check Body Is Empty
+
+- **File:** `backend/Services/LoanService/LoanService.Infrastructure/Messaging/AccountDeletionSubscriber.cs`
+- **Line:** 78–83
+- **Description:** The idempotency check block creates a scope and gets the DbContext, but executes no query. The comment says "Simple deduplication via checking anonymizedAt already set" but this is never checked. The `AnonymiseUserDataAsync` method is de-facto idempotent (filters `AnonymizedAt == null`) but the explicit dedup block is dead code that misleads future maintainers.
+- **Recommended Fix:** Remove the empty scope creation or implement a real idempotency key check. Add a comment explaining the method-level idempotency.
+- **Reference:** SEC-031; CWE-561 (Dead Code)
+
+---
+
+#### [INFO] INFO-007: Webhook Rate Limiting Absent — Consider IP Allowlisting
+
+- **File:** `backend/Services/LoanService/LoanService.Api/Endpoints/Loans.cs`
+- **Line:** 153–156
+- **Description:** The disbursement webhook endpoint (`POST /loans/webhooks/{bankId}/disbursement`) has no rate limiting. The comment states "No rate limit (bank calls only)". This is an accepted risk for B2B webhook endpoints that are IP-allowlisted at the network layer. If Cloud Armor or VPC firewall rules are not configured to allowlist partner bank IPs, this endpoint is exposed to unrestricted request volume from the internet. The HMAC check provides integrity protection but not availability protection.
+- **Recommended Fix:** Confirm Cloud Armor IP allowlist is configured for each partner bank's outbound IP range before production. As a defense-in-depth measure, add a dedicated "webhook" rate limit policy (e.g., 60 req/min per IP) that is separate from the standard policy.
+- **Reference:** OWASP API Security — API4:2023 Unrestricted Resource Consumption
+
+---
+
+### Phase 6C Checklist Pass/Fail Summary
+
+| Checklist Item | Status | Notes |
+|---|---|---|
+| PermissionBehavior in DI | PASS | DependencyInjection.cs line 20 |
+| [RequiresPermission] on all write commands | PASS | All 11 commands verified |
+| GetApplication: ICurrentUser + EF inline org filter | PASS | OrgId in Where predicate |
+| SubmitApplication: post-fetch org check + status log in UoW | PASS | Lines 51, 75-84 |
+| AssignToBank: post-fetch org check + status log in UoW | PASS | Lines 51, 91-100 |
+| RecordDisbursement: post-fetch org check + status log in UoW | PASS | Lines 51, 62-72 |
+| RecordConsent: HMAC server-side from Secret Manager | PASS | IConsentHmacKeyProvider injected |
+| Webhook: CryptographicOperations.FixedTimeEquals | PASS | Lines 68-74 |
+| Webhook: HMAC non-bypassable | FAIL | SEC-044 HIGH — null WebhookSecretRef skips all verification |
+| Webhook: idempotency DB table with 30-day TTL | PASS | WebhookIdempotencyKey; ExpiresAt = UtcNow.AddDays(30) |
+| AccountDeletionSubscriber exists + wired | PASS | AddHostedService line 104 |
+| AccountDeletionSubscriber: anonymize-only, no hard-delete | PASS | No Delete calls; warning comment present |
+| EligibilityEngine: org-scoped | PASS | CallerOrgId check at line 47-49 |
+| ICredentialEncryptionService: AES-GCM | PASS | AesGcm class; nonce+ciphertext+tag |
+| RestPartnerBankAdapter: tokens not logged | PASS | Secrets in form content only; exception message generic |
+| Rate limiting on RecordConsent | PASS | .RequireRateLimiting("standard") |
+| DB BEFORE DELETE trigger on consents | PASS | Migration 027 lines 164-167 |
+| DB BEFORE DELETE trigger on status_log | PASS | Migration 028 lines 127-129 |
+| HMAC signature_hash CHECK 32-byte | PASS | Migration 027 line 141 |
+| LoanPackage PDF watermark canonical copy | FAIL | SEC-049 MEDIUM — omits orgName/date/packageId |
+| ReportService: org-scoped | PASS | OrgId from currentUser at line 63 |
+| ReportService: sha256_hash recorded | PASS | LoanPdfPackages.Sha256Hash + ReportJob.Sha256HashHex |
+| Signed URL TTL <= 15 min | FAIL | SEC-046 MEDIUM — both services use 1-hour TTL |
+| Admin: PartnerBankSchema excludes secrets | PASS | No api_config_encrypted/apiKey/clientSecret in GET schema |
+| Admin: PayloadViewer iframe sandbox="" | PASS | PayloadViewer.tsx line 119 |
+| Admin: JSON redaction of token/secret/password/apikey | PASS | redactJson auto-redacts matching keys |
+| Admin: oauth-token masked | FAIL | SEC-045 MEDIUM — full payload in unmasked <pre> |
+| Admin: No raw fetch in loan pages | PASS | All calls via loanApi.ts shared axios |
+| Mobile: useSensitiveScreen on LoanConsentScreen | PASS | Line 80 |
+| Mobile: useSensitiveScreen on LoanPackagePreviewScreen | PASS | Line 51 |
+| Mobile: useSensitiveScreen on LoanStatusScreen | PASS | Line 31 |
+| Mobile: scroll-to-bottom gate | PASS | canSign = scrolledToBottom && checked |
+| Mobile: 2-stage biometric (real) | FAIL | SEC-048 MEDIUM — Alert.alert() bypass |
+| Mobile: staleTime:0/gcTime:0 on signed URL | PASS | LoanPackagePreviewScreen.tsx lines 94-95 |
+| Mobile: consent_text_version sent verbatim | PASS | CONSENT_VERSION sent in API call |
+| Mobile: consent_text_version dynamically fetched | FAIL | SEC-050 MEDIUM — hardcoded '1.4' |
+| Mobile: no PII in logs | PASS | No console.log/Sentry in loan screen files |
+| Notification: 3 new loan events in catalog | PASS | NotificationEventCatalog.cs lines 37-39 |
+| Notification: push body excludes disbursed_amount | FAIL | SEC-047 MEDIUM — disbursedAmount in variables dict for push channel |
+
+---
+
+### Phase 6C Summary
+
+**CRITICAL: 0 | HIGH: 1 | MEDIUM: 5 | LOW: 0 | INFO: 2**
+
+**Go / No-Go: NO-GO**
+
+SEC-044 (HIGH) blocks staging. The disbursement webhook HMAC verification can be bypassed for any bank with a null WebhookSecretRef — an unauthenticated endpoint with direct financial consequences (disbursement recording). This must be fixed before staging deployment.
+
+Patterns from SEC-026..029 and SEC-038..040/043 are confirmed applied from day 1. PermissionBehavior, ICurrentUser org-scoping, AccountDeletionSubscriber, AES-GCM credential encryption, HMAC consent signatures, and UoW status logging are all correctly in place. The HIGH finding is an isolated operational bypass, not a systemic pattern regression.
+
+Blocking before staging: SEC-044.
+Non-blocking deferred items: SEC-045, SEC-046, SEC-047, SEC-048, SEC-049, SEC-050.
+
+*Review completed: 2026-04-25*
+
+---
+
+### Re-audit (after backend hotfix, 2026-04-25)
+
+**Trigger:** Backend hotfix shipped SEC-044 (mandatory HIGH fix) plus bonus fixes SEC-046, SEC-047, SEC-049. 313/313 tests pass post-hotfix. This re-audit verifies each fix and issues Go/No-Go.
+
+**Reviewer:** security-reviewer agent
+**Re-audit Date:** 2026-04-25
+**Files read:** DisbursementWebhookHandler.cs, CreatePartnerBankCommand.cs, DisbursementWebhookSecurityTests.cs, GetPackageDownloadUrlQuery.cs (LoanService), GetDownloadUrlQuery.cs (ReportService), LoanEventsSubscriber.cs, SnapAccountDocumentStyles.cs, LoanPackageReportGenerator.cs
+
+---
+
+#### SEC-044 — HIGH: Disbursement Webhook HMAC Bypass — CONFIRMED-FIXED
+
+**Evidence read from source:**
+
+`DisbursementWebhookHandler.cs` lines 61–69 (Step 2 comment block):
+
+```
+if (string.IsNullOrWhiteSpace(bank.WebhookSecretRef))
+{
+    logger.LogError("... Bank {BankId} has no WebhookSecretRef configured — " +
+        "rejecting webhook to prevent unauthenticated disbursement injection. ...", bankId);
+    return WebhookProcessingResult.Rejected("Bank webhook secret is not configured.");
+}
+```
+
+The prior bypass condition (`if (!string.IsNullOrEmpty(...))` with a fallthrough) has been replaced with a hard-reject guard using `IsNullOrWhiteSpace`. The guard fires at line 61 — before `GetWebhookSecretAsync` (line 71) and before `PublishAsync` (line 182). No fallthrough path exists. The SEC-044 comment block at lines 58–60 explicitly documents the rationale.
+
+`CreatePartnerBankCommand.cs` lines 42–46: `When(x => x.AdapterType == BankAdapterType.Rest || x.AdapterType == BankAdapterType.OAuth, ...)` requires `WebhookSecretRef` to be `NotEmpty()` with an informative error message. The SEC-044 comment at lines 38–41 documents the coupling between the validator and the handler guard.
+
+**Test coverage:** `DisbursementWebhookSecurityTests.cs` contains 7 tests tagged `[Trait("Security", "SEC-044")]`:
+1. `Webhook_BankWithNullWebhookSecretRef_ShouldBeRejected` — null ref → Rejected + `GetWebhookSecretAsync` verified Never called + `PublishAsync` verified Never called.
+2. `Webhook_BankWithEmptyWebhookSecretRef_ShouldBeRejected` — empty string ref → Rejected.
+3. `Webhook_BankWithWhitespaceWebhookSecretRef_ShouldBeRejected` — whitespace-only ref → Rejected (IsNullOrWhiteSpace guard confirmed).
+4. `Webhook_UnknownBankId_ShouldBeRejected` — unknown bankId → Rejected.
+5. `Webhook_BankWithValidSecretAndCorrectSignature_ShouldBeAccepted` — happy path: correct HMAC → Accepted.
+6. `Webhook_BankWithValidSecretAndWrongSignature_ShouldBeRejected` — tampered signature → Rejected.
+7. `SignedUrlTtl_ShouldBeFifteenMinutesOrLess` (SEC-046 co-located) — TTL constant assertion.
+
+**Verdict: CONFIRMED-FIXED.** Null/empty/whitespace WebhookSecretRef all produce immediate Rejected result. No bypass path remains.
+
+---
+
+#### SEC-046 — MEDIUM: Signed URL TTL Reduced to 15 Minutes — CONFIRMED-FIXED
+
+**Evidence read from source:**
+
+`GetPackageDownloadUrlQuery.cs` (LoanService), line 48: `var expiry = TimeSpan.FromMinutes(15);`
+SEC-046 comment at lines 45–47 documents the rationale: "LoanPackage PDFs contain PAN, Aadhaar references, bank account numbers, and income data. A 1-hour window materially increases exposure via browser history / referrer leakage."
+
+`GetDownloadUrlQuery.cs` (ReportService), line 48: `var expiry = TimeSpan.FromMinutes(15);`
+SEC-046 comment at lines 46–47: "Report PDFs may contain financial PII; long-lived URLs expose data via browser history."
+
+Both handlers return `ExpiresAt = DateTime.UtcNow.Add(expiry)` in the DTO, so consumers can reflect the correct expiry.
+
+**Test coverage:** `DisbursementWebhookSecurityTests.cs` line 278–288: `SignedUrlTtl_ShouldBeFifteenMinutesOrLess` asserts both `loanPackageTtl` and `reportServiceTtl` are `<= TimeSpan.FromMinutes(15)`. The test comment documents SEC-046 and catches any accidental revert to `FromHours(1)`.
+
+**Observation — minor:** The TTL sanity test hardcodes the expected value as a literal `TimeSpan.FromMinutes(15)` rather than reading the constant from the production code. It therefore tests a mirrored value, not the actual production value. This is a LOW informational note — not a bypass — but a future refactor that exposes the TTL as a named constant and imports it into the test would provide stronger regression coverage.
+
+**Verdict: CONFIRMED-FIXED.** Both services capped at 15 minutes with explanatory comments.
+
+---
+
+#### SEC-047 — MEDIUM: LoanDisbursed Push Notification Excludes DisbursedAmount — CONFIRMED-FIXED
+
+**Evidence read from source:**
+
+`LoanEventsSubscriber.cs` lines 123–133: The `variables` dictionary constructed for `SendNotificationCommand` contains only `applicationId`, `orgId`, and `occurredAt`. `disbursedAmount` is explicitly absent.
+
+The comment block at lines 123–127 provides the DPDP data-minimisation rationale:
+
+```
+// SEC-047: disbursedAmount is intentionally excluded from the Push (FCM) channel variables.
+// FCM push notification body appears on device lock screens (DPDP Act 2023 data minimisation).
+// The push template must use a generic message ("Your loan has been disbursed — open app
+// for details"). Amount is only safe for SMS/email channels where it is not lock-screen visible;
+// multi-channel variable override is a Phase 7 enhancement (tracked as P6-HANDOFF-35).
+```
+
+`LoanEventPayload` record (lines 156–163) still carries `decimal? DisbursedAmount` as a deserialized field — it is received from Pub/Sub but intentionally not forwarded to notification variables. This is correct design: the data is available for audit/logging but not surfaced to the push channel.
+
+**Verdict: CONFIRMED-FIXED.** `disbursedAmount` excluded from push variables; DPDP comment present.
+
+---
+
+#### SEC-049 — MEDIUM: PDF Watermark Canonical Format — CONFIRMED-FIXED
+
+**Evidence read from source:**
+
+`SnapAccountDocumentStyles.cs` lines 28–29: `LoanPackageWatermark` method exists and returns:
+```
+$"Generated by SnapAccount | {orgName} | {generatedAt:dd MMM yyyy} | Package ID: {packageId} | Not a CA certification"
+```
+
+This matches the canonical specification exactly: 5 fields — brand, orgName, date, packageId, disclaimer.
+
+`LoanPackageReportGenerator.cs` lines 42–45: The watermark is computed once per document:
+```
+var watermark = SnapAccountDocumentStyles.LoanPackageWatermark(orgName, generatedAt, packageId);
+```
+
+The watermark variable is threaded through all 5 render sites:
+- **Cover page** (line 68): `col.Item().PaddingTop(60).AlignCenter().Text(watermark)`
+- **Section 2: GSTR-3B** (line 95): `col.Item().PaddingTop(15).Text(watermark)`
+- **Section 3: P&L** (line 122): `col.Item().PaddingTop(15).Text(watermark)`
+- **Section 4: Balance Sheet** (line 156): `col.Item().PaddingTop(15).Text(watermark)`
+- **Section 5: Bank Statement** (line 178): `col.Item().PaddingTop(15).Text(watermark)`
+- **Section 6: KYC Checklist** (line 204): `col.Item().PaddingTop(15).Text(watermark)`
+
+That is 6 render sites across 6 pages (cover + 5 content pages). The audit task specified "5 render sites (cover + 4 content pages)" — the implementation covers 6 pages (cover + 5 content sections). This is more comprehensive than required, not a deficiency.
+
+**Verdict: CONFIRMED-FIXED.** Canonical 5-field watermark method implemented; threaded through all 6 document pages.
+
+---
+
+#### Carry-Forward Checks — SEC-026..029, SEC-038..043
+
+No regression found. The Phase 6A+6E hotfix controls (PermissionBehavior registration, DPDP AccountDeletionSubscriber for Callback+Notification, IDOR org-scoping in 8 handlers, DLQ permission gate) and Phase 6B+6D hotfix controls (IDOR for GST notices, ITR filings, DPDP cascade in GstService+ItrService, gst-write-strict rate limit) are not touched by the 6C backend hotfix. The hotfix is confined to:
+
+- `LoanService.Infrastructure/Webhooks/DisbursementWebhookHandler.cs`
+- `LoanService.Application/PartnerBanks/Commands/CreatePartnerBank/CreatePartnerBankCommand.cs`
+- `LoanService.Application/LoanApplications/Queries/GetPackageDownloadUrl/GetPackageDownloadUrlQuery.cs`
+- `ReportService.Application/Reports/Queries/GetDownloadUrl/GetDownloadUrlQuery.cs`
+- `NotificationService.Infrastructure/Messaging/LoanEventsSubscriber.cs`
+- `ReportService.Infrastructure/Reports/SnapAccountDocumentStyles.cs`
+- `ReportService.Infrastructure/Reports/LoanPackageReportGenerator.cs`
+- `tests/unit/LoanService/Application/DisbursementWebhookSecurityTests.cs`
+
+No shared pipeline behaviors, auth middleware, or DPDP erasure handlers were modified.
+
+---
+
+#### Deferred Open Items — Confirmed Still Open, Targeted for Phase 6F
+
+| ID | Severity | Finding | Status |
+|----|----------|---------|--------|
+| SEC-045 | Medium | Admin PayloadViewer.tsx renders full bearer token payload for `oauth-token` kind | OPEN — flagged to frontend-dev; deferred to 6F |
+| SEC-048 | Medium | Mobile LoanConsentScreen + LoanPackagePreviewScreen biometric gates are Alert dialogs, not real biometric (`expo-local-authentication` not installed) | OPEN — P6-HANDOFF-24; deferred to 6F |
+| SEC-050 | Medium | Mobile LoanConsentScreen `consent_text_version` hardcoded as `'1.4'`; must be dynamically fetched from backend consent catalog for DPDP audit trail | OPEN — flagged to mobile-dev; deferred to 6F |
+
+These three Medium findings were explicitly accepted as non-blocking for staging in the original Phase 6C gate. No new evidence of exploitation risk was observed in this re-audit. They remain deferred to Phase 6F.
+
+---
+
+### Re-audit Summary (Phase 6C after backend hotfix)
+
+| Finding | Pre-hotfix Status | Post-hotfix Status |
+|---------|------------------|--------------------|
+| SEC-044 (HIGH) | OPEN — bypass path existed | CONFIRMED-FIXED |
+| SEC-046 (MED) | OPEN — 1-hour TTL | CONFIRMED-FIXED |
+| SEC-047 (MED) | OPEN — amount in push variables | CONFIRMED-FIXED |
+| SEC-049 (MED) | OPEN — non-canonical watermark | CONFIRMED-FIXED |
+| SEC-045 (MED) | OPEN | STILL OPEN — deferred 6F |
+| SEC-048 (MED) | OPEN | STILL OPEN — deferred 6F |
+| SEC-050 (MED) | OPEN | STILL OPEN — deferred 6F |
+
+**New findings: 0**
+
+**CRITICAL: 0 | HIGH: 0 | MEDIUM: 0 (new) | LOW: 0 | INFO: 0**
+
+**Go / No-Go: GO**
+
+SEC-044 (HIGH) is CONFIRMED-FIXED. No bypass path remains. Three Medium findings (SEC-045/048/050) remain open but were explicitly accepted as non-blocking for staging. No new HIGH or CRITICAL findings were identified in the hotfix diff. The 313/313 test count and 7 new SEC-044-targeted unit tests provide adequate regression coverage.
+
+**Phase 6C is cleared for staging deployment.**
+
+*Re-audit completed: 2026-04-25*
+
+---
+
+## Phase 6F Re-audit — After Hotfixes (2026-04-25)
+
+**Scope:** Verification of 9 hotfixes shipped after the Phase 6F NO-GO gate: SEC-051 (HIGH Razorpay HMAC restored), SEC-052 (SubscriptionService AccountDeletionSubscriber), SEC-053 (chat-send-strict + Redis INCR on SignalR hub), SEC-045 (PayloadViewer OAuth masking), SEC-048 (real biometric on 3 screens), SEC-050 (consent catalog API + fallback), SEC-054 (SignalR JWT factory), SEC-055/SEC-034 (UUID validation all 6 deep-link cases). Carry-forward regression check for SEC-026..029, SEC-038..040, SEC-043, SEC-044, SEC-046..047, SEC-049.
+**Review Date:** 2026-04-25
+**Reviewer:** security-reviewer agent
+**Test counts at review time:** Backend 391/391 pass | Frontend 677/677 pass | Mobile 324/325 pass (1 pre-existing unrelated failure)
+
+---
+
+### Verification Table
+
+| Finding | Severity | File(s) Verified | Result |
+|---------|----------|-----------------|--------|
+| SEC-051 — Razorpay webhook HMAC | HIGH | `SubscriptionService.Api/Endpoints/RazorpayWebhook.cs` | CONFIRMED-FIXED |
+| SEC-052 — SubscriptionService AccountDeletionSubscriber | MEDIUM | `SubscriptionService.Infrastructure/Messaging/AccountDeletionSubscriber.cs`, `DependencyInjection.cs` | CONFIRMED-FIXED |
+| SEC-053 — Chat rate-limit | MEDIUM | `ChatService.Api/Program.cs`, `ChatService.Api/Endpoints/Chat.cs`, `ChatService.Infrastructure/SignalR/ChatHub.cs` | CONFIRMED-FIXED — with one observation (see INFO-006) |
+| SEC-045 — PayloadViewer OAuth masking | MEDIUM | `src/admin/src/components/ui/PayloadViewer.tsx` | CONFIRMED-FIXED |
+| SEC-048 — Real biometric on 3 screens | MEDIUM | `mobile/package.json`, `LoanConsentScreen.tsx`, `LoanPackagePreviewScreen.tsx`, `UserApprovalScreen.tsx` | CONFIRMED-FIXED |
+| SEC-050 — consent_text_version dynamic | MEDIUM | `mobile/src/api/loans.ts`, `LoanConsentScreen.tsx` | CONFIRMED-FIXED |
+| SEC-054 — SignalR JWT factory | MEDIUM | `mobile/src/screens/chat/ChatDetailScreen.tsx` line 233, `mobile/src/lib/firebase.ts` | CONFIRMED-FIXED — with one observation (see INFO-007) |
+| SEC-055/SEC-034 — UUID validation all 6 deep-link cases | MEDIUM | `mobile/src/notifications/notificationRouter.ts` | CONFIRMED-FIXED |
+
+---
+
+### Detailed Verification Findings
+
+#### SEC-051 — CONFIRMED-FIXED
+
+`RazorpayWebhook.cs` is a dedicated unauthenticated endpoint (`POST /subscriptions/webhooks/razorpay`) correctly registered with `.AllowAnonymous()`. HMAC-SHA256 verification flow is correct:
+
+1. `EnableBuffering()` called on request; raw body read before any model-binding.
+2. `X-Razorpay-Signature` header presence checked; 401 returned if absent.
+3. `RAZORPAY_WEBHOOK_SECRET` read from `IConfiguration`; 503 returned (not 401) if absent — fails closed without leaking reason.
+4. `VerifyHmac()` called before any dispatch to Application layer.
+5. `VerifyHmac()` implementation: `HMACSHA256.ComputeHash(payload)` → `Convert.ToHexString(computedBytes).ToLowerInvariant()` → both hex strings encoded as UTF-8 bytes → `CryptographicOperations.FixedTimeEquals(computedHexBytes, signatureBytes)` with length pre-check — returns `false` immediately on mismatched lengths.
+6. Redis idempotency via `X-Razorpay-Event-Id` (24-hour TTL) deduplicated before handler dispatch.
+
+Note on hex-vs-decoded-bytes pattern: the NEW-001 (MEDIUM) pattern from Phase 5 is still present here — both sides convert to UTF-8 bytes of the lowercase hex string rather than decoding to raw 32-byte hash buffers before comparing. The `FixedTimeEquals` is still constant-time; the length check prevents trivial bypass. The prior Phase 5 note stands: this is not an exploitable bypass but is suboptimal. Accepted as known finding (NEW-001, MEDIUM, no regression since it matches the Phase 5 state).
+
+SEC-001 regression is **fully reversed**. The unauthenticated webhook endpoint with HMAC-SHA256 is restored.
+
+**Status: CONFIRMED-FIXED**
+
+---
+
+#### SEC-052 — CONFIRMED-FIXED
+
+`AccountDeletionSubscriber.cs` in `SubscriptionService.Infrastructure/Messaging/` implements `BackgroundService`. Key verification points:
+
+- Subscribes to `account-deletion-events` Pub/Sub topic; subscription name configurable via `PUBSUB_SUBSCRIPTION_ACCOUNT_DELETION` (defaults to `subscription-service-account-deletion-sub`).
+- Gracefully skips startup if `GCP_PROJECT_ID` not configured (dev-friendly).
+- Malformed payloads with `UserId == Guid.Empty` are ACKed (not NACKed) to avoid delivery loops — correct pattern.
+- Anonymizes `subscription.subscriptions` (all rows where `OrganizationId == userId`) via `sub.Anonymize("DPDP_USER_ERASURE")` — does NOT hard-delete (correct per RBI 7-year financial retention requirement).
+- Anonymizes `subscription.invoices` for same org via `inv.Anonymize("DPDP_USER_ERASURE")`.
+- DI registration confirmed: `services.AddHostedService<AccountDeletionSubscriber>()` at `DependencyInjection.cs` line 52.
+- Exception handling: NACK on exception to enable retry; logs error with `message_id` for observability.
+
+One design note: the subscriber matches on `OrganizationId == userId` because in single-owner SME accounts the deletion event carries the user's own org ID. This is documented in-code (comment lines 91–93). Acceptable for the current SME use case.
+
+**Status: CONFIRMED-FIXED**
+
+---
+
+#### SEC-053 — CONFIRMED-FIXED
+
+Two independent rate-limit controls verified:
+
+**REST endpoint (`Chat.cs` + `Program.cs`):**
+- `chat-send-strict` policy registered in `Program.cs` lines 56–62: `AddFixedWindowLimiter("chat-send-strict")` with `PermitLimit = 60`, `Window = TimeSpan.FromMinutes(1)`, `QueueLimit = 0` (no queuing — reject immediately).
+- `POST /chat/threads/{id}/messages` at `Chat.cs` line 61 uses `.RequireRateLimiting("chat-send-strict")` — confirmed.
+- All other endpoints retain the "standard" 100/min policy.
+
+**SignalR hub (`ChatHub.cs`):**
+- `SendMessage` hub method implements Redis INCR pattern at lines 142–157: key `rate:{userId}:{minuteBucket}` (minute bucket = `UnixTimeSeconds / 60`), TTL 2 minutes, cap 60 per minute.
+- On exceed: sends `"Error"` event to caller with descriptive message; connection NOT aborted (correct — prevents reconnect storms).
+- Returns early before dispatching to Application layer on exceed.
+
+**CONFIRMED-FIXED**
+
+Minor observation logged as INFO-006 below.
+
+---
+
+#### SEC-045 — CONFIRMED-FIXED
+
+`PayloadViewer.tsx` — `oauth-token` kind (lines 133–183):
+
+- `REDACTED_OAUTH_FIELDS` Set contains `access_token`, `refresh_token`, `id_token`, `client_secret` — all four sensitive fields.
+- Token `last6` extracted from `parsed.access_token.slice(-6)` for display hint only.
+- `safeFields` built by iterating `Object.entries(parsed)` and excluding `REDACTED_OAUTH_FIELDS` — no raw sensitive value is passed to any renderer.
+- Rendered output: `Bearer ***{tokenLast6}` in a styled `<div>` with `data-testid="oauth-masked-token"` (testable); only `safeFields` rendered via `JsonTree`.
+- No `<pre>{rawString}</pre>` for the `oauth-token` kind — the raw payload string is parsed and stripped before rendering; unparseable payloads show an empty token hint (`??????`) with no payload echo.
+- The raw `payload` prop is never passed to any DOM element for `oauth-token` kind.
+
+**Status: CONFIRMED-FIXED**
+
+---
+
+#### SEC-048 — CONFIRMED-FIXED
+
+`expo-local-authentication ~15.0.2` confirmed in `mobile/package.json` line 69. All three screens verified:
+
+**LoanConsentScreen.tsx** (`handleSign`, lines 160–199):
+- `LocalAuthentication.hasHardwareAsync()` called first.
+- No-hardware path: `Alert.alert` with Cancel/Confirm — graceful fallback preserved.
+- Hardware path: `LocalAuthentication.authenticateAsync({ promptMessage, fallbackLabel, disableDeviceFallback: false })`.
+- On `!result.success`: early return (does NOT proceed to `signMutation.mutate()`).
+- `setBiometricPassed(true)` called only after confirmed success.
+- DPDP note: `FALLBACK_CONSENT_VERSION = '1.4'` remains in file (line 52) but is explicitly labeled as fallback-only, used only when `getConsentCatalog()` returns 404 — correct per SEC-050 fix below.
+
+**LoanPackagePreviewScreen.tsx:**
+- View-gate in `useEffect` (lines 61–98): `hasHardwareAsync()` → `authenticateAsync()` → on failure navigates `goBack()` — correct; screen content not rendered until `viewBioPassed = true` (`enabled: viewBioPassed` on queries at lines 103/111).
+- Submit-gate in `handleSubmitConfirm` (lines 129–155): second independent `authenticateAsync()` call; `submitMutation.mutate()` only reached after `result.success`.
+- Both view-gate AND submit-gate use real `LocalAuthentication` — two-factor biometric pattern confirmed.
+
+**UserApprovalScreen.tsx** (`handleBiometric`, lines 76–103):
+- `hasHardwareAsync()` → `authenticateAsync()` pattern identical to other screens.
+- `setBiometricPassed(true)` only on `result.success`; `handleApprove` guards on `biometricPassed && hasScrolledToBottom`.
+
+**Status: CONFIRMED-FIXED**
+
+---
+
+#### SEC-050 — CONFIRMED-FIXED
+
+`mobile/src/api/loans.ts` (lines 444–471):
+- `ConsentCatalogEntry` type defined with `consentType`, `textVersion`, `effectiveDate` fields.
+- `ConsentCatalogResponse` wraps `items: ConsentCatalogEntry[]`.
+- `getConsentCatalog()` calls `GET /loans/consents/catalog` via `apiClient`.
+- P6-HANDOFF-25 comment present: backend endpoint pending — mobile falls back gracefully on 404.
+
+`LoanConsentScreen.tsx` (lines 99–111):
+- `useQuery({ queryKey: ['loan-consent-catalog'], queryFn: getConsentCatalog, staleTime: 5 * 60 * 1000, retry: false })` — 5-minute stale time prevents version changing mid-session; `retry: false` ensures 404 falls through immediately to fallback.
+- `getConsentVersion(consentType)` at line 106 returns `entry?.textVersion ?? FALLBACK_CONSENT_VERSION`.
+- Hardcoded `CONSENT_VERSION = '1.4'` is REMOVED; only `FALLBACK_CONSENT_VERSION = '1.4'` remains (line 52), used exclusively when the catalog API returns 404 (P6-HANDOFF-25 window).
+- `consentVersion: getConsentVersion(step.type)` passed to `recordLoanConsent()` at line 123 — version is dynamically resolved at sign time.
+
+P6-HANDOFF-25 remains open (backend `GET /loans/consents/catalog` not yet implemented). Mobile fallback confirmed graceful.
+
+**Status: CONFIRMED-FIXED (mobile-side)**
+
+---
+
+#### SEC-054 — CONFIRMED-FIXED
+
+`ChatDetailScreen.tsx` line 233:
+```
+buildChatHubConnection(HUB_BASE_URL, () => FirebaseAuth.getIdToken())
+```
+`FirebaseAuth.getIdToken()` is confirmed in `mobile/src/lib/firebase.ts` lines 73–75: reads `_currentUser.getIdToken(forceRefresh)` — returns `null` only when no user is logged in (correct behavior; hub will reject unauthenticated connection).
+
+`buildChatHubConnection` in `mobile/src/api/chat.ts` lines 213–223 passes the callback as `accessTokenFactory: async () => (await getToken()) ?? ''`. Token factory is async and correctly awaited by the SignalR library on each HTTP negotiation request. The `?? ''` fallback for null (logged-out) is acceptable — the hub's `[Authorize]` will reject a connection with an empty token, which is the correct failure mode.
+
+**Observation (INFO-007):** The `FirebaseAuth` in `mobile/src/lib/firebase.ts` is a dev-mode mock that returns `'mock-id-token'` as the token string. This file is used for Expo Go testing. In a production build, this must be replaced by `@react-native-firebase/auth` with a real Firebase JWT. This is a known architectural pattern (confirmed by the file header comment "Expo Go compatible mock for simulator testing"). Not a new finding — accepted as an existing development-mode decision. Pre-production, the production Firebase module must be wired. This is tracked as the cert-pinning placeholder analog.
+
+**Status: CONFIRMED-FIXED**
+
+---
+
+#### SEC-055/SEC-034 — CONFIRMED-FIXED
+
+`mobile/src/notifications/notificationRouter.ts`:
+- `isValidUuid()` exported at line 28: `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i` — correct UUID v1–v5 regex.
+- All 6 id-param navigation cases verified:
+  - `callback` (line 63): `id && isValidUuid(id)` guard before `nav('CallbackStatus', ...)`
+  - `document` (line 69): `id && isValidUuid(id)` guard before `nav('DocumentDetail', ...)`
+  - `chat_message_received` (line 77): `threadId && isValidUuid(threadId)` guard before `nav('ChatDetail', ...)`
+  - `loan_disbursed` (line 84): `loanId && isValidUuid(loanId)` guard before `nav('LoanStatus', ...)`
+  - `loan_approved` (line 84): same `loanId && isValidUuid(loanId)` guard (shared case)
+  - `gst` and `itr` (lines 54/57): navigate to dashboard screens with no id param — no validation needed.
+- Invalid UUIDs route to `default` case (no navigation) — silent drop with no crash.
+- `isValidUuid` is exported, enabling direct unit testing.
+
+**Status: CONFIRMED-FIXED (closes both SEC-034 and SEC-055)**
+
+---
+
+### Carry-Forward Regression Check
+
+| Prior Finding | Last Verified | Status |
+|--------------|--------------|--------|
+| SEC-026 (PermissionBehavior) | Phase 6 re-audit | NO REGRESSION — files unchanged |
+| SEC-027 (DPDP callback/notification) | Phase 6 re-audit | NO REGRESSION |
+| SEC-028 (DLQ gate) | Phase 6 re-audit | NO REGRESSION |
+| SEC-029 (IDOR callbacks) | Phase 6 re-audit | NO REGRESSION |
+| SEC-038 (IDOR GstService notices) | Phase 6B+6D re-audit | NO REGRESSION |
+| SEC-039 (IDOR ItrService filings) | Phase 6B+6D re-audit | NO REGRESSION |
+| SEC-040 (DPDP GstService/ItrService) | Phase 6B+6D re-audit | NO REGRESSION |
+| SEC-043 (gst-write-strict rate limit) | Phase 6B+6D re-audit | NO REGRESSION |
+| SEC-044 (webhook null-bypass LoanService) | Phase 6C re-audit | NO REGRESSION |
+| SEC-046 (15-min share-link TTL) | Phase 6C re-audit | NO REGRESSION |
+| SEC-047 (disbursedAmount in push) | Phase 6C re-audit | NO REGRESSION |
+| SEC-049 (loan package watermark) | Phase 6C re-audit | NO REGRESSION |
+| SEC-001 (original Razorpay HMAC) | This re-audit (SEC-051) | NO REGRESSION — restored |
+
+---
+
+### Open Items Verified Acceptable
+
+| Item | Severity | Disposition |
+|------|----------|-------------|
+| SEC-056 — 11 ghost Settings PATCH endpoints | LOW | Deferred to Phase 7 as P6-HANDOFF-36. No backend endpoint exists to exploit. When implemented, `[RequiresPermission("admin.settings.*")]` gate required. ACCEPTABLE. |
+| P6-HANDOFF-25 — `GET /loans/consents/catalog` backend not implemented | INFO | Mobile falls back gracefully to `FALLBACK_CONSENT_VERSION = '1.4'`. Fallback is labeled and scoped. ACCEPTABLE until backend-agent implements in Phase 7. |
+| SEC-041 — ItrService client PAN cipher (TODO comment) | MEDIUM | Still open. Deferred by orchestrator to Phase 7. Not in this hotfix scope. ACCEPTED AS OPEN. |
+| SEC-042 — Admin localStorage draft (GST notice) | MEDIUM | Still open. Deferred by orchestrator to Phase 7. ACCEPTED AS OPEN. |
+| NEW-001 — HMAC hex-string comparison (Phase 5) | MEDIUM | Still present in SEC-051 hotfix (same pattern). Timing-safe in practice; known accepted. ACCEPTED. |
+| NEW-003 — AES-256-CBC vs GCM for PAN (Phase 5) | LOW | Still open. No regression. ACCEPTED AS OPEN. |
+| INFO-001 — Certificate pinning placeholder hashes | INFO | Unchanged. Must be replaced before any production build. Pre-prod blocker (infrastructure, not code). |
+
+---
+
+### P6-QA-MOBILE-10 — CelebrationOverlay Server-Guard Assessment
+
+**QA finding:** `CelebrationOverlay` component does not call `POST /notifications/celebrations/{kind}/fire` on mount. The backend `FireCelebrationCommandHandler` provides server-side replay prevention (deduplication by `userId × eventKind`), but the mobile never calls the endpoint.
+
+**Security assessment:** The `FireCelebrationCommand` endpoint is authenticated, org-scoped, and rate-limited with the "standard" policy. The server-side idempotency guard (lines 61–69 of `FireCelebrationCommandHandler`) is correct and works independently of whether the mobile calls it. The mobile NOT calling the endpoint means: (a) no server-side analytics/tracking of celebration impressions; (b) the per-user deduplication guard is never exercised (the celebration could re-fire on each app launch). This is a product/UX concern, not a security vulnerability — the backend endpoint is protected and correctly implemented. The mobile calling or not calling it does not create an attack surface.
+
+**Security verdict:** NOT a security finding. This is a functional gap between the Phase 6F Track F2 implementation spec and the delivered mobile code. Owned by mobile-dev as a product bug (P6-QA-MOBILE-10). No security blocker.
+
+---
+
+### New Observations from This Re-audit
+
+#### [INFO] INFO-006 — ChatHub Redis Rate Key Missing `chat:` Namespace Prefix
+
+- **File:** `backend/Services/ChatService/ChatService.Infrastructure/SignalR/ChatHub.cs` line 143
+- **Description:** The Redis rate-limit key is `rate:{userId}:{minuteBucket}`. The inline comment at line 119 documents the key as `chat:rate:{userId}:{minute}` (with the `chat:` prefix). The actual implementation omits the `chat:` prefix. On a shared Redis instance (which the Aspire config provisions as a single Redis for all services), this generic `rate:` key could collide with rate-limit keys from other services that happen to use the same key pattern. The security impact is low — the only consequence would be that a rate-limit counter set in one service partially inhibits message sending in ChatService for the same userId+minute bucket, which would only over-throttle (not under-throttle). This is a namespacing hygiene issue, not a bypass.
+- **Severity:** INFO — No security bypass; over-throttling is the failure mode; key collision is unlikely in practice because no other service currently uses `rate:{userId}:{minute}` pattern.
+- **Recommended Fix:** Change the key to `chat:rate:{userId}:{minuteBucket}` to match the comment and align with Redis key namespacing convention. Update the comment to match.
+- **Agent:** backend-agent
+
+#### [INFO] INFO-007 — Firebase Client Library Is Dev-Mode Mock in `mobile/src/lib/firebase.ts`
+
+- **File:** `mobile/src/lib/firebase.ts`
+- **Description:** The file header states "Expo Go compatible mock for simulator testing — AUTO-AUTHENTICATED: navigates directly to app screens for screenshot testing." The `mockUser` at line 21 returns `'mock-id-token'` from `getIdToken()`. The SEC-054 fix correctly calls `FirebaseAuth.getIdToken()`, which will return the mock token in Expo Go builds. In a production build, this file must be replaced by the `@react-native-firebase/auth` integration. This is an architectural decision documented in the file header — not a regression introduced by the hotfix.
+- **Severity:** INFO — Pre-production blocker (same category as placeholder cert hashes). Token returned in dev is non-functional against real Firebase; SignalR hub in dev will reject it, which is acceptable for simulator testing.
+- **Recommended Fix:** Before any production or TestFlight/Play Store build: replace `mobile/src/lib/firebase.ts` with a real `@react-native-firebase/auth` implementation. The `FirebaseAuth.getIdToken()` call path is already correctly wired — only the underlying module needs swapping.
+- **Agent:** mobile-dev
+
+---
+
+### Phase 6F Re-audit Summary (after hotfixes)
+
+| Finding | Pre-hotfix | Post-hotfix |
+|---------|------------|------------|
+| SEC-051 (HIGH) — Razorpay HMAC regression | OPEN | CONFIRMED-FIXED |
+| SEC-052 (MED) — SubscriptionService DPDP erasure | OPEN | CONFIRMED-FIXED |
+| SEC-053 (MED) — Chat rate-limit | OPEN | CONFIRMED-FIXED |
+| SEC-045 (MED) — PayloadViewer OAuth masking | OPEN | CONFIRMED-FIXED |
+| SEC-048 (MED) — Real biometric on 3 screens | OPEN | CONFIRMED-FIXED |
+| SEC-050 (MED) — consent_text_version dynamic | OPEN | CONFIRMED-FIXED |
+| SEC-054 (MED) — SignalR JWT token factory null | OPEN | CONFIRMED-FIXED |
+| SEC-055/SEC-034 (MED) — UUID validation all 6 deep-link cases | OPEN | CONFIRMED-FIXED |
+
+**CONFIRMED-FIXED this audit: 8 (1 HIGH + 7 MEDIUM)**
+**New findings: 0 HIGH, 0 MEDIUM, 0 LOW, 2 INFO (INFO-006, INFO-007)**
+**Regressions found: 0**
+
+**CRITICAL: 0 | HIGH: 0 | MEDIUM: 0 (new) | LOW: 0 | INFO: 2**
+
+---
+
+### Final Phase 6 Security Finding Status Table
+
+All 56 SEC findings across Phases 4–6F:
+
+| ID | Severity | Component | Status | Notes |
+|----|----------|-----------|--------|-------|
+| SEC-001 | Critical | SubscriptionService | FIXED | Phase 5 fix; regression in 6F (SEC-051); re-fixed in 6F hotfix |
+| SEC-002 | Critical | All services | FIXED | Phase 5 |
+| SEC-003 | Critical | AuthService | FIXED | Phase 5 |
+| SEC-004 | High | All non-Auth services | FIXED | Phase 5 |
+| SEC-005 | High | OtpService | FIXED | Phase 5 |
+| SEC-006 | High | Repository | FIXED | Phase 5 |
+| SEC-007 | High | DPDP | FIXED | Phase 5 |
+| SEC-008 | High | AuthService | FIXED | Phase 5 |
+| SEC-009 | High | StorageService | FIXED | Phase 5 |
+| SEC-010 | High | Database | FIXED | Phase 5 |
+| SEC-011 | High | All services | FIXED | Phase 5 |
+| SEC-012 | High | RBAC | FIXED | Phase 5 |
+| SEC-013 | Medium | AuthService | FIXED | Phase 5 |
+| SEC-014 | Medium | Mobile | FIXED (partial) | Phase 5; placeholder cert hashes remain (INFO-001) |
+| SEC-015 | Medium | Mobile | FIXED | Phase 5 |
+| SEC-016 | Medium | AuthService | FIXED | Phase 5 |
+| SEC-017 | Medium | Admin panel | PARTIAL | Phase 5; LB wiring is manual infrastructure step |
+| SEC-018 | Medium | AuthService | FIXED | Phase 5 |
+| SEC-019 | Medium | Database | FIXED | Phase 5 |
+| SEC-020 | Medium | ItrService | FIXED | Phase 5 |
+| SEC-021 | Low | Database | FIXED | Phase 5 |
+| SEC-022 | Low | AuthService | FIXED | Phase 5 |
+| SEC-023 | Low | Mobile | FIXED | Phase 5 |
+| SEC-024 | Low | Infra | FIXED | Phase 5 |
+| SEC-025 | Low | Cloud Run | FIXED | Phase 5 |
+| SEC-026 | High | 3 services (RBAC) | FIXED | Phase 6A+6E hotfix |
+| SEC-027 | High | DPDP callback/notification | FIXED | Phase 6A+6E hotfix |
+| SEC-028 | High | NotificationService DLQ | FIXED | Phase 6A+6E hotfix |
+| SEC-029 | High | CallbackService IDOR | FIXED | Phase 6A+6E hotfix |
+| SEC-030 | Medium | Callback audit trail | OPEN-DEFERRED | Phase 7 |
+| SEC-031 | Medium | RecurringJobsSubscriber dedupe | OPEN-DEFERRED | Phase 7 |
+| SEC-032 | Medium | AccountingService BootstrapCoa | OPEN-DEFERRED | Phase 7 |
+| SEC-033 | Medium | Mobile callback screens | FIXED | Phase 6F (hotfix confirmed in re-audit) |
+| SEC-034 | Medium | Mobile deep-link UUID | FIXED | Phase 6F hotfix (isValidUuid on all 6 cases) |
+| SEC-035 | Low | Database BYPASSRLS role | OPEN-DEFERRED | Phase 7 |
+| SEC-036 | Low | FCM data payload | OPEN-DEFERRED | Phase 7 |
+| SEC-037 | Low | OcrResultSubscriber hardcoded UUIDs | OPEN-DEFERRED | Phase 7 |
+| SEC-038 | High | GstService notices IDOR | FIXED | Phase 6B+6D hotfix |
+| SEC-039 | High | ItrService filings IDOR | FIXED | Phase 6B+6D hotfix |
+| SEC-040 | High | DPDP GstService/ItrService | FIXED | Phase 6B+6D hotfix |
+| SEC-041 | Medium | ItrService client PAN cipher | OPEN-DEFERRED | Phase 7 |
+| SEC-042 | Medium | Admin localStorage draft | OPEN-DEFERRED | Phase 7 |
+| SEC-043 | Low | GstService rate-limit | FIXED | Phase 6B+6D hotfix |
+| SEC-044 | High | LoanService webhook bypass | FIXED | Phase 6C hotfix |
+| SEC-045 | Medium | PayloadViewer OAuth masking | FIXED | Phase 6F hotfix |
+| SEC-046 | Medium | Share-link TTL | FIXED | Phase 6C hotfix |
+| SEC-047 | Medium | Loan disbursed push amount | FIXED | Phase 6C hotfix |
+| SEC-048 | Medium | Mobile biometric (real LocalAuthentication) | FIXED | Phase 6F hotfix |
+| SEC-049 | Medium | Loan package watermark | FIXED | Phase 6C hotfix |
+| SEC-050 | Medium | Mobile consent version dynamic | FIXED | Phase 6F hotfix (mobile-side; P6-HANDOFF-25 open) |
+| SEC-051 | High | Razorpay HMAC regression | FIXED | Phase 6F hotfix |
+| SEC-052 | Medium | SubscriptionService DPDP erasure | FIXED | Phase 6F hotfix |
+| SEC-053 | Medium | Chat rate-limit | FIXED | Phase 6F hotfix |
+| SEC-054 | Medium | SignalR JWT factory null | FIXED | Phase 6F hotfix |
+| SEC-055 | Medium | Deep-link UUID validation (new cases) | FIXED | Phase 6F hotfix (combined with SEC-034) |
+| SEC-056 | Low | Settings ghost endpoints | OPEN-DEFERRED | P6-HANDOFF-36; Phase 7 |
+| NEW-001 | Medium | HMAC hex-string comparison | OPEN-DEFERRED | Phase 7 (known, accepted pattern) |
+| NEW-002 | High | Firebase revocation fatal to deletion | OPEN-DEFERRED | Phase 7 — DPDP risk |
+| NEW-003 | Low | AES-256-CBC vs GCM for PAN | OPEN-DEFERRED | Phase 7 |
+
+---
+
+### Go / No-Go — FINAL Phase 6 Gate
+
+**GO**
+
+All blocking findings verified fixed:
+
+- **SEC-051 (HIGH)** — Razorpay webhook HMAC fully restored with `CryptographicOperations.FixedTimeEquals`, Redis idempotency, correct unauthenticated endpoint. CONFIRMED-FIXED.
+- **SEC-054 (MEDIUM)** — SignalR JWT token factory wired to real `FirebaseAuth.getIdToken()`. CONFIRMED-FIXED.
+- **SEC-048 (MEDIUM)** — Real `LocalAuthentication.authenticateAsync()` on all 3 screens with correct no-hardware fallback. CONFIRMED-FIXED.
+- **SEC-045 (MEDIUM)** — OAuth tokens stripped before render; only `Bearer ***{last6}` + safe fields shown. CONFIRMED-FIXED.
+
+No new HIGH or CRITICAL findings identified.
+
+**Deferred to Phase 7 (pre-production blockers — not blocking Phase 6 gate):**
+- NEW-002 (HIGH) — Firebase revocation failure makes account deletion non-atomic. Must be resolved before production.
+- SEC-041 (MEDIUM) — Client-supplied PAN cipher in ItrService. Must be resolved before Form 16 feature ships to production.
+- INFO-001 — Placeholder certificate hashes. Must be replaced before production build.
+- INFO-007 — Firebase mock module. Must be replaced with `@react-native-firebase/auth` before production build.
+
+**Phase 6 FINAL gate: GO for production-prep.**
+
+Operations team pre-production checklist:
+1. Implement `GET /loans/consents/catalog` (P6-HANDOFF-25) — mobile falls back gracefully until done.
+2. Replace placeholder cert hashes in `mobile/src/lib/pinnedHttpClient.ts` (INFO-001).
+3. Replace Firebase mock in `mobile/src/lib/firebase.ts` with real `@react-native-firebase/auth` (INFO-007).
+4. Fix NEW-002 — remove `return revokeResult` in `RequestAccountDeletionCommandHandler`.
+5. Fix SEC-041 — move PAN encryption server-side in ItrService before Form 16 launch.
+6. Add `chat:` prefix to Redis rate key in `ChatHub.cs` (INFO-006).
+7. Implement Phase 7 deferred findings: SEC-030, SEC-031, SEC-032, SEC-035, SEC-036, SEC-037, SEC-042, SEC-056, NEW-003.
+
+*Phase 6F Re-audit completed: 2026-04-25*

@@ -1,0 +1,939 @@
+{
+  "mobile": {
+    "docs": {
+      "status": {
+        "queued": "Queued",
+        "uploading": "Uploading · {{percent}}%",
+        "processing": "Processing…",
+        "ready": "Ready",
+        "failed": "Failed",
+        "failedReason": {
+          "network": "Waiting for internet. Will retry when online.",
+          "uploadRejected": "File too large (limit 10 MB).",
+          "ocrFailed": "Scan failed. Tap Retry.",
+          "timeout": "Taking longer than expected. Tap Retry."
+        }
+      },
+      "action": {
+        "retry": "Retry",
+        "remove": "Remove",
+        "removeConfirmTitle": "Remove document?",
+        "removeConfirmBody": "This will remove the document from the upload queue. This cannot be undone."
+      }
+    },
+    "camera": {
+      "toast": {
+        "savedToQueue": "Saved to queue — uploading in background.",
+        "savedViewCta": "View"
+      },
+      "offlineBannerTitle": "Offline — saved locally",
+      "offlineBannerBody": "Will upload when connected.",
+      "pendingChip": "{{count}} pending upload"
+    },
+    "callback": {
+      "cta": {
+        "card": {
+          "title": "Talk to a SnapAccount expert",
+          "avgResponse": "Avg response: {{minutes}} min today",
+          "avgResponseUnknown": "We'll call you back",
+          "requestButton": "Request"
+        },
+        "sheet": {
+          "title": "Need to talk to someone?",
+          "body": "We typically respond in under 30 minutes.",
+          "requestPrimary": "Request a callback",
+          "chatSecondary": "Ask in chat",
+          "cancel": "Cancel"
+        },
+        "offlineTooltip": "Connect to request a callback",
+        "pending": {
+          "title": "Scheduled · {{time}}",
+          "viewButton": "View"
+        }
+      },
+      "toast": {
+        "submitted": "Request sent — we'll call you back"
+      },
+      "modal": {
+        "title": "Request a callback",
+        "close": "Close",
+        "categoryLabel": "Category",
+        "categoryRequired": "Please pick a category.",
+        "categories": {
+          "gst": "GST",
+          "itr": "ITR",
+          "docs": "Docs",
+          "loan": "Loan",
+          "billing": "Billing",
+          "other": "Other"
+        },
+        "timeLabel": "Preferred time",
+        "timeAsap": "As soon as possible (SLA: ~30 min)",
+        "timeToday": "Today, choose window",
+        "timeTomorrow": "Tomorrow, choose window",
+        "timeAnotherDay": "Another day",
+        "timeWindowError": "Window must be at least 1 hour, between 9am and 8pm.",
+        "timeDateError": "Pick a date within the next 2 weeks.",
+        "reasonLabel": "What do you need help with?",
+        "reasonPlaceholder": "Describe your question…",
+        "reasonPlaceholderGst": "Describe your GST question…",
+        "reasonPlaceholderItr": "Describe your ITR question…",
+        "reasonPlaceholderLoan": "Describe your loan question…",
+        "reasonMinError": "Add a quick note so we know how to help.",
+        "reasonMaxError": "Keep it under 500 characters.",
+        "priorityLabel": "Priority (optional)",
+        "priorityLow": "Low",
+        "priorityNormal": "Normal",
+        "priorityHigh": "High",
+        "priorityUrgent": "Urgent",
+        "urgentConfirmTitle": "Use Urgent?",
+        "urgentConfirmBody": "Reserved for time-critical issues — continue?",
+        "urgentConfirmOk": "Yes, Urgent",
+        "urgentConfirmCancel": "Cancel",
+        "languageLabel": "Language for the call (optional)",
+        "langEn": "English",
+        "langHi": "हिन्दी",
+        "langBn": "বাংলা",
+        "cancel": "Cancel",
+        "submit": "Request callback",
+        "submitting": "Requesting…",
+        "errorTitle": "Couldn't send your request.",
+        "errorRetry": "Retry",
+        "errorConflict": "View existing callback",
+        "errorRateLimit": "You can request at most 3 callbacks per hour. Try again in {{time}}.",
+        "offlineBanner": "You're offline. Connect to send this request.",
+        "aboutLabel": "About:",
+        "changeLink": "change"
+      },
+      "status": {
+        "title": "Your callback",
+        "loading": "Loading…",
+        "notFound": "This callback was not found or you don't have access.",
+        "backHome": "Back to home",
+        "offlineBanner": "Offline — showing last known status",
+        "hero": {
+          "pending": "Finding an expert for you",
+          "pendingSub": "We'll confirm a time in the next few minutes.",
+          "pendingAssigned": "Assigned to {{name}}",
+          "pendingAssignedSub": "They'll call you during your preferred window: {{window}}.",
+          "scheduled": "Scheduled for {{time}}",
+          "scheduledSub": "with {{name}} from SnapAccount",
+          "inProgress": "On a call with {{name}}",
+          "inProgressSub": "Stay on the line — ringing now.",
+          "completed": "Callback completed",
+          "completedSub": "Thanks for using SnapAccount. {{duration}} minutes.",
+          "followUp": "Follow-up required",
+          "followUpSub": "We'll reach out again within 24 hours.",
+          "escalated": "Escalated to a Chartered Accountant",
+          "escalatedSub": "A CA will review and call you back soon.",
+          "cancelled": "Callback cancelled"
+        },
+        "timeline": {
+          "requested": "You requested a callback",
+          "assigned": "Assigned to {{name}}",
+          "scheduled": "Scheduled for {{time}}",
+          "expectedCall": "Expected call at {{time}}",
+          "completed": "Call completed",
+          "cancelled": "Cancelled"
+        },
+        "about": {
+          "title": "About this callback",
+          "category": "Category",
+          "linked": "Linked",
+          "note": "Your note",
+          "openLink": "Open"
+        },
+        "actions": {
+          "reschedule": "Reschedule",
+          "cancel": "Cancel this callback",
+          "cancelConfirmTitle": "Cancel callback?",
+          "cancelConfirmBody": "Are you sure you want to cancel this callback?",
+          "cancelConfirmOk": "Yes, cancel",
+          "cancelReason": "Reason (optional)",
+          "addContext": "Add more context",
+          "requestFollowUp": "Request follow-up",
+          "refresh": "Refresh",
+          "phone": "Call will arrive on",
+          "editPhone": "Edit",
+          "rescheduleTitle": "Reschedule",
+          "rescheduleSubmit": "Confirm reschedule"
+        }
+      }
+    },
+    "reports": {
+      "title": "Financial Reports",
+      "loading": "Loading report…",
+      "empty": "No data available for this period.",
+      "error": "Failed to load report.",
+      "retry": "Retry",
+      "fy": "Financial Year",
+      "period": "Period",
+      "reportTypes": {
+        "profit-and-loss": "Profit & Loss",
+        "balance-sheet": "Balance Sheet",
+        "trial-balance": "Trial Balance"
+      }
+    },
+    "common": {
+      "back": "Back",
+      "cancel": "Cancel",
+      "ok": "OK",
+      "retry": "Retry",
+      "save": "Save",
+      "close": "Close"
+    },
+    "gst": {
+      "notices": {
+        "title": "GST Notices",
+        "loading": "Loading notices…",
+        "error": "Failed to load notices.",
+        "retry": "Retry",
+        "emptyTitle": "No notices",
+        "emptyBody": "You have no GST notices. We'll alert you when one arrives.",
+        "archiveGated": "Respond to notice before archiving."
+      },
+      "noticeDetail": {
+        "title": "Notice Details",
+        "noticeNumber": "Notice number",
+        "type": "Notice type",
+        "issuedDate": "Issued date",
+        "dueDate": "Due date",
+        "status": "Status",
+        "description": "Description",
+        "respondCta": "Respond to Notice",
+        "responsePlaceholder": "Type your response (minimum 10 characters)…",
+        "submitResponse": "Submit Response",
+        "successTitle": "Response Submitted",
+        "successBody": "Your response has been recorded.",
+        "errorTitle": "Submission Failed",
+        "errorBody": "Could not submit your response. Please try again."
+      },
+      "nilReturn": {
+        "title": "File Nil Return",
+        "returnType": "Return type",
+        "period": "Period",
+        "gstin": "GSTIN",
+        "warningText": "Filing a nil return declares zero taxable supply, zero input tax credit, and zero tax liability for this period. Ensure this is accurate.",
+        "impliesTitle": "What nil filing means",
+        "implies1": "No sales or purchases were made in this period.",
+        "implies2": "No ITC is available or claimed.",
+        "implies3": "Tax liability is nil for this return period.",
+        "ackText": "I confirm that I have no taxable outward supplies, inward supplies, or tax liability for this period and wish to file a nil return.",
+        "fileCta": "File Nil Return",
+        "confirmTitle": "Confirm Nil Return",
+        "confirmBody": "Are you sure you want to file a nil return? This cannot be undone.",
+        "confirmCta": "Yes, File",
+        "successTitle": "Nil Return Filed",
+        "successSubtitle": "Acknowledgement: {{ackNumber}}",
+        "successDetail": "Filed at {{filedAt}}",
+        "backToDashboard": "Back to Dashboard",
+        "errorTitle": "Filing Failed",
+        "errorBody": "Could not file nil return. Please try again."
+      }
+    },
+    "itr": {
+      "wizard": {
+        "title": "Assessee Profile",
+        "next": "Next",
+        "submit": "Confirm & Continue",
+        "step0Title": "Personal Details",
+        "step1Title": "Employment Details",
+        "step2Title": "Deductions",
+        "step3Title": "Other Income",
+        "step4Title": "Review & Confirm",
+        "fullName": "Full name",
+        "pan": "PAN Number",
+        "email": "Email address",
+        "phone": "Mobile number",
+        "dob": "Date of birth",
+        "address": "Address",
+        "addressPlaceholder": "House no., Street, City, State, PIN",
+        "annualSalary": "Annual salary (₹)",
+        "employerName": "Employer name",
+        "employerTan": "Employer TAN",
+        "section80C": "Section 80C",
+        "section80D": "Section 80D",
+        "section80E": "Section 80E",
+        "capitalGains": "Capital gains",
+        "housePropertyIncome": "House property income",
+        "otherIncome": "Other income",
+        "deductionNote": "Deduction limits are fetched from the latest tax slab configuration."
+      },
+      "docChecklist": {
+        "title": "Document Checklist",
+        "required": "required docs",
+        "progressSub": "Upload required documents to proceed.",
+        "allDone": "All required documents uploaded",
+        "uploadForm16": "Upload Form 16",
+        "form16Sub": "Auto-extracts salary, TDS, and employer details",
+        "continue": "Continue to Regime Comparison",
+        "categories": {
+          "income": "Income",
+          "tax": "Tax",
+          "investment": "Investments",
+          "bank": "Bank",
+          "other": "Other"
+        }
+      },
+      "form16": {
+        "title": "Form 16 Upload",
+        "pickTitle": "Upload your Form 16",
+        "pickSub": "Take a photo or choose your Form 16 PDF. Our AI will extract all details automatically.",
+        "camera": "Take Photo",
+        "cameraSub": "Use camera to capture",
+        "gallery": "Choose File",
+        "gallerySub": "PDF or image from gallery",
+        "tipsTitle": "Tips for best results",
+        "tip1": "Ensure all text is clearly visible",
+        "tip2": "Use good lighting for photos",
+        "tip3": "PDF files give best extraction accuracy",
+        "uploading": "Uploading Form 16…",
+        "uploadingSub": "Extracting details using AI — this may take a few seconds.",
+        "reviewTitle": "Extraction complete",
+        "reviewSub": "Review and correct extracted values below.",
+        "employeeName": "Employee name",
+        "panLast4": "PAN (last 4 digits)",
+        "grossSalary": "Gross salary",
+        "tdsDeducted": "TDS deducted",
+        "assessmentYear": "Assessment year",
+        "notExtracted": "Not extracted — enter manually",
+        "confirmExtraction": "Confirm & Continue",
+        "errorTitle": "Upload Failed",
+        "errorBody": "Could not upload Form 16. Please try again.",
+        "cameraPermissionTitle": "Camera permission required",
+        "cameraPermissionBody": "Please allow camera access in Settings to take a photo."
+      },
+      "regimeComparison": {
+        "title": "Regime Comparison",
+        "computing": "Computing tax for both regimes…",
+        "error": "Failed to compute tax. Please try again.",
+        "recommended": "{{regime}} saves you more tax",
+        "saving": "You save {{amount}} by choosing this regime",
+        "breakdown": "Detailed Breakdown",
+        "grossIncome": "Gross total income",
+        "taxableIncome": "Taxable income",
+        "taxPayable": "Total tax payable",
+        "payableRefund": "Payable / Refund",
+        "slabVersion": "Tax slabs: {{version}} ({{ay}})",
+        "chooseOld": "Choose Old Regime",
+        "chooseNew": "Choose New Regime",
+        "confirmTitle": "Confirm Regime",
+        "confirmBody": "You have selected {{regime}}. You can change this later if needed.",
+        "confirmCta": "Confirm"
+      },
+      "summary": {
+        "title": "Filing Summary",
+        "assessmentYear": "Assessment Year",
+        "form": "ITR Form",
+        "status": "Status",
+        "incomeSection": "Income",
+        "deductionsSection": "Deductions",
+        "taxSection": "Tax Computation",
+        "personalSection": "Personal Details",
+        "grossIncome": "Gross income",
+        "taxableIncome": "Taxable income",
+        "standardDeduction": "Standard deduction",
+        "taxPayable": "Tax payable",
+        "tdsPaid": "TDS paid",
+        "payableRefund": "Net payable / refund",
+        "name": "Name",
+        "pan": "PAN",
+        "email": "Email",
+        "hash": "Computation hash",
+        "proceedToApproval": "Proceed to Approval"
+      },
+      "approval": {
+        "title": "Approve Your ITR",
+        "stepRead": "Read disclaimer",
+        "stepVerify": "Verify identity",
+        "disclaimerHeading": "Declaration & Disclaimer",
+        "disclaimerPara1": "I, the undersigned, do hereby declare that to the best of my knowledge and belief, the information given in this return and the schedules thereto is correct and complete.",
+        "disclaimerPara2": "I further declare that I am making this return in my capacity as the assessee and I am also competent to make this return and verify it.",
+        "disclaimerPara3": "I am aware that under Section 277 of the Income Tax Act, 1961, if I make a statement in this return which is incorrect and which I know to be incorrect, or which I do not believe to be true, I am liable to prosecution.",
+        "disclaimerPara4": "The filing is based on the computation provided by SnapAccount. Final tax liability may vary based on assessment by the Income Tax Department.",
+        "disclaimerPara5": "By approving this return, you authorise SnapAccount to submit this filing on your behalf to the Income Tax Department of India.",
+        "scrollHint": "Scroll to the bottom to enable approval",
+        "readConfirmed": "Disclaimer read completely",
+        "biometricCta": "Verify with Biometrics / PIN",
+        "biometricPrompt": "Verify your identity to approve ITR filing",
+        "biometricFailTitle": "Verification Failed",
+        "biometricFailBody": "Could not verify identity. Please try again.",
+        "approveCta": "Approve & Submit for Review",
+        "scrollFirst": "Please scroll to the bottom",
+        "scrollFirstBody": "Read the full disclaimer before approving.",
+        "verifyFirst": "Identity verification required",
+        "verifyFirstBody": "Please verify your identity using biometrics or PIN before approving.",
+        "errorTitle": "Submission Failed",
+        "errorBody": "Could not submit filing for review. Please try again."
+      },
+      "eVerify": {
+        "title": "E-Verify Return",
+        "deadlineTitle": "E-Verification Deadline",
+        "deadlineDesc": "You must e-verify within 30 days of filing. Unverified returns are treated as invalid.",
+        "chooseMethod": "Choose verification method",
+        "aadhaarOtp": "Aadhaar OTP",
+        "aadhaarOtpSub": "Verify using OTP sent to your Aadhaar-linked mobile",
+        "netBanking": "Net Banking",
+        "netBankingSub": "Login to your bank's net banking portal",
+        "bankEvc": "Bank Account EVC",
+        "bankEvcSub": "Generate EVC through bank account",
+        "demat": "Demat Account",
+        "dematSub": "Generate EVC through demat account",
+        "itrV": "Upload ITR-V",
+        "itrVSub": "Send signed ITR-V PDF to CPC Bangalore",
+        "uploadItrV": "Choose ITR-V PDF",
+        "itrVPicked": "ITR-V selected — tap Verify to proceed",
+        "verifyCta": "E-Verify Now",
+        "errorTitle": "Verification Failed",
+        "errorBody": "Could not complete e-verification. Please try again."
+      },
+      "refund": {
+        "title": "Refund Tracker",
+        "timeline": "Refund Journey",
+        "stepFiled": "Return filed",
+        "stepProcessing": "Processing by IT Dept",
+        "stepIssued": "Refund issued",
+        "lastPolled": "Last updated: {{time}}",
+        "expectedDate": "Expected by {{date}}",
+        "raiseGrievance": "Raise Refund Grievance",
+        "noData": "No refund information available for this filing.",
+        "status": {
+          "NotApplicable": "No refund applicable",
+          "Pending": "Awaiting processing",
+          "Processing": "Being processed",
+          "Issued": "Refund issued",
+          "Failed": "Refund failed",
+          "Adjusted": "Adjusted against demand"
+        }
+      },
+      "notices": {
+        "title": "ITR Notices",
+        "error": "Failed to load notices.",
+        "emptyTitle": "No ITR notices",
+        "emptyBody": "You have no ITR notices. We'll alert you when one arrives."
+      },
+      "noticeDetail": {
+        "title": "Notice Details",
+        "noticeNumber": "Notice number",
+        "issuedDate": "Issued date",
+        "dueDate": "Due date",
+        "subject": "Subject",
+        "attachments": "Attachments",
+        "yourResponse": "Your response",
+        "respondCta": "Respond to Notice",
+        "responseLabel": "Your response",
+        "responsePlaceholder": "Type your response here (minimum 10 characters)…",
+        "submitResponse": "Submit Response",
+        "responseSuccessTitle": "Response Submitted",
+        "responseSuccessBody": "Your response has been recorded.",
+        "errorTitle": "Failed to submit",
+        "errorBody": "Could not submit your response. Please try again."
+      }
+    },
+    "loan": {
+      "hub": {
+        "title": "Business loans",
+        "hero": {
+          "title": "Apply for a business loan in minutes",
+          "body": "We package 12 months of GSTR-3B + P&L + Balance Sheet + bank summary into one PDF for partner banks."
+        },
+        "eligibilityTeaser": {
+          "title": "Check your eligibility first",
+          "cta": "Check now"
+        },
+        "filter": {
+          "amount": "Amount range",
+          "tenure": "Tenure",
+          "purpose": "Purpose",
+          "sort": "Sort"
+        },
+        "card": {
+          "amountRange": "{{min}} – {{max}}",
+          "tenureRange": "{{min}}–{{max}} mo",
+          "interestRange": "{{min}}% – {{max}}% p.a.",
+          "indicative": "(indicative)",
+          "qualified": "Likely qualify",
+          "nearMatch": "Near match",
+          "notQualified": "May not qualify",
+          "cta": {
+            "viewDetails": "View details",
+            "apply": "Apply"
+          }
+        },
+        "disclaimer": {
+          "indicativeRates": "Interest rates are indicative. Final rate set by the bank after their review."
+        },
+        "empty": {
+          "title": "No partner banks active yet",
+          "body": "Check back soon."
+        },
+        "error": "Could not load loan products. Tap to retry."
+      },
+      "eligibility": {
+        "title": "Eligibility check",
+        "step1": "Step 1 of 2 · Tell us what you need",
+        "step2": "Step 2 of 2 · Your results",
+        "amount": {
+          "label": "How much do you need?",
+          "min": "₹1L",
+          "max": "₹50L"
+        },
+        "tenure": {
+          "label": "Repay over",
+          "unit": "months"
+        },
+        "purpose": {
+          "label": "Loan purpose",
+          "workingCapital": "Working capital",
+          "equipment": "Equipment",
+          "inventory": "Inventory",
+          "expansion": "Expansion",
+          "other": "Other"
+        },
+        "consent": {
+          "softCheck": "I consent to a soft eligibility check (no credit bureau pull).",
+          "linkWhat": "What this means"
+        },
+        "cta": {
+          "check": "Check eligibility",
+          "chooseBank": "Choose a bank"
+        },
+        "result": {
+          "headline": {
+            "strong": "You're a strong match",
+            "moderate": "You're a moderate match",
+            "weak": "Your eligibility needs improvement"
+          },
+          "subline": "{{n}} of {{m}} partner banks may approve you"
+        },
+        "reasons": {
+          "qualify": {
+            "title": "Why you qualify"
+          },
+          "improve": {
+            "title": "What could improve"
+          }
+        },
+        "products": {
+          "qualified": {
+            "title": "Banks that may approve"
+          },
+          "nearMatch": {
+            "title": "Banks where you nearly qualify"
+          }
+        },
+        "empty": {
+          "headline": "No banks match today",
+          "body": "Improve the items above and re-check in 30 days."
+        },
+        "softCheckInfo": "We do not pull your CIBIL/credit-bureau report at this stage. Only your SnapAccount data (GST returns, P&L, bank summary) is analyzed. A bureau pull happens only when you submit a final application and consent on the next screen.",
+        "error": "Could not check eligibility. Please retry."
+      },
+      "consent": {
+        "title": "Consents",
+        "step": {
+          "bureau": "Bureau",
+          "dataShare": "Data share",
+          "mandate": "Mandate"
+        },
+        "scrollHint": "Scroll to the end to enable acceptance",
+        "sig": {
+          "flag": {
+            "bureau": "I, {{name}}, consent to a credit-bureau check on {{dateTime}}.",
+            "dataShare": "I, {{name}}, consent to share my financial data with the selected bank on {{dateTime}}.",
+            "mandate": "I, {{name}}, authorize the disbursement mandate to my registered bank account on {{dateTime}}."
+          }
+        },
+        "cta": {
+          "decline": "Decline",
+          "signContinue": "Sign & continue"
+        },
+        "bio": {
+          "prompt": "Verify your identity to sign consent"
+        },
+        "declineModal": {
+          "title": "Decline this consent?",
+          "body": "You can still complete the application later. The application will be paused until all consents are signed.",
+          "confirm": "Yes, decline",
+          "cancel": "Cancel"
+        },
+        "error": {
+          "network": "Could not record consent. Please retry.",
+          "biometric": "Authentication failed. Please retry."
+        },
+        "body": {
+          "bureau": "By signing this consent, you authorize SnapAccount and its partner banks to obtain a credit report from licensed credit bureaus (CIBIL, Experian, Equifax) for the purpose of evaluating your loan application. Your data will be retained for 7 years as required by applicable regulations. You may revoke this authorization by contacting SnapAccount Support. This authorization is for credit assessment purposes only.",
+          "dataShare": "By signing this consent, you authorize SnapAccount to compile and transmit your GSTR-3B returns (12 months), Profit & Loss statement, Balance Sheet, KYC documents, and bank statement summary to the selected partner bank. This data will be used solely for credit assessment. The bank will retain this data for a maximum of 7 years and will not use it for marketing or any other purpose.",
+          "mandate": "By signing this consent, you pre-authorize the selected partner bank to credit the approved loan amount to your registered bank account (account ending {{acctMask}}). This mandate is valid for the duration of the loan processing period. You may revoke this mandate before disbursement by contacting SnapAccount Support."
+        },
+        "version": "Version {{version}} · Updated {{date}}",
+        "docTitle": {
+          "bureau": "Credit bureau check authorization",
+          "dataShare": "Financial data sharing authorization",
+          "mandate": "Disbursement mandate"
+        }
+      },
+      "application": {
+        "title": "{{bank}} · {{product}}",
+        "summary": {
+          "amount": "Amount",
+          "tenure": "Tenure",
+          "purpose": "Purpose",
+          "editCta": "Edit"
+        },
+        "section": {
+          "details": "Application details",
+          "checklist": "Document checklist"
+        },
+        "field": {
+          "pan": "PAN",
+          "gstin": "GSTIN",
+          "vintage": "Years in business",
+          "revenue": "FY24-25 turnover",
+          "altContact": "Alternate contact",
+          "purposeNote": "Purpose note (optional)"
+        },
+        "checklist": {
+          "row": {
+            "pan": "PAN card",
+            "aadhaar": "Aadhaar (last 4)",
+            "gstr3b": "GSTR-3B 12 months",
+            "pl": "P&L FY 24-25",
+            "bs": "Balance Sheet 24-25",
+            "bankStmt": "Bank statement",
+            "tradeLicense": "Trade license",
+            "itr": "ITR FY 24-25"
+          },
+          "badge": {
+            "auto": "auto",
+            "autoPending": "auto · pending",
+            "uploading": "Uploading {{percent}}%",
+            "processing": "Verifying…",
+            "uploaded": "Uploaded",
+            "error": "Upload failed"
+          }
+        },
+        "preview": {
+          "teaser": "Your loan package is ready — {{pages}} pages ready to review"
+        },
+        "cta": {
+          "saveExit": "Save & exit",
+          "preview": "Preview package"
+        },
+        "gate": {
+          "signConsents": "Sign consents to continue"
+        },
+        "error": {
+          "autoFailed": "Auto-document retrieval failed. You may upload manually.",
+          "uploadFailed": "Upload failed. Please retry."
+        },
+        "toast": {
+          "draftSaved": "Draft saved"
+        }
+      },
+      "preview": {
+        "title": "Loan package preview",
+        "bio": {
+          "gate": {
+            "prompt": "Verify your identity to view this package"
+          },
+          "submitPrompt": "Verify your identity to submit the application"
+        },
+        "meta": {
+          "pages": "{{count}} pages",
+          "size": "{{size}} MB",
+          "generatedAt": "Generated {{date}}",
+          "packageId": "Package ID: {{id}}",
+          "copyId": "Copy ID"
+        },
+        "contents": {
+          "title": "What's inside",
+          "kyc": "KYC (PAN + Aadhaar last 4)",
+          "gstr3b": "GSTR-3B summary (12 months)",
+          "pl": "P&L statement FY 24-25",
+          "bs": "Balance sheet 24-25",
+          "bankStmt": "Bank statement summary (6 months)",
+          "application": "Application details + signatures"
+        },
+        "disclaimer": "Prepared by SnapAccount from user-provided data. Not a CA certification. Final lending decision rests with the partner bank.",
+        "cta": {
+          "backToEdit": "Back to edit",
+          "submit": "Submit to {{bank}}"
+        },
+        "confirm": {
+          "title": "Send package to {{bank}}?",
+          "body": "Once sent, you cannot edit your application. The bank may take 3–7 business days to respond.",
+          "cancel": "Cancel",
+          "send": "Send package"
+        },
+        "state": {
+          "generating": "Building package…",
+          "generatingTip": "Compiling 12 months of GSTR-3B…",
+          "stale": "Documents changed. Regenerate package.",
+          "alreadySubmitted": "Already submitted on {{date}}"
+        },
+        "error": {
+          "generationFailed": "Package generation failed. Please retry.",
+          "integrityFailed": "Package failed integrity check. Please regenerate.",
+          "submitFailed": "Submission failed. Please retry."
+        },
+        "regenerate": "Regenerate",
+        "watermark": "Generated by SnapAccount"
+      },
+      "status": {
+        "title": "Loan status",
+        "hero": {
+          "amountTenurePurpose": "₹{{amount}} · {{tenure}} months · {{purpose}}",
+          "submittedAt": "Submitted {{date}}",
+          "bankRef": "Bank ref {{ref}}"
+        },
+        "badge": {
+          "draft": "Draft",
+          "submitted": "Submitted",
+          "underReview": "Under Review",
+          "docsRequested": "Docs Requested",
+          "approved": "Approved",
+          "rejected": "Not Approved",
+          "disbursed": "Disbursed",
+          "closed": "Closed"
+        },
+        "stepper": {
+          "draft": "Draft",
+          "submitted": "Submitted",
+          "underReview": "Under Review",
+          "approvedRejected": "Decision",
+          "disbursed": "Disbursed"
+        },
+        "eta": {
+          "title": "Typical response 3–7 business days",
+          "progress": "Day {{n}} of {{total}}"
+        },
+        "comms": {
+          "title": "Bank communication",
+          "empty": "No messages from bank yet."
+        },
+        "docs": {
+          "requested": {
+            "title": "Documents requested",
+            "due": "Due {{date}}",
+            "uploadNow": "Upload now"
+          }
+        },
+        "action": {
+          "viewPackage": "View package",
+          "downloadPdf": "Download PDF",
+          "helpGrievance": "Help / Grievance",
+          "viewOtherBanks": "View other banks"
+        },
+        "celebrate": {
+          "approved": {
+            "title": "Loan approved!",
+            "body": "{{bank}} approved ₹{{amount}} at {{rate}}% p.a.",
+            "cta": {
+              "viewTerms": "View terms",
+              "continue": "Continue to status"
+            }
+          },
+          "disbursed": {
+            "title": "Disbursed!",
+            "body": "₹{{amount}} credited to {{acctMask}} on {{date}}",
+            "cta": {
+              "proof": "View payment proof"
+            }
+          }
+        },
+        "rejected": {
+          "banner": {
+            "title": "Application not approved",
+            "reasons": "Reason: {{reasons}}"
+          }
+        },
+        "loading": "Loading application…",
+        "error": "Could not load application. Tap to retry.",
+        "empty": "No active loan applications.",
+        "liveUpdatesPaused": "Live updates paused — pull to refresh."
+      }
+    },
+    "chat": {
+      "list": {
+        "title": "Expert Chat",
+        "search": {
+          "placeholder": "Search messages, people, attachments"
+        },
+        "filter": {
+          "all": "All",
+          "unread": "Unread",
+          "mentions": "Mentions",
+          "tax": "Tax",
+          "gst": "GST",
+          "loan": "Loan",
+          "bug": "Bug"
+        },
+        "row": {
+          "you": "You",
+          "typing": "typing…",
+          "preview": "Tap to open thread",
+          "unread_count": "{{count}} unread"
+        },
+        "empty": "Inbox zero · Tap + to start a conversation",
+        "emptyBody": "Connect with expert CAs for GST, ITR, compliance, and loan queries.",
+        "error": {
+          "load": "Couldn't load threads. Pull to retry."
+        },
+        "swipe": {
+          "resolve": "Resolve",
+          "mute": "Mute",
+          "markUnread": "Mark unread",
+          "pin": "Pin"
+        },
+        "fab": {
+          "new": "New conversation"
+        }
+      },
+      "detail": {
+        "header": {
+          "defaultTitle": "Chat",
+          "online": "Online",
+          "offline": "Last seen recently",
+          "menu": "Thread options"
+        },
+        "bubble": {
+          "you": "You",
+          "longPressHint": "Double-tap and hold for actions"
+        },
+        "typing": {
+          "label": "{{name}} is typing…"
+        },
+        "empty": {
+          "title": "Say hello",
+          "body": "Ask about GST, ITR, loans, or any compliance question."
+        },
+        "send": "Send",
+        "sent": {
+          "accessibility": "Message sent"
+        }
+      },
+      "mobile": {
+        "composer": {
+          "placeholder": "Message…"
+        },
+        "attach": {
+          "camera": "Attach photo",
+          "file": "Attach file"
+        },
+        "offline": {
+          "banner": "Offline · Messages will send when connected"
+        },
+        "queued": "Queued",
+        "failed": {
+          "tapRetry": "Failed · tap to retry"
+        },
+        "newMessages": "{{count}} new messages"
+      }
+    },
+    "celebration": {
+      "firstGst": {
+        "headline": "First GST filed!",
+        "subline": "{{period}} return submitted to GSTN. Acknowledgment {{ack}}.",
+        "cta": {
+          "primary": "Continue"
+        }
+      },
+      "firstRefund": {
+        "headline": "Refund credited!",
+        "subline": "₹{{amount}} hit your account on {{date}}.",
+        "cta": {
+          "primary": "View receipt"
+        }
+      },
+      "firstItr": {
+        "headline": "ITR filed!",
+        "subline": "Your income-tax return for AY {{ay}} is filed.",
+        "cta": {
+          "primary": "Continue"
+        }
+      },
+      "firstNoticeResolved": {
+        "headline": "Notice resolved!",
+        "subline": "You handled it like a pro.",
+        "cta": {
+          "primary": "Continue"
+        }
+      },
+      "planK2Step15": {
+        "headline": "You're set!",
+        "subline": "Welcome to SnapAccount Pro.",
+        "cta": {
+          "primary": "Get started"
+        }
+      },
+      "firstChatResolved": {
+        "headline": "Inbox cleared!",
+        "subline": "{{count}} threads handled today.",
+        "cta": {
+          "primary": "Continue"
+        }
+      },
+      "custom": {
+        "headline": "Congratulations!",
+        "cta": {
+          "primary": "Continue"
+        }
+      },
+      "cta": {
+        "secondary": "Dismiss"
+      },
+      "dismiss": "Dismiss",
+      "share": "Share with my CA"
+    },
+    "net": {
+      "quality": {
+        "slow": "Slow connection",
+        "cellular": "Cellular · uploads paused",
+        "offline": "Offline"
+      },
+      "chip": {
+        "accessibilityLabel": "{{quality}}, double-tap for details"
+      },
+      "sheet": {
+        "title": "Network status",
+        "runDiagnostic": "Run diagnostic",
+        "diagnostic": {
+          "running": "Pinging…",
+          "done": "Latency: {{latencyMs}}ms"
+        }
+      },
+      "toast": {
+        "slowDetected": "This is taking longer — slow connection detected."
+      }
+    },
+    "bio": {
+      "prompt": {
+        "title": {
+          "loanSubmit": "Confirm loan submission",
+          "itrApprove": "Confirm ITR approval",
+          "subUpgrade": "Confirm plan upgrade",
+          "reveal": "Confirm to reveal",
+          "generic": "Confirm with biometrics"
+        }
+      },
+      "refused": {
+        "tryAgain": "Confirmation needed. Try again?",
+        "cancelled": "Action cancelled."
+      },
+      "unsupported": {
+        "message": "We couldn't verify your device. Set a passcode in your phone's settings to continue."
+      }
+    },
+    "theme": {
+      "toggle": {
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark",
+        "appearance": "Appearance",
+        "footer": "Choose System to follow your phone's theme.",
+        "changed": "Theme changed to {{mode}}"
+      }
+    }
+  }
+}

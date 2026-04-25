@@ -1,0 +1,3 @@
+# EF Core migrations directory
+# Run: dotnet ef migrations add InitialCreate --project AuthService.Infrastructure --startup-project AuthService.Api
+# Then: dotnet ef database update --project AuthService.Infrastructure --startup-project AuthService.Api

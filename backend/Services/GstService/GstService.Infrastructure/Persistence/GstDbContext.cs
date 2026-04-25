@@ -1,0 +1,66 @@
+using GstService.Application.Common.Interfaces;
+using GstService.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using SnapAccount.Shared.Infrastructure.Persistence;
+
+namespace GstService.Infrastructure.Persistence;
+
+/// <summary>
+/// EF Core DbContext for the <c>gst</c> schema.
+/// Implements <see cref="IGstDbContext"/> for query-handler direct projection (Jason Taylor pattern).
+/// Audit stamping and domain event dispatch are handled by registered
+/// <c>ISaveChangesInterceptor</c> instances.
+/// </summary>
+public class GstDbContext(DbContextOptions<GstDbContext> options)
+    : BaseDbContext(options), IGstDbContext
+{
+    /// <inheritdoc />
+    public DbSet<GstReturn> GstReturns => Set<GstReturn>();
+
+    /// <inheritdoc />
+    public DbSet<GstReturnLineItem> GstReturnLineItems => Set<GstReturnLineItem>();
+
+    /// <inheritdoc />
+    public DbSet<GstInvoice> GstInvoices => Set<GstInvoice>();
+
+    /// <inheritdoc />
+    public DbSet<GstTaxRate> GstTaxRates => Set<GstTaxRate>();
+
+    /// <inheritdoc />
+    public DbSet<HsnSacCode> HsnSacCodes => Set<HsnSacCode>();
+
+    /// <inheritdoc />
+    public DbSet<ItcRecord> ItcRecords => Set<ItcRecord>();
+
+    /// <inheritdoc />
+    public DbSet<ItcMismatch> ItcMismatches => Set<ItcMismatch>();
+
+    /// <inheritdoc />
+    public DbSet<GstNotice> GstNotices => Set<GstNotice>();
+
+    /// <inheritdoc />
+    public DbSet<EInvoice> EInvoices => Set<EInvoice>();
+
+    /// <inheritdoc />
+    public DbSet<EWayBill> EWayBills => Set<EWayBill>();
+
+    /// <inheritdoc />
+    public DbSet<GstReconciliation> GstReconciliations => Set<GstReconciliation>();
+
+    /// <inheritdoc />
+    public DbSet<GstRefund> GstRefunds => Set<GstRefund>();
+
+    /// <inheritdoc />
+    public DbSet<GstAnnualReturn> GstAnnualReturns => Set<GstAnnualReturn>();
+
+    /// <inheritdoc />
+    public DbSet<LutFiling> LutFilings => Set<LutFiling>();
+
+    /// <inheritdoc />
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema("gst");
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(GstDbContext).Assembly);
+        base.OnModelCreating(modelBuilder);
+    }
+}

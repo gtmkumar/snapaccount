@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>SubscriptionService.IntegrationTests</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    NOTE FOR BACKEND-AGENT (P6-INT-02):
+    Before these tests can be run, add the following to
+    backend/Services/SubscriptionService/SubscriptionService.Api/SubscriptionService.Api.csproj:
+
+      <ItemGroup>
+        <InternalsVisibleTo Include="SubscriptionService.IntegrationTests" />
+      </ItemGroup>
+
+    Without this, the implicit Program class is internal and not accessible
+    to WebApplicationFactory<Program>. This follows the same pattern as
+    AuthService.IntegrationTests, CallbackService.IntegrationTests, and
+    GstService.IntegrationTests.
+
+    Also required: IRazorpayWebhookVerifier (or equivalent) must be injectable
+    to test HMAC verification without live Razorpay credentials.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.*">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="6.*" />
+    <PackageReference Include="Moq" Version="4.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.*" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="3.*" />
+    <PackageReference Include="coverlet.collector" Version="6.*">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\backend\Services\SubscriptionService\SubscriptionService.Api\SubscriptionService.Api.csproj" />
+    <ProjectReference Include="..\..\..\backend\Services\SubscriptionService\SubscriptionService.Application\SubscriptionService.Application.csproj" />
+    <ProjectReference Include="..\..\..\backend\Services\SubscriptionService\SubscriptionService.Domain\SubscriptionService.Domain.csproj" />
+    <ProjectReference Include="..\..\..\backend\Services\SubscriptionService\SubscriptionService.Infrastructure\SubscriptionService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

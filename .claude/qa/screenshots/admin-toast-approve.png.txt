@@ -1,0 +1,6 @@
+Screenshot ID: ss_4244yc3w5
+Captured: 2026-04-05
+Description: DocumentReviewPage - "Approve & Process" button clicked. Sonner toast notification
+"Document approved and sent for processing" visible in top-right corner with green checkmark.
+Page navigated to /documents (Document Queue). No browser alert() dialog was triggered.
+URL: http://localhost:3002/documents

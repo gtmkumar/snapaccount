@@ -1,0 +1,33 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.1.1">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>98700002-37ef-4ced-804b-be8d22067f9e</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="9.*" />
+    <PackageReference Include="Aspire.Hosting.Redis" Version="9.*" />
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Services/AuthService/AuthService.Api/AuthService.Api.csproj" />
+    <ProjectReference Include="../Services/DocumentService/DocumentService.Api/DocumentService.Api.csproj" />
+    <ProjectReference Include="../Services/AccountingService/AccountingService.Api/AccountingService.Api.csproj" />
+    <ProjectReference Include="../Services/GstService/GstService.Api/GstService.Api.csproj" />
+    <ProjectReference Include="../Services/LoanService/LoanService.Api/LoanService.Api.csproj" />
+    <ProjectReference Include="../Services/ItrService/ItrService.Api/ItrService.Api.csproj" />
+    <ProjectReference Include="../Services/ChatService/ChatService.Api/ChatService.Api.csproj" />
+    <ProjectReference Include="../Services/NotificationService/NotificationService.Api/NotificationService.Api.csproj" />
+    <ProjectReference Include="../Services/ReportService/ReportService.Api/ReportService.Api.csproj" />
+    <ProjectReference Include="../Services/SubscriptionService/SubscriptionService.Api/SubscriptionService.Api.csproj" />
+    <ProjectReference Include="../Services/AiService/AiService.Api/AiService.Api.csproj" />
+    <ProjectReference Include="../Services/CallbackService/CallbackService.Api/CallbackService.Api.csproj" />
+    <ProjectReference Include="../ServiceDefaults/ServiceDefaults.csproj" IsAspireProjectResource="false" />
+  </ItemGroup>
+
+</Project>

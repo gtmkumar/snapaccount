@@ -1,0 +1,18 @@
+{
+  "enabledPlugins": {
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
+    "ship@agentsys": true,
+    "deslop@agentsys": true,
+    "audit-project@agentsys": true,
+    "drift-detect@agentsys": true,
+    "repo-intel@agentsys": true,
+    "enhance@agentsys": true,
+    "perf@agentsys": true,
+    "sync-docs@agentsys": true,
+    "learn@agentsys": true,
+    "consult@agentsys": true,
+    "debate@agentsys": true,
+    "superpowers@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true
+  }
+}

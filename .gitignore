@@ -1,0 +1,116 @@
+# Local developer credentials reference — NEVER commit
+# README.md documents only roles + the path to this file. Real seed defaults live here.
+CREDENTIALS.local.md
+CREDENTIALS.*.local.md
+
+# Editor scratch files
+Untitled-*.sql
+Untitled-*.txt
+*.tmp
+.DS_Store
+
+# Environment / Secrets — NEVER commit these
+# SEC-006: Comprehensive env file coverage
+.env
+.env.local
+.env.*.local
+.env.development
+.env.development.local
+.env.test.local
+.env.production
+.env.production.local
+*.env
+.mcp.json
+
+# GCP / Firebase credentials — NEVER commit service account keys
+# SEC-006: All credential file patterns
+google-services.json
+GoogleService-Info.plist
+service-account*.json
+*-service-account.json
+*service-account*.json
+*credentials*.json
+application_default_credentials.json
+gcloud_credentials.json
+gcp-key.json
+google-credentials.json
+
+# Certificates and private keys
+# SEC-006: Prevent accidental key/cert commits
+*.pfx
+*.p12
+*.pem
+*.key
+*.crt
+*.cer
+
+# .NET user secrets and local appsettings overrides
+# SEC-006: secrets.json is the dotnet user-secrets file format
+secrets.json
+appsettings.Development.json
+appsettings.Local.json
+appsettings.Staging.json
+appsettings.Production.json
+
+# .NET build output
+**/bin/
+**/obj/
+**/*.user
+.vs/
+*.suo
+*.ncrunch*
+TestResults/
+.dotnet/
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.next/
+out/
+.cache/
+.vite/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Mobile / Expo
+mobile/.expo/
+mobile/dist/
+mobile/node_modules/
+mobile/.env
+mobile/.env.local
+*.jks
+*.keystore
+*.mobileprovision
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Terraform / Infra state — state files contain secrets, never commit
+# SEC-006: Terraform state and provider cache
+*.tfstate
+*.tfstate.backup
+.terraform/
+infra/.env
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log

@@ -1,0 +1,73 @@
+{
+  "expo": {
+    "name": "SnapAccount",
+    "slug": "snapaccount",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1E40AF"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.snapaccount.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "SnapAccount uses the camera to photograph bills and documents for OCR processing.",
+        "NSPhotoLibraryUsageDescription": "SnapAccount needs access to your photo library to upload documents.",
+        "NSPhotoLibraryAddUsageDescription": "SnapAccount saves downloaded reports to your photo library."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2563EB"
+      },
+      "package": "com.snapaccount.app",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECEIVE_SMS",
+        "READ_SMS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SnapAccount uses the camera to photograph bills and documents."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SnapAccount accesses your photos to upload documents.",
+          "cameraPermission": "SnapAccount uses the camera to capture documents."
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#2563EB"
+        }
+      ],
+      "expo-asset",
+      "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics"
+    ],
+    "scheme": "snapaccount",
+    "extra": {
+      "eas": {
+        "projectId": "snapaccount-app"
+      }
+    }
+  }
+}

@@ -1,0 +1,232 @@
+/**
+ * Language Selection Screen — Redesign 2026
+ * Premium grid with refined selection states
+ */
+
+import React, { useState } from 'react';
+import {
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
+import { Button } from '../../components/ui/Button';
+import { Colors } from '../../constants/colors';
+import {
+  AppLanguage,
+  LANGUAGES,
+  usePreferencesStore,
+} from '../../store/preferencesStore';
+import type { AuthStackParamList } from '../../navigation/AuthNavigator';
+
+type LangNavProp = NativeStackNavigationProp<AuthStackParamList, 'LanguageSelection'>;
+
+interface Props { navigation: LangNavProp }
+
+const LANGUAGE_LIST: { code: AppLanguage; label: string; nativeLabel: string }[] =
+  Object.entries(LANGUAGES).map(([code, meta]) => ({
+    code: code as AppLanguage,
+    label: meta.label,
+    nativeLabel: meta.nativeLabel,
+  }));
+
+export function LanguageSelectionScreen({ navigation }: Props) {
+  const { language: savedLanguage, setLanguage, setLanguageSelected } = usePreferencesStore();
+  const [selected, setSelected] = useState<AppLanguage>(savedLanguage);
+
+  const handleContinue = () => {
+    setLanguage(selected);
+    setLanguageSelected();
+    navigation.replace('PermissionRequests');
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.illustration}>
+            <Ionicons name="language-outline" size={28} color={Colors.brand[500]} />
+          </View>
+          <Text style={styles.heading}>Choose your language</Text>
+          <Text style={styles.subtext}>You can change this anytime in Settings</Text>
+        </View>
+
+        {/* Language grid */}
+        <FlatList
+          data={LANGUAGE_LIST}
+          numColumns={2}
+          scrollEnabled={false}
+          keyExtractor={(item) => item.code}
+          renderItem={({ item }) => (
+            <LanguageCard
+              code={item.code}
+              label={item.label}
+              nativeLabel={item.nativeLabel}
+              selected={selected === item.code}
+              onPress={() => setSelected(item.code)}
+            />
+          )}
+          columnWrapperStyle={styles.columnWrapper}
+          contentContainerStyle={styles.gridContent}
+        />
+
+        {/* Continue button */}
+        <View style={styles.footer}>
+          <Button
+            label="Continue"
+            onPress={handleContinue}
+            disabled={!selected}
+            fullWidth
+            size="lg"
+          />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+interface LanguageCardProps {
+  code: AppLanguage;
+  label: string;
+  nativeLabel: string;
+  selected: boolean;
+  onPress: () => void;
+}
+
+function LanguageCard({ label, nativeLabel, selected, onPress }: LanguageCardProps) {
+  return (
+    <TouchableOpacity
+      style={[styles.langCard, selected && styles.langCardSelected]}
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={`${label} (${nativeLabel})`}
+      activeOpacity={0.7}
+    >
+      <Text
+        style={[
+          styles.nativeLabel,
+          selected && styles.nativeLabelSelected,
+        ]}
+      >
+        {nativeLabel}
+      </Text>
+      <Text
+        style={[
+          styles.langLabel,
+          selected && styles.langLabelSelected,
+        ]}
+      >
+        {label}
+      </Text>
+      {selected && (
+        <View style={styles.checkmark}>
+          <Ionicons name="checkmark" size={12} color={Colors.neutral[0]} />
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.neutral[0],
+  },
+  scrollContent: {
+    padding: 24,
+    paddingBottom: 40,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  illustration: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: Colors.brand[50],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  heading: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: Colors.neutral[900],
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: -0.5,
+  },
+  subtext: {
+    fontSize: 14,
+    color: Colors.neutral[500],
+    textAlign: 'center',
+  },
+  columnWrapper: {
+    gap: 12,
+    marginBottom: 12,
+  },
+  gridContent: {
+    paddingBottom: 8,
+  },
+  langCard: {
+    flex: 1,
+    padding: 18,
+    backgroundColor: Colors.surface.default,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: Colors.neutral[200],
+    alignItems: 'center',
+    minHeight: 84,
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  langCardSelected: {
+    borderColor: Colors.brand[500],
+    borderWidth: 2,
+    backgroundColor: Colors.brand[50],
+    shadowColor: Colors.brand[500],
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  nativeLabel: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.neutral[800],
+    marginBottom: 4,
+  },
+  nativeLabelSelected: {
+    color: Colors.brand[700],
+  },
+  langLabel: {
+    fontSize: 12,
+    color: Colors.neutral[500],
+  },
+  langLabelSelected: {
+    color: Colors.brand[600],
+    fontWeight: '500',
+  },
+  checkmark: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Colors.brand[500],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footer: {
+    marginTop: 24,
+  },
+});

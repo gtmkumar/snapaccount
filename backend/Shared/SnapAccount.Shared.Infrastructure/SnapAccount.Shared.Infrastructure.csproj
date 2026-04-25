@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <NoWarn>NU1608</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" Version="12.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.*" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.*" />
+    <PackageReference Include="FirebaseAdmin" Version="3.*" />
+    <PackageReference Include="Google.Cloud.Storage.V1" Version="4.*" />
+    <PackageReference Include="Google.Cloud.PubSub.V1" Version="3.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.*" />
+    <PackageReference Include="Serilog.AspNetCore" Version="9.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
+    <ProjectReference Include="..\SnapAccount.Shared.Application\SnapAccount.Shared.Application.csproj" />
+  </ItemGroup>
+
+</Project>

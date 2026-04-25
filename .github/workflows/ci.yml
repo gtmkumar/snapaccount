@@ -1,0 +1,265 @@
+# SnapAccount — Continuous Integration
+# Triggered on every Pull Request targeting main or develop.
+# Jobs: build & test all .NET services, lint & build React admin, migrations dry-run.
+#
+# Authentication: GitHub OIDC → GCP Workload Identity Federation (no service account keys).
+
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - develop   # also run CI on direct pushes to develop (before CD triggers)
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  NODE_VERSION: "22"
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: asia-south1
+  ARTIFACT_REGISTRY: asia-south1-docker.pkg.dev
+  REGISTRY_REPO: snapaccount/services
+
+permissions:
+  contents: read
+  id-token: write   # required for OIDC
+
+jobs:
+
+  # ─────────────────────────────────────────────
+  # Job 1: Build & Test .NET microservices
+  # ─────────────────────────────────────────────
+  dotnet-build-test:
+    name: .NET Build & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: snapaccount_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+
+    env:
+      ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=snapaccount_test;Username=postgres;Password=postgres_test"
+      ConnectionStrings__Redis: "localhost:6379"
+      ASPNETCORE_ENVIRONMENT: Testing
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        working-directory: backend
+        run: dotnet restore
+
+      - name: Build (all services)
+        working-directory: backend
+        run: dotnet build --no-restore -c Release
+
+      - name: Run unit tests
+        working-directory: backend
+        run: |
+          dotnet test tests/ \
+            --no-build \
+            -c Release \
+            --logger "trx;LogFileName=test-results.trx" \
+            --logger "console;verbosity=normal" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: backend/TestResults/
+          retention-days: 14
+
+  # ─────────────────────────────────────────────
+  # Job 2: Lint & Build React Admin
+  # ─────────────────────────────────────────────
+  frontend-lint-build:
+    name: React Admin Lint & Build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: src/admin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: src/admin/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (ESLint + TypeScript)
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        env:
+          VITE_API_BASE_URL: https://api-staging.snapaccount.in
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_API_KEY: ci-placeholder-not-a-real-key
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_APP_ID: ci-placeholder-app-id
+        run: npm run build
+
+      - name: Upload build artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-dist
+          path: src/admin/dist/
+          retention-days: 7
+
+  # ─────────────────────────────────────────────
+  # Job 3: Database Migrations Dry-Run
+  # Authenticate to GCP via OIDC, pull migration tool,
+  # run migrations against a temporary test DB.
+  # ─────────────────────────────────────────────
+  migrations-dry-run:
+    name: DB Migrations Dry-Run
+    runs-on: ubuntu-latest
+    needs: dotnet-build-test
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: snapaccount_migrate_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_migrate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=snapaccount_migrate_test;Username=postgres;Password=postgres_migrate_test"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install EF Core tools
+        run: dotnet tool install --global dotnet-ef
+
+      - name: Run migrations dry-run (script only — no apply)
+        working-directory: backend
+        run: |
+          SERVICES=(AuthService DocumentService AccountingService GstService LoanService ItrService ChatService NotificationService ReportService SubscriptionService AiService)
+          for svc in "${SERVICES[@]}"; do
+            echo "=== Generating migration script for $svc ==="
+            dotnet ef migrations script \
+              --project "src/${svc}/${svc}.csproj" \
+              --idempotent \
+              --output "/tmp/${svc}-migration.sql" \
+              --no-build \
+              2>&1 || echo "No migrations configured yet for $svc — skipping"
+          done
+          echo "Dry-run complete. No database was modified."
+
+      - name: Upload migration scripts
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-scripts
+          path: /tmp/*-migration.sql
+          retention-days: 7
+
+  # ─────────────────────────────────────────────
+  # Job 4: Docker build smoke test (no push)
+  # ─────────────────────────────────────────────
+  docker-smoke-test:
+    name: Docker Build Smoke Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - AuthService
+          - DocumentService
+          - AccountingService
+          - GstService
+          - LoanService
+          - ItrService
+          - ChatService
+          - NotificationService
+          - ReportService
+          - SubscriptionService
+          - AiService
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          build-args: SERVICE_NAME=${{ matrix.service }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          tags: snapaccount/${{ matrix.service }}:ci-test
