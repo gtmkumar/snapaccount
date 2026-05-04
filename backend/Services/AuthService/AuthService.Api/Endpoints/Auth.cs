@@ -1,5 +1,7 @@
 using AuthService.Application.Admin.Queries.GetAuditEvents;
+using SnapAccount.Shared.Domain;
 using AuthService.Application.Admin.Queries.GetTeamMembers;
+using AuthService.Application.Admin.Queries.GetUserDetail;
 using AuthService.Application.Otp.Commands.SendOtp;
 using AuthService.Application.Otp.Commands.VerifyOtp;
 using AuthService.Application.RefreshTokens.Commands.RefreshToken;
@@ -52,11 +54,23 @@ public sealed class Auth : EndpointGroupBase
             return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
         }).RequireAuthorization();
 
-        // GET /auth/admin/audit-events?limit=N — cross-service audit tail (reads shared.audit_log)
-        groupBuilder.MapGet("/admin/audit-events", static async (int? limit, ISender sender, CancellationToken ct) =>
+        // GET /auth/admin/audit-events?limit=N&actorUserId= — cross-service audit tail
+        groupBuilder.MapGet("/admin/audit-events", static async (
+            int? limit, Guid? actorUserId, ISender sender, CancellationToken ct) =>
         {
-            var result = await sender.Send(new GetAuditEventsQuery(limit ?? 20), ct);
+            var result = await sender.Send(new GetAuditEventsQuery(limit ?? 20, actorUserId), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+        }).RequireAuthorization();
+
+        // GET /auth/admin/users/{id} — admin per-user detail (profile + business)
+        groupBuilder.MapGet("/admin/users/{id:guid}", static async (Guid id, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetUserDetailQuery(id), ct);
+            return result.IsSuccess
+                ? Results.Ok(result.Value)
+                : result.Error.Type == ErrorType.NotFound
+                    ? Results.NotFound(new { error = result.Error.Message })
+                    : Results.Problem(result.Error.Message);
         }).RequireAuthorization();
     }
 

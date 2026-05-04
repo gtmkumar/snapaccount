@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Bell, MessageSquare, AlertTriangle, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -8,51 +9,69 @@ import { AmountDisplay } from '@/components/ui/AmountDisplay'
 import { formatDate, formatRelativeTime, getInitials, getAvatarColor } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { usePermission } from '@/hooks/usePermission'
+import {
+  getAdminOrgGstReturns,
+  getAdminUserDetail,
+  getAdminUserDocuments,
+} from '@/lib/userAdminApi'
+import { getAdminAuditEvents } from '@/lib/dashboardApi'
 
 const tabs = ['Profile', 'Documents', 'GST Returns', 'ITR History', 'Loans', 'Subscription', 'Audit Log'] as const
 type Tab = typeof tabs[number]
 
-// STATIC-DATA-DEBT-7: full mock — needs real API endpoints + TanStack Query.
-//   GET /admin/users/{id}                    → mockUser (incl. business profile)
-//   GET /admin/users/{id}/documents          → mockDocuments
-//   GET /admin/users/{id}/gst-returns        → mockGstReturns
-//   GET /admin/users/{id}/audit-log?limit=N  → mockAuditLog
-// All four endpoints need new CQRS slices in respective services.
-const mockUser = {
-  id: '1', name: 'Rajesh Kumar', phone: '+91 98765 43210', email: 'rajesh@rktrade.in',
-  plan: 'Pro', status: 'Active', joinedAt: '2025-06-15', lastActive: new Date(Date.now() - 2 * 3600000).toISOString(),
-  businessName: 'RK Trading Co.', gstin: '27AABCS1429B1ZB', state: 'Maharashtra',
-  pan: 'ABCDE1234F', language: 'English', turnover: 12500000,
-}
-
-const mockDocuments = [
-  { id: 'D-001', category: 'Sales Bill', date: '01/04/2026', status: 'Processed', confidence: 92 },
-  { id: 'D-002', category: 'Purchase Bill', date: '31/03/2026', status: 'In Review', confidence: 67 },
-  { id: 'D-003', category: 'Bank Statement', date: '30/03/2026', status: 'Processed', confidence: 88 },
-]
-
-const mockGstReturns = [
-  { id: 'G-001', type: 'GSTR-3B', period: 'March 2026', status: 'Pending Approval', netTax: 48500, arn: null },
-  { id: 'G-002', type: 'GSTR-3B', period: 'February 2026', status: 'Filed', netTax: 42300, arn: 'ARN-26022026' },
-  { id: 'G-003', type: 'GSTR-1', period: 'March 2026', status: 'Draft', netTax: 0, arn: null },
-]
-
-const mockAuditLog = [
-  { id: 'A-001', action: 'Logged in from Chrome/Windows', by: 'User', ip: '103.21.x.x', timestamp: new Date(Date.now() - 2 * 3600000) },
-  { id: 'A-002', action: 'Uploaded document D-20260401-0003', by: 'User', ip: '103.21.x.x', timestamp: new Date(Date.now() - 3 * 3600000) },
-  { id: 'A-003', action: 'GST return submitted for review', by: 'System', ip: 'N/A', timestamp: new Date(Date.now() - 25 * 3600000) },
-  { id: 'A-004', action: 'Account suspended', by: 'Admin: Priya Sharma', ip: 'Admin', timestamp: new Date(Date.now() - 30 * 86400000) },
-]
-
 export default function UserDetailPage() {
-  const { id: _id } = useParams<{ id: string }>()
+  const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('Profile')
   const { hasPermission } = usePermission()
 
-  const user = mockUser
+  // Live user detail (profile + business)
+  const { data: user, isLoading, isError, refetch } = useQuery({
+    queryKey: ['admin-user-detail', id],
+    queryFn: () => getAdminUserDetail(id!),
+    enabled: !!id,
+    staleTime: 30_000,
+  })
+
+  // Tab-scoped fetches — only fire when the matching tab is active.
+  const { data: documents = [] } = useQuery({
+    queryKey: ['admin-user-documents', id],
+    queryFn: () => getAdminUserDocuments(id!, 50),
+    enabled: !!id && activeTab === 'Documents',
+  })
+
+  const { data: gstReturns = [] } = useQuery({
+    queryKey: ['admin-user-gst-returns', user?.business?.organizationId],
+    queryFn: () => getAdminOrgGstReturns(user!.business!.organizationId, 50),
+    enabled: !!user?.business?.organizationId && activeTab === 'GST Returns',
+  })
+
+  const { data: auditEvents = [] } = useQuery({
+    queryKey: ['admin-user-audit', id],
+    queryFn: () => getAdminAuditEvents(50, id!),
+    enabled: !!id && activeTab === 'Audit Log',
+  })
+
+  if (isLoading) {
+    return (
+      <Card>
+        <p className="text-sm text-neutral-500">Loading user…</p>
+      </Card>
+    )
+  }
+
+  if (isError || !user) {
+    return (
+      <Card>
+        <p className="text-sm text-error-600">Could not load user.</p>
+        <Button variant="ghost" size="sm" onClick={() => void refetch()}>Retry</Button>
+      </Card>
+    )
+  }
+
   const initials = getInitials(user.name)
   const bgColor = getAvatarColor(user.name)
+  const status = user.isActive ? 'Active' : 'Suspended'
 
   return (
     <div className="space-y-5">
@@ -75,27 +94,32 @@ export default function UserDetailPage() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-neutral-900">{user.name}</h1>
-                <Badge variant={user.status === 'Active' ? 'success' : user.status === 'Suspended' ? 'error' : 'neutral'} dot>
-                  {user.status}
+                <Badge variant={user.isActive ? 'success' : 'error'} dot>
+                  {status}
                 </Badge>
-                <Badge variant="brand">{user.plan}</Badge>
               </div>
               <div className="flex items-center gap-4 mt-2 text-sm text-neutral-500">
-                <span>{user.phone}</span>
-                <span>·</span>
-                <span>{user.email}</span>
-                <span>·</span>
+                {user.phone && <><span>{user.phone}</span><span>·</span></>}
+                {user.email && <><span>{user.email}</span><span>·</span></>}
                 <span>Joined {formatDate(user.joinedAt)}</span>
-                <span>·</span>
-                <span>Active {formatRelativeTime(user.lastActive)}</span>
               </div>
-              <div className="flex items-center gap-4 mt-1 text-sm text-neutral-500">
-                <span className="font-medium text-neutral-700">{user.businessName}</span>
-                <span>·</span>
-                <span className="font-mono text-xs">{user.gstin}</span>
-                <span>·</span>
-                <span>{user.state}</span>
-              </div>
+              {user.business && (
+                <div className="flex items-center gap-4 mt-1 text-sm text-neutral-500">
+                  <span className="font-medium text-neutral-700">{user.business.businessName}</span>
+                  {user.business.gstin && (
+                    <>
+                      <span>·</span>
+                      <span className="font-mono text-xs">{user.business.gstin}</span>
+                    </>
+                  )}
+                  {user.business.state && (
+                    <>
+                      <span>·</span>
+                      <span>{user.business.state}</span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -138,36 +162,60 @@ export default function UserDetailPage() {
         ))}
       </div>
 
-      {/* Tab content */}
+      {/* Profile tab */}
       {activeTab === 'Profile' && (
         <div className="grid grid-cols-2 gap-5">
           <Card>
             <CardHeader title="Business Details" />
             <dl className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-neutral-500">Business Name</dt>
-                <dd className="font-medium">{user.businessName}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-neutral-500">GSTIN</dt>
-                <dd className="font-mono text-xs">{user.gstin}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-neutral-500">State</dt>
-                <dd>{user.state}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-neutral-500">PAN</dt>
-                <dd className="font-mono text-xs">{user.pan.slice(0, 5)}****{user.pan.slice(-1)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-neutral-500">Annual Turnover</dt>
-                <dd><AmountDisplay amount={user.turnover} size="sm" /></dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-neutral-500">Language Preference</dt>
-                <dd>{user.language}</dd>
-              </div>
+              {user.business ? (
+                <>
+                  <div className="flex justify-between">
+                    <dt className="text-neutral-500">Business Name</dt>
+                    <dd className="font-medium">{user.business.businessName}</dd>
+                  </div>
+                  {user.business.gstin && (
+                    <div className="flex justify-between">
+                      <dt className="text-neutral-500">GSTIN</dt>
+                      <dd className="font-mono text-xs">{user.business.gstin}</dd>
+                    </div>
+                  )}
+                  {user.business.state && (
+                    <div className="flex justify-between">
+                      <dt className="text-neutral-500">State</dt>
+                      <dd>{user.business.state}</dd>
+                    </div>
+                  )}
+                  {user.business.panNumber && (
+                    <div className="flex justify-between">
+                      <dt className="text-neutral-500">PAN</dt>
+                      <dd className="font-mono text-xs">
+                        {user.business.panNumber.slice(0, 5)}****{user.business.panNumber.slice(-1)}
+                      </dd>
+                    </div>
+                  )}
+                  {user.business.annualTurnoverInr != null && (
+                    <div className="flex justify-between">
+                      <dt className="text-neutral-500">Annual Turnover</dt>
+                      <dd><AmountDisplay amount={user.business.annualTurnoverInr} size="sm" /></dd>
+                    </div>
+                  )}
+                  {user.business.industryType && (
+                    <div className="flex justify-between">
+                      <dt className="text-neutral-500">Industry</dt>
+                      <dd>{user.business.industryType}</dd>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-neutral-400 text-sm">No business profile linked.</p>
+              )}
+              {user.preferredLanguage && (
+                <div className="flex justify-between">
+                  <dt className="text-neutral-500">Language</dt>
+                  <dd>{user.preferredLanguage}</dd>
+                </div>
+              )}
             </dl>
           </Card>
 
@@ -179,52 +227,54 @@ export default function UserDetailPage() {
                 <dd className="font-mono text-xs">{user.id}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-neutral-500">Plan</dt>
-                <dd><Badge variant="brand">{user.plan}</Badge></dd>
+                <dt className="text-neutral-500">Status</dt>
+                <dd><Badge variant={user.isActive ? 'success' : 'error'}>{status}</Badge></dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-neutral-500">Joined</dt>
                 <dd>{formatDate(user.joinedAt)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-neutral-500">Last Active</dt>
-                <dd>{formatRelativeTime(user.lastActive)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-neutral-500">Devices</dt>
-                <dd>2 / 2 active</dd>
               </div>
             </dl>
           </Card>
         </div>
       )}
 
+      {/* Documents tab */}
       {activeTab === 'Documents' && (
         <Card>
-          <CardHeader title="Documents" subtitle={`${mockDocuments.length} documents`} />
+          <CardHeader title="Documents" subtitle={`${documents.length} document${documents.length === 1 ? '' : 's'}`} />
           <div className="overflow-x-auto">
             <table className="w-full text-sm" aria-label="User documents">
               <thead>
                 <tr className="border-b border-neutral-200">
                   <th scope="col" className="px-4 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">ID</th>
-                  <th scope="col" className="px-4 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">Category</th>
-                  <th scope="col" className="px-4 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">Date</th>
+                  <th scope="col" className="px-4 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">File</th>
+                  <th scope="col" className="px-4 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">Vendor</th>
+                  <th scope="col" className="px-4 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">Amount</th>
                   <th scope="col" className="px-4 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">Status</th>
-                  <th scope="col" className="px-4 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">Confidence</th>
+                  <th scope="col" className="px-4 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">Uploaded</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
-                {mockDocuments.map((doc) => (
+                {documents.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-6 text-center text-neutral-400">No documents.</td></tr>
+                )}
+                {documents.map((doc) => (
                   <tr key={doc.id} className="hover:bg-neutral-50">
-                    <td className="px-4 py-3 font-mono text-xs text-brand-600">{doc.id}</td>
-                    <td className="px-4 py-3"><Badge variant="brand" size="sm">{doc.category}</Badge></td>
-                    <td className="px-4 py-3 text-neutral-600">{doc.date}</td>
-                    <td className="px-4 py-3"><Badge variant={doc.status === 'Processed' ? 'success' : 'warning'} size="sm" dot>{doc.status}</Badge></td>
+                    <td className="px-4 py-3 font-mono text-xs text-brand-600">{doc.id.slice(0, 8)}</td>
+                    <td className="px-4 py-3 text-neutral-700">{doc.fileName}</td>
+                    <td className="px-4 py-3 text-neutral-600">{doc.vendorName ?? '—'}</td>
+                    <td className="px-4 py-3">{doc.amount != null ? <AmountDisplay amount={doc.amount} size="sm" /> : '—'}</td>
                     <td className="px-4 py-3">
-                      <span className={cn('text-sm font-mono', doc.confidence >= 80 ? 'text-success-600' : 'text-warning-600')}>
-                        {doc.confidence}%
-                      </span>
+                      <Badge
+                        variant={doc.status === 'PROCESSED' ? 'success' : doc.status === 'REJECTED' ? 'error' : 'warning'}
+                        size="sm"
+                        dot
+                      >
+                        {doc.status}
+                      </Badge>
                     </td>
+                    <td className="px-4 py-3 text-xs text-neutral-500">{formatRelativeTime(new Date(doc.uploadedAt))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -233,45 +283,67 @@ export default function UserDetailPage() {
         </Card>
       )}
 
+      {/* GST Returns tab */}
       {activeTab === 'GST Returns' && (
         <Card>
-          <CardHeader title="GST Returns" />
+          <CardHeader title="GST Returns" subtitle={user.business ? user.business.businessName : 'No org linked'} />
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" aria-label="GST returns">
-              <thead>
-                <tr className="border-b border-neutral-200">
-                  {['ID', 'Type', 'Period', 'Status', 'Net Tax', 'ARN'].map(h => (
-                    <th key={h} scope="col" className="px-4 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
-                {mockGstReturns.map((r) => (
-                  <tr key={r.id} className="hover:bg-neutral-50">
-                    <td className="px-4 py-3 font-mono text-xs text-brand-600">{r.id}</td>
-                    <td className="px-4 py-3"><Badge variant="gst" size="sm">{r.type}</Badge></td>
-                    <td className="px-4 py-3 text-neutral-600">{r.period}</td>
-                    <td className="px-4 py-3"><Badge variant={r.status === 'Filed' ? 'success' : r.status === 'Pending Approval' ? 'warning' : 'neutral'} size="sm" dot>{r.status}</Badge></td>
-                    <td className="px-4 py-3"><AmountDisplay amount={r.netTax} size="sm" colorCode /></td>
-                    <td className="px-4 py-3 font-mono text-xs text-neutral-500">{r.arn ?? '—'}</td>
+            {!user.business ? (
+              <p className="px-4 py-6 text-neutral-400">No organisation linked to this user.</p>
+            ) : (
+              <table className="w-full text-sm" aria-label="GST returns">
+                <thead>
+                  <tr className="border-b border-neutral-200">
+                    {['Type', 'FY', 'Period', 'Status', 'Net Tax', 'ARN', 'Created'].map(h => (
+                      <th key={h} scope="col" className="px-4 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {gstReturns.length === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-6 text-center text-neutral-400">No GST returns.</td></tr>
+                  )}
+                  {gstReturns.map((r) => (
+                    <tr key={r.id} className="hover:bg-neutral-50">
+                      <td className="px-4 py-3"><Badge variant="gst" size="sm">{r.returnType}</Badge></td>
+                      <td className="px-4 py-3 text-neutral-600">{r.financialYear}</td>
+                      <td className="px-4 py-3 text-neutral-600">{r.periodMonth ?? '—'}</td>
+                      <td className="px-4 py-3">
+                        <Badge
+                          variant={r.status === 'FILED' ? 'success' : r.status === 'PENDING_APPROVAL' ? 'warning' : 'neutral'}
+                          size="sm" dot
+                        >
+                          {r.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3"><AmountDisplay amount={r.netTaxPayable} size="sm" colorCode /></td>
+                      <td className="px-4 py-3 font-mono text-xs text-neutral-500">{r.arnNumber ?? '—'}</td>
+                      <td className="px-4 py-3 text-xs text-neutral-500">{formatRelativeTime(new Date(r.createdAt))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </Card>
       )}
 
+      {/* Audit log tab */}
       {activeTab === 'Audit Log' && (
         <Card>
-          <CardHeader title="Audit Log" subtitle="All actions by and on this user" />
+          <CardHeader title="Audit Log" subtitle={`Actions by ${user.name}`} />
           <div className="space-y-0 divide-y divide-neutral-100">
-            {mockAuditLog.map((event) => (
+            {auditEvents.length === 0 && (
+              <p className="px-1 py-6 text-center text-neutral-400 text-sm">No audit events for this user.</p>
+            )}
+            {auditEvents.map((event) => (
               <div key={event.id} className="flex items-center gap-4 px-1 py-3">
                 <div className="flex-1">
-                  <p className="text-sm text-neutral-700">{event.action}</p>
+                  <p className="text-sm text-neutral-700">
+                    {event.action} · {event.entityType}
+                  </p>
                   <p className="text-xs text-neutral-400 mt-0.5">
-                    By: {event.by} · IP: {event.ip} · {formatRelativeTime(event.timestamp)}
+                    {event.service} · {event.actorType.toLowerCase()} · {formatRelativeTime(new Date(event.eventTime))}
                   </p>
                 </div>
               </div>
@@ -285,7 +357,7 @@ export default function UserDetailPage() {
         <Card>
           <div className="py-12 flex flex-col items-center text-neutral-400">
             <p className="text-lg font-medium">{activeTab}</p>
-            <p className="text-sm mt-1">Coming soon — API integration pending</p>
+            <p className="text-sm mt-1">Coming soon — admin per-user endpoint pending</p>
           </div>
         </Card>
       )}

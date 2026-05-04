@@ -1,3 +1,4 @@
+using DocumentService.Application.Admin.Queries.GetUserDocuments;
 using DocumentService.Application.Dashboard.Queries.GetActivity;
 using DocumentService.Application.Dashboard.Queries.GetDashboardStats;
 using DocumentService.Application.Documents.Commands.CategorizeDocument;
@@ -68,6 +69,17 @@ public sealed class Documents : EndpointGroupBase
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetDocumentAdminActivity")
             .WithSummary("Daily document-creation counts for the cross-service activity chart.");
+
+        // GET /documents/admin/users/{userId}/documents?limit=N — recent docs for a user
+        groupBuilder.MapGet("/admin/users/{userId:guid}/documents", static async (
+            Guid userId, int? limit, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetUserDocumentsQuery(userId, limit ?? 20), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetAdminUserDocuments")
+            .WithSummary("Recent documents for a specific user — admin per-user detail view.");
     }
 
     private static async Task<IResult> UploadDocument(HttpRequest httpRequest, ISender sender)

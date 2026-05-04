@@ -17,7 +17,8 @@ namespace AuthService.Application.Admin.Queries.GetAuditEvents;
 /// endpoint can't be used as an exfiltration path.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
-public record GetAuditEventsQuery(int Limit = 20) : IQuery<IReadOnlyList<AuditEventDto>>;
+public record GetAuditEventsQuery(int Limit = 20, Guid? ActorUserId = null)
+    : IQuery<IReadOnlyList<AuditEventDto>>;
 
 public record AuditEventDto(
     Guid Id,
@@ -38,8 +39,12 @@ public sealed class GetAuditEventsQueryHandler(IAuthDbContext db)
 {
     public async Task<Result<IReadOnlyList<AuditEventDto>>> Handle(GetAuditEventsQuery request, CancellationToken ct)
     {
-        var rows = await db.AuditEvents
-            .Where(a => !a.IsSensitive)
+        var query = db.AuditEvents.Where(a => !a.IsSensitive);
+
+        if (request.ActorUserId.HasValue)
+            query = query.Where(a => a.ActorUserId == request.ActorUserId.Value);
+
+        var rows = await query
             .OrderByDescending(a => a.EventTime)
             .Take(request.Limit)
             .Select(a => new AuditEventDto(

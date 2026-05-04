@@ -27,17 +27,8 @@ Greppable marker comment (added to live offenders during PR #7):
 - `GET /admin/chat/queue?limit=N` — currently no aggregation across ChatService
 - `GET /admin/audit-events?limit=N` — needs a cross-service audit collector or per-service feed
 
-### `src/admin/src/pages/users/UserDetailPage.tsx`
-- `mockUser` (line ~15) — full user/business profile
-- `mockDocuments` (line ~22) — recent docs for this user
-- `mockGstReturns` (line ~28) — recent GST returns
-- `mockAuditLog` (line ~34) — per-user audit tail
-
-**Backend gaps:**
-- `GET /admin/users/{id}` — exists in AuthService but not exposed cleanly to admin
-- `GET /admin/users/{id}/documents` — DocumentService cross-user query (admin-only)
-- `GET /admin/users/{id}/gst-returns` — GstService cross-user query (admin-only)
-- `GET /admin/users/{id}/audit-log?limit=N` — same audit collector as Dashboard
+### ~~`src/admin/src/pages/users/UserDetailPage.tsx`~~ — RESOLVED in PR #13
+All four mocks replaced with live API fetches. See "Resolved in PR #13" below.
 
 ### `src/admin/src/pages/gst/GstFilingQueuePage.tsx`
 - `availableCAs` (line ~75) — should come from `GET /auth/users?role=CA`
@@ -71,6 +62,31 @@ Greppable marker comment (added to live offenders during PR #7):
   fabricated server-side.
 - Refresh interval 30s preserved.
 - **DashboardPage is now fully API-driven** as of PR #12. No mocks remain.
+
+## 🟢 Resolved in PR #13
+
+### `src/admin/src/pages/users/UserDetailPage.tsx` — full rewrite
+All 4 mocks (mockUser, mockDocuments, mockGstReturns, mockAuditLog) replaced
+with live API fetches via TanStack Query.
+
+Backend — 3 new admin-only IQuery slices + 1 extension:
+  - AuthService     `GET /auth/admin/users/{id}` — profile + primary business org
+  - DocumentService `GET /documents/admin/users/{userId}/documents?limit=N`
+  - GstService      `GET /gst/admin/orgs/{organizationId}/returns?limit=N`
+  - AuthService     `GET /auth/admin/audit-events` extended with optional
+                    `?actorUserId=` filter (existing endpoint, additive)
+
+Frontend:
+  - New `lib/userAdminApi.ts` with 3 typed clients
+  - DashboardPage's `getAdminAuditEvents(limit, actorUserId?)` extended
+  - UserDetailPage rewritten:
+    - Loading + error states wired
+    - Tab-scoped fetches (only fire when matching tab is active) so
+      switching tabs doesn't waste backend roundtrips
+    - Empty states everywhere
+    - Optional/missing fields handled gracefully (no business profile,
+      no GSTIN, no industry, etc.)
+    - PAN masking preserved (XXXXX****X)
 
 ## 🟢 Resolved in PR #12
 
