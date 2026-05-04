@@ -1,6 +1,7 @@
 using DocumentService.Application.Common.Interfaces;
 using DocumentService.Application.Documents.Interfaces;
 using DocumentService.Application.Interfaces;
+using DocumentService.Infrastructure.Messaging;
 using DocumentService.Infrastructure.Persistence;
 using DocumentService.Infrastructure.Persistence.Repositories;
 using DocumentService.Infrastructure.Services;
@@ -78,6 +79,9 @@ public static class DependencyInjection
         // Pub/Sub publisher (shared infra) + OCR job enqueuer
         services.AddSingleton<IPubSubPublisher, GooglePubSubPublisher>();
         services.AddScoped<IOcrJobEnqueuer, PubSubOcrJobEnqueuer>();
+
+        // OCR worker — subscribes to snapaccount.document.ocr.requested
+        services.AddHostedService<OcrJobSubscriber>();
 
         // Current user — reads Firebase JWT claims from HttpContext.Items
         services.AddHttpContextAccessor();
