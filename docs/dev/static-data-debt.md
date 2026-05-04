@@ -64,6 +64,19 @@ All four mocks replaced with live API fetches. See "Resolved in PR #13" below.
 - Refresh interval 30s preserved.
 - **DashboardPage is now fully API-driven** as of PR #12. No mocks remain.
 
+## 🟢 Resolved in PR #15
+
+### `tests/unit/ReportService` — new test project + first 16 tests
+- Net new test project mirroring the AccountingService template
+  (xunit, FluentAssertions, Moq, coverlet, ReportService project refs).
+- 16 tests against `GenerateReportCommandValidator` covering:
+  - default valid command shape
+  - FY-format whitelist (yyyy-yy) and 4 invalid shapes
+  - PeriodStart < PeriodEnd invariant + open-ended start
+  - LoanPackage requires LoanApplicationId; non-LoanPackage doesn't
+- AiService deliberately not scaffolded — service has only DbContext and
+  endpoints, no domain logic / validators worth testing today.
+
 ## 🟢 Resolved in PR #14
 
 ### `src/admin/src/pages/gst/GstFilingQueuePage.tsx` — assign-to CA dropdown
