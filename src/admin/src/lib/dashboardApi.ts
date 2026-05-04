@@ -54,6 +54,76 @@ async function safeFetch<T>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Team workload — per-user assigned/completed counts merged across services
+// ─────────────────────────────────────────────────────────────────────────
+
+const TeamMemberSchema = z.object({
+  userId: z.string(),
+  name: z.string(),
+  role: z.string(),
+})
+const TeamMembersSchema = z.array(TeamMemberSchema)
+
+const UserWorkloadSchema = z.object({
+  userId: z.string(),
+  assigned: z.number().int().nonnegative(),
+  completed: z.number().int().nonnegative(),
+})
+const UserWorkloadListSchema = z.array(UserWorkloadSchema)
+
+export interface TeamWorkloadRow {
+  userId: string
+  name: string
+  role: string
+  assigned: number
+  completed: number
+  slaBreaches: number
+}
+
+/**
+ * Fans out 3 calls — operational team list (AuthService), per-user callback
+ * workload, per-user chat workload — and merges by userId. Members with no
+ * assignments still appear (assigned=0, completed=0). Sorted by assigned DESC.
+ *
+ * SLA breach data is not yet tracked anywhere in the schema; field is left
+ * at 0 for all rows. Will need a separate SLA-tracking slice to populate.
+ */
+export async function getAdminTeamWorkload(): Promise<TeamWorkloadRow[]> {
+  const errors: Record<string, string> = {}
+
+  const [members, callbackWorkload, chatWorkload] = await Promise.all([
+    safeFetch('/auth/admin/team-members',           TeamMembersSchema,    errors, 'authMembers'),
+    safeFetch('/callbacks/admin/workload-by-user',  UserWorkloadListSchema, errors, 'callbacks'),
+    safeFetch('/chat/admin/workload-by-user',       UserWorkloadListSchema, errors, 'chat'),
+  ])
+
+  if (!members) return []
+
+  const sumByUser = new Map<string, { assigned: number; completed: number }>()
+  for (const w of [...(callbackWorkload ?? []), ...(chatWorkload ?? [])]) {
+    const prev = sumByUser.get(w.userId) ?? { assigned: 0, completed: 0 }
+    sumByUser.set(w.userId, {
+      assigned: prev.assigned + w.assigned,
+      completed: prev.completed + w.completed,
+    })
+  }
+
+  const rows: TeamWorkloadRow[] = members.map(m => {
+    const w = sumByUser.get(m.userId) ?? { assigned: 0, completed: 0 }
+    return {
+      userId: m.userId,
+      name: m.name,
+      role: m.role,
+      assigned: w.assigned,
+      completed: w.completed,
+      slaBreaches: 0, // TODO: backend SLA tracker not yet implemented
+    }
+  })
+
+  return rows.sort((a, b) => b.assigned - a.assigned)
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Chat queue snapshot — top-N oldest open unassigned threads
 // ─────────────────────────────────────────────────────────────────────────
 
