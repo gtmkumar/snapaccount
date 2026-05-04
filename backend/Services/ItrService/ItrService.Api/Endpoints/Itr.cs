@@ -1,5 +1,6 @@
 using ItrService.Application.Assessees.Commands.UpdateProfile;
 using ItrService.Application.Assessees.Queries.GetProfile;
+using ItrService.Application.Dashboard.Queries.GetDashboardStats;
 using ItrService.Application.DocChecklist.Queries.GetDocChecklist;
 using ItrService.Application.Grievances.Commands.CreateGrievance;
 using ItrService.Application.Grievances.Queries.ListGrievances;
@@ -326,6 +327,18 @@ public sealed class Itr : EndpointGroupBase
         .WithSummary("List grievances for a filing")
         .RequireAuthorization()
         .WithTags("Grievances");
+
+        // ── Admin Dashboard ───────────────────────────────────────────────────
+
+        group.MapGet("/admin/dashboard-stats", async (IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetDashboardStatsQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+        })
+        .WithName("GetItrAdminDashboardStats")
+        .WithSummary("ITR verifications-pending count for the admin cross-service dashboard.")
+        .RequireAuthorization()
+        .WithTags("Admin");
     }
 
     /// <summary>Maps a <see cref="Error"/> to the appropriate HTTP result.</summary>

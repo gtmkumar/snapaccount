@@ -13,6 +13,7 @@ using GstService.Application.Invoices.Commands.BulkImportInvoices;
 using GstService.Application.Invoices.Commands.CreateGstInvoice;
 using GstService.Application.Invoices.Queries.ListGstInvoices;
 using GstService.Application.Invoices.Queries.ListReturnInvoices;
+using GstService.Application.Dashboard.Queries.GetDashboardStats;
 using GstService.Application.ItcReconciliation.Commands.ReconcileItc;
 using GstService.Application.ItcReconciliation.Queries.GetItcMismatches;
 using GstService.Application.Notices.Commands.AssignNoticeToCa;
@@ -117,6 +118,16 @@ public sealed class Gst : EndpointGroupBase
         // ── HSN/SAC (Phase 6B) ────────────────────────────────────────────────
         groupBuilder.MapGet("/hsn-sac/search", SearchHsnSac)
             .RequireAuthorization().RequireRateLimiting("standard");
+
+        // GET /gst/admin/dashboard-stats — admin-only count for cross-service dashboard
+        groupBuilder.MapGet("/admin/dashboard-stats", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetDashboardStatsQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetGstAdminDashboardStats")
+            .WithSummary("GST returns due today for the admin cross-service dashboard.");
     }
 
     // ── Return handlers ───────────────────────────────────────────────────────

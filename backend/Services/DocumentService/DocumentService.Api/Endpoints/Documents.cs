@@ -1,3 +1,4 @@
+using DocumentService.Application.Dashboard.Queries.GetDashboardStats;
 using DocumentService.Application.Documents.Commands.CategorizeDocument;
 using DocumentService.Application.Documents.Commands.RequestOcr;
 using DocumentService.Application.Documents.Commands.ShareDocument;
@@ -46,6 +47,16 @@ public sealed class Documents : EndpointGroupBase
         // POST /documents/{id}/ocr — AI endpoint: 20 req/min rate limit (cost guardrail)
         groupBuilder.MapPost("/{id:guid}/ocr", RequestOcr)
             .RequireAuthorization().RequireRateLimiting("ai").WithName("RequestOcr");
+
+        // GET /documents/admin/dashboard-stats — admin-only count for cross-service dashboard
+        groupBuilder.MapGet("/admin/dashboard-stats", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetDashboardStatsQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetDocumentAdminDashboardStats")
+            .WithSummary("Pending document count for the admin cross-service dashboard.");
     }
 
     private static async Task<IResult> UploadDocument(HttpRequest httpRequest, ISender sender)

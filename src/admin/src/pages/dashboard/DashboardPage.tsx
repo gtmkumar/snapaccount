@@ -21,26 +21,13 @@ import { usePermission } from '@/hooks/usePermission'
 import { formatRelativeTime, cn } from '@/lib/utils'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { NoticesDueWidget } from '@/components/widgets/NoticesDueWidget'
+import { getAdminDashboardStats } from '@/lib/dashboardApi'
 
-// STATIC-DATA-DEBT-7: this whole module is mocked. Each block below needs
-// a real API endpoint (none exist yet) and a TanStack Query call.
-// Tracked in PR #7 inventory; do not extend the mocks — replace them.
-//
-// Required backend endpoints (all need new CQRS slices):
-//   GET /admin/dashboard/stats          → mockDashboardData
-//   GET /admin/dashboard/activity?range → mockActivityData{7,30,90}D
-//   GET /admin/dashboard/team-workload  → mockTeamWorkload
-//   GET /admin/chat/queue               → mockChatQueue
-//   GET /admin/audit-events?limit=N     → mockAuditEvents
-const mockDashboardData = {
-  pendingDocuments: 48,
-  gstReturnsDueToday: 3,
-  itrVerificationsPending: 12,
-  openCallbacks: 7,
-  loanApplicationsActive: 5,
-  pendingDocumentsOverThreshold: true,
-  gstReturnsDueTodayUrgent: true,
-}
+// PR #8: counts now fetched live via getAdminDashboardStats() which fans out
+// 5 parallel calls to per-service /admin/dashboard-stats endpoints. The
+// activity / team-workload / chat-queue / audit-events sections below remain
+// mocked — see docs/dev/static-data-debt.md (STATIC-DATA-DEBT-7).
+const PENDING_DOCS_THRESHOLD = 50
 
 const mockActivityData7D = [
   { date: '28 Mar', documents: 42, returns: 8, itrs: 5 },
@@ -103,16 +90,23 @@ export default function DashboardPage() {
   const { hasPermission } = usePermission()
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['dashboard-stats'],
-    queryFn: async () => {
-      // Mock — replace with api.get('/dashboard/stats')
-      await new Promise(r => setTimeout(r, 500))
-      return mockDashboardData
-    },
+    queryKey: ['admin-dashboard-stats'],
+    queryFn: getAdminDashboardStats,
     refetchInterval: 30_000, // 30 seconds
   })
 
-  const stats = data ?? mockDashboardData
+  // Derive UI-shape from the merged API response. Per-service failures land
+  // in data.errors and the affected count is undefined — render a dash there
+  // rather than fabricating a number.
+  const stats = {
+    pendingDocuments: data?.pendingDocuments ?? 0,
+    gstReturnsDueToday: data?.gstReturnsDueToday ?? 0,
+    itrVerificationsPending: data?.itrVerificationsPending ?? 0,
+    openCallbacks: data?.openCallbacks ?? 0,
+    loanApplicationsActive: data?.loanApplicationsActive ?? 0,
+    pendingDocumentsOverThreshold: (data?.pendingDocuments ?? 0) > PENDING_DOCS_THRESHOLD,
+    gstReturnsDueTodayUrgent: (data?.gstReturnsDueToday ?? 0) > 0,
+  }
   const loading = isLoading
 
   return (
