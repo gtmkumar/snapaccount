@@ -22,6 +22,7 @@ import { formatRelativeTime, cn } from '@/lib/utils'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { NoticesDueWidget } from '@/components/widgets/NoticesDueWidget'
 import {
+  getAdminAuditEvents,
   getAdminChatQueueSnapshot,
   getAdminDashboardActivity,
   getAdminDashboardStats,
@@ -33,14 +34,6 @@ import {
 // activity / team-workload / chat-queue / audit-events sections below remain
 // mocked — see docs/dev/static-data-debt.md (STATIC-DATA-DEBT-7).
 const PENDING_DOCS_THRESHOLD = 50
-
-const mockAuditEvents = [
-  { id: '1', timestamp: new Date(Date.now() - 5 * 60_000), user: 'Anjali Singh', action: 'Document D-20260401-1234 approved' },
-  { id: '2', timestamp: new Date(Date.now() - 18 * 60_000), user: 'Ravi Kumar', action: 'GSTR-3B for Sharma Traders submitted' },
-  { id: '3', timestamp: new Date(Date.now() - 35 * 60_000), user: 'System', action: 'Feature flag ai_chatbot_first_response enabled' },
-  { id: '4', timestamp: new Date(Date.now() - 62 * 60_000), user: 'Priya Sharma', action: 'Callback logged for user +91 98765 43210' },
-  { id: '5', timestamp: new Date(Date.now() - 90 * 60_000), user: 'Suresh Nair', action: 'ITR verification pending for Nair Enterprises' },
-]
 
 export default function DashboardPage() {
   const navigate = useNavigate()
@@ -69,6 +62,12 @@ export default function DashboardPage() {
     queryKey: ['admin-dashboard-team-workload'],
     queryFn: getAdminTeamWorkload,
     refetchInterval: 60_000,
+  })
+
+  const { data: auditEvents = [] } = useQuery({
+    queryKey: ['admin-dashboard-audit-events'],
+    queryFn: () => getAdminAuditEvents(20),
+    refetchInterval: 30_000,
   })
 
   // Derive UI-shape from the merged API response. Per-service failures land
@@ -483,13 +482,20 @@ export default function DashboardPage() {
           />
         </div>
         <div className="divide-y divide-neutral-50">
-          {mockAuditEvents.map((event) => (
+          {auditEvents.length === 0 && (
+            <div className="px-5 py-6 text-center text-sm text-neutral-400">
+              No recent audit events.
+            </div>
+          )}
+          {auditEvents.map((event) => (
             <div key={event.id} className="px-5 py-3 flex items-center gap-3">
               <Activity className="h-4 w-4 text-neutral-300 shrink-0" aria-hidden="true" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-neutral-700 truncate">{event.action}</p>
+                <p className="text-sm text-neutral-700 truncate">
+                  {event.action} · {event.entityType}
+                </p>
                 <p className="text-xs text-neutral-400">
-                  {event.user} · {formatRelativeTime(event.timestamp)}
+                  {event.service} · {event.actorType.toLowerCase()} · {formatRelativeTime(new Date(event.eventTime))}
                 </p>
               </div>
             </div>

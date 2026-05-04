@@ -70,8 +70,27 @@ Greppable marker comment (added to live offenders during PR #7):
   `gstReturnsDueTodayUrgent`) are now derived in the component, not
   fabricated server-side.
 - Refresh interval 30s preserved.
-- **Still mocked on the same page** (separate follow-up):
-  `mockAuditEvents`.
+- **DashboardPage is now fully API-driven** as of PR #12. No mocks remain.
+
+## 🟢 Resolved in PR #12
+
+### `DashboardPage.tsx` — recent audit events widget (last DashboardPage mock)
+- Removed `mockAuditEvents`. `getAdminAuditEvents(limit)` reads from the
+  partitioned `shared.audit_log` table that all 12 services already write
+  to (see migration 012 — pre-existing infrastructure).
+- New AuthService entity `AuditLogEntry` is keyless-on-insert, mapped to
+  `shared.audit_log`, **excluded from EF migrations** (table is owned by
+  the schema migration, not by EF).
+- `GET /auth/admin/audit-events?limit=N` (max 100) returns the most-recent
+  non-sensitive rows ordered by event_time DESC.
+- Sensitive PII rows (`is_sensitive = TRUE`) are filtered server-side so
+  this endpoint can't be used as an exfiltration channel.
+- 30s refetch on the dashboard.
+
+### `src/admin/src/pages/dashboard/DashboardPage.tsx` — overall
+- All 5 widgets on DashboardPage are now wired to live APIs (top counters,
+  activity chart, chat queue, team workload, audit events).
+- Page-level mock removal complete across PRs #8–#12.
 
 ## 🟢 Resolved in PR #11
 

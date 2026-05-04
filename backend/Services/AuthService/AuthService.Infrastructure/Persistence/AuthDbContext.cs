@@ -52,10 +52,17 @@ public class AuthDbContext(DbContextOptions<AuthDbContext> options)
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
 
     /// <inheritdoc />
+    public DbSet<AuditLogEntry> AuditEvents => Set<AuditLogEntry>();
+
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("auth");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AuthDbContext).Assembly);
+        // AuditLogEntry lives in shared.audit_log — exclude it from EF migrations.
+        // The shared.audit_log table is owned by migration 012 (partitioned by month).
+        modelBuilder.Entity<AuditLogEntry>().ToTable(
+            t => t.ExcludeFromMigrations());
         base.OnModelCreating(modelBuilder);
     }
 }
