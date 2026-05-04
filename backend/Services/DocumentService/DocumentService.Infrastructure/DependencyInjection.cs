@@ -1,4 +1,5 @@
 using DocumentService.Application.Common.Interfaces;
+using DocumentService.Application.Documents.Interfaces;
 using DocumentService.Application.Interfaces;
 using DocumentService.Infrastructure.Persistence;
 using DocumentService.Infrastructure.Persistence.Repositories;
@@ -11,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Infrastructure.Auth;
+using SnapAccount.Shared.Infrastructure.Messaging;
 using SnapAccount.Shared.Infrastructure.Persistence.Interceptors;
 using SnapAccount.Shared.Infrastructure.Storage;
 
@@ -72,6 +74,10 @@ public static class DependencyInjection
 
         // Google Document AI — OCR
         services.AddScoped<IOcrService, GoogleDocumentAiService>();
+
+        // Pub/Sub publisher (shared infra) + OCR job enqueuer
+        services.AddSingleton<IPubSubPublisher, GooglePubSubPublisher>();
+        services.AddScoped<IOcrJobEnqueuer, PubSubOcrJobEnqueuer>();
 
         // Current user — reads Firebase JWT claims from HttpContext.Items
         services.AddHttpContextAccessor();
