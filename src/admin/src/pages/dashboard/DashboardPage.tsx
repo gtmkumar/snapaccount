@@ -21,46 +21,13 @@ import { usePermission } from '@/hooks/usePermission'
 import { formatRelativeTime, cn } from '@/lib/utils'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { NoticesDueWidget } from '@/components/widgets/NoticesDueWidget'
-import { getAdminDashboardStats } from '@/lib/dashboardApi'
+import { getAdminDashboardActivity, getAdminDashboardStats } from '@/lib/dashboardApi'
 
 // PR #8: counts now fetched live via getAdminDashboardStats() which fans out
 // 5 parallel calls to per-service /admin/dashboard-stats endpoints. The
 // activity / team-workload / chat-queue / audit-events sections below remain
 // mocked — see docs/dev/static-data-debt.md (STATIC-DATA-DEBT-7).
 const PENDING_DOCS_THRESHOLD = 50
-
-const mockActivityData7D = [
-  { date: '28 Mar', documents: 42, returns: 8, itrs: 5 },
-  { date: '29 Mar', documents: 65, returns: 12, itrs: 3 },
-  { date: '30 Mar', documents: 38, returns: 6, itrs: 7 },
-  { date: '31 Mar', documents: 71, returns: 15, itrs: 9 },
-  { date: '1 Apr', documents: 55, returns: 10, itrs: 4 },
-  { date: '2 Apr', documents: 63, returns: 9, itrs: 6 },
-  { date: 'Today', documents: 48, returns: 3, itrs: 12 },
-]
-
-const mockActivityData30D = [
-  { date: '3 Mar', documents: 30, returns: 4, itrs: 2 },
-  { date: '8 Mar', documents: 45, returns: 7, itrs: 4 },
-  { date: '13 Mar', documents: 52, returns: 9, itrs: 6 },
-  { date: '18 Mar', documents: 38, returns: 5, itrs: 3 },
-  { date: '23 Mar', documents: 60, returns: 11, itrs: 8 },
-  { date: '28 Mar', documents: 42, returns: 8, itrs: 5 },
-  { date: 'Today', documents: 48, returns: 3, itrs: 12 },
-]
-
-const mockActivityData90D = [
-  { date: 'Jan', documents: 210, returns: 32, itrs: 18 },
-  { date: 'Feb', documents: 285, returns: 45, itrs: 27 },
-  { date: 'Mar', documents: 320, returns: 68, itrs: 35 },
-  { date: 'Today', documents: 48, returns: 3, itrs: 12 },
-]
-
-const activityDataByPeriod = {
-  '7D': mockActivityData7D,
-  '30D': mockActivityData30D,
-  '90D': mockActivityData90D,
-}
 
 const mockTeamWorkload = [
   { name: 'Anjali Singh', role: 'Data Entry', assigned: 14, completed: 8, slaBreaches: 0 },
@@ -93,6 +60,12 @@ export default function DashboardPage() {
     queryKey: ['admin-dashboard-stats'],
     queryFn: getAdminDashboardStats,
     refetchInterval: 30_000, // 30 seconds
+  })
+
+  const { data: activityData = [] } = useQuery({
+    queryKey: ['admin-dashboard-activity', period],
+    queryFn: () => getAdminDashboardActivity(period),
+    refetchInterval: 60_000, // 1 minute
   })
 
   // Derive UI-shape from the merged API response. Per-service failures land
@@ -213,7 +186,7 @@ export default function DashboardPage() {
         />
         <div className="h-64" aria-label="Activity chart">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={activityDataByPeriod[period]} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <LineChart data={activityData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
               <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#64748B' }} />
               <YAxis tick={{ fontSize: 12, fill: '#64748B' }} />

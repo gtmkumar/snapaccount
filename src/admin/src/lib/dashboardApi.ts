@@ -53,6 +53,78 @@ async function safeFetch<T>(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Activity series — daily creation counts merged into one chart series
+// ─────────────────────────────────────────────────────────────────────────
+
+const DailyActivityPointSchema = z.object({
+  date: z.string(),                  // ISO date 'YYYY-MM-DD'
+  count: z.number().int().nonnegative(),
+})
+const ActivitySeriesSchema = z.array(DailyActivityPointSchema)
+
+export type ActivityRange = '7D' | '30D' | '90D'
+
+export interface ActivityChartPoint {
+  date: string         // formatted for chart axis (e.g. '28 Mar', 'Today')
+  documents: number
+  returns: number
+  itrs: number
+}
+
+/**
+ * Fans out the 3 per-service /admin/activity endpoints, merges by date,
+ * fills missing days with zeros, and formats the date column for the chart.
+ */
+export async function getAdminDashboardActivity(range: ActivityRange): Promise<ActivityChartPoint[]> {
+  const errors: Record<string, string> = {}
+
+  const [docs, gst, itrs] = await Promise.all([
+    safeFetch(`/documents/admin/activity?range=${range}`, ActivitySeriesSchema, errors, 'documents'),
+    safeFetch(`/gst/admin/activity?range=${range}`,       ActivitySeriesSchema, errors, 'gst'),
+    safeFetch(`/itr/admin/activity?range=${range}`,       ActivitySeriesSchema, errors, 'itr'),
+  ])
+
+  const days = range === '90D' ? 90 : range === '30D' ? 30 : 7
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // Build the day spine from N days ago through today (inclusive).
+  const spine: ActivityChartPoint[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    spine.push({
+      date: i === 0 ? 'Today' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+      documents: 0,
+      returns: 0,
+      itrs: 0,
+    })
+  }
+
+  // Build a Map<isoDate, indexInSpine> for O(1) merge.
+  const indexByIso = new Map<string, number>()
+  for (let i = 0; i < days; i++) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - (days - 1 - i))
+    indexByIso.set(d.toISOString().slice(0, 10), i)
+  }
+
+  const merge = (rows: { date: string; count: number }[] | undefined, key: 'documents' | 'returns' | 'itrs') => {
+    if (!rows) return
+    for (const row of rows) {
+      const idx = indexByIso.get(row.date)
+      if (idx !== undefined) spine[idx][key] = row.count
+    }
+  }
+
+  merge(docs, 'documents')
+  merge(gst,  'returns')
+  merge(itrs, 'itrs')
+
+  return spine
+}
+
 /**
  * Fans out 5 parallel requests to the per-service dashboard-stats endpoints
  * and merges them. Never throws — failed services land in `errors`.

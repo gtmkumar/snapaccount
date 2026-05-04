@@ -1,3 +1,4 @@
+using DocumentService.Application.Dashboard.Queries.GetActivity;
 using DocumentService.Application.Dashboard.Queries.GetDashboardStats;
 using DocumentService.Application.Documents.Commands.CategorizeDocument;
 using DocumentService.Application.Documents.Commands.RequestOcr;
@@ -57,6 +58,16 @@ public sealed class Documents : EndpointGroupBase
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetDocumentAdminDashboardStats")
             .WithSummary("Pending document count for the admin cross-service dashboard.");
+
+        // GET /documents/admin/activity?range=7D|30D|90D — daily creation series
+        groupBuilder.MapGet("/admin/activity", static async (string? range, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetActivityQuery(range ?? "7D"), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetDocumentAdminActivity")
+            .WithSummary("Daily document-creation counts for the cross-service activity chart.");
     }
 
     private static async Task<IResult> UploadDocument(HttpRequest httpRequest, ISender sender)
