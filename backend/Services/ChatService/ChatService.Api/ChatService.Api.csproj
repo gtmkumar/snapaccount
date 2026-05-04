@@ -1,10 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>preview</LangVersion>
     <NoWarn>NU1608;CS0618;MSB3277</NoWarn>
+    <UserSecretsId>a045e006-057a-469a-ba01-0b92fee4b17c</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="MediatR" Version="12.*" />

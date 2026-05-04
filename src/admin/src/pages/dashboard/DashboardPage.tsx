@@ -21,7 +21,11 @@ import { usePermission } from '@/hooks/usePermission'
 import { formatRelativeTime, cn } from '@/lib/utils'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { NoticesDueWidget } from '@/components/widgets/NoticesDueWidget'
-import { getAdminDashboardActivity, getAdminDashboardStats } from '@/lib/dashboardApi'
+import {
+  getAdminChatQueueSnapshot,
+  getAdminDashboardActivity,
+  getAdminDashboardStats,
+} from '@/lib/dashboardApi'
 
 // PR #8: counts now fetched live via getAdminDashboardStats() which fans out
 // 5 parallel calls to per-service /admin/dashboard-stats endpoints. The
@@ -35,12 +39,6 @@ const mockTeamWorkload = [
   { name: 'Priya Sharma', role: 'Support Exec', assigned: 9, completed: 7, slaBreaches: 0 },
   { name: 'Suresh Nair', role: 'Data Entry', assigned: 18, completed: 10, slaBreaches: 2 },
   { name: 'Kavita Patel', role: 'CA', assigned: 5, completed: 5, slaBreaches: 0 },
-]
-
-const mockChatQueue = [
-  { id: '1', user: 'Rajesh Kumar', query: 'GST Filing', waitMins: 8 },
-  { id: '2', user: 'Meena Iyer', query: 'ITR Documents', waitMins: 22 },
-  { id: '3', user: 'Arjun Verma', query: 'Loan Eligibility', waitMins: 5 },
 ]
 
 const mockAuditEvents = [
@@ -66,6 +64,12 @@ export default function DashboardPage() {
     queryKey: ['admin-dashboard-activity', period],
     queryFn: () => getAdminDashboardActivity(period),
     refetchInterval: 60_000, // 1 minute
+  })
+
+  const { data: chatQueue = [] } = useQuery({
+    queryKey: ['admin-dashboard-chat-queue'],
+    queryFn: () => getAdminChatQueueSnapshot(10),
+    refetchInterval: 30_000,
   })
 
   // Derive UI-shape from the merged API response. Per-service failures land
@@ -290,22 +294,35 @@ export default function DashboardPage() {
               />
             </div>
             <div className="divide-y divide-neutral-50">
-              {mockChatQueue.map((item) => (
-                <div key={item.id} className="px-5 py-4 flex items-center justify-between hover:bg-neutral-50">
+              {chatQueue.length === 0 && (
+                <div className="px-5 py-6 text-center text-sm text-neutral-400">
+                  No chat threads waiting for an agent.
+                </div>
+              )}
+              {chatQueue.map((item) => (
+                <div key={item.threadId} className="px-5 py-4 flex items-center justify-between hover:bg-neutral-50">
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-full bg-brand-100 flex items-center justify-center">
                       <MessageSquare className="h-4 w-4 text-brand-600" aria-hidden="true" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-neutral-800">{item.user}</p>
-                      <p className="text-xs text-neutral-400">{item.query}</p>
+                      <p className="text-sm font-medium text-neutral-800">
+                        {item.subject || `Thread ${item.threadId.slice(0, 8)}`}
+                      </p>
+                      <p className="text-xs text-neutral-400">{item.category}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className={`text-xs font-medium ${item.waitMins > 15 ? 'text-warning-600' : 'text-neutral-500'}`}>
                       {item.waitMins}m wait
                     </span>
-                    <Button variant="primary" size="sm">Assign</Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => void navigate(`/chat?thread=${item.threadId}`)}
+                    >
+                      Open
+                    </Button>
                   </div>
                 </div>
               ))}

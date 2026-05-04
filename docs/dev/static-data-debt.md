@@ -71,7 +71,18 @@ Greppable marker comment (added to live offenders during PR #7):
   fabricated server-side.
 - Refresh interval 30s preserved.
 - **Still mocked on the same page** (separate follow-ups):
-  `mockTeamWorkload`, `mockChatQueue`, `mockAuditEvents`.
+  `mockTeamWorkload`, `mockAuditEvents`.
+
+## 🟢 Resolved in PR #10
+
+### `DashboardPage.tsx` — chat queue widget
+- Removed `mockChatQueue`. New `getAdminChatQueueSnapshot(limit)` fetches
+  `GET /chat/admin/queue-snapshot?limit=N` (top-N oldest open unassigned
+  threads, ordered by creation time). 30s refetch.
+- Backend: `ChatService.Application.Dashboard.Queries.GetQueueSnapshot`
+  with permission `admin.dashboard.read`. Empty state shows "No chat
+  threads waiting for an agent." Open button deep-links to
+  `/chat?thread={id}`.
 
 ## 🟢 Resolved in PR #9
 
