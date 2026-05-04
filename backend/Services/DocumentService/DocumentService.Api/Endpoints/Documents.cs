@@ -1,6 +1,12 @@
+using DocumentService.Application.Documents.Commands.CategorizeDocument;
+using DocumentService.Application.Documents.Commands.RequestOcr;
+using DocumentService.Application.Documents.Commands.ShareDocument;
 using DocumentService.Application.Documents.Commands.UploadDocument;
+using DocumentService.Application.Documents.Queries.GetDocument;
+using DocumentService.Application.Documents.Queries.GetDocuments;
 using MediatR;
 using SnapAccount.Shared.Api;
+using SnapAccount.Shared.Domain;
 
 namespace DocumentService.Api.Endpoints;
 
@@ -68,43 +74,62 @@ public sealed class Documents : EndpointGroupBase
             : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
     }
 
-    private static Task<IResult> GetDocuments(
+    private static async Task<IResult> GetDocuments(
         ISender sender,
         int page = 1,
         int pageSize = 20,
         string? status = null,
         Guid? categoryId = null)
     {
-        // TODO Phase 2: wire GetDocumentsQuery when DbContext read-projection is ready
-        return Task.FromResult(Results.Ok(new { message = "TODO", page, pageSize }));
+        var result = await sender.Send(new GetDocumentsQuery(page, pageSize, status, categoryId));
+        return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
     }
 
-    private static Task<IResult> GetDocument(Guid id, ISender sender)
+    private static async Task<IResult> GetDocument(Guid id, ISender sender)
     {
-        // TODO Phase 2: wire GetDocumentQuery
-        return Task.FromResult(Results.Ok(new { message = "TODO", id }));
+        var result = await sender.Send(new GetDocumentQuery(id));
+        return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
     }
 
-    private static Task<IResult> CategorizeDocument(
+    private static async Task<IResult> CategorizeDocument(
         Guid id, CategorizeRequest req, ISender sender)
     {
-        // TODO Phase 2: wire CategorizeDocumentCommand
-        return Task.FromResult(Results.NoContent());
+        var result = await sender.Send(new CategorizeDocumentCommand(id, req.CategoryId));
+        return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
     }
 
-    private static Task<IResult> ShareDocument(Guid id, ShareRequest req, ISender sender)
+    private static async Task<IResult> ShareDocument(Guid id, ShareRequest req, ISender sender)
     {
-        // TODO Phase 2: wire ShareDocumentCommand
-        return Task.FromResult(Results.Ok(new { message = "TODO" }));
+        var result = await sender.Send(new ShareDocumentCommand(
+            id, req.ShareType, req.SharedWith, req.ExternalEmail, req.ExpiresAt));
+        return result.IsSuccess
+            ? Results.Created($"/documents/{id}/shares/{result.Value.ShareId}", result.Value)
+            : MapError(result.Error);
     }
 
-    private static Task<IResult> RequestOcr(Guid id, ISender sender)
+    private static async Task<IResult> RequestOcr(Guid id, ISender sender)
     {
-        // TODO Phase 2: wire RequestOcrCommand — triggers Google Document AI pipeline
-        return Task.FromResult(Results.Accepted($"/documents/{id}", new { message = "OCR queued." }));
+        var result = await sender.Send(new RequestOcrCommand(id));
+        return result.IsSuccess
+            ? Results.Accepted($"/documents/{id}", new { message = "OCR queued." })
+            : MapError(result.Error);
     }
+
+    private static IResult MapError(Error error) => error.Type switch
+    {
+        ErrorType.NotFound => Results.NotFound(new { error = error.Message, code = error.Code }),
+        ErrorType.Validation => Results.BadRequest(new { error = error.Message, code = error.Code }),
+        ErrorType.Conflict => Results.Conflict(new { error = error.Message, code = error.Code }),
+        ErrorType.Unauthorized => Results.Unauthorized(),
+        ErrorType.Forbidden => Results.Forbid(),
+        _ => Results.BadRequest(new { error = error.Message, code = error.Code })
+    };
 }
 
 // Request DTOs
 internal record CategorizeRequest(Guid CategoryId);
-internal record ShareRequest(string SharedWithEmail, string? Permission = "VIEW");
+internal record ShareRequest(
+    string ShareType,
+    Guid? SharedWith = null,
+    string? ExternalEmail = null,
+    DateTime? ExpiresAt = null);
