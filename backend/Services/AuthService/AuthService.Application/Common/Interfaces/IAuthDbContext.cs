@@ -54,6 +54,13 @@ public interface IAuthDbContext
     /// <summary>User preferences in <c>auth.user_preferences</c>.</summary>
     DbSet<UserPreference> UserPreferences { get; }
 
+    /// <summary>
+    /// Read-only projection of <c>shared.audit_log</c>. All services write to
+    /// the same partitioned table; AuthService exposes the admin-only read
+    /// path for the cross-service audit-feed widget. Never write through this DbSet.
+    /// </summary>
+    DbSet<AuditLogEntry> AuditEvents { get; }
+
     /// <summary>Persists changes to the auth schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

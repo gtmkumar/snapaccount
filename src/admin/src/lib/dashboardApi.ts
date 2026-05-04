@@ -54,6 +54,31 @@ async function safeFetch<T>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Audit events — cross-service tail from shared.audit_log
+// ─────────────────────────────────────────────────────────────────────────
+
+const AuditEventSchema = z.object({
+  id: z.string(),
+  eventTime: z.string(),
+  service: z.string(),
+  entityType: z.string(),
+  action: z.string(),
+  actorUserId: z.string().nullable().optional(),
+  actorType: z.string(),
+})
+const AuditEventsSchema = z.array(AuditEventSchema)
+export type AuditEvent = z.infer<typeof AuditEventSchema>
+
+export async function getAdminAuditEvents(limit = 20): Promise<AuditEvent[]> {
+  const errors: Record<string, string> = {}
+  const items = await safeFetch(
+    `/auth/admin/audit-events?limit=${limit}`,
+    AuditEventsSchema, errors, 'audit',
+  )
+  return items ?? []
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Team workload — per-user assigned/completed counts merged across services
 // ─────────────────────────────────────────────────────────────────────────
 

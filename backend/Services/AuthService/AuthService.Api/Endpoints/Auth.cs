@@ -1,3 +1,4 @@
+using AuthService.Application.Admin.Queries.GetAuditEvents;
 using AuthService.Application.Admin.Queries.GetTeamMembers;
 using AuthService.Application.Otp.Commands.SendOtp;
 using AuthService.Application.Otp.Commands.VerifyOtp;
@@ -49,6 +50,13 @@ public sealed class Auth : EndpointGroupBase
         {
             var result = await sender.Send(new GetTeamMembersQuery(), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        }).RequireAuthorization();
+
+        // GET /auth/admin/audit-events?limit=N — cross-service audit tail (reads shared.audit_log)
+        groupBuilder.MapGet("/admin/audit-events", static async (int? limit, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetAuditEventsQuery(limit ?? 20), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
         }).RequireAuthorization();
     }
 
