@@ -1,3 +1,4 @@
+using ChatService.Application.Dashboard.Queries.GetQueueSnapshot;
 using ChatService.Application.Threads.Commands.AddParticipant;
 using ChatService.Application.Threads.Commands.AssignThread;
 using ChatService.Application.Threads.Commands.EscalateThread;
@@ -138,6 +139,16 @@ public sealed class Chat : EndpointGroupBase
             .RequireRateLimiting("standard")
             .WithName("GetUnreadCount")
             .WithSummary("Returns total unread message and thread counts for the authenticated user.");
+
+        // GET /chat/admin/queue-snapshot?limit=N — top-N oldest open unassigned threads
+        g.MapGet("/admin/queue-snapshot", static async (int? limit, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetQueueSnapshotQuery(limit ?? 10), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetChatAdminQueueSnapshot")
+            .WithSummary("Top-N open chat threads waiting for an agent — admin dashboard widget.");
     }
 
     // ── Handlers ──────────────────────────────────────────────────────────────

@@ -54,6 +54,30 @@ async function safeFetch<T>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Chat queue snapshot — top-N oldest open unassigned threads
+// ─────────────────────────────────────────────────────────────────────────
+
+const ChatQueueItemSchema = z.object({
+  threadId: z.string(),
+  category: z.string(),
+  subject: z.string().nullable().optional(),
+  initiatedByUserId: z.string(),
+  createdAt: z.string(),
+  waitMins: z.number().int().nonnegative(),
+})
+const ChatQueueSnapshotSchema = z.array(ChatQueueItemSchema)
+export type ChatQueueItem = z.infer<typeof ChatQueueItemSchema>
+
+export async function getAdminChatQueueSnapshot(limit = 10): Promise<ChatQueueItem[]> {
+  const errors: Record<string, string> = {}
+  const items = await safeFetch(
+    `/chat/admin/queue-snapshot?limit=${limit}`,
+    ChatQueueSnapshotSchema, errors, 'chat',
+  )
+  return items ?? []
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Activity series — daily creation counts merged into one chart series
 // ─────────────────────────────────────────────────────────────────────────
 
