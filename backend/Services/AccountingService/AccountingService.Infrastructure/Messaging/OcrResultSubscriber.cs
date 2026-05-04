@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using AccountingService.Application.Interfaces;
 using AccountingService.Application.JournalBatches.Commands.PostFromOcr;
 using MediatR;
 using Microsoft.Extensions.Configuration;
@@ -79,15 +80,34 @@ public sealed class OcrResultSubscriber(
                 // P6-HANDOFF-03: compute dedupe hash before dispatching
                 var dedupeHash = ComputeDedupeHash(payload.DocumentId, payload.ExtractedPayloadHash);
 
-                // Map OCR result to default debit/credit accounts.
-                // In production these are resolved from per-org COA; for Phase 6A we use
-                // the standard Indian COA convention: Accounts Receivable (1200) vs Revenue (4100).
-                // A per-org mapping service will be added in Phase 6B.
+                // SEC-037: resolve debit/credit accounts via per-org COA lookup.
+                // Prior code fell back to hardcoded UUIDs (1200/4100 placeholders) which
+                // could post to wrong (cross-org) accounts when DocumentService didn't
+                // suggest specific accounts. Now: prefer suggestion → else look up the
+                // org's "1200" / "4100" by code → else fail-loud (NACK) so Pub/Sub
+                // retries and the message eventually goes to DLQ for human triage.
+                var coaRepo = scope.ServiceProvider.GetRequiredService<IChartOfAccountRepository>();
+
+                var debitAccountId = payload.SuggestedDebitAccountId
+                    ?? (await coaRepo.GetByOrganizationAndCodeAsync(payload.OrgId, "1200", ct))?.Id;
+                var creditAccountId = payload.SuggestedCreditAccountId
+                    ?? (await coaRepo.GetByOrganizationAndCodeAsync(payload.OrgId, "4100", ct))?.Id;
+
+                if (debitAccountId is null || creditAccountId is null)
+                {
+                    logger.LogError(
+                        "OCR posting blocked for document {DocumentId} (org {OrgId}): " +
+                        "no suggested accounts and org has no COA entry for codes 1200/4100. " +
+                        "Run BootstrapCoa for the org or have DocumentService supply suggestions. NACK.",
+                        payload.DocumentId, payload.OrgId);
+                    return SubscriberClient.Reply.Nack;
+                }
+
                 var command = new PostFromOcrCommand(
                     OrgId: payload.OrgId,
                     DocumentId: payload.DocumentId,
-                    DebitAccountId: payload.SuggestedDebitAccountId ?? Guid.Parse("00000000-0000-0000-0000-000000001200"),
-                    CreditAccountId: payload.SuggestedCreditAccountId ?? Guid.Parse("00000000-0000-0000-0000-000000004100"),
+                    DebitAccountId: debitAccountId.Value,
+                    CreditAccountId: creditAccountId.Value,
                     Amount: payload.TotalAmount,
                     Narration: $"OCR: {payload.VendorName ?? "Unknown vendor"} — {payload.DocumentDate:yyyy-MM-dd}",
                     FyYear: IndianFyYear(payload.DocumentDate),

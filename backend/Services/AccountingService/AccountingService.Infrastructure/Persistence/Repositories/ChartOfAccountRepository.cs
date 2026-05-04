@@ -21,4 +21,15 @@ public sealed class ChartOfAccountRepository(AccountingDbContext dbContext) : IC
         await dbContext.SaveChangesAsync(ct);
         return account;
     }
+
+    /// <inheritdoc />
+    public async Task<ChartOfAccount?> GetByOrganizationAndCodeAsync(
+        Guid orgId, string accountCode, CancellationToken ct = default)
+        => await dbContext.ChartOfAccounts
+            .FirstOrDefaultAsync(
+                a => a.OrgId == orgId
+                    && a.AccountCode == accountCode
+                    && a.IsActive
+                    && a.DeletedAt == null,
+                ct);
 }
