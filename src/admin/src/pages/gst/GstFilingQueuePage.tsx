@@ -14,6 +14,7 @@ import { AlertBanner } from '@/components/shared/AlertBanner'
 import { AmountDisplay } from '@/components/ui/AmountDisplay'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { getAdminTeamMembers, type TeamMember } from '@/lib/dashboardApi'
 
 interface GstQueueItem {
   id: string
@@ -72,13 +73,6 @@ function DueDateChip({ dueDate }: { dueDate: string }) {
   return <Badge variant="success" dot>{formatDate(dueDate)}</Badge>
 }
 
-const availableCAs = [
-  { id: 'ca-1', name: 'CA Ravi Kumar', load: 12 },
-  { id: 'ca-2', name: 'CA Priya Sharma', load: 8 },
-  { id: 'ca-3', name: 'CA Anjali Singh', load: 15 },
-  { id: 'ca-4', name: 'CA Suresh Nair', load: 5 },
-]
-
 function AssignCell({
   row,
   assigningRowId,
@@ -95,9 +89,17 @@ function AssignCell({
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null)
   const [caSearch, setCaSearch] = useState('')
 
+  // Live CA list — fetched only when the dropdown is open (per-row mount).
+  const { data: availableCAs = [] } = useQuery<TeamMember[]>({
+    queryKey: ['admin-team-members', 'CA'],
+    queryFn: () => getAdminTeamMembers('CA'),
+    enabled: isOpen,
+    staleTime: 5 * 60_000, // CA roster doesn't change often
+  })
+
   const filteredCAs = useMemo(
     () => availableCAs.filter(ca => ca.name.toLowerCase().includes(caSearch.toLowerCase())),
-    [caSearch]
+    [availableCAs, caSearch]
   )
 
   useEffect(() => {
@@ -181,7 +183,7 @@ function AssignCell({
             ) : (
               filteredCAs.map(ca => (
                 <button
-                  key={ca.id}
+                  key={ca.userId}
                   className="w-full text-left px-4 py-2.5 hover:bg-blue-50 flex items-center justify-between transition-colors"
                   onClick={(e) => {
                     e.stopPropagation()
@@ -191,7 +193,7 @@ function AssignCell({
                   }}
                 >
                   <span className="text-sm font-medium text-gray-800">{ca.name}</span>
-                  <span className="text-xs text-gray-400 ml-3 shrink-0">{ca.load} active</span>
+                  <span className="text-xs text-gray-400 ml-3 shrink-0">{ca.role}</span>
                 </button>
               ))
             )}
