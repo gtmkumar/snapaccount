@@ -65,7 +65,10 @@ public static class DependencyInjection
         services.AddScoped<IAuthDbContext>(sp => sp.GetRequiredService<AuthDbContext>());
 
         // Firebase Admin SDK initialisation (singleton — shared process-wide)
-        if (FirebaseApp.DefaultInstance == null)
+        // DEV_AUTH_BYPASS skips Firebase init entirely (canned tokens accepted by middleware).
+        var devBypass = string.Equals(configuration["DEV_AUTH_BYPASS"], "true", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_BYPASS"), "true", StringComparison.OrdinalIgnoreCase);
+        if (!devBypass && FirebaseApp.DefaultInstance == null)
         {
             var credentialJson = configuration["Firebase:ServiceAccountJson"];
 #pragma warning disable CS0618 // GoogleCredential.FromJson is deprecated in favour of CredentialFactory but we retain it here until Firebase Admin SDK ships a clean replacement
@@ -80,6 +83,10 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+
+        // MSG91 OTP SMS sender — used by OtpService to deliver the OTP.
+        services.AddHttpClient("Msg91Otp");
+        services.AddScoped<IOtpSmsSender, Msg91OtpSmsSender>();
 
         // Domain services
         services.AddScoped<IOtpService, OtpService>();

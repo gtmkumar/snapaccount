@@ -13,6 +13,7 @@ namespace AuthService.Infrastructure.Services;
 public sealed class OtpService(
     AuthDbContext dbContext,
     IConfiguration configuration,
+    IOtpSmsSender smsSender,
     ILogger<OtpService> logger) : IOtpService
 {
     public async Task<Result<Guid>> SendOtpAsync(
@@ -54,10 +55,20 @@ public sealed class OtpService(
         dbContext.OtpRequests.Add(otpRequest);
         await dbContext.SaveChangesAsync(ct);
 
-        // TODO: Send OTP via MSG91 SMS API
-        // For now, log the OTP in non-production environments
-        if (configuration["ASPNETCORE_ENVIRONMENT"] != "Production")
+        // Dev convenience: log the OTP in non-prod so manual testing doesn't need a phone.
+        // In prod this branch is skipped — the OTP only ever leaves the box via MSG91.
+        var env = configuration["ASPNETCORE_ENVIRONMENT"];
+        if (!string.Equals(env, "Production", StringComparison.OrdinalIgnoreCase))
             logger.LogWarning("OTP for {Phone}: {Otp} (DEVELOPMENT ONLY — never log in production)", phoneNumber, otp);
+
+        // Send via MSG91 OTP API. Failures are logged but not propagated — the
+        // OTP row is already persisted, so the user can be told to retry on
+        // the next SendOtp call. Production must be alerted on the
+        // sms-delivery-failure-rate metric.
+        var delivered = await smsSender.SendOtpAsync(phoneNumber, otp, ct);
+        if (!delivered)
+            logger.LogError("OTP request {OtpId} created but SMS delivery failed for {Phone}",
+                otpRequest.Id, phoneNumber);
 
         logger.LogInformation("OTP request created for phone {Phone}, type {Type}", phoneNumber, otpType);
         return otpRequest.Id;
