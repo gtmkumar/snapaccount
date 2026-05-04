@@ -21,6 +21,9 @@ public interface ILoanServiceDbContext
     /// <summary>P6-HANDOFF-33: Webhook idempotency keys for deduplication (30-day TTL).</summary>
     DbSet<WebhookIdempotencyKey> WebhookIdempotencyKeys { get; }
 
+    /// <summary>P6-HANDOFF-25 / SEC-050: Versioned consent text catalog.</summary>
+    DbSet<ConsentCatalogEntry> ConsentCatalog { get; }
+
     /// <summary>Persists changes to the loan schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

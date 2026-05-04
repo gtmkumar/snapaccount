@@ -4,6 +4,7 @@ using LoanService.Application.LoanApplications.Commands.CheckEligibility;
 using LoanService.Application.LoanApplications.Commands.CloseApplication;
 using LoanService.Application.LoanApplications.Commands.GeneratePackage;
 using LoanService.Application.LoanApplications.Commands.RecordBankDecision;
+using LoanService.Application.Consents.Queries.GetConsentCatalog;
 using LoanService.Application.LoanApplications.Commands.RecordConsent;
 using LoanService.Application.LoanApplications.Commands.RecordDisbursement;
 using LoanService.Application.LoanApplications.Commands.StartApplication;
@@ -142,6 +143,15 @@ public sealed class Loans : EndpointGroupBase
         groupBuilder.MapPatch("/partner-banks/{id:guid}", UpdatePartnerBank)
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("UpdatePartnerBank");
+
+        // ── Consents catalog (P6-HANDOFF-25 / SEC-050) ───────────────────────
+
+        /// <summary>GET /loans/consents/catalog — Versioned consent text catalog (DPDP audit).</summary>
+        groupBuilder.MapGet("/consents/catalog", GetConsentCatalog)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetLoanConsentCatalog")
+            .WithSummary("Versioned loan consent text catalog")
+            .WithDescription("Returns current (non-retired) consent text per type for the requested locale. Mobile echoes the returned textVersion in RecordConsent so DPDP audit trail ties back to exactly what the user saw.");
 
         // ── Webhooks (no auth — HMAC verified in handler) ─────────────────────
 
@@ -333,6 +343,16 @@ public sealed class Loans : EndpointGroupBase
                 processingResult.Reason ?? "Rejected", statusCode: StatusCodes.Status400BadRequest),
             _ => Results.Problem("Unknown webhook status.", statusCode: 500)
         };
+    }
+
+    /// <summary>P6-HANDOFF-25 / SEC-050: Returns versioned consent text catalog.</summary>
+    private static async Task<IResult> GetConsentCatalog(
+        string? locale, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetConsentCatalogQuery(locale), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
     }
 
     private static int MapError(SnapAccount.Shared.Domain.Error error)

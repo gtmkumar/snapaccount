@@ -37,6 +37,9 @@ public class LoanServiceDbContext(DbContextOptions<LoanServiceDbContext> options
     public DbSet<WebhookIdempotencyKey> WebhookIdempotencyKeys => Set<WebhookIdempotencyKey>();
 
     /// <inheritdoc />
+    public DbSet<ConsentCatalogEntry> ConsentCatalog => Set<ConsentCatalogEntry>();
+
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("loan");
