@@ -9,6 +9,46 @@ import { z } from 'zod'
 import api from './api'
 
 // ─────────────────────────────────────────────────────────────────────────
+// Paginated user list (admin Users page)
+// ─────────────────────────────────────────────────────────────────────────
+
+const UserListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  phone: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  isActive: z.boolean(),
+  joinedAt: z.string(),
+  organizationId: z.string().nullable().optional(),
+  businessName: z.string().nullable().optional(),
+  gstin: z.string().nullable().optional(),
+  state: z.string().nullable().optional(),
+})
+const PaginatedUsersSchema = z.object({
+  items: z.array(UserListItemSchema),
+  totalCount: z.number().int().nonnegative(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  totalPages: z.number().int().nonnegative(),
+  hasNextPage: z.boolean(),
+  hasPreviousPage: z.boolean(),
+})
+export type AdminUserListItem = z.infer<typeof UserListItemSchema>
+export type AdminUsersPage = z.infer<typeof PaginatedUsersSchema>
+
+export interface ListAdminUsersParams {
+  page?: number
+  pageSize?: number
+  search?: string
+  isActive?: boolean
+}
+
+export async function listAdminUsers(params: ListAdminUsersParams = {}): Promise<AdminUsersPage> {
+  const res = await api.get('/auth/admin/users', { params })
+  return PaginatedUsersSchema.parse(res.data)
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // User detail (profile + business)
 // ─────────────────────────────────────────────────────────────────────────
 

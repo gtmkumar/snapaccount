@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { type ColumnDef } from '@tanstack/react-table'
 import { toast } from 'sonner'
 import { Search, Download, UserPlus } from 'lucide-react'
@@ -12,46 +12,12 @@ import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { getInitials, getAvatarColor } from '@/lib/utils'
 import { cn } from '@/lib/utils'
-
-interface UserListItem {
-  id: string
-  name: string
-  phone: string
-  email: string
-  userType: 'Business Owner' | 'Employee'
-  plan: 'Free' | 'Basic' | 'Pro' | 'Enterprise'
-  gstin: string | null
-  state: string
-  joinedAt: string
-  lastActive: string
-  status: 'Active' | 'Inactive' | 'Suspended'
-}
-
-const mockUsers: UserListItem[] = [
-  { id: '1', name: 'Rajesh Kumar', phone: '+91 98765 43210', email: 'rajesh@rktrade.in', userType: 'Business Owner', plan: 'Pro', gstin: '27AABCS1429B1ZB', state: 'Maharashtra', joinedAt: '2025-06-15', lastActive: new Date(Date.now() - 2 * 3600000).toISOString(), status: 'Active' },
-  { id: '2', name: 'Meena Iyer', phone: '+91 87654 32109', email: 'meena@example.com', userType: 'Employee', plan: 'Basic', gstin: null, state: 'Karnataka', joinedAt: '2025-08-22', lastActive: new Date(Date.now() - 24 * 3600000).toISOString(), status: 'Active' },
-  { id: '3', name: 'Arjun Verma', phone: '+91 76543 21098', email: 'arjun@vermatextiles.com', userType: 'Business Owner', plan: 'Enterprise', gstin: '24AAPCP2345B1Z2', state: 'Gujarat', joinedAt: '2025-04-01', lastActive: new Date(Date.now() - 5 * 60000).toISOString(), status: 'Active' },
-  { id: '4', name: 'Priya Sharma', phone: '+91 65432 10987', email: 'priya@example.com', userType: 'Employee', plan: 'Free', gstin: null, state: 'Delhi', joinedAt: '2025-11-10', lastActive: new Date(Date.now() - 7 * 86400000).toISOString(), status: 'Inactive' },
-  { id: '5', name: 'Ramesh Gupta', phone: '+91 54321 09876', email: 'ramesh@guptaelec.in', userType: 'Business Owner', plan: 'Basic', gstin: '07AACPG4567B1Z3', state: 'Delhi', joinedAt: '2025-09-18', lastActive: new Date(Date.now() - 3 * 86400000).toISOString(), status: 'Suspended' },
-]
-
-const planColors: Record<string, string> = {
-  Free: 'bg-neutral-100 text-neutral-500',
-  Basic: 'bg-brand-100 text-brand-700',
-  Pro: 'bg-purple-100 text-purple-700',
-  Enterprise: 'bg-amber-100 text-amber-700',
-}
-
-const statusColors: Record<string, string> = {
-  Active: 'text-success-600',
-  Inactive: 'text-neutral-400',
-  Suspended: 'text-error-600',
-}
+import { listAdminUsers, type AdminUserListItem } from '@/lib/userAdminApi'
 
 function buildUserColumns(
   navigate: ReturnType<typeof useNavigate>,
-  onSuspendRequest: (user: UserListItem) => void,
-): ColumnDef<UserListItem>[] {
+  onSuspendRequest: (user: AdminUserListItem) => void,
+): ColumnDef<AdminUserListItem>[] {
   return [
     {
       accessorKey: 'name',
@@ -66,7 +32,7 @@ function buildUserColumns(
             </div>
             <div>
               <p className="text-sm font-medium text-neutral-800">{row.original.name}</p>
-              <p className="text-xs text-neutral-400">{row.original.email}</p>
+              <p className="text-xs text-neutral-400">{row.original.email ?? '—'}</p>
             </div>
           </div>
         )
@@ -75,42 +41,36 @@ function buildUserColumns(
     {
       accessorKey: 'phone',
       header: 'Phone',
-      cell: ({ row }) => (
+      cell: ({ row }) => row.original.phone ? (
         <a href={`tel:${row.original.phone}`} className="text-sm text-brand-600 hover:underline font-mono">
           {row.original.phone}
         </a>
-      ),
+      ) : <span className="text-sm text-neutral-400">—</span>,
     },
     {
-      accessorKey: 'userType',
-      header: 'Type',
+      accessorKey: 'businessName',
+      header: 'Business',
       cell: ({ row }) => (
-        <Badge variant={row.original.userType === 'Business Owner' ? 'brand' : 'info'} size="sm">
-          {row.original.userType}
-        </Badge>
-      ),
-    },
-    {
-      accessorKey: 'plan',
-      header: 'Plan',
-      cell: ({ row }) => (
-        <span className={cn('text-xs font-semibold px-2 py-0.5 rounded', planColors[row.original.plan])}>
-          {row.original.plan}
-        </span>
+        <div>
+          <p className="text-sm text-neutral-700">{row.original.businessName ?? '—'}</p>
+          {row.original.gstin && (
+            <p className="text-xs text-neutral-400 font-mono">{row.original.gstin}</p>
+          )}
+        </div>
       ),
     },
     {
       accessorKey: 'state',
       header: 'State',
-      cell: ({ row }) => <span className="text-sm text-neutral-600">{row.original.state}</span>,
+      cell: ({ row }) => <span className="text-sm text-neutral-600">{row.original.state ?? '—'}</span>,
     },
     {
-      accessorKey: 'status',
+      accessorKey: 'isActive',
       header: 'Status',
       cell: ({ row }) => (
-        <span className={cn('text-sm font-medium', statusColors[row.original.status])}>
-          {row.original.status}
-        </span>
+        <Badge variant={row.original.isActive ? 'success' : 'error'} size="sm" dot>
+          {row.original.isActive ? 'Active' : 'Suspended'}
+        </Badge>
       ),
     },
     {
@@ -125,7 +85,7 @@ function buildUserColumns(
           >
             View
           </Button>
-          {row.original.status === 'Active' && (
+          {row.original.isActive && (
             <Button
               variant="ghost"
               size="sm"
@@ -144,37 +104,38 @@ function buildUserColumns(
 export default function UserListPage() {
   const navigate = useNavigate()
   const [globalFilter, setGlobalFilter] = useState('')
-  const [userTypeFilter, setUserTypeFilter] = useState('')
-  const [planFilter, setPlanFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [stateFilter, setStateFilter] = useState('')
-  const [suspendTarget, setSuspendTarget] = useState<UserListItem | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'suspended'>('')
+  const [suspendTarget, setSuspendTarget] = useState<AdminUserListItem | null>(null)
+  const [page, setPage] = useState(1)
+  const pageSize = 20
 
   const columns = useMemo(
     () => buildUserColumns(navigate, (user) => setSuspendTarget(user)),
     [navigate],
   )
 
+  // Server-side search + status filter; debounce omitted for simplicity (fires on every keystroke,
+  // 5-min staleTime + keepPreviousData masks the latency).
   const { data, isLoading } = useQuery({
-    queryKey: ['users'],
-    queryFn: async () => { await new Promise(r => setTimeout(r, 300)); return mockUsers },
+    queryKey: ['admin-users', { page, pageSize, search: globalFilter, statusFilter }],
+    queryFn: () => listAdminUsers({
+      page,
+      pageSize,
+      search: globalFilter || undefined,
+      isActive: statusFilter === 'active' ? true : statusFilter === 'suspended' ? false : undefined,
+    }),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
   })
 
-  const filteredData = useMemo(() => {
-    return (data ?? []).filter(d => {
-      if (userTypeFilter && d.userType !== userTypeFilter) return false
-      if (planFilter && d.plan !== planFilter) return false
-      if (statusFilter && d.status !== statusFilter) return false
-      if (stateFilter && d.state !== stateFilter) return false
-      return true
-    })
-  }, [data, userTypeFilter, planFilter, statusFilter, stateFilter])
+  const items = data?.items ?? []
+  const totalCount = data?.totalCount ?? 0
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Users"
-        subtitle={`${(data ?? []).length} total users`}
+        subtitle={`${totalCount} total user${totalCount === 1 ? '' : 's'}`}
         actions={
           <>
             <Button variant="secondary" size="sm" leftIcon={<Download className="h-4 w-4" />}>
@@ -220,81 +181,65 @@ export default function UserListPage() {
         <div className="flex flex-wrap gap-3 items-end">
           <div className="w-72">
             <Input
-              placeholder="Search by name, phone, PAN, GSTIN..."
+              placeholder="Search by name, phone, email, business, GSTIN…"
               value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
+              onChange={(e) => { setGlobalFilter(e.target.value); setPage(1) }}
               prefix={<Search className="h-4 w-4" />}
               size="sm"
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">User Type</label>
-            <select
-              value={userTypeFilter}
-              onChange={(e) => setUserTypeFilter(e.target.value)}
-              className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label="Filter by User Type"
-            >
-              <option value="">All Types</option>
-              <option value="Business Owner">Business Owner</option>
-              <option value="Employee">Employee</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">Plan</label>
-            <select
-              value={planFilter}
-              onChange={(e) => setPlanFilter(e.target.value)}
-              className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label="Filter by Plan"
-            >
-              <option value="">All Plans</option>
-              <option value="Free">Free</option>
-              <option value="Basic">Basic</option>
-              <option value="Pro">Pro</option>
-              <option value="Enterprise">Enterprise</option>
-            </select>
-          </div>
-          <div>
             <label className="text-xs font-medium text-neutral-500 block mb-1">Status</label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as '' | 'active' | 'suspended')
+                setPage(1)
+              }}
               className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
               aria-label="Filter by Status"
             >
               <option value="">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-              <option value="Suspended">Suspended</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">State</label>
-            <select
-              value={stateFilter}
-              onChange={(e) => setStateFilter(e.target.value)}
-              className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label="Filter by State"
-            >
-              <option value="">All States</option>
-              <option value="Maharashtra">Maharashtra</option>
-              <option value="Karnataka">Karnataka</option>
-              <option value="Gujarat">Gujarat</option>
-              <option value="Delhi">Delhi</option>
-              <option value="Tamil Nadu">Tamil Nadu</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
             </select>
           </div>
         </div>
       </Card>
 
       <DataTable
-        data={filteredData}
+        data={items}
         columns={columns}
         loading={isLoading}
-        globalFilter={globalFilter}
         onRowClick={(row) => void navigate(`/users/${row.id}`)}
       />
+
+      {/* Pagination */}
+      {data && data.totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-neutral-500">
+            Page {data.page} of {data.totalPages} · {totalCount} users
+          </span>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!data.hasPreviousPage}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!data.hasNextPage}
+              onClick={() => setPage(p => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

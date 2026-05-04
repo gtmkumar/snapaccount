@@ -2,6 +2,7 @@ using AuthService.Application.Admin.Queries.GetAuditEvents;
 using SnapAccount.Shared.Domain;
 using AuthService.Application.Admin.Queries.GetTeamMembers;
 using AuthService.Application.Admin.Queries.GetUserDetail;
+using AuthService.Application.Admin.Queries.ListUsers;
 using AuthService.Application.Otp.Commands.SendOtp;
 using AuthService.Application.Otp.Commands.VerifyOtp;
 using AuthService.Application.RefreshTokens.Commands.RefreshToken;
@@ -60,6 +61,16 @@ public sealed class Auth : EndpointGroupBase
             int? limit, Guid? actorUserId, ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetAuditEventsQuery(limit ?? 20, actorUserId), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+        }).RequireAuthorization();
+
+        // GET /auth/admin/users?page=&pageSize=&search=&isActive= — paginated user list
+        groupBuilder.MapGet("/admin/users", static async (
+            int? page, int? pageSize, string? search, bool? isActive,
+            ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(
+                new ListUsersQuery(page ?? 1, pageSize ?? 20, search, isActive), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
         }).RequireAuthorization();
 
