@@ -36,6 +36,9 @@ public interface IItrDbContext
     /// <summary>Refund status polling log in <c>itr.refund_status_log</c>.</summary>
     DbSet<RefundStatusEntry> RefundStatusEntries { get; }
 
+    /// <summary>Assessee-raised grievances in <c>itr.grievances</c> (P6-HANDOFF-23).</summary>
+    DbSet<Grievance> Grievances { get; }
+
     // ── Phase 5 legacy entities ─────────────────────────────────────────────
 
     /// <summary>Tax computation records in <c>itr.tax_computations</c>.</summary>

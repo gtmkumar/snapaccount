@@ -5,6 +5,7 @@ using ItrService.Application.Interfaces;
 using ItrService.Infrastructure.Messaging;
 using ItrService.Infrastructure.Persistence;
 using ItrService.Infrastructure.Persistence.Repositories;
+using ItrService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -62,6 +63,10 @@ public static class DependencyInjection
 
         // ── Repositories ──────────────────────────────────────────────────────
         services.AddScoped<ITaxComputationRepository, TaxComputationRepository>();
+
+        // ── SEC-041: server-side PAN encryption ──────────────────────────────
+        services.AddSingleton<ItrService.Application.Common.Interfaces.IPanEncryptionService,
+            AesPanEncryptionService>();
 
         // ── Auth / CurrentUser ────────────────────────────────────────────────
         services.AddHttpContextAccessor();
