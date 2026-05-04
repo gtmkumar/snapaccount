@@ -5,6 +5,7 @@ using LoanService.Application.LoanApplications.Commands.CloseApplication;
 using LoanService.Application.LoanApplications.Commands.GeneratePackage;
 using LoanService.Application.LoanApplications.Commands.RecordBankDecision;
 using LoanService.Application.Consents.Queries.GetConsentCatalog;
+using LoanService.Application.Dashboard.Queries.GetDashboardStats;
 using LoanService.Application.LoanApplications.Commands.RecordConsent;
 using LoanService.Application.LoanApplications.Commands.RecordDisbursement;
 using LoanService.Application.LoanApplications.Commands.StartApplication;
@@ -152,6 +153,17 @@ public sealed class Loans : EndpointGroupBase
             .WithName("GetLoanConsentCatalog")
             .WithSummary("Versioned loan consent text catalog")
             .WithDescription("Returns current (non-retired) consent text per type for the requested locale. Mobile echoes the returned textVersion in RecordConsent so DPDP audit trail ties back to exactly what the user saw.");
+
+        // ── Admin Dashboard ───────────────────────────────────────────────────
+
+        groupBuilder.MapGet("/admin/dashboard-stats", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetDashboardStatsQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetLoanAdminDashboardStats")
+            .WithSummary("Active loan applications count for the admin cross-service dashboard.");
 
         // ── Webhooks (no auth — HMAC verified in handler) ─────────────────────
 

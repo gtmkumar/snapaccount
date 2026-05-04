@@ -1,4 +1,5 @@
 using CallbackService.Application.Callbacks.Commands.AddNote;
+using CallbackService.Application.Dashboard.Queries.GetDashboardStats;
 using CallbackService.Application.Callbacks.Commands.AssignCallback;
 using CallbackService.Application.Callbacks.Commands.CancelCallback;
 using CallbackService.Application.Callbacks.Commands.CompleteCallback;
@@ -102,6 +103,19 @@ public sealed class Callbacks : EndpointGroupBase
             .RequireRateLimiting("standard")
             .WithName("GetCallbackKpi")
             .WithSummary("Returns daily KPI snapshot for the authenticated user's organisation.");
+
+        // GET /callbacks/admin/dashboard-stats — admin-only count for cross-service dashboard
+        g.MapGet("/admin/dashboard-stats", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetDashboardStatsQuery(), ct);
+            return result.IsSuccess
+                ? Results.Ok(result.Value)
+                : Results.Problem(result.Error.Message);
+        })
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GetCallbackAdminDashboardStats")
+            .WithSummary("Open callback count for the admin cross-service dashboard.");
     }
 
     private static async Task<IResult> RequestCallback(

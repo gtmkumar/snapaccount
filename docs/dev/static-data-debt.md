@@ -55,6 +55,25 @@ Greppable marker comment (added to live offenders during PR #7):
   states wired. The seed at `database/dev-seed/200_dev_business_data.sql`
   inserts two banks (HDFC, ICICI) so the section renders against real data.
 
+## 🟢 Resolved in PR #8
+
+### `src/admin/src/pages/dashboard/DashboardPage.tsx` — top counters
+- `mockDashboardData` (5 cross-service counts) replaced with a real
+  `getAdminDashboardStats()` fan-out call defined in `lib/dashboardApi.ts`.
+- Each service now has its own thin `GET /<service>/admin/dashboard-stats`
+  query handler that returns just the count it owns (DocumentService:
+  pending docs; GstService: returns due today; ItrService: filings awaiting
+  e-verification; CallbackService: open callbacks; LoanService: active apps).
+- Frontend fans out 5 parallel requests via `Promise.all`; failed services
+  land in `data.errors` and the affected count is undefined so the UI can
+  render the rest. Threshold flags (`pendingDocumentsOverThreshold`,
+  `gstReturnsDueTodayUrgent`) are now derived in the component, not
+  fabricated server-side.
+- Refresh interval 30s preserved.
+- **Still mocked on the same page** (separate follow-ups):
+  `mockActivityData{7,30,90}D`, `mockTeamWorkload`, `mockChatQueue`,
+  `mockAuditEvents`.
+
 ---
 
 ## 🟢 Pages already wired correctly (audited, no debt)
