@@ -42,6 +42,14 @@ public static class DependencyInjection
         // ICurrentUser — reads Firebase claims from HttpContext
         services.AddScoped<ICurrentUser, CurrentUser>();
 
+        // SEC-031: Redis-backed IDistributedCache for cross-pod recurring-job dedupe.
+        var redisConnectionString = configuration["REDIS_CONNECTION_STRING"] ?? "localhost:6379";
+        services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = redisConnectionString;
+            options.InstanceName = "notification:";
+        });
+
         // HTTP clients for channel adapters
         services.AddHttpClient("FCM");
         services.AddHttpClient("MSG91");
