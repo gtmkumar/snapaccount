@@ -97,16 +97,24 @@ jobs:
         run: dotnet build --no-restore -c Release
 
       - name: Run unit tests
-        working-directory: backend
+        # `tests/` is a directory of project folders, not a project/sln —
+        # `dotnet test` needs each project explicitly (or the solution file
+        # at the repo root). Discover and run all .csproj under tests/unit.
+        working-directory: ${{ github.workspace }}
         run: |
-          dotnet test tests/ \
-            --no-build \
-            -c Release \
-            --logger "trx;LogFileName=test-results.trx" \
-            --logger "console;verbosity=normal" \
-            --collect:"XPlat Code Coverage" \
-            --results-directory ./TestResults \
-            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+          set -e
+          find tests/unit -name '*.csproj' -print0 | while IFS= read -r -d '' proj; do
+            echo "::group::$(basename "$proj")"
+            dotnet test "$proj" \
+              --no-build \
+              -c Release \
+              --logger "trx;LogFileName=$(basename "$proj" .csproj).trx" \
+              --logger "console;verbosity=normal" \
+              --collect:"XPlat Code Coverage" \
+              --results-directory ./backend/TestResults \
+              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+            echo "::endgroup::"
+          done
 
       - name: Upload test results
         if: always()
@@ -139,7 +147,9 @@ jobs:
           cache-dependency-path: src/admin/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        # @eslint/js@10 requires eslint@^10 but project pins eslint@^8.57.1.
+        # Until package.json is realigned, accept the peer-dep mismatch.
+        run: npm ci --legacy-peer-deps
 
       - name: Lint (ESLint + TypeScript)
         run: npm run lint
@@ -253,6 +263,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Lowercase service name (Docker tag rule)
+        id: lc
+        run: echo "service=$(echo '${{ matrix.service }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
       - name: Build Docker image (no push)
         uses: docker/build-push-action@v6
         with:
@@ -262,4 +276,4 @@ jobs:
           push: false
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
-          tags: snapaccount/${{ matrix.service }}:ci-test
+          tags: snapaccount/${{ steps.lc.outputs.service }}:ci-test
