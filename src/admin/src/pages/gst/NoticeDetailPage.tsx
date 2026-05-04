@@ -125,10 +125,13 @@ export default function NoticeDetailPage() {
     staleTime: 30_000,
   })
 
-  // Load draft from localStorage on mount
+  // SEC-042: Load draft from sessionStorage on mount.
+  // Notice response bodies often contain GSTIN, financial figures, and notice
+  // references — sensitive enough that they shouldn't survive tab close on a
+  // shared workstation. sessionStorage is per-tab and clears on close.
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(storageKey)
+      const saved = sessionStorage.getItem(storageKey)
       if (saved) {
         const parsed = JSON.parse(saved) as { subject?: string; body?: string; channel?: string; reference?: string }
         setSubject(parsed.subject ?? '')
@@ -143,10 +146,10 @@ export default function NoticeDetailPage() {
     }
   }, [storageKey, notice?.noticeNumber])
 
-  // Auto-save draft
+  // SEC-042: Auto-save draft to sessionStorage (not localStorage).
   const saveDraft = useCallback(() => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ subject, body, channel, reference }))
+      sessionStorage.setItem(storageKey, JSON.stringify({ subject, body, channel, reference }))
       setDraftSavedAt(new Date())
     } catch { /* noop */ }
   }, [storageKey, subject, body, channel, reference])
@@ -177,7 +180,7 @@ export default function NoticeDetailPage() {
     onSuccess: () => {
       toast.success(t('admin.gst.notice.action.responded.success'))
       setShowConfirm(false)
-      try { localStorage.removeItem(storageKey) } catch { /* noop */ }
+      try { sessionStorage.removeItem(storageKey) } catch { /* noop */ }
       void queryClient.invalidateQueries({ queryKey: ['gst-notice', noticeId] })
       void queryClient.invalidateQueries({ queryKey: ['gst-notices'] })
     },
