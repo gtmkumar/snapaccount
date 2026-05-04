@@ -30,8 +30,9 @@ Greppable marker comment (added to live offenders during PR #7):
 ### ~~`src/admin/src/pages/users/UserDetailPage.tsx`~~ — RESOLVED in PR #13
 All four mocks replaced with live API fetches. See "Resolved in PR #13" below.
 
-### `src/admin/src/pages/gst/GstFilingQueuePage.tsx`
-- `availableCAs` (line ~75) — should come from `GET /auth/users?role=CA`
+### ~~`src/admin/src/pages/gst/GstFilingQueuePage.tsx`~~ — RESOLVED in PR #14
+`availableCAs` mock replaced; assign-to dropdown now fetches live CAs via
+`GET /auth/admin/team-members?role=CA`. See "Resolved in PR #14" below.
 
 ### `src/admin/src/pages/users/UsersListPage.tsx` (suspect — verify)
 - Should be fully wired via `GET /admin/users?...` but worth re-checking.
@@ -62,6 +63,20 @@ All four mocks replaced with live API fetches. See "Resolved in PR #13" below.
   fabricated server-side.
 - Refresh interval 30s preserved.
 - **DashboardPage is now fully API-driven** as of PR #12. No mocks remain.
+
+## 🟢 Resolved in PR #14
+
+### `src/admin/src/pages/gst/GstFilingQueuePage.tsx` — assign-to CA dropdown
+- Removed the 4-row hardcoded `availableCAs` array.
+- Existing `GetTeamMembersQuery` extended with optional `Role` parameter
+  (whitelisted against `OperationalRoles` to prevent role-name spoofing).
+- Endpoint `GET /auth/admin/team-members` now accepts `?role=CA`.
+- New `getAdminTeamMembers(role?)` helper in `lib/dashboardApi.ts`.
+- AssignCell uses `useQuery({ enabled: isOpen })` so the CA list only
+  fetches when the dropdown is opened. 5-minute staleTime.
+- `load` count was fabricated server-side and is dropped from the UI; per-CA
+  workload is available via the existing dashboard endpoint
+  (`getAdminTeamWorkload`) but not yet wired here — separate UX iteration.
 
 ## 🟢 Resolved in PR #13
 

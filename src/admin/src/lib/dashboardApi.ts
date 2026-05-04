@@ -90,6 +90,22 @@ const TeamMemberSchema = z.object({
   role: z.string(),
 })
 const TeamMembersSchema = z.array(TeamMemberSchema)
+export type TeamMember = z.infer<typeof TeamMemberSchema>
+
+/**
+ * Fetches operational team members. With `role` set, returns just that
+ * role (e.g. "CA" for the GST filing-queue assign-to dropdown). Without
+ * a role, returns all operational roles (used by the team-workload widget
+ * via the higher-level getAdminTeamWorkload).
+ */
+export async function getAdminTeamMembers(role?: string): Promise<TeamMember[]> {
+  const errors: Record<string, string> = {}
+  const path = role
+    ? `/auth/admin/team-members?role=${encodeURIComponent(role)}`
+    : '/auth/admin/team-members'
+  const items = await safeFetch(path, TeamMembersSchema, errors, 'teamMembers')
+  return items ?? []
+}
 
 const UserWorkloadSchema = z.object({
   userId: z.string(),

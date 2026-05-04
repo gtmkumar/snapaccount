@@ -47,10 +47,11 @@ public sealed class Auth : EndpointGroupBase
         // DPDP Act 2023: Right to Erasure
         groupBuilder.MapDelete("/account", DeleteAccount).RequireAuthorization();
 
-        // GET /auth/admin/team-members — operational team list for the admin dashboard widget
-        groupBuilder.MapGet("/admin/team-members", static async (ISender sender, CancellationToken ct) =>
+        // GET /auth/admin/team-members?role= — operational team list for admin widgets
+        // (?role=CA used by the GST filing-queue assign-to dropdown)
+        groupBuilder.MapGet("/admin/team-members", static async (string? role, ISender sender, CancellationToken ct) =>
         {
-            var result = await sender.Send(new GetTeamMembersQuery(), ct);
+            var result = await sender.Send(new GetTeamMembersQuery(role), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
         }).RequireAuthorization();
 
