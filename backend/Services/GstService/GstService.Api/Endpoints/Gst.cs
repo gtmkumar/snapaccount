@@ -13,6 +13,7 @@ using GstService.Application.Invoices.Commands.BulkImportInvoices;
 using GstService.Application.Invoices.Commands.CreateGstInvoice;
 using GstService.Application.Invoices.Queries.ListGstInvoices;
 using GstService.Application.Invoices.Queries.ListReturnInvoices;
+using GstService.Application.ItcReconciliation.Commands.ReconcileItc;
 using GstService.Application.ItcReconciliation.Queries.GetItcMismatches;
 using GstService.Application.Notices.Commands.AssignNoticeToCa;
 using GstService.Application.Notices.Commands.CreateNotice;
@@ -81,6 +82,11 @@ public sealed class Gst : EndpointGroupBase
         // ── ITC Mismatches ───────────────────────────────────────────────────
         groupBuilder.MapGet("/itc-mismatches", GetItcMismatches)
             .RequireAuthorization().RequireRateLimiting("standard");
+
+        // POST /gst/itc-reconciliation — runs ITC reconciliation for org+period.
+        groupBuilder.MapPost("/itc-reconciliation", ReconcileItc)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("ReconcileItc");
 
         // ── Notices (Phase 6B — all real handlers) ───────────────────────────
         groupBuilder.MapGet("/notices", ListNotices)
@@ -224,6 +230,15 @@ public sealed class Gst : EndpointGroupBase
         return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
     }
 
+    private static async Task<IResult> ReconcileItc(ReconcileItcRequest req, ISender sender)
+    {
+        var result = await sender.Send(new ReconcileItcCommand(
+            req.OrganizationId, req.FinancialYear, req.PeriodMonth, req.ReconciliationType ?? "GSTR_2B"));
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
+    }
+
     // ── Notice handlers ───────────────────────────────────────────────────────
 
     private static async Task<IResult> ListNotices(
@@ -301,6 +316,8 @@ internal record CreateGstReturnRequest(
 internal record FileReturnRequest(string ArnNumber);
 
 internal record FileNilReturnRequest(Guid GstReturnId, string Gstin, string ReturnType, int Year, int Month);
+internal record ReconcileItcRequest(
+    Guid OrganizationId, string FinancialYear, int PeriodMonth, string? ReconciliationType = "GSTR_2B");
 
 internal record AddReturnInvoiceRequest(
     Guid OrganizationId, string InvoiceType, string InvoiceNumber, DateOnly InvoiceDate,
