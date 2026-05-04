@@ -13,6 +13,7 @@ using GstService.Application.Invoices.Commands.BulkImportInvoices;
 using GstService.Application.Invoices.Commands.CreateGstInvoice;
 using GstService.Application.Invoices.Queries.ListGstInvoices;
 using GstService.Application.Invoices.Queries.ListReturnInvoices;
+using GstService.Application.Dashboard.Queries.GetActivity;
 using GstService.Application.Dashboard.Queries.GetDashboardStats;
 using GstService.Application.ItcReconciliation.Commands.ReconcileItc;
 using GstService.Application.ItcReconciliation.Queries.GetItcMismatches;
@@ -128,6 +129,16 @@ public sealed class Gst : EndpointGroupBase
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetGstAdminDashboardStats")
             .WithSummary("GST returns due today for the admin cross-service dashboard.");
+
+        // GET /gst/admin/activity?range=7D|30D|90D — daily return-creation series
+        groupBuilder.MapGet("/admin/activity", static async (string? range, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetActivityQuery(range ?? "7D"), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetGstAdminActivity")
+            .WithSummary("Daily GST return creation counts for the cross-service activity chart.");
     }
 
     // ── Return handlers ───────────────────────────────────────────────────────

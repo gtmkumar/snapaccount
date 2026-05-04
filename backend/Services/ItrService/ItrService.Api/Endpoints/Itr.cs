@@ -1,5 +1,6 @@
 using ItrService.Application.Assessees.Commands.UpdateProfile;
 using ItrService.Application.Assessees.Queries.GetProfile;
+using ItrService.Application.Dashboard.Queries.GetActivity;
 using ItrService.Application.Dashboard.Queries.GetDashboardStats;
 using ItrService.Application.DocChecklist.Queries.GetDocChecklist;
 using ItrService.Application.Grievances.Commands.CreateGrievance;
@@ -337,6 +338,16 @@ public sealed class Itr : EndpointGroupBase
         })
         .WithName("GetItrAdminDashboardStats")
         .WithSummary("ITR verifications-pending count for the admin cross-service dashboard.")
+        .RequireAuthorization()
+        .WithTags("Admin");
+
+        group.MapGet("/admin/activity", async (string? range, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetActivityQuery(range ?? "7D"), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+        })
+        .WithName("GetItrAdminActivity")
+        .WithSummary("Daily ITR filing creation counts for the cross-service activity chart.")
         .RequireAuthorization()
         .WithTags("Admin");
     }

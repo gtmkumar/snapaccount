@@ -71,8 +71,20 @@ Greppable marker comment (added to live offenders during PR #7):
   fabricated server-side.
 - Refresh interval 30s preserved.
 - **Still mocked on the same page** (separate follow-ups):
-  `mockActivityData{7,30,90}D`, `mockTeamWorkload`, `mockChatQueue`,
-  `mockAuditEvents`.
+  `mockTeamWorkload`, `mockChatQueue`, `mockAuditEvents`.
+
+## 🟢 Resolved in PR #9
+
+### `DashboardPage.tsx` — activity chart
+- Removed `mockActivityData{7,30,90}D` and the `activityDataByPeriod` map.
+- New `getAdminDashboardActivity(range)` helper in `lib/dashboardApi.ts`
+  fans out 3 parallel calls to `/<svc>/admin/activity?range=` (Documents,
+  Gst, Itr), merges by date, fills missing days with zeros, formats the
+  date column for the recharts axis. Failed services land in errors and
+  the affected series stays at zero — chart still renders.
+- 1-minute refetch interval (separate from the 30s stats interval).
+- Backend: 3 new admin-only IQuery slices each returning a daily
+  `(DateOnly, int)` series with FluentValidation on the range whitelist.
 
 ---
 
