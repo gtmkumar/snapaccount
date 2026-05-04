@@ -532,3 +532,27 @@ export async function getLoanKpi(): Promise<LoanKpi> {
   const res = await api.get('/loans/kpi')
   return LoanKpiSchema.parse(res.data)
 }
+
+// ---------------------------------------------------------------------------
+// API Functions — Partner Banks (lightweight DTO list, used by Settings page)
+// ---------------------------------------------------------------------------
+
+/**
+ * Matches the canonical backend handler shape:
+ *   GetPartnerBanksQueryHandler → IReadOnlyList<PartnerBankDto>
+ *   { bankId, name, logoUrl?, adapterType, isActive, hasApiConfig }
+ */
+export const PartnerBankLiteSchema = z.object({
+  bankId: z.string(),
+  name: z.string(),
+  logoUrl: z.string().nullable().optional(),
+  adapterType: z.string(),
+  isActive: z.boolean(),
+  hasApiConfig: z.boolean(),
+})
+export type PartnerBankLite = z.infer<typeof PartnerBankLiteSchema>
+
+export async function getPartnerBanksLite(includeInactive = false): Promise<PartnerBankLite[]> {
+  const res = await api.get('/loans/partner-banks', { params: { includeInactive } })
+  return z.array(PartnerBankLiteSchema).parse(res.data)
+}

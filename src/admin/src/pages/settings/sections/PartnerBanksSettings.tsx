@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, TestTube } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
@@ -7,16 +8,17 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { AlertBanner } from '@/components/shared/AlertBanner'
-
-const mockBanks = [
-  { id: '1', name: 'HDFC Bank', type: 'Private', adapterType: 'REST JSON', status: 'Active', loanTypes: ['Business Loan', 'Working Capital'] },
-  { id: '2', name: 'SBI', type: 'Public Sector', adapterType: 'REST XML', status: 'Active', loanTypes: ['Business Loan', 'MSME-Mudra'] },
-  { id: '3', name: 'ICICI Bank', type: 'Private', adapterType: 'Manual Review', status: 'Inactive', loanTypes: ['Personal Loan'] },
-]
+import { getPartnerBanksLite } from '@/lib/loanApi'
 
 export function PartnerBanksSettings() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [authType, setAuthType] = useState('api-key')
+
+  const { data: banks, isLoading, isError, refetch } = useQuery({
+    queryKey: ['settings', 'partner-banks', { includeInactive: true }],
+    queryFn: () => getPartnerBanksLite(true),
+    staleTime: 30_000,
+  })
 
   return (
     <div className="space-y-6">
@@ -32,42 +34,65 @@ export function PartnerBanksSettings() {
         </Button>
       </div>
 
-      {/* Active banks */}
-      <div className="space-y-4">
-        {mockBanks.map((bank) => (
-          <Card key={bank.id}>
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                {/* Bank logo placeholder */}
-                <div className="h-12 w-20 rounded-lg bg-neutral-100 flex items-center justify-center border border-neutral-200">
-                  <span className="text-xs font-bold text-neutral-500 truncate px-2">{bank.name}</span>
+      {isLoading && (
+        <Card>
+          <p className="text-sm text-neutral-500">Loading partner banks…</p>
+        </Card>
+      )}
+
+      {isError && (
+        <AlertBanner
+          type="error"
+          title="Could not load partner banks"
+          description="The /loans/partner-banks request failed."
+          actions={
+            <Button variant="ghost" size="sm" onClick={() => void refetch()}>Retry</Button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && (banks?.length ?? 0) === 0 && (
+        <Card>
+          <p className="text-sm text-neutral-500">No partner banks configured yet. Click <em>Add Partner Bank</em> to onboard one.</p>
+        </Card>
+      )}
+
+      {!isLoading && !isError && (banks?.length ?? 0) > 0 && (
+        <div className="space-y-4">
+          {banks!.map((bank) => (
+            <Card key={bank.bankId}>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-20 rounded-lg bg-neutral-100 flex items-center justify-center border border-neutral-200">
+                    {bank.logoUrl ? (
+                      <img src={bank.logoUrl} alt={bank.name} className="max-h-10 max-w-16 object-contain" />
+                    ) : (
+                      <span className="text-xs font-bold text-neutral-500 truncate px-2">{bank.name}</span>
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-neutral-800">{bank.name}</span>
+                      <Badge variant="neutral" size="sm">{bank.adapterType}</Badge>
+                      <Badge variant={bank.isActive ? 'success' : 'neutral'} dot size="sm">
+                        {bank.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                      {bank.hasApiConfig && (
+                        <Badge variant="neutral" size="sm">API configured</Badge>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-neutral-800">{bank.name}</span>
-                    <Badge variant="neutral" size="sm">{bank.adapterType}</Badge>
-                    <Badge variant={bank.status === 'Active' ? 'success' : 'neutral'} dot size="sm">
-                      {bank.status}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-neutral-400">{bank.type}</span>
-                    <span className="text-neutral-200">·</span>
-                    <span className="text-xs text-neutral-500">
-                      Loan types: {bank.loanTypes.join(', ')}
-                    </span>
-                  </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button variant="ghost" size="sm" leftIcon={<TestTube className="h-3.5 w-3.5" />}>Test</Button>
+                  <Button variant="ghost" size="sm" leftIcon={<Edit className="h-3.5 w-3.5" />}>Edit</Button>
+                  <Button variant="ghost" size="sm" className="text-error-600 hover:bg-error-50" leftIcon={<Trash2 className="h-3.5 w-3.5" />}>Remove</Button>
                 </div>
               </div>
-              <div className="flex gap-2 shrink-0">
-                <Button variant="ghost" size="sm" leftIcon={<TestTube className="h-3.5 w-3.5" />}>Test</Button>
-                <Button variant="ghost" size="sm" leftIcon={<Edit className="h-3.5 w-3.5" />}>Edit</Button>
-                <Button variant="ghost" size="sm" className="text-error-600 hover:bg-error-50" leftIcon={<Trash2 className="h-3.5 w-3.5" />}>Remove</Button>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <AlertBanner
         type="info"
@@ -75,7 +100,7 @@ export function PartnerBanksSettings() {
         description="Each bank uses the IPartnerBankAdapter interface. Contact the backend team to implement a new adapter for banks with non-standard APIs."
       />
 
-      {/* Add bank modal */}
+      {/* Add bank modal — write side not yet wired to API; UI only. */}
       <Modal
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
@@ -91,7 +116,6 @@ export function PartnerBanksSettings() {
         }
       >
         <div className="space-y-6">
-          {/* Bank identity */}
           <section>
             <h3 className="text-sm font-semibold text-neutral-800 mb-4 pb-2 border-b border-neutral-100">Bank Identity</h3>
             <div className="space-y-4">
@@ -110,7 +134,6 @@ export function PartnerBanksSettings() {
             </div>
           </section>
 
-          {/* API integration */}
           <section>
             <h3 className="text-sm font-semibold text-neutral-800 mb-4 pb-2 border-b border-neutral-100">API Integration</h3>
             <div className="space-y-4">
@@ -163,7 +186,6 @@ export function PartnerBanksSettings() {
             </div>
           </section>
 
-          {/* Loan configuration */}
           <section>
             <h3 className="text-sm font-semibold text-neutral-800 mb-4 pb-2 border-b border-neutral-100">Loan Configuration</h3>
             <div className="space-y-4">
