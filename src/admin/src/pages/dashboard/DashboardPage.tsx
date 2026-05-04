@@ -25,6 +25,7 @@ import {
   getAdminChatQueueSnapshot,
   getAdminDashboardActivity,
   getAdminDashboardStats,
+  getAdminTeamWorkload,
 } from '@/lib/dashboardApi'
 
 // PR #8: counts now fetched live via getAdminDashboardStats() which fans out
@@ -32,14 +33,6 @@ import {
 // activity / team-workload / chat-queue / audit-events sections below remain
 // mocked — see docs/dev/static-data-debt.md (STATIC-DATA-DEBT-7).
 const PENDING_DOCS_THRESHOLD = 50
-
-const mockTeamWorkload = [
-  { name: 'Anjali Singh', role: 'Data Entry', assigned: 14, completed: 8, slaBreaches: 0 },
-  { name: 'Ravi Kumar', role: 'CA', assigned: 6, completed: 4, slaBreaches: 1 },
-  { name: 'Priya Sharma', role: 'Support Exec', assigned: 9, completed: 7, slaBreaches: 0 },
-  { name: 'Suresh Nair', role: 'Data Entry', assigned: 18, completed: 10, slaBreaches: 2 },
-  { name: 'Kavita Patel', role: 'CA', assigned: 5, completed: 5, slaBreaches: 0 },
-]
 
 const mockAuditEvents = [
   { id: '1', timestamp: new Date(Date.now() - 5 * 60_000), user: 'Anjali Singh', action: 'Document D-20260401-1234 approved' },
@@ -70,6 +63,12 @@ export default function DashboardPage() {
     queryKey: ['admin-dashboard-chat-queue'],
     queryFn: () => getAdminChatQueueSnapshot(10),
     refetchInterval: 30_000,
+  })
+
+  const { data: teamWorkload = [] } = useQuery({
+    queryKey: ['admin-dashboard-team-workload'],
+    queryFn: getAdminTeamWorkload,
+    refetchInterval: 60_000,
   })
 
   // Derive UI-shape from the merged API response. Per-service failures land
@@ -254,8 +253,15 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mockTeamWorkload.map((member) => (
-                    <tr key={member.name} className="border-b border-neutral-50 last:border-0 hover:bg-neutral-50 cursor-pointer">
+                  {teamWorkload.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-6 text-center text-sm text-neutral-400">
+                        No operational team members yet.
+                      </td>
+                    </tr>
+                  )}
+                  {teamWorkload.map((member) => (
+                    <tr key={member.userId} className="border-b border-neutral-50 last:border-0 hover:bg-neutral-50 cursor-pointer">
                       <td className="px-5 py-3">
                         <div>
                           <p className="font-medium text-neutral-800">{member.name}</p>

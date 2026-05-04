@@ -1,4 +1,5 @@
 using ChatService.Application.Dashboard.Queries.GetQueueSnapshot;
+using ChatService.Application.Dashboard.Queries.GetWorkloadByUser;
 using ChatService.Application.Threads.Commands.AddParticipant;
 using ChatService.Application.Threads.Commands.AssignThread;
 using ChatService.Application.Threads.Commands.EscalateThread;
@@ -149,6 +150,16 @@ public sealed class Chat : EndpointGroupBase
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetChatAdminQueueSnapshot")
             .WithSummary("Top-N open chat threads waiting for an agent — admin dashboard widget.");
+
+        // GET /chat/admin/workload-by-user — per-assignee chat thread counts
+        g.MapGet("/admin/workload-by-user", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetWorkloadByUserQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetChatAdminWorkloadByUser")
+            .WithSummary("Per-assignee chat workload — admin dashboard team-workload widget.");
     }
 
     // ── Handlers ──────────────────────────────────────────────────────────────

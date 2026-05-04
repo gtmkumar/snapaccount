@@ -70,8 +70,23 @@ Greppable marker comment (added to live offenders during PR #7):
   `gstReturnsDueTodayUrgent`) are now derived in the component, not
   fabricated server-side.
 - Refresh interval 30s preserved.
-- **Still mocked on the same page** (separate follow-ups):
-  `mockTeamWorkload`, `mockAuditEvents`.
+- **Still mocked on the same page** (separate follow-up):
+  `mockAuditEvents`.
+
+## 🟢 Resolved in PR #11
+
+### `DashboardPage.tsx` — team workload widget
+- Removed `mockTeamWorkload`. New `getAdminTeamWorkload()` fans out 3 calls:
+  - `GET /auth/admin/team-members` (operational roles only — DATA_ENTRY,
+    SUPPORT_EXEC, CA, OPS_MANAGER, SYS_ADMIN; excludes BUSINESS_OWNER /
+    EMPLOYEE)
+  - `GET /callbacks/admin/workload-by-user` (per-assignee active vs completed)
+  - `GET /chat/admin/workload-by-user` (per-assignee open vs resolved)
+- Frontend merges by userId, sums callback + chat workload per user, sorts
+  by assigned DESC. Members with zero assignments still appear.
+- 1-minute refetch.
+- **slaBreaches stays at 0** — no SLA tracker exists in any service yet;
+  field marked TODO. Renders the green "OK" pill for everyone today.
 
 ## 🟢 Resolved in PR #10
 

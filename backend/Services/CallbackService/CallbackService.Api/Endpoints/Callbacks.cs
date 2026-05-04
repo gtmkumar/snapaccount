@@ -1,5 +1,6 @@
 using CallbackService.Application.Callbacks.Commands.AddNote;
 using CallbackService.Application.Dashboard.Queries.GetDashboardStats;
+using CallbackService.Application.Dashboard.Queries.GetWorkloadByUser;
 using CallbackService.Application.Callbacks.Commands.AssignCallback;
 using CallbackService.Application.Callbacks.Commands.CancelCallback;
 using CallbackService.Application.Callbacks.Commands.CompleteCallback;
@@ -116,6 +117,16 @@ public sealed class Callbacks : EndpointGroupBase
             .RequireRateLimiting("standard")
             .WithName("GetCallbackAdminDashboardStats")
             .WithSummary("Open callback count for the admin cross-service dashboard.");
+
+        // GET /callbacks/admin/workload-by-user — per-assignee callback counts
+        g.MapGet("/admin/workload-by-user", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetWorkloadByUserQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetCallbackAdminWorkloadByUser")
+            .WithSummary("Per-assignee callback workload — admin dashboard team-workload widget.");
     }
 
     private static async Task<IResult> RequestCallback(

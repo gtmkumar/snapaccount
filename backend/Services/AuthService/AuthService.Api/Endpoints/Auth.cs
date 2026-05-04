@@ -1,3 +1,4 @@
+using AuthService.Application.Admin.Queries.GetTeamMembers;
 using AuthService.Application.Otp.Commands.SendOtp;
 using AuthService.Application.Otp.Commands.VerifyOtp;
 using AuthService.Application.RefreshTokens.Commands.RefreshToken;
@@ -42,6 +43,13 @@ public sealed class Auth : EndpointGroupBase
         groupBuilder.MapPost("/organizations", CreateOrganization).RequireAuthorization();
         // DPDP Act 2023: Right to Erasure
         groupBuilder.MapDelete("/account", DeleteAccount).RequireAuthorization();
+
+        // GET /auth/admin/team-members — operational team list for the admin dashboard widget
+        groupBuilder.MapGet("/admin/team-members", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetTeamMembersQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        }).RequireAuthorization();
     }
 
     // POST /auth/otp/send — SEC-011: rate limited to 5 req/10 min per client
