@@ -12,5 +12,8 @@ public interface ICallbackDbContext
     DbSet<Callback> Callbacks { get; }
     DbSet<CallNote> CallNotes { get; }
 
+    /// <summary>SEC-030: callback.assignments_log audit rows.</summary>
+    DbSet<AssignmentLog> AssignmentLogs { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }
