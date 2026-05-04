@@ -22,7 +22,16 @@ import { formatRelativeTime, cn } from '@/lib/utils'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { NoticesDueWidget } from '@/components/widgets/NoticesDueWidget'
 
-// Mock data — replace with TanStack Query + API calls
+// STATIC-DATA-DEBT-7: this whole module is mocked. Each block below needs
+// a real API endpoint (none exist yet) and a TanStack Query call.
+// Tracked in PR #7 inventory; do not extend the mocks — replace them.
+//
+// Required backend endpoints (all need new CQRS slices):
+//   GET /admin/dashboard/stats          → mockDashboardData
+//   GET /admin/dashboard/activity?range → mockActivityData{7,30,90}D
+//   GET /admin/dashboard/team-workload  → mockTeamWorkload
+//   GET /admin/chat/queue               → mockChatQueue
+//   GET /admin/audit-events?limit=N     → mockAuditEvents
 const mockDashboardData = {
   pendingDocuments: 48,
   gstReturnsDueToday: 3,

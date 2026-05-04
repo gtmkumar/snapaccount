@@ -12,6 +12,12 @@ import { usePermission } from '@/hooks/usePermission'
 const tabs = ['Profile', 'Documents', 'GST Returns', 'ITR History', 'Loans', 'Subscription', 'Audit Log'] as const
 type Tab = typeof tabs[number]
 
+// STATIC-DATA-DEBT-7: full mock — needs real API endpoints + TanStack Query.
+//   GET /admin/users/{id}                    → mockUser (incl. business profile)
+//   GET /admin/users/{id}/documents          → mockDocuments
+//   GET /admin/users/{id}/gst-returns        → mockGstReturns
+//   GET /admin/users/{id}/audit-log?limit=N  → mockAuditLog
+// All four endpoints need new CQRS slices in respective services.
 const mockUser = {
   id: '1', name: 'Rajesh Kumar', phone: '+91 98765 43210', email: 'rajesh@rktrade.in',
   plan: 'Pro', status: 'Active', joinedAt: '2025-06-15', lastActive: new Date(Date.now() - 2 * 3600000).toISOString(),
