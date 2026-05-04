@@ -37,6 +37,9 @@ public class ItrServiceDbContext(DbContextOptions<ItrServiceDbContext> options)
     /// <inheritdoc />
     public DbSet<RefundStatusEntry> RefundStatusEntries => Set<RefundStatusEntry>();
 
+    /// <inheritdoc />
+    public DbSet<Grievance> Grievances => Set<Grievance>();
+
     // ── Phase 5 legacy entities ────────────────────────────────────────────────
 
     /// <inheritdoc />

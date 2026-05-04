@@ -1,5 +1,8 @@
 using ItrService.Application.Assessees.Commands.UpdateProfile;
 using ItrService.Application.Assessees.Queries.GetProfile;
+using ItrService.Application.DocChecklist.Queries.GetDocChecklist;
+using ItrService.Application.Grievances.Commands.CreateGrievance;
+using ItrService.Application.Grievances.Queries.ListGrievances;
 using ItrService.Application.Filings.Commands.CaApprove;
 using ItrService.Application.Filings.Commands.CaReject;
 using ItrService.Application.Filings.Commands.CompareRegimes;
@@ -199,8 +202,8 @@ public sealed class Itr : EndpointGroupBase
         group.MapPost("/filings/{id:guid}/form16", async (
             Guid id, UploadForm16Request req, IMediator mediator, CancellationToken ct) =>
         {
-            var command = new UploadForm16Command(id, req.AssesseeId, req.GcsUri,
-                req.EmployeePanCipher, req.EmployeePanLast4);
+            // SEC-041: pass plaintext PAN; handler encrypts server-side and derives last-4.
+            var command = new UploadForm16Command(id, req.AssesseeId, req.GcsUri, req.EmployeePan);
             var result = await mediator.Send(command, ct);
             return result.IsSuccess
                 ? Results.Created($"/itr/filings/{id}/form16", result.Value)
@@ -281,6 +284,48 @@ public sealed class Itr : EndpointGroupBase
         .WithDescription("Returns all deduction sections (80C, 80D, etc.) with limits and regime availability.")
         .RequireAuthorization()
         .WithTags("Tax Configuration");
+
+        // ── Doc Checklist (P6-HANDOFF-23) ─────────────────────────────────────
+
+        group.MapGet("/doc-checklist", async (
+            Guid assesseeId, Guid filingId, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetDocChecklistQuery(assesseeId, filingId), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+        })
+        .WithName("GetDocChecklist")
+        .WithSummary("Per-filing document checklist")
+        .WithDescription("Returns the document checklist for a filing, with per-item provided state. Drives mobile 'Documents needed' UI.")
+        .RequireAuthorization()
+        .WithTags("Doc Checklist");
+
+        // ── Grievances (P6-HANDOFF-23) ────────────────────────────────────────
+
+        group.MapPost("/grievances", async (
+            CreateGrievanceRequest req, IMediator mediator, CancellationToken ct) =>
+        {
+            var command = new CreateGrievanceCommand(req.FilingId, req.Subject, req.Body, req.Category);
+            var result = await mediator.Send(command, ct);
+            return result.IsSuccess
+                ? Results.Created($"/itr/grievances/{result.Value.GrievanceId}", result.Value)
+                : MapError(result.Error);
+        })
+        .WithName("CreateGrievance")
+        .WithSummary("Raise a grievance against a filing")
+        .RequireAuthorization()
+        .RequireRateLimiting("standard")
+        .WithTags("Grievances");
+
+        group.MapGet("/grievances", async (
+            Guid filingId, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new ListGrievancesQuery(filingId), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+        })
+        .WithName("ListGrievances")
+        .WithSummary("List grievances for a filing")
+        .RequireAuthorization()
+        .WithTags("Grievances");
     }
 
     /// <summary>Maps a <see cref="Error"/> to the appropriate HTTP result.</summary>
@@ -358,12 +403,18 @@ public sealed record MarkFiledRequest(string AcknowledgementNumber);
 /// <summary>Request body for e-verify.</summary>
 public sealed record EVerifyRequest(string VerificationMethod, string? ItrVObjectKey = null);
 
-/// <summary>Request body for upload Form 16.</summary>
+/// <summary>Request body for upload Form 16. SEC-041: PAN supplied plaintext, encrypted server-side.</summary>
 public sealed record UploadForm16Request(
     Guid AssesseeId,
     string GcsUri,
-    string EmployeePanCipher,
-    string EmployeePanLast4);
+    string EmployeePan);
+
+/// <summary>Request body for POST /itr/grievances (P6-HANDOFF-23).</summary>
+public sealed record CreateGrievanceRequest(
+    Guid FilingId,
+    string Subject,
+    string Body,
+    string Category);
 
 /// <summary>Request body for upload notice.</summary>
 public sealed record UploadNoticeRequest(

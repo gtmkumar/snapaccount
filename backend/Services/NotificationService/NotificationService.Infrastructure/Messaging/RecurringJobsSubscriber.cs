@@ -1,5 +1,6 @@
 using Google.Cloud.PubSub.V1;
 using MediatR;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -13,14 +14,19 @@ namespace NotificationService.Infrastructure.Messaging;
 /// Topic: snapaccount.recurring-jobs.due
 /// Subscription: notification-service-recurring-jobs-sub
 /// Supported job types: GST_DEADLINE_CHECK, ITR_DEADLINE_REMINDERS, ITR_REFUND_POLLING, SUBSCRIPTION_RENEWAL_CHECK.
-/// Idempotency: messages are deduped by event_id in-process via HashSet (restarted on process recycle).
+///
+/// SEC-031: Idempotency keyed on Pub/Sub MessageId via Redis (IDistributedCache)
+/// with 24h TTL. Replaces the prior in-process HashSet which would duplicate
+/// dispatch on multi-pod scale-out and forget on restart.
 /// </summary>
 public sealed class RecurringJobsSubscriber(
     IConfiguration configuration,
     IMediator mediator,
+    IDistributedCache cache,
     ILogger<RecurringJobsSubscriber> logger) : BackgroundService
 {
-    private readonly HashSet<string> _processedEventIds = new(StringComparer.Ordinal);
+    private static readonly TimeSpan DedupTtl = TimeSpan.FromHours(24);
+    private const string CachePrefix = "notification:recurring-jobs:dedup:";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -36,16 +42,21 @@ public sealed class RecurringJobsSubscriber(
         await subscriber.StartAsync(async (message, ct) =>
         {
             var eventId = message.MessageId;
+            var cacheKey = CachePrefix + eventId;
 
-            // In-process dedupe
-            lock (_processedEventIds)
+            // SEC-031: distributed dedupe via Redis. GetString returns non-null when
+            // we've seen this MessageId before (within TTL).
+            var existing = await cache.GetStringAsync(cacheKey, ct);
+            if (existing is not null)
             {
-                if (!_processedEventIds.Add(eventId))
-                {
-                    logger.LogDebug("RecurringJob duplicate event_id={EventId} — skipping", eventId);
-                    return SubscriberClient.Reply.Ack;
-                }
+                logger.LogDebug("RecurringJob duplicate event_id={EventId} — skipping (cache hit)", eventId);
+                return SubscriberClient.Reply.Ack;
             }
+
+            // Mark as in-flight FIRST so concurrent pods don't double-process.
+            // Failure-path below evicts the key so Pub/Sub redelivery can retry.
+            await cache.SetStringAsync(cacheKey, "1",
+                new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = DedupTtl }, ct);
 
             try
             {
@@ -66,8 +77,13 @@ public sealed class RecurringJobsSubscriber(
             catch (Exception ex)
             {
                 logger.LogError(ex, "RecurringJob processing failed: event_id={EventId}", eventId);
-                // Remove from dedup set so it will be retried on redelivery
-                lock (_processedEventIds) { _processedEventIds.Remove(eventId); }
+                // Evict so Pub/Sub redelivery is processed by some pod.
+                try { await cache.RemoveAsync(cacheKey, ct); }
+                catch (Exception evictEx)
+                {
+                    logger.LogWarning(evictEx,
+                        "RecurringJob dedupe-key eviction failed: event_id={EventId}", eventId);
+                }
                 return SubscriberClient.Reply.Nack;
             }
         });

@@ -10,4 +10,12 @@ public interface IChartOfAccountRepository
 
     /// <summary>Persists a new COA entry.</summary>
     Task<ChartOfAccount> AddAsync(ChartOfAccount account, CancellationToken ct = default);
+
+    /// <summary>
+    /// SEC-037: Looks up a single account by (org, account_code) for OCR
+    /// posting fallback. Returns null if missing — caller must fail-loud
+    /// rather than post to a wrong (cross-org) account.
+    /// </summary>
+    Task<ChartOfAccount?> GetByOrganizationAndCodeAsync(
+        Guid orgId, string accountCode, CancellationToken ct = default);
 }

@@ -14,6 +14,7 @@ public class CallbackDbContext(DbContextOptions<CallbackDbContext> options)
 {
     public DbSet<Callback> Callbacks => Set<Callback>();
     public DbSet<CallNote> CallNotes => Set<CallNote>();
+    public DbSet<AssignmentLog> AssignmentLogs => Set<AssignmentLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

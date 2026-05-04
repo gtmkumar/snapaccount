@@ -35,7 +35,8 @@ public sealed class BootstrapOrganizationChartOfAccountsCommandValidator
 /// </summary>
 public sealed class BootstrapOrganizationChartOfAccountsCommandHandler(
     ICoaTemplateRepository templateRepository,
-    IChartOfAccountRepository coaRepository)
+    IChartOfAccountRepository coaRepository,
+    ICurrentUser currentUser)
     : ICommandHandler<BootstrapOrganizationChartOfAccountsCommand, BootstrapCoaResponse>
 {
     /// <inheritdoc />
@@ -43,6 +44,12 @@ public sealed class BootstrapOrganizationChartOfAccountsCommandHandler(
         BootstrapOrganizationChartOfAccountsCommand request,
         CancellationToken cancellationToken)
     {
+        // SEC-032: caller must be authenticated and request.OrgId must match their org.
+        // NotFound (not Forbidden) to avoid leaking org existence.
+        if (!currentUser.IsAuthenticated || currentUser.OrganizationId is null
+            || currentUser.OrganizationId.Value != request.OrgId)
+            return Error.NotFound("Organization.NotFound", $"Organization {request.OrgId} not found.");
+
         var templates = await templateRepository.GetAllTemplatesAsync(cancellationToken);
         var existing = await coaRepository.GetByOrganizationAsync(request.OrgId, cancellationToken);
         var existingCodes = existing.Select(a => a.AccountCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
