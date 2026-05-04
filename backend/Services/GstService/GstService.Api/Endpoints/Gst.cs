@@ -13,6 +13,7 @@ using GstService.Application.Invoices.Commands.BulkImportInvoices;
 using GstService.Application.Invoices.Commands.CreateGstInvoice;
 using GstService.Application.Invoices.Queries.ListGstInvoices;
 using GstService.Application.Invoices.Queries.ListReturnInvoices;
+using GstService.Application.Admin.Queries.GetUserReturns;
 using GstService.Application.Dashboard.Queries.GetActivity;
 using GstService.Application.Dashboard.Queries.GetDashboardStats;
 using GstService.Application.ItcReconciliation.Commands.ReconcileItc;
@@ -139,6 +140,17 @@ public sealed class Gst : EndpointGroupBase
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetGstAdminActivity")
             .WithSummary("Daily GST return creation counts for the cross-service activity chart.");
+
+        // GET /gst/admin/orgs/{organizationId}/returns?limit=N — recent returns for a user's org
+        groupBuilder.MapGet("/admin/orgs/{organizationId:guid}/returns", static async (
+            Guid organizationId, int? limit, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetUserReturnsQuery(organizationId, limit ?? 20), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetAdminOrgGstReturns")
+            .WithSummary("Recent GST returns for a specific organisation — admin per-user detail view.");
     }
 
     // ── Return handlers ───────────────────────────────────────────────────────

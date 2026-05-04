@@ -69,10 +69,12 @@ const AuditEventSchema = z.object({
 const AuditEventsSchema = z.array(AuditEventSchema)
 export type AuditEvent = z.infer<typeof AuditEventSchema>
 
-export async function getAdminAuditEvents(limit = 20): Promise<AuditEvent[]> {
+export async function getAdminAuditEvents(limit = 20, actorUserId?: string): Promise<AuditEvent[]> {
   const errors: Record<string, string> = {}
+  const qs = new URLSearchParams({ limit: String(limit) })
+  if (actorUserId) qs.set('actorUserId', actorUserId)
   const items = await safeFetch(
-    `/auth/admin/audit-events?limit=${limit}`,
+    `/auth/admin/audit-events?${qs.toString()}`,
     AuditEventsSchema, errors, 'audit',
   )
   return items ?? []
