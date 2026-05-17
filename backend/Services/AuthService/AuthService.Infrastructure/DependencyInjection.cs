@@ -39,7 +39,7 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         // SEC-018: DB password via user-secrets / env var DB_PASSWORD — never in appsettings.json
-        var connectionString = configuration.GetConnectionString("DefaultConnection")
+        var connectionString = configuration.GetConnectionString("DefaultConnection") ?? configuration.GetConnectionString("snapaccount")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
         // JT pattern: register interceptors as scoped ISaveChangesInterceptor

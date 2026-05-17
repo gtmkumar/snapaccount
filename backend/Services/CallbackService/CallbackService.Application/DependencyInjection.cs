@@ -18,8 +18,7 @@ public static class DependencyInjection
         services.AddApplicationServices(typeof(DependencyInjection).Assembly);
 
         // SEC-026: RBAC PermissionBehavior — runs last in pipeline after validation
-        services.AddMediatR(cfg =>
-            cfg.AddOpenBehavior(typeof(PermissionBehavior<,>)));
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(PermissionBehavior<,>));
 
         return services;
     }

@@ -33,7 +33,7 @@ public static class DependencyInjection
         // Application layer (MediatR pipeline, validators, PermissionBehavior)
         services.AddReportApplicationServices();
 
-        var connectionString = configuration.GetConnectionString("DefaultConnection")
+        var connectionString = configuration.GetConnectionString("DefaultConnection") ?? configuration.GetConnectionString("snapaccount")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
         services.AddScoped<ISaveChangesInterceptor, AuditableEntityInterceptor>();

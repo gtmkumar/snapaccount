@@ -17,6 +17,10 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
+    // Bind HostOptions from config (allows env HostOptions__BackgroundServiceExceptionBehavior=Ignore
+    // to keep host alive when a BackgroundService throws — dev-loop only).
+    builder.Services.Configure<HostOptions>(builder.Configuration.GetSection("HostOptions"));
+
     builder.Host.UseSerilog((ctx, lc) => lc
         .ReadFrom.Configuration(ctx.Configuration)
         .WriteTo.Console()
