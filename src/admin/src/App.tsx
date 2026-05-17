@@ -4,29 +4,26 @@ import { Toaster } from 'sonner'
 import { router } from './router'
 import { queryClient } from './lib/queryClient'
 import { ThemeProvider } from './contexts/ThemeContext'
-import { CommandPaletteProvider } from './contexts/CommandPaletteContext'
-import { KeyboardShortcutsProvider } from './contexts/KeyboardShortcutsContext'
 
+// Note: KeyboardShortcutsProvider and CommandPaletteProvider both depend on
+// useNavigate() and must be rendered INSIDE the RouterProvider. They are
+// mounted by ProtectedLayout (router.tsx) so all router-aware pages get them.
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <KeyboardShortcutsProvider>
-          <CommandPaletteProvider>
-            <RouterProvider router={router} />
-            <Toaster
-              position="top-right"
-              richColors
-              closeButton
-              duration={4000}
-              toastOptions={{
-                classNames: {
-                  toast: 'font-sans text-sm',
-                },
-              }}
-            />
-          </CommandPaletteProvider>
-        </KeyboardShortcutsProvider>
+        <RouterProvider router={router} />
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+          duration={4000}
+          toastOptions={{
+            classNames: {
+              toast: 'font-sans text-sm',
+            },
+          }}
+        />
       </ThemeProvider>
     </QueryClientProvider>
   )
