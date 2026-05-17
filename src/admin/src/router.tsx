@@ -2,6 +2,8 @@ import { createBrowserRouter, Navigate } from 'react-router'
 import { AppShell } from '@/components/layout/AppShell'
 import { AuthGuard } from '@/components/shared/AuthGuard'
 import { ForbiddenPage } from '@/components/shared/RoleGuard'
+import { CommandPaletteProvider } from '@/contexts/CommandPaletteContext'
+import { KeyboardShortcutsProvider } from '@/contexts/KeyboardShortcutsContext'
 import LoginPage from '@/pages/auth/LoginPage'
 import DashboardPage from '@/pages/dashboard/DashboardPage'
 import DocumentQueuePage from '@/pages/documents/DocumentQueuePage'
@@ -36,12 +38,18 @@ import CallbackDetailPage from '@/pages/callbacks/CallbackDetailPage'
 import CallbackKpiPage from '@/pages/callbacks/CallbackKpiPage'
 
 // Layout wrapper for protected routes
+// KeyboardShortcutsProvider uses useNavigate() so it must live inside the
+// RouterProvider tree — mounting it here keeps it scoped to authenticated app shell.
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
-      <AppShell>
-        {children}
-      </AppShell>
+      <KeyboardShortcutsProvider>
+        <CommandPaletteProvider>
+          <AppShell>
+            {children}
+          </AppShell>
+        </CommandPaletteProvider>
+      </KeyboardShortcutsProvider>
     </AuthGuard>
   )
 }
