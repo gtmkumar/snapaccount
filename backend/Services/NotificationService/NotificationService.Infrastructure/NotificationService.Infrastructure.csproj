@@ -11,6 +11,10 @@
     <PackageReference Include="Google.Cloud.PubSub.V1" Version="3.*" />
     <PackageReference Include="MediatR" Version="12.*" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.*" />
+    <!-- Pin Relational explicitly so it matches the version other transitive deps reference.
+         Without this, Npgsql.EFCore.PostgreSQL 10.0.4 wins resolution but the NotificationSeeder's
+         compiled assembly references 10.0.8 → FileNotFoundException at runtime. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.*" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.*">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
