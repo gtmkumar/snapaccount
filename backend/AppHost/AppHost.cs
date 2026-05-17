@@ -18,8 +18,19 @@ static IResourceBuilder<T> WithDevLoopDefaults<T>(IResourceBuilder<T> b) where T
 }
 
 // PostgreSQL resource (shared cluster with schema-per-service)
+// Uses pgvector/pgvector:pg17 image so the `vector` extension is available
+// (required by database/init/00_extensions_and_schemas.sql).
+// The init bind-mount runs database/init/*.sql on first container start,
+// creating all 12 schemas + extensions before any service-owned migration
+// runs. Run database/migrations/*.sql manually after AppHost startup for now;
+// a proper migration runner job is on the roadmap.
+var initScriptDir = Path.GetFullPath(Path.Combine(
+    builder.AppHostDirectory, "..", "..", "database", "init"));
+
 var postgres = builder.AddPostgres("postgres")
-    .WithEnvironment("POSTGRES_DB", "snapaccount");
+    .WithImage("pgvector/pgvector", "pg17")
+    .WithEnvironment("POSTGRES_DB", "snapaccount")
+    .WithInitFiles(initScriptDir);
 
 var snapAccountDb = postgres.AddDatabase("snapaccount");
 
