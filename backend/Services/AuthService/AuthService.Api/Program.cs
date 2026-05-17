@@ -22,6 +22,10 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
+    // Bind HostOptions from config (allows env HostOptions__BackgroundServiceExceptionBehavior=Ignore
+    // to keep host alive when a BackgroundService throws — dev-loop only).
+    builder.Services.Configure<HostOptions>(builder.Configuration.GetSection("HostOptions"));
+
     builder.Host.UseSerilog((ctx, lc) => lc
         .ReadFrom.Configuration(ctx.Configuration)
         .WriteTo.Console()
@@ -70,7 +74,16 @@ try
     // Health Checks
     builder.Services.AddHealthChecks();
 
-    // Authorization (Firebase middleware handles authentication)
+    // Authentication + Authorization
+    // Firebase JWT validation is implemented as a middleware (FirebaseAuthMiddleware) that
+    // sets HttpContext.User directly, but ASP.NET Core's RequireAuthorization() still needs
+    // an IAuthenticationService to be registered, otherwise the auth pipeline throws
+    // InvalidOperationException at request time. Register a no-op default scheme so the
+    // middleware's principal flows through unchallenged.
+    builder.Services.AddAuthentication("FirebaseMiddleware")
+        .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions,
+                   SnapAccount.Shared.Infrastructure.Auth.PassthroughAuthHandler>(
+            "FirebaseMiddleware", _ => { });
     builder.Services.AddAuthorization();
 
     // CustomExceptionHandler: maps ValidationException/NotFoundException/ForbiddenAccessException → ProblemDetails

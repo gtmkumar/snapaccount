@@ -15,10 +15,20 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
+    // Bind HostOptions from config (allows env HostOptions__BackgroundServiceExceptionBehavior=Ignore
+    // to keep host alive when a BackgroundService throws — dev-loop only).
+    builder.Services.Configure<HostOptions>(builder.Configuration.GetSection("HostOptions"));
+
     builder.Host.UseSerilog((ctx, lc) => lc
         .ReadFrom.Configuration(ctx.Configuration)
         .WriteTo.Console()
         .Enrich.WithProperty("Service", "AiService"));
+
+    // MediatR — AiService has no Application layer commands yet, but the shared
+    // DispatchDomainEventsInterceptor (registered by AddAiInfrastructure) requires IMediator.
+    // Scan the Infrastructure assembly so the registration is non-empty.
+    builder.Services.AddMediatR(cfg =>
+        cfg.RegisterServicesFromAssembly(typeof(AiService.Infrastructure.DependencyInjection).Assembly));
 
     builder.Services.AddAiInfrastructure(builder.Configuration);
 

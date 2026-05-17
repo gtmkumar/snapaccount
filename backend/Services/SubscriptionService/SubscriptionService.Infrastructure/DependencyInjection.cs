@@ -24,7 +24,7 @@ public static class DependencyInjection
         services.AddSubscriptionApplicationServices();
 
         var dbPassword = configuration["DB_PASSWORD"] ?? "postgresql";
-        var connectionString = (configuration.GetConnectionString("DefaultConnection")
+        var connectionString = (configuration.GetConnectionString("DefaultConnection") ?? configuration.GetConnectionString("snapaccount")
             ?? "Host=localhost;Port=5432;Database=snapaccount;Username=postgres;Password=#{DB_PASSWORD}#")
             .Replace("#{DB_PASSWORD}#", dbPassword);
 
