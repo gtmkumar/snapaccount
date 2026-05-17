@@ -53,4 +53,4 @@ VALUES
     ('DISBURSEMENT_MANDATE', '1.4', 'en',
      'I authorise the partner bank to disburse the approved loan amount directly to my registered bank account, after deducting any applicable processing fees as disclosed in the sanction letter.',
      TIMESTAMPTZ '2025-04-01 00:00:00+00')
-ON CONFLICT ON CONSTRAINT ux_loan_consent_catalog_type_version_locale DO NOTHING;
+ON CONFLICT (consent_type, text_version, locale) DO NOTHING;
