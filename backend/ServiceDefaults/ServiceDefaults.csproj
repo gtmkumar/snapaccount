@@ -13,11 +13,17 @@
 
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.1.0" />
     <PackageReference Include="Microsoft.Extensions.ServiceDiscovery" Version="10.1.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.14.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.14.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.14.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.14.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.14.0" />
+    <!-- Core packages — bumped to 1.15.2 to fix moderate-severity CVEs:
+         GHSA-g94r-2vxg-569j (OpenTelemetry.Api), GHSA-4625-4j76-fww9,
+         GHSA-mr8r-92fq-pj8p, GHSA-q834-8qmm-v933 (Exporter.OTLP). -->
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
+    <!-- Instrumentation packages have a separate release cadence; latest is 1.15.1.
+         Transitively pull in OpenTelemetry.Api 1.15.2 via the Exporter dep above,
+         which resolves the NU1902 advisory on OpenTelemetry.Api. -->
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
   </ItemGroup>
 
 </Project>
