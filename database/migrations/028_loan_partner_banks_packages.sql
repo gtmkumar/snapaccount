@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS loan.pdf_packages (
     submitted_to_bank_at    TIMESTAMPTZ,
     submitted_to_bank_id    UUID REFERENCES loan.partner_banks (id),
     -- Compliance retention: 7 years (DPDP + lending). GCS lifecycle mirrors this.
-    retention_until         DATE GENERATED ALWAYS AS ((generated_at + INTERVAL '7 years')::date) STORED,
+    retention_until         DATE,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at              TIMESTAMPTZ,
@@ -165,6 +165,23 @@ DROP TRIGGER IF EXISTS trg_pdf_packages_updated_at ON loan.pdf_packages;
 CREATE TRIGGER trg_pdf_packages_updated_at
     BEFORE UPDATE ON loan.pdf_packages
     FOR EACH ROW EXECUTE FUNCTION shared.set_updated_at();
+
+-- Auto-set retention_until = generated_at + 7 years (trigger; STORED generated columns
+-- can't use INTERVAL '7 years' because it's not immutable across timezones)
+CREATE OR REPLACE FUNCTION loan.set_pdf_package_retention_until()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.retention_until IS NULL THEN
+        NEW.retention_until := (NEW.generated_at + INTERVAL '7 years')::date;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_pdf_packages_retention_until ON loan.pdf_packages;
+CREATE TRIGGER trg_pdf_packages_retention_until
+    BEFORE INSERT ON loan.pdf_packages
+    FOR EACH ROW EXECUTE FUNCTION loan.set_pdf_package_retention_until();
 
 ALTER TABLE loan.pdf_packages ENABLE ROW LEVEL SECURITY;
 

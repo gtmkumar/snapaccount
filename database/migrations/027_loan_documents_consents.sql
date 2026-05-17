@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS loan.consents (
     anonymized_at               TIMESTAMPTZ,
     anonymization_reason        VARCHAR(200),
     -- Compliance retention: 7 years
-    retention_until             DATE GENERATED ALWAYS AS ((signed_at + INTERVAL '7 years')::date) STORED,
+    retention_until             DATE,
     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- NOTE: deliberately NO deleted_at — consents are not soft-deletable.
@@ -150,6 +150,23 @@ DROP TRIGGER IF EXISTS trg_consents_updated_at ON loan.consents;
 CREATE TRIGGER trg_consents_updated_at
     BEFORE UPDATE ON loan.consents
     FOR EACH ROW EXECUTE FUNCTION shared.set_updated_at();
+
+-- Auto-set retention_until = signed_at + 7 years (trigger; STORED generated columns
+-- can't use INTERVAL '7 years' because it's not immutable across timezones)
+CREATE OR REPLACE FUNCTION loan.set_consent_retention_until()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.retention_until IS NULL AND NEW.signed_at IS NOT NULL THEN
+        NEW.retention_until := (NEW.signed_at + INTERVAL '7 years')::date;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_consents_retention_until ON loan.consents;
+CREATE TRIGGER trg_consents_retention_until
+    BEFORE INSERT ON loan.consents
+    FOR EACH ROW EXECUTE FUNCTION loan.set_consent_retention_until();
 
 ALTER TABLE loan.consents ENABLE ROW LEVEL SECURITY;
 
