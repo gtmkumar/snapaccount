@@ -56,9 +56,7 @@ var accountingService = WithDevLoopDefaults(builder.AddProject<Projects.Accounti
     .WaitFor(snapAccountDb)
     .WithEnvironment("PUBSUB_SUBSCRIPTION_OCR", "accounting-service-ocr-sub")
     .WithEnvironment("PUBSUB_TOPIC_PREFIX", "snapaccount")
-    .WithEnvironment("GCP_PROJECT_ID", builder.Configuration["GCP_PROJECT_ID"] ?? "snapaccount-dev")
-    .WithHttpEndpoint(port: 5005, name: "fixed-http")
-    .WithHttpsEndpoint(port: 5006, name: "fixed-https");
+    .WithEnvironment("GCP_PROJECT_ID", builder.Configuration["GCP_PROJECT_ID"] ?? "snapaccount-dev");
 
 // GST Service — Phase 6B: GSTN/IRP/EWB adapter env vars (P6-HANDOFF-15)
 var gstService = WithDevLoopDefaults(builder.AddProject<Projects.GstService_Api>("gst-service"))
