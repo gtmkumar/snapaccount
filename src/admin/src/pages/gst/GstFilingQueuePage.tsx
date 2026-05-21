@@ -6,69 +6,31 @@ import { toast } from 'sonner'
 import { Search, ChevronDown } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { DataTable } from '@/components/ui/DataTable'
-import { Badge, StatusBadge } from '@/components/ui/Badge'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { AlertBanner } from '@/components/shared/AlertBanner'
-import { AmountDisplay } from '@/components/ui/AmountDisplay'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { t } from '@/i18n'
 import { getAdminTeamMembers, type TeamMember } from '@/lib/dashboardApi'
+import { getFilingQueue, type FilingQueueItem } from '@/lib/gstApi'
 
-interface GstQueueItem {
-  id: string
-  businessName: string
-  gstin: string
-  returnType: 'GSTR-1' | 'GSTR-3B' | 'GSTR-9'
-  period: string
-  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'FILED' | 'REVISION_NEEDED'
-  dueDate: string
-  taxPayable: number
-  assignedCa: string | null
-  slaExpiresAt: string
-}
-
-const mockGstQueue: GstQueueItem[] = [
-  {
-    id: '1', businessName: 'Sharma Trading Co.', gstin: '27AABCS1429B1ZB',
-    returnType: 'GSTR-3B', period: 'March 2026', status: 'PENDING_APPROVAL',
-    dueDate: new Date(Date.now() - 2 * 86400000).toISOString(), taxPayable: 48500,
-    assignedCa: 'CA Ravi Kumar', slaExpiresAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: '2', businessName: 'Nair Enterprises', gstin: '32BBBCN5678A1ZC',
-    returnType: 'GSTR-1', period: 'March 2026', status: 'DRAFT',
-    dueDate: new Date(Date.now() + 2 * 86400000).toISOString(), taxPayable: 0,
-    assignedCa: null, slaExpiresAt: new Date(Date.now() + 86400000).toISOString(),
-  },
-  {
-    id: '3', businessName: 'Patel Textiles Pvt Ltd', gstin: '24AAPCP2345B1Z2',
-    returnType: 'GSTR-3B', period: 'March 2026', status: 'APPROVED',
-    dueDate: new Date(Date.now() + 1 * 86400000).toISOString(), taxPayable: 125000,
-    assignedCa: 'CA Priya Sharma', slaExpiresAt: new Date(Date.now() + 3 * 3600000).toISOString(),
-  },
-  {
-    id: '4', businessName: 'Gupta Electrics', gstin: '07AACPG4567B1Z3',
-    returnType: 'GSTR-3B', period: 'February 2026', status: 'REVISION_NEEDED',
-    dueDate: new Date(Date.now() + 5 * 86400000).toISOString(), taxPayable: 67200,
-    assignedCa: 'CA Ravi Kumar', slaExpiresAt: new Date(Date.now() + 2 * 86400000).toISOString(),
-  },
-]
-
-function DueDateChip({ dueDate }: { dueDate: string }) {
+function DueDateChip({ dueDate }: { dueDate: string | null }) {
+  if (!dueDate) return <span className="text-sm text-neutral-400">{t('common.na')}</span>
   const now = new Date()
   const due = new Date(dueDate)
   const diffDays = (due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
 
   if (diffDays < 0) {
-    return <Badge variant="error" dot>Overdue {Math.abs(Math.floor(diffDays))}d</Badge>
+    return <Badge variant="error" dot>{t('gstQueue.overdue', { days: Math.abs(Math.floor(diffDays)) })}</Badge>
   }
   if (diffDays < 3) {
-    return <Badge variant="warning" dot>{Math.floor(diffDays)}d left</Badge>
+    return <Badge variant="warning" dot>{t('gstQueue.daysLeft', { days: Math.floor(diffDays) })}</Badge>
   }
   if (diffDays < 7) {
-    return <Badge variant="info" dot>{Math.floor(diffDays)}d left</Badge>
+    return <Badge variant="info" dot>{t('gstQueue.daysLeft', { days: Math.floor(diffDays) })}</Badge>
   }
   return <Badge variant="success" dot>{formatDate(dueDate)}</Badge>
 }
@@ -77,10 +39,12 @@ function AssignCell({
   row,
   assigningRowId,
   setAssigningRowId,
+  caList,
 }: {
-  row: GstQueueItem
+  row: FilingQueueItem
   assigningRowId: string | null
   setAssigningRowId: (id: string | null) => void
+  caList: TeamMember[]
 }) {
   const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -89,17 +53,9 @@ function AssignCell({
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null)
   const [caSearch, setCaSearch] = useState('')
 
-  // Live CA list — fetched only when the dropdown is open (per-row mount).
-  const { data: availableCAs = [] } = useQuery<TeamMember[]>({
-    queryKey: ['admin-team-members', 'CA'],
-    queryFn: () => getAdminTeamMembers('CA'),
-    enabled: isOpen,
-    staleTime: 5 * 60_000, // CA roster doesn't change often
-  })
-
   const filteredCAs = useMemo(
-    () => availableCAs.filter(ca => ca.name.toLowerCase().includes(caSearch.toLowerCase())),
-    [availableCAs, caSearch]
+    () => caList.filter(ca => ca.name.toLowerCase().includes(caSearch.toLowerCase())),
+    [caList, caSearch]
   )
 
   useEffect(() => {
@@ -147,7 +103,7 @@ function AssignCell({
         size="sm"
         onClick={handleButtonClick}
       >
-        {row.assignedCa ? 'Reassign' : 'Assign'} <ChevronDown size={14} className="inline ml-1" />
+        {row.assignedCaUserId ? t('gstQueue.reassign') : t('gstQueue.assign')} <ChevronDown size={14} className="inline ml-1" />
       </Button>
       {isOpen && dropdownPos && (
         <div
@@ -158,7 +114,7 @@ function AssignCell({
         >
           {/* Header */}
           <div className="px-4 py-3 border-b">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assign to CA</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('gstQueue.assignToCA')}</p>
           </div>
           {/* Search */}
           <div className="px-3 py-2 border-b">
@@ -169,7 +125,7 @@ function AssignCell({
                 type="text"
                 value={caSearch}
                 onChange={e => setCaSearch(e.target.value)}
-                placeholder="Search CA..."
+                placeholder={t('gstQueue.searchCA')}
                 className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 onClick={e => e.stopPropagation()}
                 onMouseDown={e => e.stopPropagation()}
@@ -179,7 +135,7 @@ function AssignCell({
           {/* CA List */}
           <div className="max-h-48 overflow-y-auto">
             {filteredCAs.length === 0 ? (
-              <div className="px-4 py-3 text-sm text-gray-400 text-center">No CAs found</div>
+              <div className="px-4 py-3 text-sm text-gray-400 text-center">{t('gstQueue.noCAsFound')}</div>
             ) : (
               filteredCAs.map(ca => (
                 <button
@@ -188,7 +144,7 @@ function AssignCell({
                   onClick={(e) => {
                     e.stopPropagation()
                     e.nativeEvent.stopImmediatePropagation()
-                    toast.success(`Assigned to ${ca.name}`)
+                    toast.success(t('gstQueue.assignedTo', { name: ca.name }))
                     handleClose()
                   }}
                 >
@@ -208,7 +164,7 @@ function AssignCell({
                 handleClose()
               }}
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -217,67 +173,69 @@ function AssignCell({
   )
 }
 
+const STATUS_VARIANT: Record<string, 'neutral' | 'warning' | 'info' | 'success' | 'error'> = {
+  DRAFT: 'neutral',
+  PENDING_APPROVAL: 'warning',
+  APPROVED: 'info',
+  FILED: 'success',
+  REVISION_NEEDED: 'error',
+}
+
 function buildGstColumns(
   navigate: ReturnType<typeof useNavigate>,
   assigningRowId: string | null,
   setAssigningRowId: (id: string | null) => void,
-): ColumnDef<GstQueueItem>[] {
+  caList: TeamMember[],
+): ColumnDef<FilingQueueItem>[] {
   return [
     {
       accessorKey: 'businessName',
-      header: 'Business',
+      header: t('gstQueue.col.business'),
       cell: ({ row }) => (
         <div>
-          <p className="text-sm font-medium text-neutral-800">{row.original.businessName}</p>
-          <p className="font-mono text-xs text-neutral-400">{row.original.gstin}</p>
+          <p className="text-sm font-medium text-neutral-800">
+            {row.original.businessName ?? <span className="text-neutral-400">{t('common.unknown')}</span>}
+          </p>
+          <p className="font-mono text-xs text-neutral-400">{row.original.orgId}</p>
         </div>
       ),
     },
     {
       accessorKey: 'returnType',
-      header: 'Return Type',
+      header: t('gstQueue.col.returnType'),
       cell: ({ row }) => (
         <Badge variant="gst">{row.original.returnType}</Badge>
       ),
     },
     {
-      accessorKey: 'period',
-      header: 'Period',
-      cell: ({ row }) => <span className="text-sm text-neutral-600">{row.original.period}</span>,
-    },
-    {
       accessorKey: 'status',
-      header: 'Status',
-      cell: ({ row }) => <StatusBadge status={row.original.status} />,
-    },
-    {
-      accessorKey: 'dueDate',
-      header: 'Due Date',
-      cell: ({ row }) => <DueDateChip dueDate={row.original.dueDate} />,
-    },
-    {
-      accessorKey: 'taxPayable',
-      header: 'Tax Payable',
+      header: t('gstQueue.col.status'),
       cell: ({ row }) => (
-        <AmountDisplay
-          amount={row.original.taxPayable}
-          colorCode
-          size="sm"
-        />
+        <Badge variant={STATUS_VARIANT[row.original.status] ?? 'neutral'}>
+          {row.original.status}
+        </Badge>
       ),
     },
     {
-      accessorKey: 'assignedCa',
-      header: 'Assigned CA',
-      cell: ({ row }) => (
-        <span className={cn('text-sm', row.original.assignedCa ? 'text-neutral-600' : 'text-warning-600 font-medium')}>
-          {row.original.assignedCa ?? 'Unassigned'}
-        </span>
-      ),
+      accessorKey: 'filingDeadline',
+      header: t('gstQueue.col.dueDate'),
+      cell: ({ row }) => <DueDateChip dueDate={row.original.filingDeadline} />,
+    },
+    {
+      accessorKey: 'assignedCaUserId',
+      header: t('gstQueue.col.assignedCA'),
+      cell: ({ row }) => {
+        const ca = caList.find(c => c.userId === row.original.assignedCaUserId)
+        return (
+          <span className={cn('text-sm', ca ? 'text-neutral-600' : 'text-warning-600 font-medium')}>
+            {ca ? ca.name : t('gstQueue.unassigned')}
+          </span>
+        )
+      },
     },
     {
       id: 'actions',
-      header: 'Actions',
+      header: t('gstQueue.col.actions'),
       cell: ({ row }) => (
         <div className="flex gap-2 items-center" onClick={(e) => e.stopPropagation()}>
           <Button
@@ -285,22 +243,23 @@ function buildGstColumns(
             size="sm"
             onClick={() => void navigate(`/gst/${row.original.id}`)}
           >
-            Review
+            {t('gstQueue.review')}
           </Button>
           {row.original.status === 'APPROVED' && (
             <Button
               variant="success"
               size="sm"
               className="whitespace-nowrap"
-              onClick={() => toast.success(`Filing initiated for ${row.original.gstin}`)}
+              onClick={() => toast.success(t('gstQueue.filingInitiated'))}
             >
-              File Now
+              {t('gstQueue.fileNow')}
             </Button>
           )}
           <AssignCell
             row={row.original}
             assigningRowId={assigningRowId}
             setAssigningRowId={setAssigningRowId}
+            caList={caList}
           />
         </div>
       ),
@@ -316,55 +275,72 @@ export default function GstFilingQueuePage() {
   const [caFilter, setCaFilter] = useState('')
   const [assigningRowId, setAssigningRowId] = useState<string | null>(null)
 
-  const columns = useMemo(
-    () => buildGstColumns(navigate, assigningRowId, setAssigningRowId),
-    [navigate, assigningRowId],
-  )
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['gst-queue'],
-    queryFn: async () => {
-      await new Promise(r => setTimeout(r, 300))
-      return mockGstQueue
-    },
+  // Live CA roster — loaded once, shared with all AssignCell dropdowns
+  const { data: caList = [] } = useQuery<TeamMember[]>({
+    queryKey: ['admin-team-members', 'CA'],
+    queryFn: () => getAdminTeamMembers('CA'),
+    staleTime: 5 * 60_000,
   })
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['gst', 'filing-queue', { status: statusFilter || undefined }],
+    queryFn: () => getFilingQueue({ status: statusFilter || undefined }),
+  })
+
+  const columns = useMemo(
+    () => buildGstColumns(navigate, assigningRowId, setAssigningRowId, caList),
+    [navigate, assigningRowId, caList],
+  )
 
   const filteredData = useMemo(() => {
     return (data ?? []).filter(d => {
       if (returnTypeFilter && d.returnType !== returnTypeFilter) return false
-      if (statusFilter && d.status !== statusFilter) return false
-      if (caFilter === 'Unassigned' && d.assignedCa !== null) return false
-      if (caFilter && caFilter !== 'Unassigned' && caFilter !== 'All CAs' && d.assignedCa !== caFilter) return false
+      if (caFilter === 'Unassigned' && d.assignedCaUserId !== null) return false
+      if (caFilter && caFilter !== 'Unassigned' && caFilter !== 'All CAs' && d.assignedCaUserId !== caFilter) return false
       return true
     })
-  }, [data, returnTypeFilter, statusFilter, caFilter])
+  }, [data, returnTypeFilter, caFilter])
 
-  const overdueCount = (data ?? []).filter(d => new Date(d.dueDate) < new Date()).length
+  const overdueCount = (data ?? []).filter(d => d.filingDeadline && new Date(d.filingDeadline) < new Date()).length
   const dueTodayCount = (data ?? []).filter(d => {
-    const diff = (new Date(d.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    if (!d.filingDeadline) return false
+    const diff = (new Date(d.filingDeadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
     return diff >= 0 && diff < 1
   }).length
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="GST Filing Queue"
-        subtitle={`${overdueCount > 0 ? `${overdueCount} overdue · ` : ''}${dueTodayCount} due today · ${(data ?? []).length} total`}
+        title={t('gstQueue.title')}
+        subtitle={`${overdueCount > 0 ? `${overdueCount} ${t('gstQueue.overdueSuffix')} · ` : ''}${dueTodayCount} ${t('gstQueue.dueTodaySuffix')} · ${(data ?? []).length} ${t('gstQueue.totalSuffix')}`}
       />
 
-      {/* Urgency alerts */}
-      {overdueCount > 0 && (
+      {/* Load error banner */}
+      {isError && (
         <AlertBanner
           type="error"
-          title="Overdue GST Returns"
-          description={`GSTR-3B for ${overdueCount} business${overdueCount > 1 ? 'es' : ''} is overdue. Late fees are accruing.`}
+          title={t('admin.gstQueue.loadError')}
+          actions={
+            <button type="button" onClick={() => void refetch()} className="text-xs underline">
+              {t('common.retry')}
+            </button>
+          }
         />
       )}
-      {dueTodayCount > 0 && !overdueCount && (
+
+      {/* Urgency alerts */}
+      {!isError && overdueCount > 0 && (
+        <AlertBanner
+          type="error"
+          title={t('gstQueue.overdueTitle')}
+          description={t('gstQueue.overdueDesc', { count: overdueCount })}
+        />
+      )}
+      {!isError && dueTodayCount > 0 && overdueCount === 0 && (
         <AlertBanner
           type="warning"
-          title="GST Returns Due Today"
-          description={`GSTR-1 deadline in 2 days for ${dueTodayCount} businesses.`}
+          title={t('gstQueue.dueTodayTitle')}
+          description={t('gstQueue.dueTodayDesc', { count: dueTodayCount })}
         />
       )}
 
@@ -373,7 +349,7 @@ export default function GstFilingQueuePage() {
         <div className="flex flex-wrap gap-3 items-end">
           <div className="w-64">
             <Input
-              placeholder="Search business or GSTIN..."
+              placeholder={t('gstQueue.searchPlaceholder')}
               value={globalFilter}
               onChange={(e) => setGlobalFilter(e.target.value)}
               prefix={<Search className="h-4 w-4" />}
@@ -381,47 +357,48 @@ export default function GstFilingQueuePage() {
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">Return Type</label>
+            <label className="text-xs font-medium text-neutral-500 block mb-1">{t('gstQueue.filterReturnType')}</label>
             <select
               value={returnTypeFilter}
               onChange={(e) => setReturnTypeFilter(e.target.value)}
               className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label="Filter by return type"
+              aria-label={t('gstQueue.filterReturnType')}
             >
-              <option value="">All Types</option>
+              <option value="">{t('gstQueue.allTypes')}</option>
               <option value="GSTR-1">GSTR-1</option>
               <option value="GSTR-3B">GSTR-3B</option>
               <option value="GSTR-9">GSTR-9</option>
             </select>
           </div>
           <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">Status</label>
+            <label className="text-xs font-medium text-neutral-500 block mb-1">{t('gstQueue.filterStatus')}</label>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label="Filter by status"
+              aria-label={t('gstQueue.filterStatus')}
             >
-              <option value="">All Statuses</option>
-              <option value="DRAFT">Draft</option>
-              <option value="PENDING_APPROVAL">Pending Approval</option>
-              <option value="APPROVED">Approved</option>
-              <option value="FILED">Filed</option>
-              <option value="REVISION_NEEDED">Revision Needed</option>
+              <option value="">{t('gstQueue.allStatuses')}</option>
+              <option value="DRAFT">{t('gstQueue.statusDraft')}</option>
+              <option value="PENDING_APPROVAL">{t('gstQueue.statusPendingApproval')}</option>
+              <option value="APPROVED">{t('gstQueue.statusApproved')}</option>
+              <option value="FILED">{t('gstQueue.statusFiled')}</option>
+              <option value="REVISION_NEEDED">{t('gstQueue.statusRevisionNeeded')}</option>
             </select>
           </div>
           <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">Assigned CA</label>
+            <label className="text-xs font-medium text-neutral-500 block mb-1">{t('gstQueue.filterCA')}</label>
             <select
               value={caFilter}
               onChange={(e) => setCaFilter(e.target.value)}
               className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label="Filter by CA"
+              aria-label={t('gstQueue.filterCA')}
             >
-              <option value="">All CAs</option>
-              <option value="Unassigned">Unassigned</option>
-              <option value="CA Ravi Kumar">CA Ravi Kumar</option>
-              <option value="CA Priya Sharma">CA Priya Sharma</option>
+              <option value="">{t('gstQueue.allCAs')}</option>
+              <option value="Unassigned">{t('gstQueue.unassigned')}</option>
+              {caList.map(ca => (
+                <option key={ca.userId} value={ca.userId}>{ca.name}</option>
+              ))}
             </select>
           </div>
         </div>

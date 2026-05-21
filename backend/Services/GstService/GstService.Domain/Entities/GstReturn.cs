@@ -40,6 +40,16 @@ public class GstReturn : BaseAuditableEntity
     public DateTime? ApprovedAt { get; private set; }
     public string? RejectionReason { get; private set; }
 
+    // Filing queue — denormalised for the admin CA assignment queue
+    /// <summary>Snapshot of the business/org name at the time the return was created.</summary>
+    public string? BusinessNameSnapshot { get; private set; }
+
+    /// <summary>CA user assigned to handle this return. FK → auth.user.id.</summary>
+    public Guid? AssignedCaUserId { get; private set; }
+
+    /// <summary>SLA deadline for this filing to be completed.</summary>
+    public DateTime? SlaExpiresAt { get; private set; }
+
     private readonly List<GstReturnLineItem> _lineItems = [];
     public IReadOnlyCollection<GstReturnLineItem> LineItems => _lineItems.AsReadOnly();
 
@@ -112,4 +122,10 @@ public class GstReturn : BaseAuditableEntity
         _lineItems.Add(item);
         return item;
     }
+
+    /// <summary>
+    /// Assigns a CA user to handle this return in the filing queue.
+    /// </summary>
+    /// <param name="caUserId">The user ID of the CA being assigned.</param>
+    public void AssignCa(Guid caUserId) => AssignedCaUserId = caUserId;
 }

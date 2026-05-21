@@ -1,3 +1,4 @@
+using GstService.Application.GstReturns.Queries.GetFilingQueue;
 using GstService.Application.EInvoices.Commands.GenerateEInvoice;
 using GstService.Application.EWayBills.Commands.CreateEWayBill;
 using GstService.Application.GstReturns.Commands.ApproveReturn;
@@ -151,6 +152,19 @@ public sealed class Gst : EndpointGroupBase
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetAdminOrgGstReturns")
             .WithSummary("Recent GST returns for a specific organisation — admin per-user detail view.");
+
+        // GET /gst/admin/filing-queue?status=&limit= — CA assignment queue ordered by SLA
+        groupBuilder.MapGet("/admin/filing-queue", static async (
+            string? status, int? limit, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetFilingQueueQuery(status, limit ?? 50), ct);
+            return result.IsSuccess
+                ? Results.Ok(result.Value)
+                : Results.Problem(result.Error.Message);
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetGstAdminFilingQueue")
+            .WithSummary("CA filing queue — GST returns ordered by SLA expiry for admin assignment.");
     }
 
     // ── Return handlers ───────────────────────────────────────────────────────
