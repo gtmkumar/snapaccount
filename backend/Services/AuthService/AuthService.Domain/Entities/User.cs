@@ -16,6 +16,14 @@ public class User : BaseAuditableEntity
     public string PreferredLanguage { get; set; } = "en";
     public DateTime? LastLoginAt { get; set; }
 
+    /// <summary>
+    /// PBKDF2 password hash for LOCAL_AUTH dev login. Null for Firebase-authenticated users;
+    /// never populated or used in staging/production.
+    /// </summary>
+    public string? PasswordHash { get; private set; }
+
+    public void SetPasswordHash(string hash) => PasswordHash = hash;
+
     private readonly List<UserDevice> _devices = [];
     public IReadOnlyCollection<UserDevice> Devices => _devices.AsReadOnly();
 

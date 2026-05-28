@@ -1,5 +1,6 @@
 using AuthService.Api;
 using AuthService.Application;
+using AuthService.Application.Common.Interfaces;
 using AuthService.Infrastructure;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -118,6 +119,21 @@ try
 
     // Auto-discover and register all EndpointGroupBase subclasses in this assembly
     app.MapEndpoints(Assembly.GetExecutingAssembly());
+
+    // LOCAL_AUTH: idempotently seed a dev admin (admin@snapaccount.local) for local login.
+    var localAuthEnabled =
+        string.Equals(app.Configuration["LOCAL_AUTH"], "true", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Environment.GetEnvironmentVariable("LOCAL_AUTH"), "true", StringComparison.OrdinalIgnoreCase);
+    if (localAuthEnabled)
+    {
+        using var seedScope = app.Services.CreateScope();
+        var localAuth = seedScope.ServiceProvider.GetService<ILocalAuthService>();
+        if (localAuth is not null)
+        {
+            try { localAuth.EnsureDevAdminAsync(CancellationToken.None).GetAwaiter().GetResult(); }
+            catch (Exception seedEx) { Log.Warning(seedEx, "LOCAL_AUTH dev-admin seed failed."); }
+        }
+    }
 
     app.Run();
 }

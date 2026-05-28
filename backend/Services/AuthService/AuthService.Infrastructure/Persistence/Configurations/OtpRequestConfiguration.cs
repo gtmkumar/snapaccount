@@ -20,7 +20,13 @@ public class OtpRequestConfiguration : IEntityTypeConfiguration<OtpRequest>
         builder.Property(o => o.IsUsed).HasColumnName("is_used");
         builder.Property(o => o.ExpiresAt).HasColumnName("expires_at");
         builder.Property(o => o.CooldownUntil).HasColumnName("cooldown_until");
-        builder.Property(o => o.IpAddress).HasColumnName("ip_address").HasColumnType("inet");
+        // ip_address is a Postgres `inet` column. Npgsql cannot bind a CLR string to inet,
+        // so convert through System.Net.IPAddress (which Npgsql maps to inet). Null passes through.
+        builder.Property(o => o.IpAddress)
+            .HasColumnName("ip_address")
+            .HasConversion(
+                s => System.Net.IPAddress.Parse(s!),
+                ip => ip.ToString());
         builder.Property(o => o.UserAgent).HasColumnName("user_agent");
         builder.Property(o => o.CreatedAt).HasColumnName("created_at");
         builder.Property(o => o.UpdatedAt).HasColumnName("updated_at");

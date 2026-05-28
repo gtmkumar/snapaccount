@@ -40,19 +40,14 @@ public sealed class CurrentUser(IHttpContextAccessor httpContextAccessor) : ICur
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<string> Roles
-    {
-        get
-        {
-            var claims = Claims;
-            if (claims is not null && claims.TryGetValue("roles", out var roles))
-            {
-                if (roles is System.Text.Json.JsonElement element)
-                    return element.EnumerateArray().Select(r => r.GetString() ?? "").ToList();
-            }
-            return [];
-        }
-    }
+    public IReadOnlyList<string> Roles => ParseStringList(Claims, "roles");
+
+    /// <summary>
+    /// Permission names granted to the current user. Populated from the "permissions"
+    /// claim (LOCAL_AUTH JWT) or, for Firebase tokens, left empty unless present.
+    /// A single "*" entry grants all permissions (dev super-admin).
+    /// </summary>
+    public IReadOnlyList<string> Permissions => ParseStringList(Claims, "permissions");
 
     /// <inheritdoc />
     public bool IsAuthenticated =>
@@ -90,6 +85,49 @@ public sealed class CurrentUser(IHttpContextAccessor httpContextAccessor) : ICur
     public bool IsInRole(string role) => Roles.Contains(role, StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
-    public bool HasPermission(string permission) =>
-        Roles.Any(r => r.Equals(permission, StringComparison.OrdinalIgnoreCase));
+    public bool HasPermission(string permission)
+    {
+        var permissions = Permissions;
+        if (permissions.Contains("*"))
+            return true;
+        if (permissions.Any(p => p.Equals(permission, StringComparison.OrdinalIgnoreCase)))
+            return true;
+        // Back-compat: some tokens carry permission strings directly in the roles claim.
+        return Roles.Any(r => r.Equals(permission, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Reads a claim that may be a JSON array, a JSON string, a CLR string collection,
+    /// or a comma-separated string, and normalises it to a list of non-empty strings.
+    /// Handles both Firebase-decoded claims (JsonElement) and LOCAL_AUTH claims.
+    /// </summary>
+    private static IReadOnlyList<string> ParseStringList(IReadOnlyDictionary<string, object>? claims, string key)
+    {
+        if (claims is null || !claims.TryGetValue(key, out var value) || value is null)
+            return [];
+
+        switch (value)
+        {
+            case System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Array } array:
+                return array.EnumerateArray()
+                    .Select(e => e.ValueKind == System.Text.Json.JsonValueKind.String ? e.GetString() ?? "" : e.ToString())
+                    .Where(s => s.Length > 0)
+                    .ToList();
+            case System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.String } str:
+                return SplitCsv(str.GetString());
+            case string s:
+                return SplitCsv(s);
+            case IEnumerable<string> strings:
+                return strings.Where(s => !string.IsNullOrEmpty(s)).ToList();
+            case System.Collections.IEnumerable items:
+                return items.Cast<object?>().Select(o => o?.ToString() ?? "").Where(s => s.Length > 0).ToList();
+            default:
+                return [];
+        }
+    }
+
+    private static IReadOnlyList<string> SplitCsv(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }

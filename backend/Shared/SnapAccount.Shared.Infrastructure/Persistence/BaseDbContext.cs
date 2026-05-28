@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SnapAccount.Shared.Domain;
 
 namespace SnapAccount.Shared.Infrastructure.Persistence;
@@ -31,8 +32,6 @@ public abstract class BaseDbContext(DbContextOptions options) : DbContext(option
     {
         base.OnModelCreating(modelBuilder);
 
-        // Apply snake_case naming convention for all columns, tables, and indexes
-        // (EF Core Npgsql convention — aligns with CLAUDE.md database naming requirements)
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             // Global soft-delete filter: only return rows where deleted_at IS NULL
@@ -40,12 +39,21 @@ public abstract class BaseDbContext(DbContextOptions options) : DbContext(option
             // BaseEntity subtypes without audit columns are not filtered.
             if (typeof(BaseAuditableEntity).IsAssignableFrom(entityType.ClrType))
             {
-                modelBuilder
-                    .Entity(entityType.ClrType)
-                    .HasQueryFilter(BuildSoftDeleteFilter(entityType.ClrType));
+                var entity = modelBuilder.Entity(entityType.ClrType);
+                entity.HasQueryFilter(BuildSoftDeleteFilter(entityType.ClrType));
+
+                // created_by / updated_by are `uuid` columns but the CLR properties are
+                // string (they hold the user's UUID). Convert string <-> Guid so Npgsql
+                // binds a uuid-typed parameter instead of text. Null passes through.
+                entity.Property(nameof(BaseAuditableEntity.CreatedBy)).HasConversion(GuidStringConverter);
+                entity.Property(nameof(BaseAuditableEntity.UpdatedBy)).HasConversion(GuidStringConverter);
             }
         }
     }
+
+    /// <summary>Maps a CLR string holding a UUID to a Postgres <c>uuid</c> column (null-safe).</summary>
+    private static readonly ValueConverter<string, Guid> GuidStringConverter =
+        new(v => Guid.Parse(v), v => v.ToString());
 
     /// <summary>
     /// Builds a compiled lambda for the soft-delete global query filter.

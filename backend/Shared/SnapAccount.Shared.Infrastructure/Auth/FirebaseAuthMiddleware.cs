@@ -59,6 +59,20 @@ public sealed class FirebaseAuthMiddleware(
         string.Equals(configuration["DEV_AUTH_BYPASS"], "true", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_BYPASS"), "true", StringComparison.OrdinalIgnoreCase);
 
+    // LOCAL_AUTH: validate locally-issued HS256 JWTs (username/password dev login) instead
+    // of Firebase ID tokens. NEVER enabled in staging/production.
+    private bool LocalAuthEnabled =>
+        string.Equals(configuration["LOCAL_AUTH"], "true", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Environment.GetEnvironmentVariable("LOCAL_AUTH"), "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Shared dev signing secret for LOCAL_AUTH JWTs. Issuer and validators must agree.</summary>
+    public const string DefaultLocalSecret = "snapaccount-local-dev-secret-change-me-32++chars";
+
+    private string LocalAuthSecret =>
+        configuration["LOCAL_AUTH:SECRET"]
+        ?? Environment.GetEnvironmentVariable("LOCAL_AUTH__SECRET")
+        ?? DefaultLocalSecret;
+
     public async Task InvokeAsync(HttpContext context)
     {
         var authHeader = context.Request.Headers[AuthorizationHeader].FirstOrDefault();
@@ -83,6 +97,40 @@ public sealed class FirebaseAuthMiddleware(
                             new System.Security.Claims.Claim("userId", devClaims["userId"].ToString()!),
                         ],
                         authenticationType: "DevBypass"));
+                await next(context);
+                return;
+            }
+
+            // ── Local auth: validate a locally-issued JWT. NEVER enabled in staging/prod ──
+            if (LocalAuthEnabled)
+            {
+                var payload = LocalJwt.Validate(idToken, LocalAuthSecret);
+                if (payload is { } p)
+                {
+                    var claims = new Dictionary<string, object>(StringComparer.Ordinal);
+                    foreach (var prop in p.EnumerateObject())
+                        claims[prop.Name] = prop.Value;
+
+                    var uid = p.TryGetProperty("firebase_uid", out var fuid) ? fuid.ToString()
+                        : p.TryGetProperty("userId", out var uidEl) ? uidEl.ToString()
+                        : Guid.Empty.ToString();
+
+                    context.Items["FirebaseUid"] = uid;
+                    context.Items["FirebaseClaims"] = claims;
+                    context.User = new System.Security.Claims.ClaimsPrincipal(
+                        new System.Security.Claims.ClaimsIdentity(
+                            [
+                                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, uid),
+                                new System.Security.Claims.Claim("userId", uid),
+                            ],
+                            authenticationType: "LocalAuth"));
+                }
+                else
+                {
+                    logger.LogWarning("LOCAL_AUTH: invalid/expired local token for {Path}.", context.Request.Path);
+                }
+
+                // In local mode Firebase is not configured — never attempt Firebase verification.
                 await next(context);
                 return;
             }
