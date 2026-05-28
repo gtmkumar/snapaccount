@@ -454,6 +454,33 @@ export async function fileNilReturn(body: { orgId: string; returnPeriod: string;
 }
 
 // ---------------------------------------------------------------------------
+// Phase 7 Batch 16b: Admin filing queue
+// ---------------------------------------------------------------------------
+
+export const FilingQueueItemSchema = z.object({
+  id: z.string().uuid(),
+  orgId: z.string().uuid(),
+  businessName: z.string().nullable(),
+  returnType: z.string(),
+  status: z.string(),
+  filingDeadline: z.string().nullable(),
+  slaExpiresAt: z.string().nullable(),
+  assignedCaUserId: z.string().uuid().nullable(),
+})
+
+export type FilingQueueItem = z.infer<typeof FilingQueueItemSchema>
+
+export interface GetFilingQueueParams {
+  status?: string
+  limit?: number
+}
+
+export async function getFilingQueue(params: GetFilingQueueParams = {}): Promise<FilingQueueItem[]> {
+  const res = await api.get('/gst/admin/filing-queue', { params })
+  return z.array(FilingQueueItemSchema).parse(res.data)
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard widget — notices due
 // ---------------------------------------------------------------------------
 

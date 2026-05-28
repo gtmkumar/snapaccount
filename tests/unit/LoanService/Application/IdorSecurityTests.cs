@@ -167,6 +167,7 @@ internal sealed class InMemoryLoanDbContext(DbContextOptions<InMemoryLoanDbConte
     public DbSet<ApplicationStatusLog> ApplicationStatusLogs { get; set; } = null!;
     public DbSet<LoanPdfPackage> LoanPdfPackages { get; set; } = null!;
     public DbSet<WebhookIdempotencyKey> WebhookIdempotencyKeys { get; set; } = null!;
+    public DbSet<ConsentCatalogEntry> ConsentCatalog { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
