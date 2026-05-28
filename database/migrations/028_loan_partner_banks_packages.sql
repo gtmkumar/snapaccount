@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS loan.pdf_packages (
     is_submitted_to_bank    BOOLEAN NOT NULL DEFAULT FALSE,
     submitted_to_bank_at    TIMESTAMPTZ,
     submitted_to_bank_id    UUID REFERENCES loan.partner_banks (id),
-    -- Compliance retention: 7 years (DPDP + lending). GCS lifecycle mirrors this.
+    -- Compliance retention: 7 years (DPDP + lending). GCS lifecycle mirrors this. PG 18 → app-side compute.
     retention_until         DATE,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),

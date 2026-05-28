@@ -95,7 +95,8 @@ CREATE TABLE IF NOT EXISTS loan.applications (
     -- DPDP anonymization (consents NEVER hard-deleted; PII nulled instead)
     anonymized_at               TIMESTAMPTZ,
     anonymization_reason        VARCHAR(200),
-    -- Compliance retention: 7 years (lending + DPDP)
+    -- Compliance retention: 7 years (lending + DPDP).
+    -- PG 18 deems the cast through tz non-immutable; computed by application layer instead.
     retention_until             DATE,
     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),

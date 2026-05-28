@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS loan.consents (
     -- DPDP anonymization (compliance: retain record, scrub PII)
     anonymized_at               TIMESTAMPTZ,
     anonymization_reason        VARCHAR(200),
-    -- Compliance retention: 7 years
+    -- Compliance retention: 7 years (PG 18 immutability — computed app-side).
     retention_until             DATE,
     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
