@@ -1,4 +1,6 @@
 using AuthService.Application.Admin.Queries.GetAuditEvents;
+using AuthService.Application.Common.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 using SnapAccount.Shared.Domain;
 using AuthService.Application.Admin.Queries.GetTeamMembers;
 using AuthService.Application.Admin.Queries.GetUserDetail;
@@ -37,6 +39,24 @@ public sealed class Auth : EndpointGroupBase
         groupBuilder.MapPost("/otp/send", SendOtp).RequireRateLimiting("otp");
         groupBuilder.MapPost("/otp/verify", VerifyOtp).RequireRateLimiting("otp");
         groupBuilder.MapPost("/token/refresh", RefreshToken);
+
+        // LOCAL_AUTH dev login (username/password against local DB). Anonymous.
+        // Returns 404 when LOCAL_AUTH is disabled (ILocalAuthService not registered).
+        groupBuilder.MapPost("/local/login", static async (
+            LocalLoginRequest req, IServiceProvider sp, CancellationToken ct) =>
+        {
+            var localAuth = sp.GetService<ILocalAuthService>();
+            if (localAuth is null)
+                return Results.NotFound(new { error = "Local auth is disabled." });
+            if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
+                return Results.BadRequest(new { error = "Email and password are required." });
+
+            var result = await localAuth.LoginAsync(req.Email, req.Password, ct);
+            return result is null
+                ? Results.Json(new { error = "Invalid email or password." }, statusCode: 401)
+                : Results.Ok(result);
+        });
+
         groupBuilder.MapGet("/me", GetMe).RequireAuthorization();
         // Phase 6F: role-based shell needs full permission list for client-side gating
         groupBuilder.MapGet("/me/permissions", GetPermissions).RequireAuthorization();
@@ -195,6 +215,7 @@ public sealed class Auth : EndpointGroupBase
 }
 
 // Request/Response DTOs (same as pre-refactor Program.cs record declarations)
+internal record LocalLoginRequest(string Email, string Password);
 internal record SendOtpRequest(string PhoneNumber);
 internal record VerifyOtpRequest(string PhoneNumber, string Otp, string? DeviceId = null);
 internal record RefreshTokenRequest(string Token);

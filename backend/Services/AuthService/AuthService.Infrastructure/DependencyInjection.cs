@@ -1,5 +1,6 @@
 using AuthService.Application.Common.Interfaces;
 using AuthService.Application.Interfaces;
+using AuthService.Infrastructure.Auth;
 using AuthService.Infrastructure.Messaging;
 using AuthService.Infrastructure.Persistence;
 using AuthService.Infrastructure.Repositories;
@@ -65,10 +66,12 @@ public static class DependencyInjection
         services.AddScoped<IAuthDbContext>(sp => sp.GetRequiredService<AuthDbContext>());
 
         // Firebase Admin SDK initialisation (singleton — shared process-wide)
-        // DEV_AUTH_BYPASS skips Firebase init entirely (canned tokens accepted by middleware).
+        // DEV_AUTH_BYPASS or LOCAL_AUTH skip Firebase init entirely (middleware uses local tokens).
         var devBypass = string.Equals(configuration["DEV_AUTH_BYPASS"], "true", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_BYPASS"), "true", StringComparison.OrdinalIgnoreCase);
-        if (!devBypass && FirebaseApp.DefaultInstance == null)
+        var localAuth = string.Equals(configuration["LOCAL_AUTH"], "true", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(Environment.GetEnvironmentVariable("LOCAL_AUTH"), "true", StringComparison.OrdinalIgnoreCase);
+        if (!devBypass && !localAuth && FirebaseApp.DefaultInstance == null)
         {
             var credentialJson = configuration["Firebase:ServiceAccountJson"];
 #pragma warning disable CS0618 // GoogleCredential.FromJson is deprecated in favour of CredentialFactory but we retain it here until Firebase Admin SDK ships a clean replacement
@@ -102,6 +105,10 @@ public static class DependencyInjection
         // Current user — reads Firebase JWT claims from HttpContext.Items (SEC-022)
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, CurrentUser>();
+
+        // LOCAL_AUTH dev login (username/password against local DB). Never used in prod.
+        if (localAuth)
+            services.AddScoped<ILocalAuthService, LocalAuthService>();
 
         return services;
     }

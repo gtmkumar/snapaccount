@@ -6,11 +6,8 @@
     All Infrastructure projects reference Npgsql.EntityFrameworkCore.PostgreSQL 10.*
     which pulls EF Core Relational 10.0.5; the Api projects must agree.
   -->
-  <ItemGroup>
-    <!-- Pin EF Core to latest 10.x uniformly across all projects that reference it transitively.
-         This eliminates the MSB3277 10.0.4 vs 10.0.5 EF Core Relational version conflict. -->
-    <PackageReference Update="Microsoft.EntityFrameworkCore" Version="10.*" />
-    <PackageReference Update="Microsoft.EntityFrameworkCore.Relational" Version="10.*" />
-    <PackageReference Update="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.*" />
-  </ItemGroup>
+  <!-- NOTE: the effective EF Core version pin lives in Directory.Build.targets, which is
+       imported AFTER each project's <PackageReference Include> so `Update` can override them.
+       `Update` here in .props is imported before the includes and is therefore a no-op. -->
+
 </Project>

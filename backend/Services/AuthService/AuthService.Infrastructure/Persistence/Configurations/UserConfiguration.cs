@@ -22,6 +22,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.IsDeleted).HasColumnName("is_deleted");
         builder.Property(u => u.PreferredLanguage).HasColumnName("preferred_language").HasMaxLength(20);
         builder.Property(u => u.LastLoginAt).HasColumnName("last_login_at");
+        builder.Property(u => u.PasswordHash).HasColumnName("password_hash");
         builder.Property(u => u.CreatedAt).HasColumnName("created_at");
         builder.Property(u => u.UpdatedAt).HasColumnName("updated_at");
         builder.Property(u => u.DeletedAt).HasColumnName("deleted_at");

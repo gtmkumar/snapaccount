@@ -1,0 +1,20 @@
+<Project>
+  <!--
+    EF Core / Npgsql version pin — MUST live in Directory.Build.targets (imported AFTER each
+    project's <PackageReference Include>), not Directory.Build.props (imported before), because
+    `PackageReference Update` can only override items that already exist. Pinning in .props is a
+    silent no-op, which let "10.*" float to different patches per project (Relational 10.0.4 vs
+    10.0.8), causing runtime "Could not load Relational 10.0.8.0" crashes. Exact pins here force
+    every project — and thus every service bin — onto the same assemblies.
+  -->
+  <!-- Align the whole EF Core stack to 10.0.4: the Npgsql provider 10.0.2 hard-depends on
+       Microsoft.EntityFrameworkCore.Relational 10.0.4, so pinning the EF metapackage to 10.0.4
+       makes the transitive Relational resolve to 10.0.4 in every project (otherwise the
+       metapackage floats to 10.0.8 and clashes with Npgsql's 10.0.4 Relational). -->
+  <ItemGroup>
+    <PackageReference Update="Microsoft.EntityFrameworkCore" Version="10.0.4" />
+    <PackageReference Update="Microsoft.EntityFrameworkCore.Relational" Version="10.0.4" />
+    <PackageReference Update="Microsoft.EntityFrameworkCore.Design" Version="10.0.4" />
+    <PackageReference Update="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
+  </ItemGroup>
+</Project>
