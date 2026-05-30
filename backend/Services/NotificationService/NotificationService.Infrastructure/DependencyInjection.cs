@@ -61,14 +61,14 @@ public static class DependencyInjection
         services.AddScoped<IChannelAdapter, SendGridEmailAdapter>();
 
         // Hosted services
-        services.AddHostedService<RecurringJobsSubscriber>();
-        services.AddHostedService<NotificationSeeder>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<RecurringJobsSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<NotificationSeeder>();
 
         // SEC-027: DPDP Right-to-Erasure — subscribe to account-deletion-events topic
-        services.AddHostedService<AccountDeletionSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();
 
         // P6-HANDOFF-34: Loan disbursement event notifications
-        services.AddHostedService<LoanEventsSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<LoanEventsSubscriber>();
 
         return services;
     }

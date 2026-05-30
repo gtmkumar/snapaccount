@@ -9,7 +9,7 @@ namespace DocumentService.Application.Dashboard.Queries.GetDashboardStats;
 /// <summary>
 /// Admin dashboard counts for DocumentService — pending docs across all orgs.
 /// "Pending" = any status other than PROCESSED / REJECTED / ARCHIVED.
-/// SYSTEM_ADMIN only — no org scoping.
+/// SUPER_ADMIN only — no org scoping.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetDashboardStatsQuery : IQuery<DocumentDashboardStats>;

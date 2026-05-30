@@ -51,9 +51,10 @@ public sealed class GetThreadInboxQueryHandler(
         var query = db.Threads
             .Where(t => t.OrganizationId == orgId && t.DeletedAt == null);
 
-        // Admins/agents see all threads; regular users see only their own
-        var isAdmin = currentUser.IsInRole("ADMIN") || currentUser.IsInRole("OPS")
-            || currentUser.IsInRole("CA") || currentUser.IsInRole("LOAN_OFFICER");
+        // Admins/agents see all threads; regular users see only their own.
+        // Canonical staff roles (Phase-6F ADMIN/OPS/LOAN_OFFICER aliases retired).
+        var isAdmin = currentUser.IsInRole("SUPER_ADMIN") || currentUser.IsInRole("OPERATIONS_MANAGER")
+            || currentUser.IsInRole("CA") || currentUser.IsInRole("SUPPORT_EXECUTIVE");
 
         if (!isAdmin)
             query = query.Where(t => t.InitiatedByUserId == currentUser.UserId);

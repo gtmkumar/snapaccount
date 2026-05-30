@@ -53,7 +53,7 @@ public static class DependencyInjection
         services.AddScoped<IReportServiceDbContext>(sp => sp.GetRequiredService<ReportServiceDbContext>());
 
         // Firebase Admin SDK
-        if (FirebaseApp.DefaultInstance == null)
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration) && FirebaseApp.DefaultInstance == null)
         {
             var credentialJson = configuration["Firebase:ServiceAccountJson"];
 #pragma warning disable CS0618

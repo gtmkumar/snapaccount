@@ -57,7 +57,8 @@ public sealed class GlobalSearchQueryHandler(
         CancellationToken cancellationToken)
     {
         var orgId = currentUser.OrganizationId;
-        var isAdmin = currentUser.IsInRole("ADMIN") || currentUser.IsInRole("OPS");
+        // Canonical staff roles (Phase-6F ADMIN/OPS aliases retired).
+        var isAdmin = currentUser.IsInRole("SUPER_ADMIN") || currentUser.IsInRole("OPERATIONS_MANAGER");
 
         var types = request.Types?.Count > 0 ? request.Types : DefaultTypes;
         var q = request.Q.Trim().ToLowerInvariant();

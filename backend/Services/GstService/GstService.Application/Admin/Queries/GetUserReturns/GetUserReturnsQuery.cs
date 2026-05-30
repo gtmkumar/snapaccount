@@ -11,7 +11,7 @@ namespace GstService.Application.Admin.Queries.GetUserReturns;
 /// Returns the most-recent N GST returns for a user — admin per-user detail
 /// view. The user is mapped to their org via the OwnerUserId on
 /// <c>auth.organizations</c>; the GstReturn carries OrganizationId.
-/// SYSTEM_ADMIN only.
+/// SUPER_ADMIN only.
 /// </summary>
 [RequiresPermission("admin.users.read")]
 public record GetUserReturnsQuery(Guid OrganizationId, int Limit = 20)

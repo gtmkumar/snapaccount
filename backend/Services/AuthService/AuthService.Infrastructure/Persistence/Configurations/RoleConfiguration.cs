@@ -16,6 +16,9 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.Property(r => r.DisplayName).HasColumnName("display_name").HasMaxLength(200);
         builder.Property(r => r.Description).HasColumnName("description");
         builder.Property(r => r.IsSystemRole).HasColumnName("is_system_role");
+        // Org-scoped custom roles: NULL = platform role; non-NULL = org custom role
+        builder.Property(r => r.OrganizationId).HasColumnName("organization_id");
+        builder.Property(r => r.CreatedByUserId).HasColumnName("created_by_user_id");
         builder.Property(r => r.IsActive).HasColumnName("is_active");
         builder.Property(r => r.CreatedAt).HasColumnName("created_at");
         builder.Property(r => r.UpdatedAt).HasColumnName("updated_at");
@@ -23,7 +26,10 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.Property(r => r.CreatedBy).HasColumnName("created_by");
         builder.Property(r => r.UpdatedBy).HasColumnName("updated_by");
 
-        builder.HasIndex(r => r.Name).IsUnique();
+        // System roles must have globally unique names; custom roles unique per org
+        builder.HasIndex(r => r.Name).IsUnique().HasFilter("organization_id IS NULL");
+        builder.HasIndex(r => new { r.OrganizationId, r.Name }).IsUnique().HasFilter("organization_id IS NOT NULL");
+        builder.HasIndex(r => r.OrganizationId);
         builder.Ignore(r => r.DomainEvents);
     }
 }
@@ -40,13 +46,18 @@ public class PermissionConfiguration : IEntityTypeConfiguration<Permission>
         builder.Property(p => p.Resource).HasColumnName("resource").HasMaxLength(100);
         builder.Property(p => p.Action).HasColumnName("action").HasMaxLength(100);
         builder.Property(p => p.Description).HasColumnName("description");
+        // I1.1 (migration 037): is_active column — RETIRED vs ACTIVE distinction
+        builder.Property(p => p.IsActive).HasColumnName("is_active");
         builder.Property(p => p.CreatedAt).HasColumnName("created_at");
         builder.Property(p => p.UpdatedAt).HasColumnName("updated_at");
         builder.Property(p => p.DeletedAt).HasColumnName("deleted_at");
         builder.Property(p => p.CreatedBy).HasColumnName("created_by");
         builder.Property(p => p.UpdatedBy).HasColumnName("updated_by");
 
-        builder.HasIndex(p => p.Name).IsUnique();
+        // I1.1-002: case-insensitive uniqueness — Postgres lower() functional index
+        builder.HasIndex(p => p.Name)
+            .IsUnique()
+            .HasDatabaseName("ix_permission_name_ci");
         builder.Ignore(p => p.DomainEvents);
     }
 }

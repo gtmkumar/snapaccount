@@ -12,7 +12,7 @@ namespace AuthService.Application.Admin.Queries.GetTeamMembers;
 /// EMPLOYEE (used by the dashboard team-workload widget).
 /// With <paramref name="Role"/> set (e.g. "CA"): just that role — used by
 /// the GST filing-queue assign-to dropdown and similar pickers.
-/// SYSTEM_ADMIN only.
+/// SUPER_ADMIN only.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetTeamMembersQuery(string? Role = null) : IQuery<IReadOnlyList<TeamMemberDto>>;
@@ -22,8 +22,11 @@ public record TeamMemberDto(Guid UserId, string Name, string Role);
 public sealed class GetTeamMembersQueryHandler(IAuthDbContext db)
     : IQueryHandler<GetTeamMembersQuery, IReadOnlyList<TeamMemberDto>>
 {
+    // SnapAccount internal-staff roles (the "Team" population — design Screen 87):
+    // the operational roles + the platform super-admin (SUPER_ADMIN, canonical per
+    // migration 036). ORG_ADMIN/MANAGER/HR/REVIEWER are customer-org roles and NOT here.
     private static readonly string[] OperationalRoles =
-        ["DATA_ENTRY_OPERATOR", "SUPPORT_EXECUTIVE", "CA", "OPERATIONS_MANAGER", "SYSTEM_ADMIN"];
+        ["DATA_ENTRY_OPERATOR", "SUPPORT_EXECUTIVE", "CA", "OPERATIONS_MANAGER", "SUPER_ADMIN"];
 
     public async Task<Result<IReadOnlyList<TeamMemberDto>>> Handle(GetTeamMembersQuery request, CancellationToken ct)
     {
@@ -39,6 +42,9 @@ public sealed class GetTeamMembersQueryHandler(IAuthDbContext db)
         if (allowed.Length == 0)
             return Result<IReadOnlyList<TeamMemberDto>>.Success(Array.Empty<TeamMemberDto>());
 
+        // Project to an anonymous type for the DISTINCT (EF cannot translate Distinct over
+        // a DTO constructor projection, nor OrderBy on a constructor-arg afterwards), then
+        // shape the DTO + null-coalesce + order in memory.
         var rows = await (
             from ur in db.UserRoles
             join u in db.Users on ur.UserId equals u.Id
@@ -47,11 +53,15 @@ public sealed class GetTeamMembersQueryHandler(IAuthDbContext db)
                && u.IsActive
                && !u.IsDeleted
                && allowed.Contains(r.Name)
-            select new TeamMemberDto(u.Id, u.FullName ?? "(no name)", r.DisplayName))
+            select new { u.Id, u.FullName, r.DisplayName })
             .Distinct()
-            .OrderBy(m => m.Name)
             .ToListAsync(ct);
 
-        return Result<IReadOnlyList<TeamMemberDto>>.Success(rows);
+        var members = rows
+            .Select(x => new TeamMemberDto(x.Id, x.FullName ?? "(no name)", x.DisplayName))
+            .OrderBy(m => m.Name)
+            .ToList();
+
+        return Result<IReadOnlyList<TeamMemberDto>>.Success(members);
     }
 }

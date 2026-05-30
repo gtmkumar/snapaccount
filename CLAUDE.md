@@ -93,7 +93,7 @@ docker compose up -d
 ### Backend — Clean Architecture per Service
 
 Each microservice (`backend/Services/<Name>Service/`) follows this 4-layer structure:
-- `<Name>Service.Api` — ASP.NET Core controllers, minimal API endpoints, DI wiring, Hangfire jobs
+- `<Name>Service.Api` — Minimal API endpoints (no MVC controllers), DI wiring in `Program.cs`, Hangfire jobs, request/response DTOs
 - `<Name>Service.Application` — MediatR commands/queries, validators, CQRS handlers
 - `<Name>Service.Domain` — entities, domain events, value objects (no dependencies)
 - `<Name>Service.Infrastructure` — EF Core DbContext, repositories, external service adapters
@@ -102,10 +102,14 @@ Shared base types live in `backend/Shared/`:
 - `SnapAccount.Shared.Domain` — `BaseEntity`, `Result<T>`, `Error`, `ValueObject`, `IDomainEvent`, `DomainEvent`
 - `SnapAccount.Shared.Domain/ValueObjects/` — Indian-format value objects: `PanNumber`, `GstinNumber`, `AadhaarLastFour`, `PhoneNumber`, `Money`
 - `SnapAccount.Shared.Application` — `ICommand`, `IQuery`, `ICommandHandler<T>`, `IQueryHandler<T,R>`, `ICurrentUser`, `PaginatedQuery`
-- `SnapAccount.Shared.Application/Behaviors/` — MediatR pipeline: `ValidationBehavior` (FluentValidation), `LoggingBehavior`
+- `SnapAccount.Shared.Application/Behaviors/` — MediatR pipeline (order: `LoggingBehavior` → `ValidationBehavior` (FluentValidation) → `PermissionBehavior`). RBAC is enforced by `[RequiresPermission("perm.name")]` on a command/query class
 - `SnapAccount.Shared.Infrastructure` — `BaseDbContext`, `FirebaseAuthMiddleware`, `GoogleCloudStorageService`, `GooglePubSubPublisher`
 
 All services share a single PostgreSQL database with schema-per-service isolation. .NET Aspire (`AppHost`) handles service discovery and wires all services together with named references (`auth-service`, `document-service`, etc.).
+
+For deeper backend conventions (full MediatR pipeline order, `DependencyInjection.cs` patterns, DTO placement) see `backend/CLAUDE.md`.
+
+**Local auth bypass:** Setting `DEV_AUTH_BYPASS=true` short-circuits `FirebaseAuthMiddleware` so the admin frontend can call the backend without Firebase tokens (local dev only — never enable in deployed environments).
 
 ### Code Conventions
 

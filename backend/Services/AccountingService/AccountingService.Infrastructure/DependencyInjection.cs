@@ -52,7 +52,7 @@ public static class DependencyInjection
         services.AddScoped<IAccountingDbContext>(sp => sp.GetRequiredService<AccountingDbContext>());
 
         // Firebase Admin SDK
-        if (FirebaseApp.DefaultInstance == null)
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration) && FirebaseApp.DefaultInstance == null)
         {
             var credentialJson = configuration["Firebase:ServiceAccountJson"];
 #pragma warning disable CS0618
@@ -76,7 +76,7 @@ public static class DependencyInjection
 
         // Phase 6A: OCR result Pub/Sub subscriber (hosted service)
         // P6-HANDOFF-09: subscribes to snapaccount.document.ocr.completed / accounting-service-ocr-sub
-        services.AddHostedService<OcrResultSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<OcrResultSubscriber>();
 
         // Current user
         services.AddHttpContextAccessor();

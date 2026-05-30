@@ -54,7 +54,7 @@ public static class DependencyInjection
         services.AddScoped<ILoanServiceDbContext>(sp => sp.GetRequiredService<LoanServiceDbContext>());
 
         // Firebase Admin SDK
-        if (FirebaseApp.DefaultInstance == null)
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration) && FirebaseApp.DefaultInstance == null)
         {
             var credentialJson = configuration["Firebase:ServiceAccountJson"];
 #pragma warning disable CS0618
@@ -101,7 +101,7 @@ public static class DependencyInjection
         services.AddSingleton<ILoanEventPublisher, GooglePubSubPublisherAdapter>();
 
         // SEC-027 / P6-HANDOFF-30: DPDP Right-to-Erasure
-        services.AddHostedService<AccountDeletionSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();
 
         // Current user
         services.AddHttpContextAccessor();

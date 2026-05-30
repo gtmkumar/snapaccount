@@ -41,7 +41,7 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUser, CurrentUser>();
 
         // SEC-027: DPDP Right-to-Erasure — subscribe to account-deletion-events topic
-        services.AddHostedService<AccountDeletionSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();
 
         return services;
     }

@@ -28,7 +28,7 @@ public sealed class FirebaseAuthMiddleware(
         {
             ["userId"] = "11111111-1111-1111-1111-111111111111",
             ["organizationId"] = "00000000-0000-0000-0000-000000000000",
-            ["roles"] = new[] { "SYSTEM_ADMIN", "OPERATIONS_MANAGER" },
+            ["roles"] = new[] { "SUPER_ADMIN", "OPERATIONS_MANAGER" },
             ["phone_number"] = "+919000000001",
             ["email"] = "superadmin@snapaccount.local",
             ["firebase_uid"] = "dev-superadmin-uid",

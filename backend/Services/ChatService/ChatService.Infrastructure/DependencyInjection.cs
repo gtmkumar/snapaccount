@@ -83,7 +83,7 @@ public static class DependencyInjection
         services.AddSingleton<PresenceService>();
 
         // DPDP: account deletion erasure subscriber
-        services.AddHostedService<AccountDeletionSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();
 
         return services;
     }

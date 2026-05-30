@@ -58,9 +58,10 @@ try
              .AllowAnyHeader()
              .AllowCredentials()));
 
-    // SEC-011: Rate limiting — sliding window for OTP endpoints (5 req / 10 min per client IP)
+    // SEC-011: Rate limiting
     builder.Services.AddRateLimiter(options =>
     {
+        // OTP endpoints: 5 req / 10 min per client IP (sliding window)
         options.AddSlidingWindowLimiter("otp", opt =>
         {
             opt.PermitLimit = 5;
@@ -69,6 +70,17 @@ try
             opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
             opt.QueueLimit = 0;
         });
+
+        // M1-R-INFO-001: Public invite-token lookup — fixed window 20 req/min per IP.
+        // Prevents token enumeration on the public GET /auth/invite/{token} endpoint.
+        options.AddFixedWindowLimiter("invite-token-lookup", opt =>
+        {
+            opt.PermitLimit = 20;
+            opt.Window = TimeSpan.FromMinutes(1);
+            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            opt.QueueLimit = 0;
+        });
+
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     });
 
@@ -108,10 +120,10 @@ try
         app.MapScalarApiReference();
     }
 
-    // Hangfire dashboard — restricted to SYSTEM_ADMIN role, not exposed in production without VPN
+    // Hangfire dashboard — restricted to SUPER_ADMIN role, not exposed in production without VPN
     app.UseHangfireDashboard("/hangfire", new DashboardOptions
     {
-        Authorization = [new HangfireRoleAuthorizationFilter("SYSTEM_ADMIN")]
+        Authorization = [new HangfireRoleAuthorizationFilter("SUPER_ADMIN")]
     });
 
     // Health check (Cloud Run health check endpoint)

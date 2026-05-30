@@ -52,6 +52,11 @@ public sealed class UserRepository(AuthDbContext dbContext) : IUserRepository
             .Include(u => u.Preference)
             .FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid, ct);
 
+    public Task<User?> GetByEmailAsync(string email, CancellationToken ct = default)
+        => dbContext.Users
+            .Include(u => u.Profile)
+            .FirstOrDefaultAsync(u => u.Email == email, ct);
+
     public async Task<User> AddAsync(User user, CancellationToken ct = default)
     {
         dbContext.Users.Add(user);

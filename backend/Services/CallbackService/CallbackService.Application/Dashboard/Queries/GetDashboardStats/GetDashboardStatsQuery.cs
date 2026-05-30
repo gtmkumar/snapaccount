@@ -10,7 +10,7 @@ namespace CallbackService.Application.Dashboard.Queries.GetDashboardStats;
 /// <summary>
 /// Admin dashboard counts for CallbackService — open callbacks across all orgs.
 /// "Open" = anything that's not Completed / Cancelled.
-/// SYSTEM_ADMIN only — no org scoping.
+/// SUPER_ADMIN only — no org scoping.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetDashboardStatsQuery : IQuery<CallbackDashboardStats>;

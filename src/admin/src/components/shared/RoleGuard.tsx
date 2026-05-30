@@ -63,7 +63,7 @@ export function RoleGuard({
 
 // ── 403 Forbidden page ──────────────────────────────────────────────────────
 const ROLE_LABELS: Record<AdminRole, string> = {
-  SYSTEM_ADMIN: 'System Administrator',
+  SUPER_ADMIN: 'System Administrator',
   OPERATIONS_MANAGER: 'Operations Manager',
   CA: 'Chartered Accountant',
   SUPPORT_EXECUTIVE: 'Support Executive',

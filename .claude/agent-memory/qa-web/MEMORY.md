@@ -1,3 +1,4 @@
 - [QA Phase 5 State](project_phase5_state.md) — Comprehensive QA COMPLETE (2026-04-05): all 6 bugs fixed, 56/56 PASS, zero native dialogs, PASS issued
 - [QA Phase 6F FINAL State](project_phase6_state.md) — Phase 6F QA COMPLETE (2026-04-25): 677/677 Vitest PASS (+192 tests); ChatService+SubscriptionService integration scaffolds compile clean (P6-INT-02)
+- [Module 1 RBAC State](project_module1_rbac_state.md) — Module 1 Auth/RBAC QA FINAL (2026-05-29): 721/721 Vitest PASS (+44), 428/428 unit PASS, 20/20 RBAC integration PASS; BUG-RBAC-E2E-001 filed
 - [No alert() dialogs](feedback_no_alert_dialogs.md) — Team lead rejected native alert()/confirm() on financial platform; require in-app toast/modal

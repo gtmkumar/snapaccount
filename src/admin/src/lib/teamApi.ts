@@ -1,6 +1,8 @@
 /**
- * Team / Auth service API client — Phase 6F Track F3
- * Uses auth service endpoints for user/team management.
+ * Team / Auth service API client — Module 1 (RBAC)
+ * Wired to real org-scoped endpoints per backend-agent contract.
+ * Routes: /auth/team/* (members), /auth/team/invite, /auth/team/invites/*
+ * Existing routes were correct stubs — no URL changes required.
  */
 import { z } from 'zod'
 import api from './api'

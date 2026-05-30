@@ -11,7 +11,7 @@ namespace ChatService.Application.Dashboard.Queries.GetWorkloadByUser;
 /// Per-assignee chat workload counts for the admin dashboard team-workload widget.
 /// "Assigned" = thread has assignedToUserId set AND status != Resolved.
 /// "Completed" = status == Resolved.
-/// SYSTEM_ADMIN only.
+/// SUPER_ADMIN only.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetWorkloadByUserQuery : IQuery<IReadOnlyList<UserWorkloadDto>>;

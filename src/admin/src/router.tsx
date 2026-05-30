@@ -36,6 +36,13 @@ import ReportsPage from '@/pages/reports/ReportsPage'
 import CallbackListPage from '@/pages/callbacks/CallbackListPage'
 import CallbackDetailPage from '@/pages/callbacks/CallbackDetailPage'
 import CallbackKpiPage from '@/pages/callbacks/CallbackKpiPage'
+// Module 1 — Auth/RBAC
+import RolesPermissionsPage from '@/pages/roles/RolesPermissionsPage'
+import PermissionCatalogPage from '@/pages/roles/PermissionCatalogPage'
+import ReferenceDataPage from '@/pages/settings/ReferenceDataPage'
+import OrganizationsPage from '@/pages/orgs/OrganizationsPage'
+import OrganizationDetailPage from '@/pages/orgs/OrganizationDetailPage'
+import InviteAcceptancePage from '@/pages/auth/InviteAcceptancePage'
 
 // Layout wrapper for protected routes
 // KeyboardShortcutsProvider uses useNavigate() so it must live inside the
@@ -59,6 +66,12 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+
+  // Module 1 — Invite acceptance (PUBLIC, no auth required)
+  {
+    path: '/invite/:token',
+    element: <InviteAcceptancePage />,
   },
 
   // 403 Forbidden
@@ -274,11 +287,59 @@ export const router = createBrowserRouter([
   {
     path: '/settings',
     element: (
-      <AuthGuard requiredRoles={['SYSTEM_ADMIN', 'OPERATIONS_MANAGER']}>
+      <AuthGuard requiredRoles={['SUPER_ADMIN', 'OPERATIONS_MANAGER']}>
         <AppShell>
           <SettingsPage />
         </AppShell>
       </AuthGuard>
+    ),
+  },
+
+  // Module 1 — Roles & Permissions matrix
+  {
+    path: '/settings/roles',
+    element: (
+      <ProtectedLayout>
+        <RolesPermissionsPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // Module 1, Increment 1.1 — Permission Catalog (SUPER_ADMIN, platform.permissions.manage)
+  {
+    path: '/settings/permissions',
+    element: (
+      <ProtectedLayout>
+        <PermissionCatalogPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // Module 1, Increment 1.4 Phase A — Reference Data (SUPER_ADMIN, platform.refdata.manage)
+  {
+    path: '/settings/reference-data',
+    element: (
+      <ProtectedLayout>
+        <ReferenceDataPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // Module 1 — Platform Organizations (SUPER_ADMIN)
+  {
+    path: '/admin/organizations',
+    element: (
+      <ProtectedLayout>
+        <OrganizationsPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    path: '/admin/organizations/:orgId',
+    element: (
+      <ProtectedLayout>
+        <OrganizationDetailPage />
+      </ProtectedLayout>
     ),
   },
 

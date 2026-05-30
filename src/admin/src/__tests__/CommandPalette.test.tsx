@@ -16,7 +16,7 @@ import * as api from '@/lib/api'
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: vi.fn(() => ({
-    user: { uid: 'user-001', email: 'dev@snapaccount.in', displayName: 'Dev', role: 'SYSTEM_ADMIN' },
+    user: { uid: 'user-001', email: 'dev@snapaccount.in', displayName: 'Dev', role: 'SUPER_ADMIN' },
     loading: false,
     error: null,
     signInWithGoogle: vi.fn(),

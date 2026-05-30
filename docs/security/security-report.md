@@ -2,7 +2,7 @@
 
 > **Classification:** INTERNAL — Restricted
 > **Reviewer:** security-reviewer agent
-> **Last Updated:** 2026-04-25
+> **Last Updated:** 2026-05-29
 
 ---
 
@@ -20,8 +20,18 @@
 | 6C re-audit (2026-04-25) | 0 | 0 | 0 | 0 | 0 | Complete — GO; 4 confirmed fixed, 0 new findings |
 | 6F Final Gate (2026-04-25) | 0 | 1 | 5 | 1 | 2 | Complete — NO-GO (SEC-051 HIGH + prior deferred unresolved) |
 | 6F Re-audit after hotfixes (2026-04-25) | 0 | 0 | 0 | 0 | 2 | Complete — **GO** — 1 HIGH + 7 MED confirmed fixed; 0 new HIGH/MED/LOW |
-| **Total (Phases 4–6F)** | **3** | **20** | **27** | **12** | **12** | — |
-| **Total open (pre-prod blockers)** | **0** | **1** (NEW-002) | **4** (SEC-030/031/032/041; others deferred) | **5** (SEC-035/036/037/056/NEW-003) | **3** (INFO-001/006/007) | All Phase 6 gate blockers cleared |
+| Module 1 Auth/RBAC (2026-05-29) | 1 | 3 | 3 | 2 | 2 | Complete — **NO-GO** (initial review; implementation was pre-code) |
+| Module 1 Auth/RBAC Re-review (2026-05-29) | 0 | 1 | 1 | 1 | 2 | Complete — **GO with conditions** |
+| Increment 1.1 — Permission Catalog Mgmt + OrgContextGuard (2026-05-29) | 0 | 0 | 1 | 1 | 1 | Complete — **GO** |
+| **Total (Phases 4–Increment 1.1)** | **4** | **21** | **29** | **14** | **15** | — |
+| **Total open (pre-prod blockers)** | **0** (M1-001 backlogged) | **2** (NEW-002, M1-R-001) | **6** (SEC-030/031/032/041 deferred + M1-R-002 + I1.1-001) | **7** (SEC-035/036/037/056/NEW-003 + M1-R-003 + I1.1-002) | **6** (INFO-001/006/007 + M1-R-INFO-001/002 + I1.1-INFO-001) | Increment 1.1: **GO** |
+| Increment 1.3 — Add User + user_permission + Assignable Roles (2026-05-29) | 0 | 1 | 1 | 1 | 1 | Complete (initial) — **NO-GO** |
+| Increment 1.3 Re-confirm after I1.3-001 fix (2026-05-29) | 0 | 0 | 0 | 0 | 0 | I1.3-001 FIXED — **GO** |
+| **Total (Phases 4–Increment 1.3 final)** | **4** | **21** | **30** | **15** | **16** | — |
+| **Total open (pre-prod blockers)** | **0** | **2** (NEW-002, M1-R-001) | **7** (deferred + M1-R-002 + I1.1-001 + I1.3-002) | **8** (deferred + M1-R-003 + I1.1-002 + I1.3-003) | **7** (INFO-001/006/007 + M1-R-INFO-001/002 + I1.1-INFO-001 + I1.3-INFO-001) | Increment 1.3: **GO** |
+| Increment 1.4 Phase A — Reference-Data CRUD (2026-05-29) | 0 | 0 | 0 | 1 | 1 | Complete — **GO** |
+| **Total (Phases 4–Increment 1.4A)** | **4** | **21** | **30** | **16** | **17** | — |
+| **Total open (pre-prod blockers)** | **0** | **2** (NEW-002, M1-R-001) | **7** (unchanged) | **9** (+ I1.4A-001) | **8** (+ I1.4A-INFO-001) | Increment 1.4A: **GO** |
 
 ---
 
@@ -1847,3 +1857,1017 @@ Operations team pre-production checklist:
 7. Implement Phase 7 deferred findings: SEC-030, SEC-031, SEC-032, SEC-035, SEC-036, SEC-037, SEC-042, SEC-056, NEW-003.
 
 *Phase 6F Re-audit completed: 2026-04-25*
+
+---
+
+## Module 1 Auth/RBAC Security Review
+
+**Scope:** Auth/RBAC Module 1 — Multi-tenant org roles, constrained delegation, invitation tokens, org isolation (IDOR), DEV_AUTH_BYPASS safety. New files: `database/migrations/035_auth_org_roles_invitations.sql`, `database/migrations/036_auth_rbac_permission_catalog_seed.sql`, `AuthService.Domain/Entities/Invitation.cs`, `AuthService.Domain/Permissions.cs`, `AuthService.Application/Roles/` (directory tree), `AuthService.Application/Invitations/` (directory tree), `AuthService.Application/Members/` (directory tree), `AuthService.Application/Permissions/` (directory tree), `AuthService.Application/PlatformAdmin/` (directory tree). Existing files reviewed for regressions: `FirebaseAuthMiddleware.cs`, `LocalAuthService.cs`, `LocalJwt.cs`, `PasswordHasher.cs`, `CurrentUser.cs`, `OtpService.cs`, `AesPanEncryptionService.cs`, `Auth.cs` (endpoints), `PermissionBehavior.cs`, `useAuth.ts`, `usePermission.ts`, `authToken.ts`, `teamApi.ts`, mobile `authStore.ts`.
+**Review Date:** 2026-05-29
+**Reviewer:** security-reviewer agent
+
+---
+
+### Findings
+
+#### [CRITICAL] M1-001: Production Firebase API Key Committed to Repository
+
+- **File:** `mobile/ios/SnapAccount/GoogleService-Info.plist`
+- **Line:** 6 (`API_KEY`), 10 (`GCM_SENDER_ID`), 14 (`PROJECT_ID`), 16 (`STORAGE_BUCKET`), 28 (`GOOGLE_APP_ID`)
+- **Description:** A production Firebase configuration file is committed to the repository at `mobile/ios/SnapAccount/GoogleService-Info.plist`. It contains a live Firebase API key (`AIzaSyBHXztHzLI38FZnV11PMQC89VvUlF3UKgE`), GCM sender ID (`552502623224`), project ID (`snapaccount-44625`), storage bucket, and app ID. Although `GoogleService-Info.plist` is listed in both `.gitignore` (root and `mobile/`) as an exclusion, the file exists in the repository at its current state — either because it was committed before the `.gitignore` rule was added, or because a `git add -f` was used. An attacker with repository access (or via a public leak) can extract these values and use the Firebase API key to enumerate Firebase Auth users, attempt unauthorized phone OTP flows, or probe Firebase storage. The API key in a `.plist` file is not a private secret by itself — Firebase API keys are restricted by SHA-1 app certificate fingerprints and iOS bundle ID — but the project ID and storage bucket in combination enable targeted abuse. More critically: if this repo is or becomes public, or if CI secrets are leaked, the combination enables malicious Firebase project access.
+- **Recommended Fix:** (1) Immediately rotate the Firebase API key via the GCP Console (Firebase project settings). (2) Remove the file from git history using `git filter-repo` or BFG. (3) Use a placeholder/template `.plist` in the repository and inject the real values at CI build time from a secret store. (4) Verify Firebase Security Rules are restrictive (not `allow read, write: if true`).
+- **Reference:** OWASP Mobile Top 10 — M9: Insecure Data Storage; CWE-312 (Cleartext Storage of Sensitive Information)
+
+---
+
+#### [HIGH] M1-002: RBAC Module 1 Delegation Guard Completely Unimplemented — Backend Command Handlers Are Empty Stub Directories
+
+- **File:** `backend/Services/AuthService/AuthService.Application/Roles/Commands/SetRolePermissions/` (empty directory), `backend/Services/AuthService/AuthService.Application/Roles/Commands/CreateOrgRole/` (empty), `backend/Services/AuthService/AuthService.Application/Invitations/Commands/CreateInvitation/` (empty), `backend/Services/AuthService/AuthService.Application/Invitations/Commands/AcceptInvitation/` (empty), `backend/Services/AuthService/AuthService.Application/Permissions/Queries/GetGrantablePermissions/` (empty)
+- **Description:** The scope document (§4 backend-agent) requires server-side enforcement that a delegate cannot grant permissions they do not themselves hold, and cannot assign a role whose permission set exceeds their own. This is the primary security requirement of Module 1. All the command handler directories that would implement this logic (`SetRolePermissions`, `CreateOrgRole`, `UpdateOrgRole`, `DeleteOrgRole`) contain only empty subdirectories — no `.cs` files exist within them. Similarly, `CreateInvitation`, `AcceptInvitation`, `ResendInvitation`, `RevokeInvitation`, and `GetGrantablePermissions` are all empty. The only implemented handler is `GetOrgRoles` (a read query). No new API endpoints for `POST /auth/org/roles`, `PUT /auth/org/roles/{id}/permissions`, `POST /auth/org/members/invite`, `GET /auth/me/grantable-permissions`, etc. are registered in `Auth.cs`. This means the entire delegation enforcement surface described in the scope is absent from the codebase. The `auth.invitation` table and DB schema are correct, but no backend code creates, validates, or accepts invitations.
+- **Recommended Fix:** Implement all command handlers before marking this module ready for security review gate. The specific delegation guard logic required: in `SetRolePermissionsCommandHandler`, after loading the caller's effective permission set via `ICurrentUser`, verify that every permission in the request is contained in the caller's own set — reject with 403 Forbidden if any requested permission is not in the caller's set. Similarly in `CreateOrgRole` and `UpdateOrgRole`, verify the role's intended permissions are all held by the caller. This logic must be in the application layer, not only in the validator or middleware.
+- **Reference:** CWE-269 (Improper Privilege Management); OWASP ASVS V4.1 (Access Control)
+
+---
+
+#### [HIGH] M1-003: PostgreSQL RLS Session Variable (app.current_user_id) Is Never Set by Application Code — All Auth Schema RLS Policies Are Silently Inactive
+
+- **File:** `database/migrations/001_auth_schema.sql` (lines 384–415), `database/migrations/035_auth_org_roles_invitations.sql` (lines 149–179), `backend/Shared/SnapAccount.Shared.Infrastructure/Persistence/BaseDbContext.cs`
+- **Description:** The RLS policies for `auth.user`, `auth.user_profile`, `auth.organization`, `auth.organization_member`, `auth.user_role`, `auth.user_device`, `auth.refresh_token`, `auth.user_preference`, `auth.role`, and `auth.invitation` all use `current_setting('app.current_user_id', TRUE)::UUID` and `current_setting('app.is_platform_admin', TRUE) = 'true'` to isolate rows to the current user or organization. However, no application code — not in `BaseDbContext`, not in any interceptor, not in any middleware — ever issues `SET LOCAL app.current_user_id = '...'` or `SELECT set_config('app.current_user_id', ..., true)` on the database connection. Without the session variable being set, `current_setting('app.current_user_id', TRUE)` returns `NULL` (the second argument `TRUE` means "return null on missing setting rather than throw"). A UUID cast of `NULL` yields `NULL`, so the USING clause condition becomes `NULL = NULL` (which is false in SQL) for the user-equality predicates, and the `IN (SELECT ...)` subqueries return empty sets for `NULL` UUID. The net effect is that every `SELECT` on an RLS-enabled table returns zero rows for authenticated application users, and write operations may be blocked or silently filtered depending on the policy. This means the RLS policies provide zero actual isolation — they simply block all application queries. Conversely, if any connection bypasses EF Core or uses BYPASSRLS, data is fully exposed across tenants. The new `auth.role` and `auth.invitation` RLS policies introduced in migration 035 have the same defect.
+- **Recommended Fix:** Add an EF Core `ISaveChangesInterceptor` or `DbCommandInterceptor` that, before any query on RLS-protected schemas, executes `SET LOCAL app.current_user_id = '<currentUser.UserId>'` and (conditionally) `SET LOCAL app.is_platform_admin = 'true'`. This must run within the same database transaction as the query so `SET LOCAL` takes effect. An alternative is to use Postgres connection-level settings in the EF connection string, but per-request scoping via `SET LOCAL` is the correct approach. Until this is implemented, RLS provides no tenant isolation for authenticated application users.
+- **Reference:** CWE-284 (Improper Access Control); PostgreSQL RLS documentation; OWASP ASVS V4.2 (Operation Level Access Control)
+
+---
+
+#### [HIGH] M1-004: GetUserPermissionsQuery Returns Role Names as Permission Codes — Frontend Permission Gates Are Meaningless
+
+- **File:** `backend/Services/AuthService/AuthService.Application/Users/Queries/GetUserPermissions/GetUserPermissionsQuery.cs`, lines 22–26
+- **Description:** The `GET /auth/me/permissions` endpoint is used by the frontend permission system (Phase 6F) to determine which UI actions a user may perform. The handler `GetUserPermissionsQueryHandler` returns `currentUser.Roles.ToList()` — that is, it returns role names (`["SYSTEM_ADMIN", "CA"]`) as if they were permission codes. Role names are not permission codes. The frontend `usePermission.ts` hook and `RoleGuard` consume this endpoint expecting strings like `"org.members.invite"` or `"gst.returns.file"`. When the frontend calls `GET /auth/me/permissions` and receives role names, the `hasPermission("org.members.invite")` check fails for everyone because no token will ever carry the string `"org.members.invite"` — the user profile object only carries role names. The module scope (§4 backend-agent) explicitly calls this out: `GET /auth/me/grantable-permissions` must return the subset of permissions the caller may delegate. The current implementation means every permission check relying on this endpoint returns false, and the role matrix UI cannot accurately grey out non-grantable permissions. Additionally a comment in the file says "Phase 2 will expand roles → permission codes via IAuthDbContext" — this was never implemented.
+- **Recommended Fix:** Implement the handler to join `auth.user_role` → `auth.role_permission` → `auth.permission` for the current user's org context and return the resolved permission name strings. Separately implement `GET /auth/me/grantable-permissions` which further intersects with the caller's own permission set. The wildcard `"*"` case (SYSTEM_ADMIN) must still be preserved.
+- **Reference:** CWE-732 (Incorrect Permission Assignment for Critical Resource); OWASP ASVS V4.3 (Other Access Control Considerations)
+
+---
+
+#### [MEDIUM] M1-005: Invitation Token Entropy and Single-Use/Replay Protection Cannot Be Verified — CreateInvitation Handler Is Absent
+
+- **File:** `backend/Services/AuthService/AuthService.Application/Invitations/Commands/CreateInvitation/` (empty directory), `backend/Services/AuthService/AuthService.Domain/Entities/Invitation.cs`
+- **Description:** The `Invitation` entity correctly stores a `token_hash` (SHA-256 of the raw token) and has a `UNIQUE` constraint on `token_hash`. However, since `CreateInvitationCommandHandler` does not exist, we cannot verify: (1) the raw token is generated with sufficient entropy (minimum 256 bits from `RandomNumberGenerator`), (2) the token is single-use (the `Accept()` method sets status but there is no guard preventing re-use if the status check is skipped), (3) the expiry is enforced at the point of acceptance. The `IsValid(DateTime utcNow)` method on the entity exists but will only be called if `AcceptInvitationCommandHandler` is implemented and uses it. The scope requires replay protection — once an invite is accepted, the same token must not be usable again. This cannot be confirmed without the handler.
+- **Recommended Fix:** When implementing `CreateInvitationCommandHandler`: generate the raw token with `RandomNumberGenerator.GetBytes(32)` (256 bits minimum), store only `Convert.ToHexString(SHA256.HashData(tokenBytes))` as `token_hash`. When implementing `AcceptInvitationCommandHandler`: look up by token hash, call `IsValid(DateTime.UtcNow)` and reject if false (expired or already accepted), call `invitation.Accept()` to set status, then persist before any other action to make the transition atomic. Do not call `Accept()` after the member is already added.
+- **Reference:** OWASP Testing Guide — Testing for Insecure Object References; CWE-330 (Use of Insufficiently Random Values)
+
+---
+
+#### [MEDIUM] M1-006: LOCAL_AUTH JWT Stored in localStorage — Accessible to XSS
+
+- **File:** `src/admin/src/lib/authToken.ts` (lines 4–7), `src/admin/src/hooks/useAuth.ts` (lines 155–163)
+- **Description:** When `VITE_LOCAL_AUTH=true` (the dev-mode username/password login), the JWT issued by `POST /auth/local/login` is stored in `localStorage` under the key `sa_admin_token`. The user profile object (including role and email) is stored in `localStorage` under `sa_admin_user`. `localStorage` is not httpOnly — any cross-site scripting vulnerability in the application can read the token and impersonate the user. While this is explicitly a dev-mode path (`NEVER enabled in staging or production` is documented), the admin panel's CSP and security posture in staging must prevent this from accidentally shipping. Further, the `LOCAL_AUTH` guard in `FirebaseAuthMiddleware` checks `configuration["LOCAL_AUTH"]` — if a misconfigured staging deployment sets `LOCAL_AUTH=true`, a localStorage-stored token becomes the credential for a backend that accepts it as valid.
+- **Recommended Fix:** (1) For the local dev mode, store the token in `sessionStorage` instead of `localStorage` (scoped to tab, cleared on close, slightly better than persistent `localStorage` for dev use). Ideally use in-memory state only. (2) Add a CI/CD check that fails any staging or production deployment if `LOCAL_AUTH=true` or `VITE_LOCAL_AUTH=true` is present in environment variables. (3) Add a server-side check in `LocalAuthService` that refuses to operate if `ASPNETCORE_ENVIRONMENT` is `Staging` or `Production`.
+- **Reference:** OWASP Top 10 — A07:2021 Identification and Authentication Failures; CWE-312 (Cleartext Storage of Sensitive Information)
+
+---
+
+#### [MEDIUM] M1-007: Admin Endpoints /auth/admin/* Lack Permission Gate — Any Authenticated User Can Access Them
+
+- **File:** `backend/Services/AuthService/AuthService.Api/Endpoints/Auth.cs`, lines 72–106
+- **Description:** The endpoints `GET /auth/admin/team-members`, `GET /auth/admin/audit-events`, `GET /auth/admin/users`, and `GET /auth/admin/users/{id}` each call `.RequireAuthorization()` (checking only that the user is authenticated) and then dispatch to queries that carry `[RequiresPermission("admin.dashboard.read")]` or `[RequiresPermission("admin.users.read")]`. The permission check runs correctly through `PermissionBehavior` for `GetTeamMembersQuery`, `GetAuditEventsQuery`, `ListUsersQuery`, and `GetUserDetailQuery`. However: `PermissionBehavior` reads permissions from `currentUser.HasPermission(...)` which in turn reads from the `"permissions"` claim in the JWT. For Firebase-authenticated users (production path), Firebase ID tokens do not carry a `"permissions"` claim — they carry only Firebase-standard claims. The `"permissions"` claim is only present in LOCAL_AUTH JWTs (set explicitly in `LocalAuthService.LoginAsync`). For Firebase users the `HasPermission` check falls back to role-name matching (`Roles.Any(r => r.Equals(permission, ...))`), which will never match a dotted permission string like `"admin.users.read"`. The net result for production Firebase users is: `HasPermission("admin.users.read")` returns false, and `PermissionBehavior` returns a Forbidden result — meaning these admin endpoints are broken (always 403) for Firebase-authenticated users, not merely permissive. However, for LOCAL_AUTH dev users with `SYSTEM_ADMIN` role, the wildcard `"*"` permission is set, so they pass. This is a correctness and privilege issue: the permission enforcement works in dev mode but silently fails in production.
+- **Recommended Fix:** Implement `GetUserPermissionsQueryHandler` to resolve actual permissions from the database (see M1-004). For Firebase-authenticated users, their permissions must be loaded from `auth.role_permission` on every request (or cached in a short-lived distributed cache). Until M1-004 is fixed, the admin endpoints are inaccessible to production users regardless of their role.
+- **Reference:** CWE-285 (Improper Authorization); OWASP ASVS V4.1
+
+---
+
+#### [LOW] M1-008: OTP Service Logs Plaintext OTP in Non-Production Environments Including Staging
+
+- **File:** `backend/Services/AuthService/AuthService.Infrastructure/Services/OtpService.cs`, lines 60–62
+- **Description:** The OTP service logs the plaintext OTP to the application log in all non-production environments: `logger.LogWarning("OTP for {Phone}: {Otp} (DEVELOPMENT ONLY — never log in production)", phoneNumber, otp)`. The condition is `!string.Equals(env, "Production", ...)`. If the service is deployed to a staging environment with `ASPNETCORE_ENVIRONMENT=Staging`, this log statement executes and the plaintext OTP is written to Cloud Logging (GCP). Any team member or service account with Cloud Logging read access to the staging project can read all staging OTPs, enabling account takeover on staging. If staging uses any real user phone numbers or if staging credentials are ever used to access production data, this is a direct exposure risk.
+- **Recommended Fix:** Change the condition to only log the OTP when `ASPNETCORE_ENVIRONMENT=Development` (local dev only), not for any deployed environment. Use `app.Environment.IsDevelopment()` via `IHostEnvironment` injection rather than reading the raw string. Alternatively, remove the log entirely and rely on the dev seed admin account for local testing.
+- **Reference:** CWE-532 (Insertion of Sensitive Information into Log File); OWASP Logging Cheat Sheet
+
+---
+
+#### [LOW] M1-009: Weak Placeholder PAN Encryption Key Committed in appsettings.json
+
+- **File:** `backend/Services/AuthService/AuthService.Api/appsettings.json`, line 29
+- **Description:** `appsettings.json` contains `"Key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="` as the placeholder `PanEncryption:Key`. This is a base64-encoded string of 32 zero-bytes — a trivially predictable key. Although `AesPanEncryptionService` correctly requires a 32-byte key and uses GCP Secret Manager in production, the committed placeholder key means: (1) if a developer forgets to set the real key before running tests, PANs are encrypted with a known-weak key, (2) if any integration test database contains data encrypted with this key, those PANs can be trivially decrypted. The `.gitignore` excludes `appsettings.Development.json` and `appsettings.Local.json` but not `appsettings.json` itself — so this file is correctly tracked, but the placeholder being cryptographically weak is a risk.
+- **Recommended Fix:** Replace the all-zeros placeholder with an explanatory string: `"Key": "SET_VIA_ENV_OR_SECRET_MANAGER"`. Modify `AesPanEncryptionService` to explicitly reject this sentinel value at startup with a clear error message. This prevents accidental use of a weak key in any environment.
+- **Reference:** CWE-321 (Use of Hard-coded Cryptographic Key); OWASP Cryptographic Storage Cheat Sheet
+
+---
+
+#### [INFO] M1-INFO-001: auth.role RLS Policy References app.is_platform_admin Session Variable — Not Set for SUPER_ADMIN — Cross-Org Visibility Broken
+
+- **File:** `database/migrations/035_auth_org_roles_invitations.sql`, lines 149–165
+- **Description:** The `role_org_isolation` policy allows a platform admin to see all roles when `current_setting('app.is_platform_admin', TRUE) = 'true'`. The `invitation_org_isolation` policy has the same bypass. No application code sets `app.is_platform_admin`. This is additional evidence for M1-003. Specifically: a SUPER_ADMIN who is an authenticated user will see only system roles (organization_id IS NULL) and roles for their own org — they will not see org-custom roles across all organizations as required by the scope. SUPER_ADMIN cross-org admin actions will fail or return incomplete data.
+- **Recommended Fix:** When implementing the RLS session variable injection (M1-003 fix), also set `SET LOCAL app.is_platform_admin = 'true'` for users whose effective permission set includes `"platform.orgs.read"` or who have the `SUPER_ADMIN` role. This should be determined from `ICurrentUser` before the EF query executes.
+
+---
+
+#### [INFO] M1-INFO-002: teamApi.ts Calls Stub Endpoints /auth/team/* — Not Wired to Backend
+
+- **File:** `src/admin/src/lib/teamApi.ts`, lines 72, 77, 82, 86, 91, 95, 99, 103, 107, 112
+- **Description:** `teamApi.ts` (Phase 6F Track F3) calls `GET /auth/team`, `GET /auth/team/{userId}`, `POST /auth/team/invite`, `PATCH /auth/team/{userId}`, `POST /auth/team/{userId}/suspend`, `POST /auth/team/{userId}/reactivate`, `DELETE /auth/team/{userId}`, `GET /auth/team/invites`, etc. None of these routes exist in `Auth.cs` — the backend endpoints registered are `GET /auth/org/members`, `POST /auth/org/members/invite`, etc. (as specified in the scope). The URL mismatch means all team management calls will return 404. This is a functional defect but has a security implication: because these endpoints don't exist server-side, any team management UI actions silently fail without the user receiving an error, potentially creating the false impression that invite/suspend actions succeeded when they did not.
+- **Recommended Fix:** Align `teamApi.ts` route paths with the actual backend routes once the backend endpoints are implemented (`/auth/org/members`, `/auth/org/invites`, etc.). Wire the frontend to the actual endpoint contract.
+
+---
+
+### Module 1 Summary
+
+| Severity | Count | Finding IDs |
+|----------|-------|-------------|
+| CRITICAL | 1 | M1-001 |
+| HIGH | 3 | M1-002, M1-003, M1-004 |
+| MEDIUM | 3 | M1-005, M1-006, M1-007 |
+| LOW | 2 | M1-008, M1-009 |
+| INFO | 2 | M1-INFO-001, M1-INFO-002 |
+
+**GATE VERDICT: NO-GO**
+
+Module 1 cannot be approved for any deployed environment in its current state. The three HIGH findings represent fundamental gaps:
+
+- M1-002: The entire delegation enforcement surface (the #1 security requirement of this module) is absent — all new command handlers are empty stub directories.
+- M1-003: PostgreSQL RLS is enabled but the session variable that powers it is never set — all RLS policies are silently inactive, providing no tenant isolation.
+- M1-004: The permissions endpoint returns role names instead of permission codes — the frontend matrix and all permission gates are non-functional for production Firebase users.
+
+**Blockers that must be fixed before re-review:**
+1. M1-001 (CRITICAL): Rotate the Firebase API key and remove `GoogleService-Info.plist` from git history.
+2. M1-002 (HIGH): Implement all Role, Invitation, Member, and Permission command handlers with delegation guard.
+3. M1-003 (HIGH): Implement RLS session variable injection (`SET LOCAL app.current_user_id`) in EF Core before queries.
+4. M1-004 (HIGH): Implement permission resolution from `auth.role_permission` in `GetUserPermissionsQueryHandler`.
+
+**Fix before production (not gate blockers but must be resolved before go-live):**
+5. M1-005 (MEDIUM): Verify invitation token entropy and single-use enforcement when handlers are implemented.
+6. M1-006 (MEDIUM): Move LOCAL_AUTH token from `localStorage` to `sessionStorage` or in-memory state; add staging guard.
+7. M1-007 (MEDIUM): Admin endpoints will be inaccessible to Firebase users until M1-004 is fixed.
+
+**Recommended improvements:**
+8. M1-008 (LOW): Restrict OTP plaintext logging to `IsDevelopment()` only, not all non-production environments.
+9. M1-009 (LOW): Replace all-zeros placeholder PAN encryption key with a sentinel string rejected at startup.
+
+*Module 1 Auth/RBAC initial review completed: 2026-05-29 (pre-implementation; findings M1-002/M1-003/M1-004/M1-005/M1-007 were timing artifacts — implementation was absent at review time)*
+
+---
+
+## Module 1 Auth/RBAC Re-Review (Implementation Verified)
+
+**Scope:** Full re-review against actual implemented code. Supersedes the initial Module 1 review for all timing-artifact findings. Backlogged per user acknowledgement: M1-001 (Firebase plist), M1-006 (localStorage JWT), M1-008 (OTP staging log), M1-009 (PAN placeholder key) — these remain tracked but are not re-litigated here.
+**Review Date:** 2026-05-29
+**Reviewer:** security-reviewer agent
+
+### Timing-Artifact Findings Resolved (Code Confirmed Present)
+
+| Finding | Original Severity | Disposition |
+|---------|-------------------|-------------|
+| M1-002 | HIGH | RESOLVED. All command handlers implemented: SetRolePermissions, CreateOrgRole, UpdateOrgRole, DeleteOrgRole, CreateInvitation, AcceptInvitation, ResendInvitation, RevokeInvitation. All API endpoints registered in OrgRoles.cs, Invitations.cs, OrgMembers.cs, Permissions.cs, PlatformAdmin.cs. |
+| M1-003 | HIGH | RESOLVED. `RlsSessionInterceptor` implemented at `AuthService.Infrastructure/Persistence/Interceptors/RlsSessionInterceptor.cs`. Registered as `DbConnectionInterceptor` in `DependencyInjection.cs` line 63. Sets `app.current_user_id` and `app.is_platform_admin` on connection open. |
+| M1-004 | HIGH | RESOLVED. `GetUserPermissionsQueryHandler` now resolves actual DB permission codes via `UserRole → RolePermission → Permission` join. Returns `UserPermissionsDto` with `Roles` and `Permissions` (dot-notation codes). Wildcard `"*"` path expands to full catalog. |
+| M1-005 | MEDIUM | RESOLVED. Token entropy: `RandomNumberGenerator.GetBytes(32)` = 256 bits, URL-safe base64. Single-use: `Invitation.IsValid()` checks `Status == Pending && ExpiresAt > utcNow`. `AcceptInvitationCommandHandler` calls `invitation.Accept(userId)` before `SaveChangesAsync` — status transitions atomically with membership creation. Replay blocked by status check. |
+| M1-007 | MEDIUM | RESOLVED. Permission codes now correctly resolved from DB (M1-004 fix). `GetUserPermissionsQuery` returns real permission strings. Admin endpoints work for Firebase users. `OrgMembers.cs` routes match `/auth/team/*` pattern expected by `teamApi.ts`. |
+| M1-INFO-001 | INFO | RESOLVED. `RlsSessionInterceptor` sets `app.is_platform_admin = 'true'` when `currentUser.HasPermission(Permissions.PlatformOrgsRead) || HasPermission("*")`. SUPER_ADMIN cross-org visibility now functional. |
+| M1-INFO-002 | INFO | RESOLVED. `OrgMembers.cs` uses GroupName `/auth/team` — routes match `teamApi.ts` exactly: GET `/auth/team`, PATCH `/auth/team/{memberId}`, POST `/auth/team/{memberId}/suspend`, etc. |
+
+---
+
+### Findings (Actual Implementation)
+
+#### [HIGH] M1-R-001: RlsSessionInterceptor Uses String Interpolation to Construct SQL — Potential SQL Injection in app.current_user_id
+
+- **File:** `backend/Services/AuthService/AuthService.Infrastructure/Persistence/Interceptors/RlsSessionInterceptor.cs`, lines 61–63
+- **Description:** The interceptor sets the RLS session variable using a C# interpolated string directly in `cmd.CommandText`:
+  ```csharp
+  cmd.CommandText = $"""
+      SET LOCAL app.current_user_id = '{userId.Replace("'", "''")}';
+      SET LOCAL app.is_platform_admin = '{(isPlatformAdmin ? "true" : "false")}';
+      """;
+  ```
+  The `userId` value comes from `currentUser.UserId.ToString()` — a GUID formatted as `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`. A GUID cannot contain a single-quote character, so the `Replace("'", "''")` escape is technically sufficient for the GUID case. However: (1) the escape logic relies on the caller never passing a non-GUID value — if `currentUser.UserId` were somehow populated with attacker-controlled content (e.g. via a JWT claim parsing bug), the escaping could be bypassed; (2) using string concatenation for SQL is categorically unsafe as a pattern even when the current input is constrained — it creates a maintenance risk where future changes to `userId` sourcing could silently introduce injection. The correct approach is to use parameterized `SET` or `set_config()` with proper parameter binding.
+- **Recommended Fix:** Replace the interpolated SET LOCAL with a parameterized call using `set_config()` which accepts parameters safely via `NpgsqlParameter`. Example:
+  ```csharp
+  cmd.CommandText = "SELECT set_config('app.current_user_id', @uid, true), set_config('app.is_platform_admin', @admin, true)";
+  cmd.Parameters.Add(new NpgsqlParameter("uid", userId));
+  cmd.Parameters.Add(new NpgsqlParameter("admin", isPlatformAdmin ? "true" : "false"));
+  ```
+  This removes any injection surface regardless of input origin.
+- **Reference:** CWE-89 (SQL Injection); OWASP A03:2021
+
+---
+
+#### [MEDIUM] M1-R-002: AcceptInvitationCommand Is Unauthenticated — Invitation Acceptance Can Be Triggered by Any Signed-In User, Not Just the Invitee
+
+- **File:** `backend/Services/AuthService/AuthService.Api/Endpoints/Invitations.cs`, line 61; `backend/Services/AuthService/AuthService.Application/Invitations/Commands/AcceptInvitation/AcceptInvitationCommand.cs`, lines 39–103
+- **Description:** The `POST /auth/invite/{token}/accept` endpoint requires `.RequireAuthorization()` (the user must be authenticated), and `AcceptInvitationCommandHandler` confirms `currentUser.IsAuthenticated`. However, the invitation was sent to a specific email address (`invitation.Email`). The handler does not verify that the authenticated caller's email matches the invited email before creating the org membership. Any authenticated user who obtains the invite token (e.g. by intercepting the email, or if the token is shared) can accept the invitation as themselves — joining the organization under a different identity than intended. The intended invitee cannot then accept the invite (it will already be accepted). In a B2B multi-tenant system where invitations represent explicit access grants to specific named individuals, accepting on behalf of a different identity is an access control gap.
+- **Recommended Fix:** Add an email match check in `AcceptInvitationCommandHandler` before creating the membership:
+  ```csharp
+  var callerEmail = currentUser.Email?.ToLowerInvariant().Trim();
+  if (callerEmail is null || !string.Equals(callerEmail, invitation.Email, StringComparison.OrdinalIgnoreCase))
+      return Error.Forbidden("Invitation.EmailMismatch",
+          "This invitation was sent to a different email address.");
+  ```
+  If the platform must support phone-based users without email, add an analogous phone check when `invitation.PhoneNumber` is set. Alternatively, embed the invitee's user ID in the invitation at creation time (requires a pre-registration step) and verify against `currentUser.UserId`.
+- **Reference:** CWE-284 (Improper Access Control); OWASP ASVS V4.2
+
+---
+
+#### [LOW] M1-R-003: RlsSessionInterceptor Silently Swallows Failure — RLS Isolation Silently Degrades Without Alert
+
+- **File:** `backend/Services/AuthService/AuthService.Infrastructure/Persistence/Interceptors/RlsSessionInterceptor.cs`, lines 72–79
+- **Description:** The interceptor catches all exceptions during session variable setting and logs a warning, but allows the request to continue:
+  ```csharp
+  catch (Exception ex)
+  {
+      logger.LogWarning(ex, "RLS: Failed to set session variables ...");
+  }
+  ```
+  This means if the `SET LOCAL` command fails (e.g. Postgres config does not have `app` in `custom_variable_classes`, or a connection pool state issue), RLS policies silently receive `NULL` for `app.current_user_id` and fall back to their null-UUID behavior, effectively disabling tenant isolation. The log warning may go unnoticed in a high-traffic environment. A failed RLS session initialization is a security event, not merely an operational warning — it should be observable via a metric/alert.
+- **Recommended Fix:** (1) Add a Cloud Monitoring counter metric increment on the catch block so alerts can be configured on non-zero rate. (2) Consider adding `custom_variable_classes = 'app'` to the Postgres config explicitly and testing at startup that the variables can be set. (3) Optionally, add a circuit-breaker: if RLS setup fails for N consecutive requests from the same connection, return a 503 rather than silently serving potentially un-isolated data.
+- **Reference:** CWE-778 (Insufficient Logging); defense-in-depth for tenant isolation
+
+---
+
+#### [INFO] M1-R-INFO-001: ValidateInviteToken Is a Public Unauthenticated Endpoint — Timing Oracle for Token Existence
+
+- **File:** `backend/Services/AuthService/AuthService.Api/Endpoints/Invitations.cs`, lines 57–59, 102–110; `backend/Services/AuthService/AuthService.Application/Invitations/Queries/ValidateInviteToken/ValidateInviteTokenQuery.cs`
+- **Description:** `GET /auth/invite/{token}` is public — no `RequireAuthorization()`. It looks up an invitation by token hash and returns different responses for valid vs. invalid tokens (200 with details vs. 410 with `isValid: false`). For a non-existent token, the handler returns `Error.NotFound` which maps to 404. An attacker can distinguish: 404 (token not in DB) vs. 410 with `isValid: false` (token exists but expired/revoked) vs. 200 (token valid). This is an oracle for whether a given token string is in the database. Given that tokens are 256-bit random values, brute-force is not feasible, but the 404 vs. 410/200 distinction slightly leaks information about system state. The more significant risk is that this endpoint reveals org name, email (invitee's email), role name, and expiry time to anyone who has the token — confirming this is intentional (the accept page needs this data), but the endpoint has no rate limiting.
+- **Recommended Fix:** Add the `"otp"` or a new `"invite"` rate limiting policy to this endpoint to limit oracle/enumeration attempts: `group.MapGet("/invite/{token}", ...).RequireRateLimiting("invite")`. A modest limit (20 req/min per IP) is sufficient since legitimate users open the link once.
+
+---
+
+#### [INFO] M1-R-INFO-002: GetOrgMembersQuery Role Name Filter Accepts Arbitrary String — No Whitelist
+
+- **File:** `backend/Services/AuthService/AuthService.Application/Members/Queries/GetOrgMembers/GetOrgMembersQuery.cs`, lines 58–60
+- **Description:** `GetOrgMembersQuery` accepts a `Role` string parameter and filters by `r.Name == request.Role`. Unlike `GetTeamMembersQuery` (the existing admin query) which validates `request.Role` against an explicit `OperationalRoles` whitelist, `GetOrgMembersQuery` passes the role name string directly to EF Core. Since this is a parameterized LINQ query (not raw SQL), SQL injection is not possible. However, the free-form role name filter allows a caller with `org.members.read` to probe whether any given role name exists in the system (including system roles not visible in their UI) by observing whether the filter returns 0 results vs. records. This is a low-severity information disclosure.
+- **Recommended Fix:** For the user-supplied `role` filter in `GetOrgMembersQuery`, validate the value against roles actually visible within the caller's org (i.e. join to `auth.role` scoped to the org before applying the filter) rather than accepting arbitrary strings. This is naturally enforced by the LINQ join on `db.Roles.Where(r => r.DeletedAt == null)` which already limits to visible roles, but the observable 0-vs-N result oracle remains.
+
+---
+
+### Delegation / Privilege Escalation Verification
+
+The three delegation enforcement points were verified in detail:
+
+**SetRolePermissions (lines 86–107 of SetRolePermissionsCommand.cs):**
+- Guard fires for all non-SUPER_ADMIN, non-wildcard callers
+- Effective permissions resolved from DB via `ResolveCallerEffectivePermissionsAsync` — joins both platform roles (`auth.user_role`) and org membership roles (`auth.organization_member`) to `role_permission` and `permission` tables
+- JWT claim permissions (`_currentUser.Permissions`) also included for LOCAL_AUTH compatibility
+- Escalation check: `requestedPermNames.Except(callerEffectivePerms)` — any permission not in caller's set triggers `Error.Forbidden("Role.PrivilegeEscalation", ...)`
+- System role guard: `role.IsSystemRole` checked before any mutation
+- Org isolation: `role.OrganizationId != orgId` checked before any mutation
+- PASS: Server-side, not bypassable via UI or JWT manipulation
+
+**CreateInvitation — role permission check (lines 89–111 of CreateInvitationCommand.cs):**
+- Same `ResolveCallerEffectivePermissionNamesAsync` logic
+- Checks role's full permission set against caller's effective permissions
+- Returns `Error.Forbidden("Invitation.PrivilegeEscalation", ...)` on excess
+- Duplicate pending invite prevention before token generation
+- PASS
+
+**UpdateOrgMember role reassignment (lines 74–93 of UpdateOrgMemberCommand.cs):**
+- Identical delegation check pattern
+- Resolves new role's permissions and compares to caller's effective set
+- Returns `Error.Forbidden("Member.PrivilegeEscalation", ...)` on excess
+- PASS
+
+All three delegation guards are: (a) on the server, (b) backed by DB queries (not JWT claims alone), (c) separate from the `[RequiresPermission]` attribute-based gate (defense-in-depth), (d) applied consistently across role create/update/assign/invite paths.
+
+### Org Isolation / IDOR Verification
+
+Verified across all new handlers:
+
+| Handler | Org Isolation Method | Result |
+|---------|---------------------|--------|
+| SetRolePermissions | `role.OrganizationId != orgId` check before mutation | PASS |
+| CreateOrgRole | Scopes to `currentUser.OrganizationId.Value` | PASS |
+| UpdateOrgRole | `role.OrganizationId != orgId` check | PASS |
+| DeleteOrgRole | `role.OrganizationId != orgId` check; also system role guard | PASS |
+| GetOrgRoles | Filters by `orgId` or `NULL` (system roles); SUPER_ADMIN bypass correct | PASS |
+| CreateInvitation | Scopes to `currentUser.OrganizationId.Value` | PASS |
+| AcceptInvitation | Does not verify email match — see M1-R-002 | MEDIUM finding |
+| RevokeInvitation | `invite.OrganizationId != orgId` check | PASS |
+| ResendInvitation | `invite.OrganizationId != orgId` check | PASS |
+| GetOrgMembers | `m.OrganizationId == orgId` in base query | PASS |
+| SuspendOrgMember | `m.OrganizationId == orgId` in query | PASS |
+| RemoveOrgMember | `m.OrganizationId == orgId` in query | PASS |
+| SuspendOrganization | Guarded by `[RequiresPermission(PlatformOrgsSuspend)]` (SUPER_ADMIN only) | PASS |
+| ListPlatformOrganizations | Guarded by `[RequiresPermission(PlatformOrgsRead)]` | PASS |
+
+RLS (`RlsSessionInterceptor`) adds defense-in-depth at the DB layer — subject to M1-R-001 (SQL injection risk in variable construction) and M1-R-003 (silent failure on set error).
+
+### Invitation Token Security Verification
+
+| Property | Implementation | Result |
+|----------|---------------|--------|
+| Entropy | `RandomNumberGenerator.GetBytes(32)` = 256 bits | PASS |
+| Storage | SHA-256 hash only; raw token returned once in response, never persisted | PASS |
+| Expiry | 48 hours (`DateTime.UtcNow.AddHours(48)`) | PASS |
+| Single-use | `invitation.Accept(userId)` sets `Status = Accepted`; `IsValid()` checks `Status == Pending` | PASS |
+| Replay blocked | Status check in `AcceptInvitationCommandHandler` lines 52–65 returns Conflict on re-use | PASS |
+| Raw token in logs | Checked: no `logger.Log*` call includes `rawToken` in CreateInvitation, AcceptInvitation, ResendInvitation, or ValidateInviteToken | PASS |
+| DB UNIQUE constraint | `token_hash UNIQUE` in migration 035 prevents hash collision insert | PASS |
+
+### /auth/me/permissions Verification
+
+`GetUserPermissionsQueryHandler` verified to return DB-resolved permission codes:
+- Wildcard path: expands full `auth.permission` catalog (all `p.Name` values)
+- Standard path: three-way LINQ join resolving dotted permission names (`"org.members.invite"`, etc.)
+- Response DTO: `UserPermissionsDto(UserId, Roles, Permissions)` — matches `teamApi.ts PermissionsSchema`
+- No over-broad exposure: only permissions actually assigned to the user's active roles are included; no cross-org permissions leak
+
+### Module 1 Re-Review Summary
+
+| Severity | Count | Finding IDs |
+|----------|-------|-------------|
+| CRITICAL | 0 | — |
+| HIGH | 1 | M1-R-001 |
+| MEDIUM | 1 | M1-R-002 |
+| LOW | 1 | M1-R-003 |
+| INFO | 2 | M1-R-INFO-001, M1-R-INFO-002 |
+
+**GATE VERDICT: GO with conditions**
+
+The core security requirements of Module 1 are correctly implemented:
+- Constrained delegation is enforced server-side across all three mutation paths (SetRolePermissions, CreateInvitation, UpdateOrgMember)
+- Org isolation is present on all resource-scoped handlers
+- RLS session variable injection is wired (`RlsSessionInterceptor`) providing defense-in-depth
+- Invitation tokens have correct entropy, are stored hashed, enforce single-use, and plaintext is never logged
+- Permissions endpoint returns DB-resolved permission codes, not role names
+
+**M1-R-001 (HIGH) should be fixed before production deployment.** It is a low-exploitation-probability finding (GUID format constrains injection), but the pattern is categorically unsafe. The parameterized `set_config()` fix is a minimal change.
+
+**M1-R-002 (MEDIUM) should be fixed before go-live.** The invitation email match check is a straightforward server-side guard that should be added to `AcceptInvitationCommandHandler`.
+
+**Deferred (acknowledged by user, tracked for future sprints):** M1-001 (Firebase plist rotation), M1-006 (localStorage JWT), M1-008 (OTP staging log), M1-009 (PAN placeholder key).
+
+*Module 1 re-review completed: 2026-05-29*
+
+---
+
+## Increment 1.1 Security Review — Permission Catalog Management + OrgContextGuard Hardening
+
+**Scope:** New files reviewed:
+- `AuthService.Application/PermissionCatalog/Commands/CreatePermission/CreatePermissionCommand.cs`
+- `AuthService.Application/PermissionCatalog/Commands/UpdatePermission/UpdatePermissionCommand.cs`
+- `AuthService.Application/PermissionCatalog/Commands/DeletePermission/DeletePermissionCommand.cs`
+- `AuthService.Application/Common/Guards/OrgContextGuard.cs`
+- `AuthService.Api/Endpoints/Permissions.cs` (updated with write routes)
+- `AuthService.Domain/Entities/Permission.cs`
+- Modified handlers adopting OrgContextGuard: `CreateOrgRoleCommand`, `SetRolePermissionsCommand`, `UpdateOrgMemberCommand`, `SuspendOrgMemberCommand`, `RemoveOrgMemberCommand`, `CreateInvitationCommand`
+
+Previously-deferred backlog items (M1-001, M1-006, M1-008, M1-009) are not re-litigated per user instruction.
+
+**Review Date:** 2026-05-29
+**Reviewer:** security-reviewer agent
+
+---
+
+### Focus Area 1 — platform.permissions.manage Gating on Write Endpoints
+
+**Verdict: PASS**
+
+All three write operations carry `[RequiresPermission(Permissions.PlatformPermissionsManage)]` at the command-record level:
+
+- `CreatePermissionCommand` (line 25): `[RequiresPermission(Permissions.PlatformPermissionsManage)]`
+- `UpdatePermissionCommand` (line 17): `[RequiresPermission(Permissions.PlatformPermissionsManage)]`
+- `DeletePermissionCommand` (line 18): `[RequiresPermission(Permissions.PlatformPermissionsManage)]`
+
+`PermissionBehavior<TRequest,TResponse>` is registered as an open generic `IPipelineBehavior<,>` (AuthService.Application `DependencyInjection.cs` line 27) and fires on every MediatR dispatch, including these three commands. The pipeline order is: Validation → PermissionBehavior — meaning a malformed request is rejected by validation before permission is even checked, and a valid request from an unauthorised caller is rejected by the permission check before the handler body runs.
+
+`Permissions.PlatformPermissionsManage` resolves to `"platform.permissions.manage"`, which in migration 036 is granted only to `SUPER_ADMIN` (the cross-join that seeds all permissions to SUPER_ADMIN). `ORG_ADMIN` is seeded with `resource IN ('org','accounting','document','gst','itr','loan','chat','callback','subscription','notification')` — `"platform"` resource is explicitly excluded. No other system role receives `platform.permissions.manage`.
+
+A non-SUPER_ADMIN (Org Admin, Manager, CA, HR, Reviewer) reaching `POST /auth/permissions`, `PUT /auth/permissions/{id}`, or `DELETE /auth/permissions/{id}` will be rejected by `PermissionBehavior` with `Error.Forbidden("Auth.InsufficientPermission", ...)` before the handler body executes. There is no fallback path. The enforcement is entirely server-side.
+
+---
+
+### Focus Area 2 — Create-Then-Grant Privilege Escalation
+
+**Verdict: PASS — escalation is structurally blocked**
+
+The attack scenario: a user with `platform.permissions.manage` (and therefore SUPER_ADMIN) creates a new permission `new.perm.x` via `POST /auth/permissions`, then tries to grant it to a role via `PUT /auth/org/roles/{id}/permissions`. The question is whether a non-SUPER_ADMIN with limited `org.permissions.grant` but not `new.perm.x` in their effective set could grant it.
+
+The delegation guard in `SetRolePermissionsCommandHandler` (lines 86–119) operates as follows:
+
+1. It loads the requested permission IDs from the database: `db.Permissions.Where(p => distinctIds.Contains(p.Id) && p.DeletedAt == null)`. A freshly-created permission exists in this table immediately — it is treated identically to any seed permission.
+2. It resolves the caller's effective permission names via `ResolveCallerEffectivePermissionsAsync` — joining `auth.user_role → role_permission → permission` and `auth.organization_member → role_permission → permission`. A newly-created permission name (`"new.perm.x"`) will only appear in this set if the caller's roles have been explicitly granted it through an existing `role_permission` row.
+3. The check `requestedPermNames.Except(callerEffectivePerms)` produces a non-empty set for `"new.perm.x"` unless the caller already holds it — and since the permission was just created, no existing role_permission row can grant it to the caller yet.
+4. Result: `Error.Forbidden("Role.PrivilegeEscalation", "You cannot grant permissions you do not hold: new.perm.x")` — the escalation attempt is blocked.
+
+The identical logic holds for `CreateInvitationCommandHandler` (role permission check) and `UpdateOrgMemberCommandHandler` (role reassignment check) — a freshly-created permission not yet in the caller's effective set cannot be assigned through any of these three mutation paths.
+
+The only exception is a caller who already holds `"*"` (SUPER_ADMIN wildcard) or `PlatformPermissionsManage`. But a caller with `PlatformPermissionsManage` is SUPER_ADMIN by construction and the guard's `isSuperAdmin` branch (line 54–55) correctly skips the delegation check for them. There is no way for a non-SUPER_ADMIN to acquire `PlatformPermissionsManage` without going through `SetRolePermissions` — which would itself reject the grant because no non-SUPER_ADMIN already holds it.
+
+---
+
+### Focus Area 3 — Permission Name Validation (Regex + Input Risk)
+
+**Verdict: PASS with one observation (INFO)**
+
+The `CreatePermissionCommandValidator` enforces:
+- `NotEmpty()` — cannot be blank
+- `MaximumLength(200)` — bounded length, prevents oversized payloads
+- `Matches(@"^[a-z0-9_]+(\.[a-z0-9_]+)+$")` — lowercase dot-notation; at least two segments; each segment composed only of `[a-z0-9_]`
+
+The regex is correct and tight. It enforces:
+- No uppercase (prevents ambiguity with case-insensitive `HasPermission` comparisons)
+- No hyphens, slashes, quotes, wildcards, or other metacharacters that could interfere with downstream string matching
+- At least two dot-separated segments (prevents bare single-token names like `"admin"` that could shadow role names)
+- No leading/trailing dots or consecutive dots (the `+` quantifier requires at least one character per segment)
+
+The regex is evaluated by FluentValidation's `Matches()` which uses `Regex.IsMatch` with the full string anchored by `^` and `$` — no partial-match bypass is possible.
+
+`UpdatePermissionCommand` does not accept a new `name` — only `description` (nullable string, max 500 chars). The name, resource, and action fields on `Permission` are `private set` and only writable via `Permission.Create()`. `UpdateDescription()` is the only mutator. Name immutability is enforced at the domain entity level, not just the handler.
+
+**Observation:** `Description` on both `CreatePermissionCommand` and `UpdatePermissionCommand` is stored as-is with no sanitisation beyond `MaximumLength(500)`. Descriptions are returned in `GetPermissionCatalogQuery` responses and will be rendered in the admin UI permission matrix. If the frontend renders descriptions with `dangerouslySetInnerHTML` or similar, stored XSS is possible. Based on prior reviews the frontend uses standard React text rendering — flagged as INFO only.
+
+---
+
+### Focus Area 4 — OrgContextGuard Bypass and SUPER_ADMIN Path
+
+**Verdict: PASS — guard is correct and not bypassable**
+
+`OrgContextGuard.ValidateAsync` performs three checks in sequence:
+
+**Check 1 — OrganizationId must be non-null and non-empty (line 44):**
+`currentUser.OrganizationId` is read from `HttpContext.Items["FirebaseClaims"]` by `CurrentUser.cs`. For Firebase-authenticated users, `organizationId` must be in the JWT custom claims (set by the backend at login). A stale or zero-GUID value fails this check with a 409 before any DB query runs.
+
+**Check 2 — Org row must exist and not be soft-deleted (lines 53–62):**
+`db.Organizations.AnyAsync(o => o.Id == orgId && o.DeletedAt == null)`. This DB round-trip prevents a token from acting on behalf of a deleted or never-existing org. RLS on `auth.organization` provides a second layer for non-SUPER_ADMIN callers.
+
+**Check 3 — Membership verification for non-SUPER_ADMIN (lines 64–82):**
+`isSuperAdmin` is determined by `currentUser.HasPermission(Permissions.PlatformOrgsRead) || HasPermission("*")`. For non-SUPER_ADMIN callers, an active `organization_member` row is required (`m.IsActive && m.DeletedAt == null`). A user whose membership has been suspended or soft-deleted cannot pass this check.
+
+**SUPER_ADMIN org-context path:** When `isSuperAdmin` is true, Check 3 is skipped (`if (requireMembership && !isSuperAdmin)`). This is correct — a SUPER_ADMIN does not need an explicit membership row to act within any org. The guard still runs Check 1 and Check 2, so even SUPER_ADMIN cannot operate against a non-existent or deleted org ID. A SUPER_ADMIN with an all-zeros org ID in their token will fail Check 1.
+
+**Bypass analysis:** There are three token origins:
+- Firebase tokens: `organizationId` is a custom claim set by backend — not user-controllable
+- LOCAL_AUTH tokens: signed with `LocalJwt.Issue()` using HMAC-SHA256 — not forgeable without the server secret
+- DEV_AUTH_BYPASS tokens: canned token map with fixed values — not injectable from outside
+
+No path allows a non-SUPER_ADMIN to pass Check 3 without a live, active membership row in the database. A user who has just been suspended via `SuspendOrgMemberCommand` will fail the guard on their next write attempt.
+
+**OrgContextGuard adoption:** The guard is called in all six org-scoped write handlers: `CreateOrgRoleCommand` (requireMembership: true), `SetRolePermissionsCommand` (requireMembership: true, gated on non-SUPER_ADMIN), `UpdateOrgMemberCommand` (requireMembership: true), `SuspendOrgMemberCommand` (requireMembership: true), `RemoveOrgMemberCommand` (requireMembership: true), `CreateInvitationCommand` (requireMembership: true). The permission catalog write commands (`CreatePermissionCommand`, `UpdatePermissionCommand`, `DeletePermissionCommand`) do not call `OrgContextGuard` — this is correct, as they are platform-global operations (no org context), not org-scoped writes.
+
+---
+
+### Findings
+
+#### [MEDIUM] I1.1-001: DeletePermissionCommand Does Not Verify the Permission Is Not Referenced by Soft-Deleted role_permission Rows — Resurrection Risk
+
+- **File:** `AuthService.Application/PermissionCatalog/Commands/DeletePermission/DeletePermissionCommand.cs`, lines 35–42
+- **Description:** The active-grant check before deletion is `db.RolePermissions.CountAsync(rp => rp.PermissionId == request.PermissionId && rp.DeletedAt == null)`. This correctly blocks deletion when active grants exist. However, soft-deleted `role_permission` rows (`rp.DeletedAt != null`) are not counted. If a SUPER_ADMIN: (1) grants permission P to role R, (2) removes the grant (soft-deletes the `role_permission` row), (3) soft-deletes the permission from the catalog, and later (4) restores the permission (by re-creating it with the same name — the uniqueness check allows recreation of soft-deleted names), the previously soft-deleted `role_permission` row still exists in the DB with the old permission ID. Since permissions get a new UUID on recreation (via `gen_random_uuid()`), the orphaned soft-deleted `role_permission` row points to the old ID and is inert. This is not an active exploitation path. The actual risk is subtler: if soft-deleted `role_permission` rows are ever un-soft-deleted as part of a bulk restore/audit operation, a permission that was supposed to be deleted could silently re-activate. This is a data integrity concern that could become a security issue depending on future restore operations.
+- **Recommended Fix:** When soft-deleting a permission, also permanently hard-delete or explicitly confirm-delete all associated `role_permission` rows (including soft-deleted ones) whose `permission_id` matches. Alternatively, add a comment in the handler noting that soft-deleted `role_permission` rows referencing this permission remain in the database and any future restore tooling must not reactivate them.
+- **Reference:** CWE-672 (Operation on a Resource After Expiration or Release)
+
+---
+
+#### [LOW] I1.1-002: CreatePermissionCommand Uniqueness Check Is Case-Sensitive — Allows Near-Duplicate Names That Differ Only in Casing
+
+- **File:** `AuthService.Application/PermissionCatalog/Commands/CreatePermission/CreatePermissionCommand.cs`, line 69
+- **Description:** The duplicate check is `db.Permissions.AnyAsync(p => p.Name == request.Name && p.DeletedAt == null)`. EF Core translates `==` on a `string` column to a case-sensitive `=` comparison in PostgreSQL (the `auth.permission.name` column has no `citext` type). The FluentValidation regex `^[a-z0-9_]+(\.[a-z0-9_]+)+$` enforces lowercase on the incoming request. However, if a permission was seeded or created historically with a mixed-case name (e.g., during early dev), the duplicate check would not detect `"gst.Returns.File"` as a duplicate of `"gst.returns.file"`. This is a low-probability scenario given the regex enforcement on all new creates, but represents a consistency gap. Additionally, `HasPermission()` in `CurrentUser.cs` uses `StringComparer.OrdinalIgnoreCase` for comparison — so two permissions differing only in case would both match the same `[RequiresPermission]` attribute, creating an ambiguous catalog state.
+- **Recommended Fix:** Add `.ToLower()` to the uniqueness check: `p.Name == request.Name.ToLower()`, or use `.ToLowerInvariant()` before DB comparison. Since the regex already enforces lowercase input, this is mainly defensive against direct DB manipulation or future tooling bypassing the validator.
+- **Reference:** CWE-178 (Improper Handling of Case Sensitivity)
+
+---
+
+#### [INFO] I1.1-INFO-001: Permission Description Field Has No Output-Encoding Guidance — Rendered in Admin UI Permission Matrix
+
+- **File:** `AuthService.Application/PermissionCatalog/Commands/CreatePermission/CreatePermissionCommand.cs` (line 54–57); `AuthService.Application/PermissionCatalog/Queries/GetPermissionCatalog/GetPermissionCatalogQuery.cs`
+- **Description:** The `description` field on a permission is stored as plain text and returned verbatim in `GetPermissionCatalogQuery`. It is rendered in the frontend permission matrix UI. The field is writable only by SUPER_ADMIN (via `platform.permissions.manage`), so the stored-XSS attack surface requires SUPER_ADMIN compromise first — which would itself be a more severe breach. This is informational: confirm the frontend matrix renders description strings via standard React text nodes (not `innerHTML`) before marking fully mitigated. Based on prior review of the frontend codebase, no `dangerouslySetInnerHTML` was found in permission-related components.
+- **Recommended Fix:** Confirm in a frontend review that `PermissionDto.description` is rendered with standard React text interpolation (`{description}`) and not injected as HTML. Add a note to the API spec that this field must not be rendered as raw HTML.
+
+---
+
+### Verification Checklist
+
+| Control | Expected | Observed | Result |
+|---------|----------|----------|--------|
+| `platform.permissions.manage` required for POST /auth/permissions | `[RequiresPermission]` on command class, PermissionBehavior fires | All three write commands decorated; pipeline confirmed | PASS |
+| Non-SUPER_ADMIN cannot create catalog permissions | Rejection before handler body | PermissionBehavior returns Forbidden before handler runs | PASS |
+| Freshly-created permission cannot be grant-escalated by non-SUPER_ADMIN | `ResolveCallerEffectivePermissionsAsync` queries DB, new perm not yet in any role_permission | Confirmed — new perm has no role_permission rows, cannot appear in effective set | PASS |
+| Permission name regex `^[a-z0-9_]+(\.[a-z0-9_]+)+$` | Lowercase, dot-notation, no injection chars | Validator confirmed; `^`/`$` anchors prevent partial match | PASS |
+| Permission name immutable after creation | `name`/`resource`/`action` private set, only `UpdateDescription()` exposed | Domain entity enforces; `UpdatePermissionCommand` accepts only `description` | PASS |
+| Delete blocked when permission in active use | `role_permission` count check before soft-delete | Implemented; see I1.1-001 for soft-deleted rows gap | PASS (with note) |
+| OrgContextGuard not bypassable | Three DB checks: orgId present, org exists, membership active | All six org-scoped write handlers call guard with `requireMembership: true` | PASS |
+| SUPER_ADMIN skips membership check correctly | `isSuperAdmin` path skips Check 3 only, still runs Check 1+2 | Confirmed — `if (requireMembership && !isSuperAdmin)` | PASS |
+| Permission catalog write commands do not call OrgContextGuard | Platform-global, no org scope | Correct — CreatePermission/Update/Delete operate on global catalog | PASS |
+
+---
+
+### Increment 1.1 Summary
+
+| Severity | Count | Finding IDs |
+|----------|-------|-------------|
+| CRITICAL | 0 | — |
+| HIGH | 0 | — |
+| MEDIUM | 1 | I1.1-001 |
+| LOW | 1 | I1.1-002 |
+| INFO | 1 | I1.1-INFO-001 |
+
+**GATE VERDICT: GO**
+
+All four focus areas pass. The `platform.permissions.manage` gate is correctly enforced server-side through `PermissionBehavior` and cannot be bypassed by any non-SUPER_ADMIN. The create-then-grant escalation path is structurally blocked — a freshly-created permission has no `role_permission` rows, so it cannot appear in any non-SUPER_ADMIN caller's effective permission set, and the delegation check in `SetRolePermissionsCommand` will reject the grant attempt with `403 Role.PrivilegeEscalation`. The permission name regex is tight and correctly anchored. `OrgContextGuard` is consistently adopted across all org-scoped write handlers, is not bypassable, and the SUPER_ADMIN path is handled correctly.
+
+I1.1-001 (MEDIUM) is a data-integrity gap around soft-deleted `role_permission` rows that could become a security issue if future restore tooling is added. Recommended to address before any bulk-restore capability is built. I1.1-002 (LOW) is a cosmetic consistency gap in the uniqueness check, fully mitigated in practice by the validator regex.
+
+*Increment 1.1 review completed: 2026-05-29*
+
+---
+
+## Increment 1.3 Security Review — Add User + Per-User Permission Grants + Assignable Roles
+
+**Scope:** New files reviewed:
+- `AuthService.Application/Admin/Commands/CreateUserAdmin/CreateUserAdminCommand.cs`
+- `AuthService.Application/Admin/Queries/GetAssignableRoles/GetAssignableRolesQuery.cs`
+- `AuthService.Application/Common/Helpers/EffectivePermissionResolver.cs`
+- `AuthService.Application/Interfaces/IPasswordHasher.cs`
+- `AuthService.Infrastructure/Auth/PasswordHasherAdapter.cs`
+- `AuthService.Domain/Entities/UserPermission.cs`
+- `AuthService.Domain/Entities/Permission.cs` (updated — `IsActive`, `SetActive`)
+- `AuthService.Infrastructure/Persistence/Configurations/UserPermissionConfiguration.cs`
+- `AuthService.Api/Endpoints/AdminUsers.cs`
+- `database/migrations/038_user_permission.sql`
+
+Updated files reviewed for regressions:
+- `GetUserPermissionsQuery.cs` (now uses `EffectivePermissionResolver`)
+- `GetGrantablePermissionsQuery.cs` (now uses `EffectivePermissionResolver`)
+- `SetRolePermissionsCommand.cs` (referenced for resolver consistency)
+- `AuthService.Infrastructure/DependencyInjection.cs` (`IPasswordHasher` registration)
+
+Deferred backlog items (M1-001, M1-006, M1-008, M1-009) are not re-litigated per user instruction.
+
+**Review Date:** 2026-05-29
+**Reviewer:** security-reviewer agent
+
+---
+
+### Focus Area 1 — Privilege Escalation via Create-User Flow
+
+#### 1a. Role Perms ⊆ Caller's Effective Set
+
+**Verdict: PASS**
+
+`CreateUserAdminCommandHandler` (lines 147–165) resolves the caller's effective permission names via `EffectivePermissionResolver.ResolveAsync` for all callers who do not hold `"*"`. The resolver includes all three legs: platform-role permissions, org-membership-role permissions, and direct `user_permission` grants. The check `rolePermNames.Except(callerEffective)` produces a non-empty list for any role whose permissions exceed the caller's set, returning `Error.Forbidden("Role.PrivilegeEscalation", ...)` before any write.
+
+#### 1b. Override permissionIds ⊆ Caller's Effective Set
+
+**Verdict: PASS**
+
+The override permissions delegation check (lines 183–198) runs identically — the same `EffectivePermissionResolver.ResolveAsync` call, then `.Except(callerEffective)`. A non-wildcard caller cannot include an override permission they do not themselves hold. The `overridePerms` list is populated exclusively from DB rows matching `p.IsActive && p.DeletedAt == null` (line 173), so retired and soft-deleted permissions cannot be injected even if their IDs are submitted.
+
+#### 1c. Non-SUPER_ADMIN Cannot Assign Platform/System Roles — FINDING
+
+**Verdict: FAIL — see I1.3-001 (HIGH)**
+
+The system-role block at line 142 is:
+```csharp
+if (!isSuperAdmin && role.IsSystemRole && role.OrganizationId is null)
+    return Error.Forbidden("User.PrivilegeEscalation", "...");
+```
+
+`isSuperAdmin` is defined at lines 97–98:
+```csharp
+var isSuperAdmin = currentUser.HasPermission(Permissions.PlatformAdminsInvite)
+                || currentUser.HasPermission("*");
+```
+
+`Permissions.PlatformAdminsInvite` = `"platform.admins.invite"`. In the current seed (migration 036), `platform.admins.invite` is granted exclusively to `SUPER_ADMIN` via the cross-join. The `[RequiresPermission(Permissions.PlatformAdminsInvite)]` gate on the command class means only holders of this permission can reach the handler at all.
+
+**The vulnerability is a semantic error in the `isSuperAdmin` definition:** it treats the possession of `platform.admins.invite` as equivalent to SUPER_ADMIN status. This is correct in the seed-only state but creates a latent privilege-escalation path: if `platform.admins.invite` is ever granted to a non-SUPER_ADMIN user (directly via `auth.user_permission`, or via `SetRolePermissions` granting it to a custom role — though `SetRolePermissions` itself requires the caller to hold the permission, creating a chain), that user's `isSuperAdmin` becomes `true`, bypassing the system-role block at line 142.
+
+A concrete attack chain: (1) SUPER_ADMIN grants `platform.admins.invite` directly to user U via a future grant-management endpoint or direct DB write. (2) User U calls `POST /auth/admin/users` with `scope=platform` and `roleId=<SUPER_ADMIN role UUID>`. (3) Line 142: `!isSuperAdmin` is `false` (U holds `platform.admins.invite`), so the block is skipped. (4) Line 148: `!HasPermission("*")` is `true` (U does not hold `"*"`), so the delegation check runs. (5) The delegation check computes `SUPER_ADMIN role perms.Except(U's effective perms)`. If U holds all SUPER_ADMIN permissions (e.g., via a broad grant), this passes. (6) U successfully creates a SUPER_ADMIN user — full privilege escalation.
+
+Even without step 5 succeeding (the delegation check catches perms U doesn't hold), step 3 alone demonstrates the system-role block is not the correct guard to rely on: the delegation check becomes the only backstop, and a sufficiently-privileged-but-not-SUPER_ADMIN user could bypass both.
+
+**Recommended Fix:** Replace the `isSuperAdmin` flag definition with the correct wildcard-only check:
+```csharp
+var isSuperAdmin = currentUser.HasPermission("*");
+```
+Then separately use `HasPermission(Permissions.PlatformAdminsInvite)` only where non-wildcard platform-invite callers need to be distinguished (e.g., the org-scope guard at line 108, which already correctly uses `!currentUser.HasPermission("*")`). The system-role block must use the wildcard check, not the permission-name check:
+```csharp
+if (!currentUser.HasPermission("*") && role.IsSystemRole && role.OrganizationId is null)
+    return Error.Forbidden("User.PrivilegeEscalation", "...");
+```
+This ensures only a true SUPER_ADMIN (wildcard) can assign system/platform roles, regardless of what individual permissions a caller holds.
+
+---
+
+### Focus Area 2 — Effective-Permission Resolver Correctness
+
+**Verdict: PASS**
+
+`EffectivePermissionResolver.ResolveAsync` is the single canonical resolver, replacing the previously duplicated three-leg expansions in each handler. All three legs apply both guards: `p.IsActive && p.DeletedAt == null`. Specific checks:
+
+**Retired permissions excluded:** Leg 1 (platform roles) and Leg 2 (org roles) join to `db.Permissions.Where(p => p.IsActive && p.DeletedAt == null)`. Leg 3 (direct `user_permission` grants) also joins the same filter. A grant to a retired permission cannot surface in the resolver output, and thus cannot appear in any delegation comparison.
+
+**Soft-deleted grants excluded:** Leg 3 filters `up.DeletedAt == null` on the `user_permission` row. A soft-deleted direct grant is ignored.
+
+**Org scope enforced in Leg 3:** The WHERE clause in Leg 3 is:
+```csharp
+up.OrganizationId == null ||
+(activeOrgId.HasValue && up.OrganizationId == activeOrgId.Value)
+```
+A grant scoped to org B (`up.OrganizationId = orgB`) when the resolver is called with `activeOrgId = orgA` will not satisfy either predicate and is excluded. Platform-scoped grants (`up.OrganizationId == null`) are always included regardless of org context, which is the correct semantics for platform-level direct grants.
+
+**No trickery via Leg 3 inflation:** A direct grant of a permission the caller doesn't normally hold only appears in the **resolver output for the target user** (the new user being created). The caller's effective set is resolved separately using `currentUser.UserId` and `currentUser.OrganizationId`. There is no path for a caller to inflate their own effective set by pre-creating a `user_permission` grant for themselves through this flow — the delegation check runs against the DB state at the time of the `SetRolePermissions` or `CreateUserAdmin` call.
+
+**`GetUserPermissionsQuery` regression:** Confirmed now calls `EffectivePermissionResolver.ResolveAsync` (lines 52–53) instead of the previous inline expansion. Wildcard path still returns only `IsActive && DeletedAt == null` permissions.
+
+**`GetGrantablePermissionsQuery` regression:** Confirmed now calls `EffectivePermissionResolver.ResolveAsync` (line 41). Retired permission guard `var livePermissions = db.Permissions.Where(p => p.IsActive && p.DeletedAt == null)` (line 32) applied before ID filtering. Retired permissions cannot appear in grantable set for any caller.
+
+---
+
+### Focus Area 3 — auth.user_permission RLS and Org Isolation
+
+**Verdict: PASS (defense-in-depth layer is correctly implemented)**
+
+Migration 038 enables RLS on `auth.user_permission` with policy `user_permission_org_isolation`:
+
+```sql
+USING (
+    current_setting('app.is_platform_admin', TRUE) = 'true'
+    OR organization_id IS NULL
+    OR organization_id IN (
+        SELECT id FROM auth.organization WHERE owner_user_id = current_setting('app.current_user_id', TRUE)::UUID
+        UNION
+        SELECT organization_id FROM auth.organization_member
+        WHERE user_id = current_setting('app.current_user_id', TRUE)::UUID AND is_active = TRUE
+    )
+)
+```
+
+An org-scoped grant (`organization_id = orgA`) is visible only to:
+- Platform admins (`app.is_platform_admin = 'true'`)
+- Users whose `app.current_user_id` matches the org owner or an active member of orgA
+
+A grant scoped to org A cannot satisfy the `organization_id IN (...)` subquery for a user in org B, and is not `NULL` (which is the platform-grant pass-through). This correctly prevents cross-org visibility of org-scoped direct grants.
+
+The `RlsSessionInterceptor` wiring (reviewed and confirmed in Module 1 re-review) supplies `app.current_user_id` and `app.is_platform_admin` before queries.
+
+**Unique index scoping (migration 038, line 39–45):**
+```sql
+CREATE UNIQUE INDEX uq_user_permission_scope
+  ON auth.user_permission (user_id, permission_id, COALESCE(organization_id, '00000000-...'))
+  WHERE deleted_at IS NULL;
+```
+The COALESCE normalises NULL org to the nil UUID so platform-scoped grants deduplicate correctly. An org-scoped grant for org A and a platform grant for the same (user, permission) pair are distinct entries (different COALESCE values), which is the correct semantic.
+
+**Application-layer isolation in `CreateUserAdminCommand`:** The `targetOrgId` for org-scoped direct grants is taken from `request.OrganizationId.Value` (line 121), which is validated against the caller's own org via `OrgContextGuard` for non-wildcard callers (lines 110–118). A non-SUPER_ADMIN caller cannot set `targetOrgId` to a foreign org because `guardedOrgId != request.OrganizationId.Value` would return `Error.Forbidden("User.OrgMismatch", ...)`.
+
+---
+
+### Focus Area 4 — initialPassword Handling
+
+**Verdict: PASS**
+
+`InitialPassword` handling in `CreateUserAdminCommandHandler` (lines 213–221):
+
+```csharp
+if (request.InitialPassword is not null)
+{
+    var localAuthEnabled =
+        Environment.GetEnvironmentVariable("LOCAL_AUTH")
+            ?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+
+    if (localAuthEnabled)
+        newUser.SetPasswordHash(hasher.Hash(request.InitialPassword));
+}
+```
+
+**LOCAL_AUTH gate:** `initialPassword` is silently ignored (no error, no hash stored) when `LOCAL_AUTH` is not set to `"true"`. In production (Firebase auth mode), `LOCAL_AUTH` is never set. The password is not stored, not returned, and not logged.
+
+**PBKDF2 hashing:** `IPasswordHasher.Hash()` is implemented by `PasswordHasherAdapter.Hash()` → `PasswordHasher.Hash()`. The `PasswordHasher.Hash` implementation (reviewed in Module 1 re-review) uses `Rfc2898DeriveBytes.Pbkdf2` with SHA-256, 100,000 iterations, 16-byte random salt, 32-byte output. This matches the seeded dev-admin hashing and is correctly parameterised.
+
+**Not returned in response:** `CreateUserAdminResponse` contains `UserId`, `Email`, `Scope`, `RoleId`, `GrantedPermissions`. No password field.
+
+**Not logged:** Checked `LoggingBehavior` — it logs request type name, not request fields. The `InitialPassword` value is never written to any log statement in the handler or the shared pipeline. No `logger.Log*` call references `InitialPassword` or `request.InitialPassword` in any file in scope.
+
+**Minimum length enforced:** Validator rule (line 80–82) requires `MinimumLength(8)` when not null — prevents trivial passwords even in dev mode.
+
+---
+
+### Focus Area 5 — Endpoint Gating
+
+**Verdict: PASS**
+
+Both endpoints in `AdminUsers.cs` call `.RequireAuthorization()` (mandatory JWT presence) and route to commands/queries that carry `[RequiresPermission(Permissions.PlatformAdminsInvite)]`:
+
+- `POST /auth/admin/users` → `CreateUserAdminCommand` — `[RequiresPermission(PlatformAdminsInvite)]` ✓
+- `GET /auth/admin/assignable-roles` → `GetAssignableRolesQuery` — `[RequiresPermission(PlatformAdminsInvite)]` ✓
+
+`PermissionBehavior` is registered as an open-generic in the pipeline and fires on both. Neither endpoint is publicly accessible or skips authorization. An unauthenticated request fails at `RequireAuthorization()`. An authenticated but unpermitted request (any non-SUPER_ADMIN in the current seed) fails at `PermissionBehavior` before the handler body runs.
+
+`GetAssignableRolesQuery` additionally applies a server-side delegation filter (lines 88–103) that limits returned roles to those whose permission sets are subsets of the caller's effective set. This is UI-assistance only (the `CreateUserAdminCommand` handler enforces the same constraint independently), but it is consistent with the delegation model.
+
+---
+
+### Findings
+
+#### [HIGH] I1.3-001: isSuperAdmin Flag Conflates platform.admins.invite with Wildcard — System-Role Block Can Be Bypassed If platform.admins.invite Is Granted to a Non-SUPER_ADMIN — **FIXED 2026-05-29**
+
+- **File:** `AuthService.Application/Admin/Commands/CreateUserAdmin/CreateUserAdminCommand.cs`, lines 97–98, 142
+- **Description:** `isSuperAdmin` is `true` for any caller holding `platform.admins.invite` (line 97). The system-role assignment block at line 142 uses `!isSuperAdmin` as its bypass condition. This means any caller who has been granted `platform.admins.invite` (even directly via a `user_permission` row rather than through a role) bypasses the block and may assign system/platform roles like `SYSTEM_ADMIN` or `SUPER_ADMIN` to newly created users. In the seed state this is safe because `platform.admins.invite` is seeded only to SUPER_ADMIN. But SUPER_ADMIN can grant this permission to any user via `SetRolePermissions` or (once implemented) direct user_permission management — at which point the block fails silently and platform-role assignment opens to a non-wildcard user. The delegation check at line 148 (`!HasPermission("*")`) would still catch cases where the assigned role's permissions exceed the caller's effective set — but only if the caller does not also happen to hold all those permissions. A partial-SUPER_ADMIN who holds all platform permissions via direct grants would pass both checks.
+- **Recommended Fix:** Replace `isSuperAdmin` at line 97 with the correct wildcard-only check, and use it consistently for the system-role block:
+  ```csharp
+  var isWildcardSuperAdmin = currentUser.HasPermission("*");
+  // ...
+  if (!isWildcardSuperAdmin && role.IsSystemRole && role.OrganizationId is null)
+      return Error.Forbidden("User.PrivilegeEscalation",
+          "You cannot assign a platform/system role. Only SUPER_ADMIN may do so.");
+  ```
+  Retain `HasPermission(PlatformAdminsInvite)` in the org-scope block at line 108 if that path is genuinely meant to allow non-wildcard platform-invite holders to create org-scoped users in any org. Otherwise make that check also use the wildcard.
+- **Reference:** CWE-269 (Improper Privilege Management); OWASP ASVS V4.1
+
+---
+
+#### [MEDIUM] I1.3-002: CreateUserAdminCommandHandler Calls EffectivePermissionResolver Twice for the Same Caller — TOCTOU Window Between the Two Delegation Checks
+
+- **File:** `AuthService.Application/Admin/Commands/CreateUserAdmin/CreateUserAdminCommand.cs`, lines 150–152 (role check) and 185–187 (override check)
+- **Description:** The handler resolves the caller's effective permission set via `EffectivePermissionResolver.ResolveAsync` twice — once for the role delegation check and once for the override-permissions delegation check. These are two separate database round-trips executed sequentially. In theory, if a concurrent process modifies the caller's role grants or direct `user_permission` grants between the two calls (e.g., another admin suspends the caller's membership or revokes a grant), the two calls could return different sets. The first check could pass (caller held perm P at time T1), but the override check at time T2 could include perm P even if it was revoked at T1+δ — or vice versa. In practice this window is very short (two DB round-trips) and exploitation requires a precise concurrent modification. However, the fix is simple and removes the ambiguity entirely.
+- **Recommended Fix:** Resolve the caller's effective permissions once before both checks and reuse the result:
+  ```csharp
+  HashSet<string> callerEffective = [];
+  if (!currentUser.HasPermission("*"))
+  {
+      callerEffective = await EffectivePermissionResolver.ResolveAsync(
+          db, currentUser.UserId, currentUser.OrganizationId, cancellationToken);
+      callerEffective.UnionWith(currentUser.Permissions.Where(p => p != "*"));
+  }
+  ```
+  Then use `callerEffective` directly in both delegation checks without re-querying.
+- **Reference:** CWE-362 (Concurrent Execution Using Shared Resource with Improper Synchronization)
+
+---
+
+#### [LOW] I1.3-003: initialPassword Silently Ignored in Production — No Client-Facing Signal That Password Was Not Set
+
+- **File:** `AuthService.Application/Admin/Commands/CreateUserAdmin/CreateUserAdminCommand.cs`, lines 213–221
+- **Description:** When `initialPassword` is supplied but `LOCAL_AUTH` is not enabled (the production case), the password is silently ignored and the user is created without one. `CreateUserAdminResponse` does not include a field indicating whether a password was stored. An admin using the UI in a production-adjacent environment (e.g., a staging environment without `LOCAL_AUTH=true`) could believe they set a password for the new user when they did not, leaving the account in an unusable state from a local-login perspective and potentially creating an orphaned user whose only access path is Firebase OTP. While the correct design for production is Firebase-only auth, the silent failure provides no feedback.
+- **Recommended Fix:** Add a boolean `PasswordSet` field to `CreateUserAdminResponse` that reflects whether a password hash was actually stored. Alternatively, return a validation error when `initialPassword` is provided in a non-LOCAL_AUTH environment, making the mismatch explicit rather than silent.
+- **Reference:** CWE-392 (Missing Report of Error Condition)
+
+---
+
+#### [INFO] I1.3-INFO-001: auth.user_permission Has No Rate Limit or Maximum-Per-User Cap — Unbounded Direct Grant Accumulation
+
+- **File:** `database/migrations/038_user_permission.sql`, `CreateUserAdminCommand.cs` line 76–78 (100-grant cap per request only)
+- **Description:** The validator caps `permissionIds` at 100 per single `CreateUserAdminCommand` call. There is no cumulative cap on how many `user_permission` rows a single user may accumulate across multiple calls. A SUPER_ADMIN making N calls could create N×100 direct permission grants for the same user. While the effective-permission resolver's Leg 3 is an efficient DB join, an unbounded grant count creates operational complexity (auditing, revocation) and could slow the resolver for users with very large grant sets. More relevantly, audit trail reviews become harder when a single user has hundreds of individual grants.
+- **Recommended Fix:** Add a pre-write check in `CreateUserAdminCommand` (or a separate grant-management flow) that enforces a per-user cumulative cap (e.g., 50 active direct grants per user). Alternatively, document that direct grants are intended for small override sets (1–5 permissions) and the UI should enforce this.
+
+---
+
+### Verification Checklist
+
+| Control | Expected | Observed | Result |
+|---------|----------|----------|--------|
+| `platform.admins.invite` required for POST /auth/admin/users | `[RequiresPermission]` + PermissionBehavior | Confirmed on command class | PASS |
+| `platform.admins.invite` required for GET /auth/admin/assignable-roles | `[RequiresPermission]` on query class | Confirmed | PASS |
+| Non-SUPER_ADMIN cannot assign system/platform roles | Wildcard-only bypass of system-role block | **FIXED (I1.3-001)** — `isWildcardAdmin = HasPermission("*")` only; `platform.admins.invite` holders correctly blocked | PASS |
+| Role perms ⊆ caller's effective set before write | DB-resolved check, 403 on excess | Confirmed, PASS — resolver called twice (I1.3-002 open MEDIUM) | PASS |
+| Override permissionIds ⊆ caller's effective set | DB-resolved check, 403 on excess | Confirmed | PASS |
+| Retired permissions excluded from override resolution | `p.IsActive && p.DeletedAt == null` on DB query | Confirmed at line 173 | PASS |
+| Org-scoped direct grants isolated per org | Leg 3 WHERE clause filters by activeOrgId | Confirmed in `EffectivePermissionResolver` line 62 | PASS |
+| RLS on auth.user_permission | Policy references `app.current_user_id` session var | Confirmed in migration 038; RlsSessionInterceptor sets it | PASS |
+| initialPassword hashed via PBKDF2 | `IPasswordHasher.Hash()` → `PasswordHasher.Hash()` | Confirmed — 100K iterations, SHA-256, random salt | PASS |
+| initialPassword only stored under LOCAL_AUTH | `Environment.GetEnvironmentVariable("LOCAL_AUTH")` check | Confirmed — silently ignored in production | PASS |
+| initialPassword never returned in response | `CreateUserAdminResponse` fields | No password field in response | PASS |
+| initialPassword never logged | No log statement references InitialPassword | Confirmed | PASS |
+
+---
+
+### Increment 1.3 Summary
+
+| Severity | Count | Finding IDs | Status |
+|----------|-------|-------------|--------|
+| CRITICAL | 0 | — | — |
+| HIGH | 1 | I1.3-001 | **FIXED 2026-05-29** |
+| MEDIUM | 1 | I1.3-002 | Open |
+| LOW | 1 | I1.3-003 | Open |
+| INFO | 1 | I1.3-INFO-001 | Open |
+
+**GATE VERDICT (initial): NO-GO** → **Updated verdict after fix: GO**
+
+I1.3-001 (HIGH) was a blocker. The `isSuperAdmin` flag in `CreateUserAdminCommand` conflated holding `platform.admins.invite` with SUPER_ADMIN wildcard status. The system-role assignment block at line 142 relied on this flag, meaning any user who could be granted `platform.admins.invite` (even directly) could assign `SYSTEM_ADMIN` or `SUPER_ADMIN` to new users. **Fixed — see re-confirmation section below.**
+
+I1.3-002 (MEDIUM) remains open — duplicate DB round-trip / theoretical TOCTOU window. Recommended to address but not a gate blocker.
+
+*Increment 1.3 initial review completed: 2026-05-29*
+
+---
+
+### Increment 1.3 Re-Confirmation — I1.3-001 Fix Verified
+
+**Fix verified in:** `AuthService.Application/Admin/Commands/CreateUserAdmin/CreateUserAdminCommand.cs`
+**Date:** 2026-05-29
+**Build status:** Green (0 warnings). AuthService unit tests: 241/241 pass (reported by orchestrator).
+**Live test:** Orchestrator confirmed a user holding `platform.admins.invite` directly (via `user_permission`) but not `"*"` now receives `403 User.PrivilegeEscalation` with message "Only a wildcard SUPER_ADMIN may do so." on `POST /auth/admin/users scope=platform roleId=<SYSTEM_ADMIN>`. A true SUPER_ADMIN continues to succeed.
+
+**Code changes verified (read-only):**
+
+1. **Line 103 — Flag renamed and narrowed:**
+   ```csharp
+   var isWildcardAdmin = currentUser.HasPermission("*");
+   ```
+   The old `isSuperAdmin` which ORed in `PlatformAdminsInvite` is gone. The new variable is exclusively the wildcard check. No other condition is mixed in.
+
+2. **Line 113 — Org-scope bypass updated:**
+   ```csharp
+   if (!isWildcardAdmin)
+   ```
+   Was `!currentUser.HasPermission("*")`. Now consistently uses `isWildcardAdmin`. Semantically identical to before; variable rename only.
+
+3. **Line 148 — System-role block uses wildcard-only flag:**
+   ```csharp
+   if (!isWildcardAdmin && role.IsSystemRole && role.OrganizationId is null)
+       return Error.Forbidden("User.PrivilegeEscalation",
+           "You cannot assign a platform/system role. Only a wildcard SUPER_ADMIN may do so.");
+   ```
+   The original `!isSuperAdmin` (which was `true` for `platform.admins.invite` holders) is replaced by `!isWildcardAdmin` (which is `true` only for `"*"` holders). A holder of `platform.admins.invite` who does not have `"*"` now falls into this branch and receives 403. This is the correct and intended behaviour.
+
+4. **Lines 154 and 189 — Both delegation checks updated:**
+   Both use `if (!isWildcardAdmin)` consistently. The resolver is still called twice (I1.3-002, open MEDIUM), but both checks now use the same flag as the system-role block, eliminating any inconsistency between the three guard points.
+
+5. **Doc comment (lines 21–27):** Updated to explicitly document the I1.3-001 fix rationale — that `platform.admins.invite` is the endpoint gate only and must not be treated as wildcard-equivalent inside the handler. This narrows the attack surface for future readers.
+
+6. **`[RequiresPermission]` at line 31:** Correctly unchanged — `platform.admins.invite` remains the endpoint admission gate, which is the right design. Only SUPER_ADMIN holds it in seed, and it can now be granted to others (for org-scoped user creation) without opening the platform-role assignment path.
+
+**No regressions introduced:** All other handler logic (email/phone uniqueness checks, role resolution, delegation checks for non-system roles, override-permission delegation, password hashing, user creation writes) is unchanged.
+
+**Absence of dedicated xUnit regression test:** A unit test specifically asserting that a `platform.admins.invite` holder (without `"*"`) receives `403 User.PrivilegeEscalation` on `scope=platform + IsSystemRole=true` was not added (implementing agent transient error). This is noted as a **recommended follow-up, not a gate blocker** for the following reasons:
+- The fix is a single, mechanically simple flag substitution with no conditional branches of its own — the test surface is small.
+- The orchestrator has already run the live test and confirmed the expected 403.
+- The existing 241/241 unit tests provide regression coverage for the broader delegation logic.
+- The vulnerability was in a latent escalation path (requires SUPER_ADMIN to first grant `platform.admins.invite` to another user), not an immediately exploitable in-the-wild condition.
+
+The test should be added in the next test-coverage pass targeting `CreateUserAdminCommandHandler`.
+
+**Updated verdict:** I1.3-001 is RESOLVED. All originally-passing controls remain passing. Remaining open items are I1.3-002 (MEDIUM, TOCTOU) and I1.3-003 (LOW, silent password ignore) — neither is a gate blocker.
+
+**GATE VERDICT: GO**
+CRITICAL: 0 | HIGH: 0 | MEDIUM: 1 (I1.3-002) | LOW: 1 (I1.3-003) | INFO: 1 (I1.3-INFO-001)
+
+*Increment 1.3 re-confirmation completed: 2026-05-29*
+
+---
+
+## Increment 1.4 Phase A Security Review — Reference-Data CRUD
+
+**Scope:** New files reviewed:
+- `AuthService.Application/ReferenceData/Commands/CreateReferenceData/CreateReferenceDataCommand.cs`
+- `AuthService.Application/ReferenceData/Commands/UpdateReferenceData/UpdateReferenceDataCommand.cs`
+- `AuthService.Application/ReferenceData/Commands/DeleteReferenceData/DeleteReferenceDataCommand.cs`
+- `AuthService.Application/ReferenceData/Queries/GetReferenceData/GetReferenceDataQuery.cs`
+- `AuthService.Domain/Entities/ReferenceData.cs` (+ `ReferenceDataCategory`)
+- `AuthService.Infrastructure/Persistence/Configurations/ReferenceDataConfiguration.cs`
+- `AuthService.Api/Endpoints/ReferenceDataEndpoints.cs`
+- `database/migrations/039_reference_data.sql`
+
+Deferred backlog items remain deferred per standing instruction.
+
+**Review Date:** 2026-05-29
+**Reviewer:** security-reviewer agent
+
+---
+
+### Focus Area 1 — Endpoint Gating
+
+**Verdict: PASS**
+
+Write commands carry `[RequiresPermission(Permissions.PlatformRefDataManage)]` at the record level, which resolves to `"platform.refdata.manage"`:
+
+- `CreateReferenceDataCommand` line 22: `[RequiresPermission(Permissions.PlatformRefDataManage)]`
+- `UpdateReferenceDataCommand` line 18: `[RequiresPermission(Permissions.PlatformRefDataManage)]`
+- `DeleteReferenceDataCommand` line 20: `[RequiresPermission(Permissions.PlatformRefDataManage)]`
+
+`PermissionBehavior` (open-generic, registered in `AuthService.Application/DependencyInjection.cs`) fires on every MediatR dispatch. A caller without `"platform.refdata.manage"` is rejected with `Error.Forbidden("Auth.InsufficientPermission", ...)` before the handler body runs.
+
+**Seed grant scope:** Migration 039 (lines 137–146) inserts `"platform.refdata.manage"` into `auth.permission` and grants it via `role_permission` exclusively to `SUPER_ADMIN`. The resource is `"platform"`, which is excluded from the `ORG_ADMIN` seed in migration 036 (`p.resource IN ('org','accounting',...)`). No non-SUPER_ADMIN role receives this permission in any seed migration. A non-SUPER_ADMIN reaching POST/PUT/DELETE receives 403 from `PermissionBehavior`.
+
+**GET is open to any authenticated user — acceptability assessment:** `GetReferenceDataQuery` carries no `[RequiresPermission]` attribute. The endpoint registers `.RequireAuthorization()` (JWT presence required), so anonymous requests are rejected. The data returned is: category, code, name, parentCode, isActive, sortOrder — entirely non-sensitive lookup values (language codes, gender options, Indian state names, country names, user-type labels). No user PII, no tenant data, no financial data, no internal IDs beyond the UUID primary key of the lookup row itself. The UUID exposes no information useful to an attacker (it cannot be used to enumerate users or orgs; reference data is global). Exposure of `isActive=false` entries via `activeOnly=false` reveals only that an admin has deactivated a lookup option — this is acceptable for the management screen. **The open-authenticated GET is acceptable.**
+
+All four endpoints call `.RequireAuthorization()` at the route level as an additional defense-in-depth layer.
+
+---
+
+### Focus Area 2 — Input Validation
+
+**Verdict: PASS**
+
+**`Code` field — `^[A-Za-z0-9_-]+$` regex:**
+`CreateReferenceDataCommandValidator` line 53: `Matches(@"^[A-Za-z0-9_-]+$")`. The regex is anchored (`^`/`$`), permits only alphanumeric characters, underscores, and hyphens, and is applied by FluentValidation's `Matches()` using `Regex.IsMatch` on the full string. No SQL metacharacters, HTML characters, or dot-notation that could interfere with permission-name comparisons can pass this filter. `MaximumLength(100)` bounds the field. The validator fires in the MediatR pipeline before the handler body.
+
+`Code` is also immutable after creation — `ReferenceData.Code` has `private set` and `UpdateReferenceDataCommand` accepts no `Code` field. The immutability is correctly noted in the docstring as protecting referencing profile rows.
+
+**`Category` — closed enum:**
+The validator checks `ReferenceDataCategory.All.Contains(c?.Trim().ToUpperInvariant() ?? "")` against the static set `{LANGUAGE, USER_TYPE, GENDER, STATE, COUNTRY}`. Any value outside this set returns a 400 before reaching the handler. The handler normalises category to uppercase (`request.Category.Trim().ToUpperInvariant()`) independently of the validator, providing belt-and-suspenders against case-sensitivity issues. Category is also immutable after creation.
+
+**`Name` field:**
+`MaximumLength(300)` on create; `MaximumLength(300)` on update. No structural constraint beyond length — names are free-text labels ("Tamil Nadu", "Prefer not to say"). Stored as plain text; the domain entity's `Create` and `UpdateDetails` methods call `.Trim()` before assignment but apply no further transformation. `Name` is returned in the `ReferenceDataDto` and rendered in dropdown UI components as text content (not as HTML). Prior frontend review found no `dangerouslySetInnerHTML` usage in dropdown/select components. Stored-XSS risk through `Name` is low: only SUPER_ADMIN can write it, and the frontend renders it as text. Flagged as INFO only.
+
+**`SortOrder`:** `int`, no validator constraint — zero is the default; any integer is accepted. No injection surface; integers cannot carry malicious content.
+
+**`ParentCode`:** Used only for STATE entries, validated against an existing active COUNTRY code in the DB before write. No regex constraint on `ParentCode` itself — the DB lookup acts as the implicit whitelist (only valid country codes that match an active COUNTRY entry are accepted). This is correct: country codes are machine-readable values matching an existing `Code` column that itself was created through the `^[A-Za-z0-9_-]+$`-validated create flow.
+
+---
+
+### Focus Area 3 — In-Use Delete Guard Correctness
+
+**Verdict: PASS with one observation (LOW)**
+
+`DeleteReferenceDataCommandHandler` calls `CountUsagesAsync` before soft-deleting:
+
+```csharp
+return entry.Category switch
+{
+    "COUNTRY"   => CountAsync(p => p.Country    == entry.Code, UserProfiles),
+    "STATE"     => CountAsync(p => p.State      == entry.Code, UserProfiles),
+    "GENDER"    => CountAsync(p => p.Gender     == entry.Code, UserProfiles),
+    "USER_TYPE" => CountAsync(p => p.UserType   == entry.Code, UserProfiles),
+    "LANGUAGE"  => CountAsync(u => u.PreferredLanguage == entry.Code, Users),
+    _           => 0,
+};
+```
+
+All five categories map to the correct referencing column:
+
+| Category | Referencing table.column | Guard targets |
+|----------|--------------------------|---------------|
+| COUNTRY | `auth.user_profile.country` | Correct |
+| STATE | `auth.user_profile.state` | Correct |
+| GENDER | `auth.user_profile.gender` | Correct |
+| USER_TYPE | `auth.user_profile.user_type` | Correct |
+| LANGUAGE | `auth.user.preferred_language` | Correct |
+
+All count queries filter `p.DeletedAt == null` (UserProfiles) and `u.DeletedAt == null` (Users), so soft-deleted user rows do not inflate the count and prevent deletion of reference data no longer referenced by live users.
+
+The `_ => 0` default branch for an unrecognised category would allow deletion without an in-use check. In practice this branch is unreachable today because the category enum is closed (`ReferenceDataCategory.All` has five entries and `CreateReferenceDataCommand` enforces this). However if a future migration adds a new category constant without updating `CountUsagesAsync`, the default silently permits deletion of in-use entries. This is the LOW finding below.
+
+---
+
+### Focus Area 4 — Tenant Sensitivity of Open GET
+
+**Verdict: PASS — no tenant-sensitive data**
+
+`auth.reference_data` has no RLS (migration 039 line 46: "No RLS: global reference data, readable by all authenticated users"). This is the correct design. The table contains no columns that are tenant-scoped: there is no `organization_id`, `user_id`, or any FK to a user or org. Every row is a platform-global lookup value. All authenticated users reading the same category/code receive identical data regardless of their org context.
+
+The `GetReferenceDataQuery` projects only `{Id, Category, Code, Name, ParentCode, IsActive, SortOrder}`. None of these fields contain user PII, financial data, org-specific configuration, or internal secrets.
+
+The `activeOnly=false` path (management screen) reveals soft-deactivated entries — e.g., a deactivated gender option or a language the platform no longer supports. This is operationally sensitive (an admin may prefer not to expose deprecated options to end users) but is not a security concern: the data itself is not sensitive, and the `activeOnly` parameter requires an authenticated session to access at all.
+
+---
+
+### Findings
+
+#### [LOW] I1.4A-001: DeleteReferenceDataCommand Default Branch Returns 0 — Future Category Additions Not Automatically Protected by In-Use Guard
+
+- **File:** `AuthService.Application/ReferenceData/Commands/DeleteReferenceData/DeleteReferenceDataCommand.cs`, lines 58–76
+- **Description:** `CountUsagesAsync` uses a `switch` expression with a `_ => 0` default. If a future migration adds a new `ReferenceDataCategory` constant (e.g., `BUSINESS_TYPE`) and the corresponding `user_profile` or other referencing column is not added to this switch, `CountUsagesAsync` returns 0 for that category, and `DeleteReferenceDataCommand` soft-deletes the entry without verifying it is not in use. The referencing rows would then carry a dangling code value with no active reference-data entry. Currently unreachable because the closed enum validator prevents creation of out-of-set categories. The risk is a future developer omission.
+- **Recommended Fix:** Replace the `_ => 0` default with a guard that returns a non-zero sentinel or throws an `InvalidOperationException`:
+  ```csharp
+  _ => throw new InvalidOperationException(
+      $"CountUsagesAsync: no usage check defined for category '{entry.Category}'. " +
+      "Add a case before allowing deletion.")
+  ```
+  This ensures that adding a new category without updating the guard produces a loud failure at test time rather than a silent data-integrity gap in production.
+- **Reference:** CWE-1068 (Inconsistency in Implementation)
+
+---
+
+#### [INFO] I1.4A-INFO-001: Name Field on Reference Data Has No Character Restriction — SUPER_ADMIN Could Store HTML Markup in a Dropdown Label
+
+- **File:** `AuthService.Application/ReferenceData/Commands/CreateReferenceData/CreateReferenceDataCommand.cs`, lines 56–59; `UpdateReferenceData/UpdateReferenceDataCommand.cs`, lines 32–36
+- **Description:** `Name` is validated only for `NotEmpty()` and `MaximumLength(300)`. A SUPER_ADMIN could store a name containing HTML markup (e.g., `<script>alert(1)</script>`). The data is returned verbatim in the GET response and consumed by dropdown components across the app. Risk is low because: (1) only SUPER_ADMIN can write this field; (2) based on prior frontend review, dropdown components render values as text nodes, not HTML; (3) React's JSX escaping prevents XSS via standard rendering. Risk would materialise only if a frontend component renders the name via `dangerouslySetInnerHTML`, which was not observed. Noted for completeness.
+- **Recommended Fix:** Confirm in a frontend review that all reference-data name renderings use standard React text interpolation. If any `dangerouslySetInnerHTML` usage is found for reference-data names, add server-side sanitisation (strip HTML tags via a library such as HtmlSanitizer before storage).
+
+---
+
+### Verification Checklist
+
+| Control | Expected | Observed | Result |
+|---------|----------|----------|--------|
+| `platform.refdata.manage` required for POST/PUT/DELETE | `[RequiresPermission]` on command class; PermissionBehavior fires | All three write commands decorated; pipeline confirmed | PASS |
+| Non-SUPER_ADMIN receives 403 | PermissionBehavior rejects before handler body | Confirmed — only SUPER_ADMIN has `platform.refdata.manage` in seed | PASS |
+| GET requires authentication only | No `[RequiresPermission]` on query; `.RequireAuthorization()` on route | Confirmed | PASS |
+| GET data is not tenant-sensitive | No org/user FKs; no PII | All fields are global lookup values | PASS |
+| `code` regex `^[A-Za-z0-9_-]+$` | Anchored, no injection chars | Confirmed via FluentValidation `Matches()` | PASS |
+| `category` closed enum | Must be in `ReferenceDataCategory.All` | Validator + handler normalisation confirmed | PASS |
+| `code` immutable after creation | `private set`; UpdateCommand has no Code field | Confirmed at domain entity level | PASS |
+| `category` immutable after creation | Same | Confirmed | PASS |
+| STATE requires valid active COUNTRY parent | DB existence check before write | Confirmed in Create (line 93) and Update (line 57) | PASS |
+| In-use guard before delete | CountUsagesAsync covers all five categories | Correct column mapping confirmed; default branch is LOW finding | PASS (with note) |
+| Soft-deleted users excluded from in-use count | `p.DeletedAt == null` / `u.DeletedAt == null` | Confirmed in all count queries | PASS |
+| No RLS needed | Global lookup, no tenant scope | Correct — no org/user FKs; migration comment confirms intent | PASS |
+| `name` rendered as text (not HTML) | Standard React text node | Frontend renders as text; no `dangerouslySetInnerHTML` observed (INFO only) | PASS |
+
+---
+
+### Increment 1.4 Phase A Summary
+
+| Severity | Count | Finding IDs |
+|----------|-------|-------------|
+| CRITICAL | 0 | — |
+| HIGH | 0 | — |
+| MEDIUM | 0 | — |
+| LOW | 1 | I1.4A-001 |
+| INFO | 1 | I1.4A-INFO-001 |
+
+**GATE VERDICT: GO**
+
+All four focus areas pass. The write-endpoint gating is correctly implemented — `platform.refdata.manage` is carried on all three write commands and enforced by `PermissionBehavior` before any handler body runs. The permission is seeded exclusively to `SUPER_ADMIN` in migration 039 with no grants to any other role. The open-authenticated GET exposes only non-sensitive global lookup data with no tenant scope. Input validation is tight: `code` is regex-constrained and immutable, `category` is a closed enum, `name` is length-bounded and rendered as text. The in-use delete guard correctly covers all five current category-to-column mappings with soft-delete awareness.
+
+I1.4A-001 (LOW) is the only substantive finding: the `_ => 0` default in `CountUsagesAsync` would silently allow deletion of a future category without an in-use check. The recommended fix is to replace the default with an `InvalidOperationException` so that category additions that omit the guard produce a loud failure at test time. This does not block the current increment.
+
+*Increment 1.4 Phase A review completed: 2026-05-29*

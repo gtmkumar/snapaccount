@@ -12,7 +12,7 @@ namespace AuthService.Application.Admin.Queries.GetAuditEvents;
 /// Reads directly from the partitioned <c>shared.audit_log</c> table that all
 /// services already write to (see migration 012).
 ///
-/// SYSTEM_ADMIN only. Limited to last N events (max 100) ordered by event_time DESC.
+/// SUPER_ADMIN only. Limited to last N events (max 100) ordered by event_time DESC.
 /// PII-bearing rows (is_sensitive = TRUE) are omitted from the projection so this
 /// endpoint can't be used as an exfiltration path.
 /// </summary>

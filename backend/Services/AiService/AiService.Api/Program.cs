@@ -62,7 +62,7 @@ try
     });
 
     // SEC-004: Initialize Firebase Admin SDK using ADC
-    if (FirebaseApp.DefaultInstance == null)
+    if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(builder.Configuration) && FirebaseApp.DefaultInstance == null)
     {
         var credentialJson = builder.Configuration["Firebase:ServiceAccountJson"];
         var credential = string.IsNullOrEmpty(credentialJson)

@@ -8,7 +8,7 @@ namespace GstService.Application.Dashboard.Queries.GetDashboardStats;
 
 /// <summary>
 /// Admin dashboard counts for GstService — returns whose filing deadline is today
-/// (and not yet FILED). SYSTEM_ADMIN only — no org scoping.
+/// (and not yet FILED). SUPER_ADMIN only — no org scoping.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetDashboardStatsQuery : IQuery<GstDashboardStats>;

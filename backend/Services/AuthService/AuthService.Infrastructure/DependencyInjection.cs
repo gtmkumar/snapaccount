@@ -3,6 +3,7 @@ using AuthService.Application.Interfaces;
 using AuthService.Infrastructure.Auth;
 using AuthService.Infrastructure.Messaging;
 using AuthService.Infrastructure.Persistence;
+using AuthService.Infrastructure.Persistence.Interceptors;
 using AuthService.Infrastructure.Repositories;
 using AuthService.Infrastructure.Services;
 using FirebaseAdmin;
@@ -47,6 +48,9 @@ public static class DependencyInjection
         services.AddScoped<ISaveChangesInterceptor, AuditableEntityInterceptor>();
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
 
+        // SEC-RLS-001: set Postgres session vars for RLS per connection open
+        services.AddScoped<RlsSessionInterceptor>();
+
         // Singleton TimeProvider — interceptor uses this for UTC timestamps
         services.AddSingleton(TimeProvider.System);
 
@@ -55,6 +59,8 @@ public static class DependencyInjection
         services.AddDbContext<AuthDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
+            // SEC-RLS-001: RlsSessionInterceptor sets app.current_user_id per connection
+            options.AddInterceptors(sp.GetRequiredService<RlsSessionInterceptor>());
             options.UseNpgsql(
                 connectionString,
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", "auth"));
@@ -82,10 +88,14 @@ public static class DependencyInjection
             FirebaseApp.Create(new AppOptions { Credential = credential });
         }
 
+        // Password hasher adapter — wraps static PasswordHasher for Application-layer DI
+        services.AddSingleton<IPasswordHasher, PasswordHasherAdapter>();
+
         // Repositories — write-side aggregate access (SEC-016: serializable transactions where noted)
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IInvitationRepository, InvitationRepository>();
 
         // MSG91 OTP SMS sender — used by OtpService to deliver the OTP.
         services.AddHttpClient("Msg91Otp");

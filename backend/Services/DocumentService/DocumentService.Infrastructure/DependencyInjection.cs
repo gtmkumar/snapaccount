@@ -55,7 +55,7 @@ public static class DependencyInjection
         services.AddScoped<IDocumentDbContext>(sp => sp.GetRequiredService<DocumentDbContext>());
 
         // Firebase Admin SDK (singleton — may already be initialised in dev monolith mode)
-        if (FirebaseApp.DefaultInstance == null)
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration) && FirebaseApp.DefaultInstance == null)
         {
             var credentialJson = configuration["Firebase:ServiceAccountJson"];
 #pragma warning disable CS0618
@@ -81,7 +81,7 @@ public static class DependencyInjection
         services.AddScoped<IOcrJobEnqueuer, PubSubOcrJobEnqueuer>();
 
         // OCR worker — subscribes to snapaccount.document.ocr.requested
-        services.AddHostedService<OcrJobSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<OcrJobSubscriber>();
 
         // Current user — reads Firebase JWT claims from HttpContext.Items
         services.AddHttpContextAccessor();

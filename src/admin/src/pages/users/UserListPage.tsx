@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { type ColumnDef } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { Search, Download, UserPlus } from 'lucide-react'
+import { Search, Download, UserPlus, Pencil, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
@@ -12,11 +12,30 @@ import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { getInitials, getAvatarColor } from '@/lib/utils'
 import { cn } from '@/lib/utils'
-import { listAdminUsers, type AdminUserListItem } from '@/lib/userAdminApi'
+import {
+  listAdminUsers, deleteAdminUser,
+  type AdminUserListItem, type AdminUserApiErrorCode,
+} from '@/lib/userAdminApi'
+import { AddUserDialog } from '@/components/shared/AddUserDialog'
+import { EditUserDialog } from '@/components/shared/EditUserDialog'
+import { usePermission } from '@/hooks/usePermission'
+import { t } from '@/i18n'
+
+// Customer user-type display labels (staff types never appear on this list).
+function formatUserType(code?: string | null): string {
+  switch (code) {
+    case 'BUSINESS_OWNER': return 'Business Owner'
+    case 'EMPLOYEE': return 'Employee'
+    default: return '—'
+  }
+}
 
 function buildUserColumns(
   navigate: ReturnType<typeof useNavigate>,
   onSuspendRequest: (user: AdminUserListItem) => void,
+  onEdit: (user: AdminUserListItem) => void,
+  onDelete: (user: AdminUserListItem) => void,
+  canManage: boolean,
 ): ColumnDef<AdminUserListItem>[] {
   return [
     {
@@ -48,6 +67,11 @@ function buildUserColumns(
       ) : <span className="text-sm text-neutral-400">—</span>,
     },
     {
+      accessorKey: 'userType',
+      header: 'User Type',
+      cell: ({ row }) => <span className="text-sm text-neutral-600">{formatUserType(row.original.userType)}</span>,
+    },
+    {
       accessorKey: 'businessName',
       header: 'Business',
       cell: ({ row }) => (
@@ -77,7 +101,7 @@ function buildUserColumns(
       id: 'actions',
       header: 'Actions',
       cell: ({ row }) => (
-        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
           <Button
             variant="ghost"
             size="sm"
@@ -85,7 +109,28 @@ function buildUserColumns(
           >
             View
           </Button>
-          {row.original.isActive && (
+          {canManage && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={t('users.editUser.cta')}
+                title={t('users.editUser.cta')}
+                onClick={() => onEdit(row.original)}
+                leftIcon={<Pencil className="h-4 w-4" />}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-error-600 hover:bg-error-50"
+                aria-label={t('users.deleteUser.cta')}
+                title={t('users.deleteUser.cta')}
+                onClick={() => onDelete(row.original)}
+                leftIcon={<Trash2 className="h-4 w-4" />}
+              />
+            </>
+          )}
+          {!canManage && row.original.isActive && (
             <Button
               variant="ghost"
               size="sm"
@@ -103,26 +148,62 @@ function buildUserColumns(
 
 export default function UserListPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { hasServerPermission } = usePermission()
   const [globalFilter, setGlobalFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'suspended'>('')
+  const [userTypeFilter, setUserTypeFilter] = useState<'' | 'BUSINESS_OWNER' | 'EMPLOYEE'>('')
   const [suspendTarget, setSuspendTarget] = useState<AdminUserListItem | null>(null)
+  const [editTarget, setEditTarget] = useState<AdminUserListItem | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<AdminUserListItem | null>(null)
+  const [showAddUser, setShowAddUser] = useState(false)
   const [page, setPage] = useState(1)
   const pageSize = 20
 
+  // Gate the Add User button by platform.admins.invite OR org.members.invite
+  const canAddUser = hasServerPermission('platform.admins.invite') || hasServerPermission('org.members.invite')
+  const canInvitePlatform = hasServerPermission('platform.admins.invite')
+  // Edit/Delete require platform.admins.invite (server-enforced on PUT/DELETE)
+  const canManageUsers = hasServerPermission('platform.admins.invite')
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteAdminUser(id),
+    onSuccess: (_, id) => {
+      toast.success(t('users.deleteUser.success', { name: deleteTarget?.name ?? '' }))
+      setDeleteTarget(null)
+      void queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      void queryClient.invalidateQueries({ queryKey: ['admin-user-detail', id] })
+    },
+    onError: (err: unknown) => {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code as AdminUserApiErrorCode | undefined
+      if (code === 'User.SelfDelete') toast.error(t('users.deleteUser.err.self'))
+      else if (code === 'User.LastAdmin') toast.error(t('users.deleteUser.err.lastAdmin'))
+      else toast.error(t('users.deleteUser.err.generic'))
+      setDeleteTarget(null)
+    },
+  })
+
   const columns = useMemo(
-    () => buildUserColumns(navigate, (user) => setSuspendTarget(user)),
-    [navigate],
+    () => buildUserColumns(
+      navigate,
+      (user) => setSuspendTarget(user),
+      (user) => setEditTarget(user),
+      (user) => setDeleteTarget(user),
+      canManageUsers,
+    ),
+    [navigate, canManageUsers],
   )
 
   // Server-side search + status filter; debounce omitted for simplicity (fires on every keystroke,
   // 5-min staleTime + keepPreviousData masks the latency).
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-users', { page, pageSize, search: globalFilter, statusFilter }],
+    queryKey: ['admin-users', { page, pageSize, search: globalFilter, statusFilter, userTypeFilter }],
     queryFn: () => listAdminUsers({
       page,
       pageSize,
       search: globalFilter || undefined,
       isActive: statusFilter === 'active' ? true : statusFilter === 'suspended' ? false : undefined,
+      userType: userTypeFilter || undefined,
     }),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
@@ -135,18 +216,48 @@ export default function UserListPage() {
     <div className="space-y-5">
       <PageHeader
         title="Users"
-        subtitle={`${totalCount} total user${totalCount === 1 ? '' : 's'}`}
+        subtitle={`${totalCount} customer${totalCount === 1 ? '' : 's'} (SME owners & employees) — internal staff live under Team`}
         actions={
           <>
             <Button variant="secondary" size="sm" leftIcon={<Download className="h-4 w-4" />}>
               Export
             </Button>
-            <Button variant="primary" size="sm" leftIcon={<UserPlus className="h-4 w-4" />}>
-              Add User
-            </Button>
+            {canAddUser && (
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<UserPlus className="h-4 w-4" />}
+                onClick={() => setShowAddUser(true)}
+              >
+                {t('users.addUser.cta')}
+              </Button>
+            )}
           </>
         }
       />
+
+      {/* Inline delete confirmation banner */}
+      {deleteTarget && (
+        <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 flex items-center justify-between">
+          <span className="text-rose-800 font-medium text-sm">
+            {t('users.deleteUser.confirm', { name: deleteTarget.name })}
+          </span>
+          <div className="flex gap-2 ml-4">
+            <Button variant="secondary" size="sm" onClick={() => setDeleteTarget(null)} disabled={deleteMutation.isPending}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="bg-rose-600 text-white hover:bg-rose-700"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate(deleteTarget.id)}
+            >
+              {t('users.deleteUser.confirmCta')}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Inline suspension confirmation banner */}
       {suspendTarget && (
@@ -187,6 +298,22 @@ export default function UserListPage() {
               prefix={<Search className="h-4 w-4" />}
               size="sm"
             />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-neutral-500 block mb-1">User Type</label>
+            <select
+              value={userTypeFilter}
+              onChange={(e) => {
+                setUserTypeFilter(e.target.value as '' | 'BUSINESS_OWNER' | 'EMPLOYEE')
+                setPage(1)
+              }}
+              className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+              aria-label="Filter by User Type"
+            >
+              <option value="">All Types</option>
+              <option value="BUSINESS_OWNER">Business Owner</option>
+              <option value="EMPLOYEE">Employee</option>
+            </select>
           </div>
           <div>
             <label className="text-xs font-medium text-neutral-500 block mb-1">Status</label>
@@ -240,6 +367,19 @@ export default function UserListPage() {
           </div>
         </div>
       )}
+      {/* Add User dialog — gated by platform.admins.invite / org.members.invite */}
+      <AddUserDialog
+        open={showAddUser}
+        onClose={() => setShowAddUser(false)}
+        canInvitePlatform={canInvitePlatform}
+      />
+
+      {/* Edit User dialog */}
+      <EditUserDialog
+        open={!!editTarget}
+        onClose={() => setEditTarget(null)}
+        userId={editTarget?.id ?? null}
+      />
     </div>
   )
 }

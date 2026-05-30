@@ -6,6 +6,79 @@ All endpoints require `.RequireAuthorization()` unless noted.
 
 ---
 
+## Module 1 — Auth & RBAC (Multi-Tenant, Custom Roles, Constrained Delegation)
+
+> AuthService base URL: Aspire-assigned (typically port 5001 locally).
+> DEV_AUTH_BYPASS tokens: `dev-superadmin-token`, `dev-admin-token`, `dev-user-token`.
+> Permission codes (not role names) are used everywhere; see GET /auth/me/permissions.
+
+### Org Role Management — `/auth/org/roles`
+
+| Method | Route | Permission Required | Request Body | Response |
+|--------|-------|---------------------|-------------|----------|
+| GET | /auth/org/roles | `org.roles.read` | — | `[{ id, name, displayName, description, isSystemRole, isActive, memberCount, permissionNames:[...] }]` 200 |
+| POST | /auth/org/roles | `org.roles.create` | `{ name: string, displayName: string, description?: string }` | `{ roleId: guid }` 201 |
+| GET | /auth/org/roles/{id} | `org.roles.read` | — | `{ id, name, displayName, description, isSystemRole, organizationId, isActive, permissions:[{permissionId, name, resource, action, description}] }` 200 |
+| PUT | /auth/org/roles/{id} | `org.roles.update` | `{ displayName: string, description?: string }` | 204 |
+| DELETE | /auth/org/roles/{id} | `org.roles.delete` | — | 204 (conflicts if members assigned) |
+| GET | /auth/org/roles/{id}/permissions | `org.roles.read` | — | `{ roleId, permissions:[{permissionId, name, resource, action, description}] }` 200 |
+| PUT | /auth/org/roles/{id}/permissions | `org.permissions.grant` | `{ permissionIds: guid[] }` | 204 (403 if delegation rule violated) |
+
+**Delegation rule on PUT /auth/org/roles/{id}/permissions**: server rejects any `permissionId` not in the caller's own effective set. Returns `403 Role.PrivilegeEscalation`.
+
+### Permission Catalog — `/auth/permissions` and `/auth/me/grantable-permissions`
+
+| Method | Route | Permission Required | Request Body | Response |
+|--------|-------|---------------------|-------------|----------|
+| GET | /auth/permissions | `org.permissions.read` | — | `[{ module: string, displayName: string, permissions:[{ id, name, resource, action, description }] }]` 200 — grouped by module |
+| GET | /auth/me/grantable-permissions | `org.permissions.read` | — | `{ grantablePermissionIds: guid[] }` 200 — subset the caller may delegate (drives greyed matrix toggles) |
+
+### Member (Team) Management — `/auth/team` (matches teamApi.ts)
+
+| Method | Route | Permission Required | Request Body | Response |
+|--------|-------|---------------------|-------------|----------|
+| GET | /auth/team | `org.members.read` | `?role=&status=&page=&pageSize=` | `{ items:[{ userId, email, displayName, role, status, modules, joinedAt, lastActiveAt, photoUrl }], totalCount }` 200 |
+| PATCH | /auth/team/{memberId} | `org.members.update` | `{ role?: string }` | 204 (403 if target role perms exceed caller's) |
+| POST | /auth/team/{memberId}/suspend | `org.members.suspend` | — | 204 |
+| POST | /auth/team/{memberId}/reactivate | `org.members.suspend` | — | 204 |
+| DELETE | /auth/team/{memberId} | `org.members.remove` | — | 204 |
+
+### Invitation Management — `/auth/team/invite`, `/auth/team/invites`, `/auth/invite/{token}`
+
+| Method | Route | Auth | Permission | Request Body | Response |
+|--------|-------|------|------------|-------------|----------|
+| POST | /auth/team/invite | Required | `org.members.invite` | `{ email: string, role: string, phone?: string, customMessage?: string }` | `{ inviteId, expiresAt }` 201 — raw token NOT in response body (sent via email/SMS); 403 if role perms exceed caller's |
+| GET | /auth/team/invites | Required | `org.members.invite` | — | `[{ inviteId, email, role, invitedByUserId, invitedAt, expiresAt, status }]` 200 |
+| POST | /auth/team/invites/{id}/resend | Required | `org.members.invite` | — | `{ expiresAt }` 200 |
+| DELETE | /auth/team/invites/{id} | Required | `org.members.invite` | — | 204 |
+| GET | /auth/invite/{token} | PUBLIC (no auth) | — | — | `{ inviteId, organizationName, email, roleName, roleDisplayName, expiresAt, isValid }` 200; 410 Gone if expired/invalid |
+| POST | /auth/invite/{token}/accept | Required | — | — | `{ organizationId, organizationName, roleId, roleName }` 200; 409 if already member |
+
+### Platform Admin — `/auth/admin/organizations`
+
+| Method | Route | Permission Required | Request Body | Response |
+|--------|-------|---------------------|-------------|----------|
+| GET | /auth/admin/organizations | `platform.orgs.read` | `?page=&pageSize=&search=&isActive=` | `{ items:[{ id, businessName, gstin, panNumber, businessType, isGstRegistered, isActive, memberCount, createdAt }], totalCount }` 200 |
+| POST | /auth/admin/organizations | `platform.orgs.create` | `{ businessName: string, gstin?: string, panNumber?: string, businessType?: string }` | `{ organizationId }` 201 |
+| POST | /auth/admin/organizations/{id}/suspend | `platform.orgs.suspend` | — | 204 |
+
+### Existing Auth Endpoints — Updated
+
+| Method | Route | Notes |
+|--------|-------|-------|
+| GET | /auth/me/permissions | Now returns **permission codes** (e.g. `"org.members.invite"`) — NOT role names. Response: `{ userId, roles:[...], permissions:[...] }` matching teamApi.ts PermissionsSchema |
+
+### Security Controls
+
+| Code | Control |
+|------|---------|
+| SEC-RLS-001 | Per-request PostgreSQL session vars `app.current_user_id` + `app.is_platform_admin` set by `RlsSessionInterceptor` |
+| SEC-DELEGATION | Application-layer guard in `SetRolePermissionsCommand`, `UpdateOrgMemberCommand`, `CreateInvitationCommand` — rejects privilege escalation; returns 403 `Role.PrivilegeEscalation` |
+| SEC-IDOR | All handlers verify `resource.OrganizationId == caller.OrganizationId`; SUPER_ADMIN (has `platform.orgs.read`) bypasses |
+| SEC-INVITE-TOKEN | 256-bit URL-safe base64 token; SHA-256 hash stored in DB (VARCHAR 256); 48-hour expiry |
+
+---
+
 ## Phase 6 — Accounting, Notification, Callback, GST
 
 ### AccountingService (port 5005/5006)

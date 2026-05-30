@@ -9,7 +9,7 @@ namespace DocumentService.Application.Dashboard.Queries.GetActivity;
 
 /// <summary>
 /// Daily document-creation counts for the admin dashboard activity chart.
-/// "Range" controls the lookback: 7D / 30D / 90D. SYSTEM_ADMIN only.
+/// "Range" controls the lookback: 7D / 30D / 90D. SUPER_ADMIN only.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetActivityQuery(string Range = "7D") : IQuery<IReadOnlyList<DailyActivityPoint>>;
