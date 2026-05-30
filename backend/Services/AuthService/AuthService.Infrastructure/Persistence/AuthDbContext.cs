@@ -52,6 +52,15 @@ public class AuthDbContext(DbContextOptions<AuthDbContext> options)
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
 
     /// <inheritdoc />
+    public DbSet<Invitation> Invitations => Set<Invitation>();
+
+    /// <inheritdoc />
+    public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
+
+    /// <inheritdoc />
+    public DbSet<ReferenceData> ReferenceData => Set<ReferenceData>();
+
+    /// <inheritdoc />
     public DbSet<AuditLogEntry> AuditEvents => Set<AuditLogEntry>();
 
     /// <inheritdoc />

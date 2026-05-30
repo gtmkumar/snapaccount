@@ -9,7 +9,7 @@ namespace CallbackService.Application.Dashboard.Queries.GetWorkloadByUser;
 
 /// <summary>
 /// Per-assignee callback workload counts for the admin dashboard team-workload widget.
-/// SYSTEM_ADMIN only.
+/// SUPER_ADMIN only.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetWorkloadByUserQuery : IQuery<IReadOnlyList<UserWorkloadDto>>;

@@ -1,6 +1,6 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig, type AxiosResponse } from 'axios'
 import { auth } from './firebase'
-import { getToken, clearToken } from './authToken'
+import { getToken, clearSession } from './authToken'
 
 const baseURL = import.meta.env.VITE_API_BASE_URL as string | undefined ?? '/api'
 
@@ -35,10 +35,12 @@ api.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: unknown) => {
     if (axios.isAxiosError(error) && error.response?.status === 401) {
-      // Token expired — sign out (clear both Firebase session and local-auth token)
-      clearToken()
+      // Token expired/invalid — clear the FULL local session (token + persisted user)
+      // and the Firebase session, then return to login. Clearing the user too is what
+      // prevents the zombie "logged-in but no token" 401→/login→/dashboard loop.
+      clearSession()
       await auth.signOut().catch(() => undefined)
-      window.location.href = '/login'
+      if (window.location.pathname !== '/login') window.location.href = '/login'
     }
     return Promise.reject(error)
   }

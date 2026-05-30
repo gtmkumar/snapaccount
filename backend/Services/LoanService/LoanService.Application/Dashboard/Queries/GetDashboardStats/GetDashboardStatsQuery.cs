@@ -10,7 +10,7 @@ namespace LoanService.Application.Dashboard.Queries.GetDashboardStats;
 /// <summary>
 /// Admin dashboard counts for LoanService — applications in non-terminal status.
 /// "Active" = anything that isn't Disbursed / Closed / Rejected.
-/// SYSTEM_ADMIN only — no org scoping.
+/// SUPER_ADMIN only — no org scoping.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetDashboardStatsQuery : IQuery<LoanDashboardStats>;

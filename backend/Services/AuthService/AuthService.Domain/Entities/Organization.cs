@@ -26,4 +26,21 @@ public class Organization : BaseAuditableEntity
 
     private readonly List<OrganizationMember> _members = [];
     public IReadOnlyCollection<OrganizationMember> Members => _members.AsReadOnly();
+
+    /// <summary>
+    /// Sets optional classification fields that cannot be provided via object-initialiser
+    /// because they have private setters (they may be updated independently of identity fields).
+    /// Call immediately after construction before persisting.
+    /// BUG-ORG-BUSINESSTYPE: BusinessType/IndustryType/AnnualTurnoverInr were silently dropped
+    /// because the handler used an object-initialiser which cannot reach private setters.
+    /// </summary>
+    public void SetBusinessDetails(
+        string? businessType,
+        string? industryType,
+        decimal? annualTurnoverInr)
+    {
+        BusinessType      = businessType;
+        IndustryType      = industryType;
+        AnnualTurnoverInr = annualTurnoverInr;
+    }
 }

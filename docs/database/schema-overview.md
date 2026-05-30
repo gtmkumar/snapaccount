@@ -742,3 +742,149 @@ Chat with CAs is regulated communication and is **retained 7 years** for complia
 - **backend-agent:** Use the new canonical plural-named tables (`chat.threads`, `chat.messages`, `chat.thread_participants`, `chat.read_receipts`). Legacy `007_chat_schema.sql` tables are not canonical for Phase 6F. Attachments are GCS URI metadata only — same contract as `gst.notices` (P6-HANDOFF-14). Category routing reads `chat.routing_rules`; cache in memory at startup with refresh on rule update event.
 - **security-reviewer:** DPDP cascade extends to `chat.messages` (anonymize sender) + `chat.thread_participants` (soft-delete). Messages retained 7 years for compliance. Same anonymize-only pattern as loans. `BEFORE DELETE` triggers block hard-deletes on `chat.threads` and `chat.messages`.
 - **devops-engineer:** ChatService needs Redis for ephemeral typing/presence state; Cloud Run **sticky sessions / session affinity** required for SignalR. Daily Hangfire retention sweeper queries `idx_chat_threads_retention_until`.
+
+## Module 1 — Auth & RBAC (Multi-Tenant Custom Roles + Invitations, additive 2026-05-29)
+
+> Scope: `.claude/orchestrator/auth-rbac-module-scope.md`. Additive on top of `001_auth_schema.sql`.
+> Org-scoped custom roles, constrained delegation (enforced server-side), token-based invitations.
+
+### Migration files
+
+| File | Purpose |
+|---|---|
+| `035_auth_org_roles_invitations.sql` | Schema: `auth.role` org-scoping columns, partial unique indexes, `auth.invitation` table, RLS. |
+| `036_auth_rbac_permission_catalog_seed.sql` | Seed: full permission catalog, 6 baseline system roles, default `role_permission` grants. |
+| `037_permission_is_active.sql` | Increment 1.2: `auth.permission.is_active` flag + partial index (soft-retire permissions). |
+| `038_user_permission.sql` | Increment 1.3: `auth.user_permission` table — per-user direct permission overrides, RLS. |
+| `039_reference_data.sql` | Increment 1.4 Phase A: `auth.reference_data` master-data table + seed; `platform.refdata.manage` permission. |
+
+All are idempotent / re-runnable (verified by applying twice against local Postgres).
+
+### `auth.permission.is_active` — soft-retire flag (Increment 1.2, migration 037)
+
+`is_active BOOLEAN NOT NULL DEFAULT TRUE` (existing rows backfilled to `TRUE`; column is nullable-with-default so it is safe to add against a running AuthService).
+
+- **`is_active = FALSE` = a RETIRED permission.** Retired permissions are **excluded** from the role permission-matrix UI, from `GET /auth/me/grantable-permissions`, and from effective-permission computation. This lets the catalog evolve (deprecate a permission) without breaking historical `role_permission` rows that still reference it.
+- This is **distinct from soft-delete**: `deleted_at` (delete) still soft-removes a row entirely; `is_active = FALSE` keeps the row visible for history/audit but treats it as retired. Live-catalog queries should filter `is_active = TRUE AND deleted_at IS NULL`.
+- Index: `idx_permission_is_active` — partial `ON (is_active) WHERE is_active = TRUE AND deleted_at IS NULL`, keeping the matrix/grantable/effective hot paths efficient.
+
+### `auth.user_permission` — per-user direct permission overrides (Increment 1.3, migration 038)
+
+A direct permission grant to a user, **independent of their roles** — for one-off elevations or exceptions that don't warrant a custom role.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `UUID PK` | `gen_random_uuid()` |
+| `user_id` | `UUID NOT NULL` | FK → `auth.user(id)` `ON DELETE CASCADE`, indexed |
+| `permission_id` | `UUID NOT NULL` | FK → `auth.permission(id)` `ON DELETE CASCADE`, indexed |
+| `organization_id` | `UUID NULL` | FK → `auth.organization(id)` `ON DELETE CASCADE`. **NULL = platform/global grant**; non-NULL = scoped to that org. Indexed (partial). |
+| `granted_by_user_id` | `UUID NULL` | FK → `auth.user(id)` `ON DELETE SET NULL`. Provenance of who granted it. |
+| `created_at`/`updated_at`/`deleted_at` | `TIMESTAMPTZ` | audit + soft-delete |
+| `created_by`/`updated_by` | `UUID` | per existing convention |
+
+**Effective permissions** for a user in a given scope = **(role permissions) ∪ (user_permission grants in scope)**, with retired permissions (`auth.permission.is_active = FALSE`) excluded. The org scope of a `user_permission` row narrows the grant: a NULL-org row applies platform-wide, a non-NULL-org row applies only within that org.
+
+**Uniqueness.** `uq_user_permission_scope` — `UNIQUE (user_id, permission_id, COALESCE(organization_id,'00000000-0000-0000-0000-000000000000')) WHERE deleted_at IS NULL` — one **active** grant per (user, permission, scope); the nil-UUID COALESCE makes platform-scoped (NULL-org) grants dedupe too.
+
+> NOTE (backend): this is an **expression** unique index, not a plain column unique. To use it as an `ON CONFLICT` arbiter you must restate the exact expression: `ON CONFLICT (user_id, permission_id, COALESCE(organization_id,'00000000-0000-0000-0000-000000000000')) WHERE deleted_at IS NULL`. A bare `ON CONFLICT (user_id, permission_id, organization_id)` will NOT match.
+
+**RLS.** `user_permission_org_isolation` — same pattern as `auth.role` / `auth.invitation`: platform-admin bypass (`app.is_platform_admin='true'`), NULL-org rows globally visible, otherwise visible only within the caller's owned/member orgs (via `app.current_user_id`). Defense-in-depth; the constrained-delegation rule (a delegate may only grant permissions within their own effective set) remains authoritative in the application layer.
+
+### `auth.reference_data` — global master data (Increment 1.4 Phase A, migration 039)
+
+Single-table master data for dropdowns / lookups. **Global, NOT tenant-scoped → no RLS** (readable by all authenticated users). Managed by SUPER_ADMIN via the new `platform.refdata.manage` permission.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `UUID PK` | `gen_random_uuid()` |
+| `category` | `VARCHAR(50) NOT NULL` | `LANGUAGE`, `USER_TYPE`, `GENDER`, `STATE`, `COUNTRY` |
+| `code` | `VARCHAR(50) NOT NULL` | lookup key (e.g. `en`, `MH`, `IN`) |
+| `name` | `VARCHAR(200) NOT NULL` | human label (native script where applicable, e.g. `हिन्दी (Hindi)`) |
+| `parent_code` | `VARCHAR(50) NULL` | hierarchy link — `STATE.parent_code` = `COUNTRY` code (`IN`) |
+| `is_active` | `BOOLEAN NOT NULL DEFAULT TRUE` | inactive = hidden from pickers, retained for history |
+| `sort_order` | `INT NOT NULL DEFAULT 0` | display ordering within a category |
+| `created_at`/`updated_at`/`deleted_at` | `TIMESTAMPTZ` | audit + soft-delete |
+| `created_by`/`updated_by` | `UUID` | per existing convention |
+
+- **Uniqueness:** `uq_reference_data_category_code` — `UNIQUE (category, code) WHERE deleted_at IS NULL`. As a partial index it must be restated as the `ON CONFLICT` arbiter: `ON CONFLICT (category, code) WHERE deleted_at IS NULL`.
+- **Indexes:** `idx_reference_data_category_active (category, is_active)` for active-picker queries; `idx_reference_data_parent_code` (partial) for `STATE → COUNTRY` joins.
+- **`set_updated_at`** trigger attached.
+
+**Seed counts (54 rows):** `LANGUAGE`=3 (`en`, `hi`, `bn`), `USER_TYPE`=4 (`BUSINESS_OWNER`, `EMPLOYEE`, `STAFF`, `DATA_ENTRY_OPERATOR`), `GENDER`=4 (`MALE`, `FEMALE`, `OTHER`, `PREFER_NOT_TO_SAY`), `COUNTRY`=7 (ISO alpha-2: `IN` default, `US`, `GB`, `AE`, `SG`, `AU`, `CA`), `STATE`=36 (28 Indian states + 8 union territories, ISO 3166-2:IN codes, `parent_code='IN'`).
+
+**New permission:** `platform.refdata.manage` (resource `platform`, action `refdata.manage`) seeded into `auth.permission` and granted to the `SUPER_ADMIN` role.
+
+### `auth.role` — new columns (additive)
+
+| Column | Type | Notes |
+|---|---|---|
+| `organization_id` | `UUID NULL` | FK → `auth.organization(id)` `ON DELETE CASCADE`. **NULL = system/global role** (read-only to org admins); non-NULL = org-owned custom role. |
+| `created_by_user_id` | `UUID NULL` | FK → `auth.user(id)` `ON DELETE SET NULL`. Provenance of who created a custom role. |
+
+**Role-name uniqueness (multi-tenant safe).** Migration 035 **drops** the original global `UNIQUE(name)` (pre-production, nothing seeded yet) and replaces it with two partial unique indexes:
+
+- `uq_role_system_name` — `UNIQUE (name) WHERE organization_id IS NULL AND deleted_at IS NULL` — system roles globally unique.
+- `uq_role_org_name` — `UNIQUE (organization_id, name) WHERE organization_id IS NOT NULL AND deleted_at IS NULL` — custom role names unique **per org** (org A and org B may both have a "Manager").
+
+> Because the global `UNIQUE(name)` is gone, any `INSERT ... ON CONFLICT (name)` on `auth.role` for a **system** role must target the partial arbiter: `ON CONFLICT (name) WHERE organization_id IS NULL AND deleted_at IS NULL`.
+
+### `auth.invitation` — new table
+
+Token-based org member invitations. Columns: `id` (PK), `organization_id` (FK org, NOT NULL), `email` (NULL), `phone_number` (NULL), `role_id` (FK role, NOT NULL), `invited_by_user_id` (FK user, NOT NULL), `token_hash` (`VARCHAR(256)` UNIQUE — SHA-256 of the invite token, never store plaintext), `status` (`PENDING`/`ACCEPTED`/`REVOKED`/`EXPIRED`, default `PENDING`), `expires_at` (NOT NULL), `accepted_at` (NULL), `accepted_user_id` (FK user, NULL — set on accept), plus standard audit cols (`created_at`, `updated_at`, `deleted_at`, `created_by`, `updated_by`).
+
+- CHECK `chk_invitation_contact`: at least one of `email` / `phone_number` is present.
+- `set_updated_at` trigger attached.
+
+### RLS posture
+
+`auth.role` is now **RLS-enabled** (it was not in 001). Both policies use the existing session-var convention `current_setting('app.current_user_id', TRUE)::UUID` and add a platform-admin bypass `current_setting('app.is_platform_admin', TRUE) = 'true'` (set for SUPER_ADMIN to allow cross-org reads).
+
+| Table | Policy | Visibility |
+|---|---|---|
+| `auth.role` | `role_org_isolation` | platform-admin sees all; system roles (`organization_id IS NULL`) world-readable; custom roles only within the caller's owned/member orgs. |
+| `auth.invitation` | `invitation_org_isolation` | platform-admin sees all; otherwise only invitations for the caller's owned/member orgs. |
+
+> RLS is **defense-in-depth**. The authoritative **constrained-delegation / no-privilege-escalation** rule (a delegate may only grant a subset of their own effective permissions, and may not assign a role exceeding their set) is enforced in the backend application layer (scope §4 backend-agent), not in RLS.
+
+### Permission catalog (`auth.permission`) — dot-notation `resource.action`
+
+Seeded **74 permissions** across **12 modules**. `resource` = first dot-segment, `action` = remainder. Names match backend `[RequiresPermission("...")]` exactly.
+
+| Module (`resource`) | Count | Examples |
+|---|---|---|
+| `org` | 14 | `org.members.{read,invite,update,remove,suspend}`, `org.roles.{read,create,update,delete,assign}`, `org.permissions.{read,grant}`, `org.settings.{read,update}` |
+| `platform` | 6 | `platform.orgs.{read,create,suspend}`, `platform.admins.invite`, `platform.roles.manage`, `platform.permissions.manage` |
+| `gst` | 9 | `gst.returns.file`, `gst.returns.approve`, `gst.itc.reconcile`, `gst.einvoices.generate` |
+| `itr` | 13 | `itr.filings.{create,compute,file,submit,verify,ca_review}`, `itr.notices.respond` |
+| `loan` | 12 | `loan.application.{create,submit,close}`, `loan.bank.decision`, `loan.disbursement.record` |
+| `document` | 4 | `document.{read,update,share,archive}` |
+| `callback` | 4 | `callback.{assign,complete,escalate,cancel}` |
+| `accounting` | 3 | `accounting.journal.{review,reverse}`, `accounting.fiscal_year.close` |
+| `chat` | 3 | `chat.thread.{assign,escalate,resolve}` |
+| `admin` | 3 | `admin.dashboard.read`, `admin.gst.queue.read`, `admin.users.read` |
+| `subscription` | 2 | `subscription.plan.{create,update}` |
+| `notification` | 1 | `notification.dlq.manage` |
+
+### Baseline system roles + default grants
+
+All six are `is_system_role = TRUE`, `organization_id = NULL`. `CA` reuses the row already seeded in `999_seed_reference_data.sql` (via `ON CONFLICT DO NOTHING`).
+
+| Role | Default grant count | Summary |
+|---|---|---|
+| `SUPER_ADMIN` | 74 (all) | Platform staff. Full catalog incl. `platform.*`. Cross-org. |
+| `ORG_ADMIN` | 65 | All `org.*` + every service module; **no** `platform.*`, no `admin.*`. |
+| `CA` | 31 | Review/compute/file across gst/itr/accounting/document/chat + org reads. |
+| `MANAGER` | 20 | Member management + role assign + module reads + callback/chat workflow ops. |
+| `REVIEWER` | 11 | Read-only + review/approve (`*.review`, `gst.returns.approve`, `itr.filings.ca_review`). |
+| `HR` | 6 | Member onboarding/offboarding (`org.members.{read,invite,update,suspend}`, role/perm read). |
+
+### Index rationale (Module 1)
+
+- `idx_role_organization_id` (partial, `WHERE organization_id IS NOT NULL`) — fast lookup of an org's custom roles.
+- `idx_role_created_by_user_id` (partial) — provenance queries.
+- `auth.invitation`: FK indexes on `organization_id`, `role_id`, `invited_by_user_id`, `accepted_user_id`; `token_hash` unique (invite-accept lookup is the hot path); partial `status` index (`WHERE deleted_at IS NULL`) for pending-invite listing; `email` and `expires_at` indexes for resend/dedup and expiry sweeps.
+
+### Cross-agent handoffs
+
+- **backend-agent:** New columns `auth.role.organization_id` (NULL=system) + `auth.role.created_by_user_id`. New table `auth.invitation` (token-based; store **SHA-256** of the token in `token_hash`, never plaintext; `status` ∈ PENDING/ACCEPTED/REVOKED/EXPIRED). Permission names are dot-notation matching `[RequiresPermission]`; the catalog and 6 baseline roles are seeded. Set `app.is_platform_admin='true'` in the DB session for SUPER_ADMIN so RLS allows cross-org reads. Enforce the constrained-delegation rule in the application layer — RLS does not enforce it.
+- **security-reviewer:** Invite-token entropy/expiry/replay (`token_hash` UNIQUE + `expires_at` + `status`), org tenant isolation via RLS on `auth.role`/`auth.invitation`, and privilege-escalation-via-delegation are the focus areas.

@@ -8,10 +8,10 @@ import {
 } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import api from '@/lib/api'
-import { setToken, clearToken } from '@/lib/authToken'
+import { setToken, clearSession } from '@/lib/authToken'
 
 export type AdminRole =
-  | 'SYSTEM_ADMIN'
+  | 'SUPER_ADMIN'
   | 'OPERATIONS_MANAGER'
   | 'CA'
   | 'SUPPORT_EXECUTIVE'
@@ -38,7 +38,7 @@ async function getRoleFromToken(user: User): Promise<AdminRole> {
   const role = idTokenResult.claims['role'] as string | undefined
   // Default to DATA_ENTRY_OPERATOR if no role set (dev mode)
   const validRoles: AdminRole[] = [
-    'SYSTEM_ADMIN',
+    'SUPER_ADMIN',
     'OPERATIONS_MANAGER',
     'CA',
     'SUPPORT_EXECUTIVE',
@@ -48,28 +48,28 @@ async function getRoleFromToken(user: User): Promise<AdminRole> {
   if (role && validRoles.includes(role as AdminRole)) {
     return role as AdminRole
   }
-  // For development: check email domain or use SYSTEM_ADMIN for admins
+  // For development: check email domain or use SUPER_ADMIN for admins
   if (user.email?.endsWith('@snapaccount.in')) {
-    return 'SYSTEM_ADMIN'
+    return 'SUPER_ADMIN'
   }
   return 'DATA_ENTRY_OPERATOR'
 }
 
 // Dev bypass: skip Firebase and inject a mock admin user for local UI testing
 const DEV_BYPASS = import.meta.env.VITE_DEV_AUTH_BYPASS === 'true'
-const DEV_ROLE = (import.meta.env.VITE_DEV_USER_ROLE ?? 'SYSTEM_ADMIN') as AdminRole
+const DEV_ROLE = (import.meta.env.VITE_DEV_USER_ROLE ?? 'SUPER_ADMIN') as AdminRole
 
 // LOCAL_AUTH: real username/password login against the local DB (Firebase off in dev).
 const LOCAL_AUTH = import.meta.env.VITE_LOCAL_AUTH === 'true'
 const USER_KEY = 'sa_admin_user'
 
 const VALID_ROLES: AdminRole[] = [
-  'SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE', 'DATA_ENTRY_OPERATOR', 'PARTNER_BANK_REP',
+  'SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE', 'DATA_ENTRY_OPERATOR', 'PARTNER_BANK_REP',
 ]
 
 function pickRole(roles: string[]): AdminRole {
   const match = roles.find(r => VALID_ROLES.includes(r as AdminRole))
-  return (match as AdminRole) ?? 'SYSTEM_ADMIN'
+  return (match as AdminRole) ?? 'SUPER_ADMIN'
 }
 
 function readStoredUser(): AdminUser | null {
@@ -171,8 +171,7 @@ export function useAuth(): AuthState & {
 
   const signOut = async (): Promise<void> => {
     if (LOCAL_AUTH || DEV_BYPASS) {
-      clearToken()
-      localStorage.removeItem(USER_KEY)
+      clearSession()
       setState({ user: null, loading: false, error: null })
     }
     await firebaseSignOut(auth).catch(() => undefined)

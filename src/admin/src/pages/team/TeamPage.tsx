@@ -32,7 +32,7 @@ import { format, formatDistanceToNow } from 'date-fns'
 import type { ColumnDef } from '@tanstack/react-table'
 import { getInitials } from '@/lib/utils'
 
-const ROLE_OPTIONS: AdminRole[] = ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE', 'DATA_ENTRY_OPERATOR', 'PARTNER_BANK_REP']
+const ROLE_OPTIONS: AdminRole[] = ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE', 'DATA_ENTRY_OPERATOR', 'PARTNER_BANK_REP']
 const MODULE_OPTIONS = ['GST', 'ITR', 'Loans', 'Reports', 'Documents']
 
 export default function TeamPage() {
@@ -290,7 +290,7 @@ export default function TeamPage() {
 
 // ── Role descriptions ─────────────────────────────────────────────────────────
 const ROLE_DESCRIPTIONS: Record<AdminRole, string> = {
-  SYSTEM_ADMIN: 'Full access to all modules, settings, team management, and subscriptions.',
+  SUPER_ADMIN: 'Full access to all modules, settings, team management, and subscriptions.',
   OPERATIONS_MANAGER: 'Access to all operations: callbacks, chat, reports, and team management.',
   CA: 'Chartered Accountant — access to ITR review, GST notices, chat, and reports.',
   SUPPORT_EXECUTIVE: 'Support access — callbacks, chat, documents, and user management.',

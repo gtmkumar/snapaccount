@@ -54,7 +54,7 @@ public static class DependencyInjection
         services.AddScoped<IGstDbContext>(sp => sp.GetRequiredService<GstDbContext>());
 
         // Firebase Admin SDK
-        if (FirebaseApp.DefaultInstance == null)
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration) && FirebaseApp.DefaultInstance == null)
         {
             var credentialJson = configuration["Firebase:ServiceAccountJson"];
 #pragma warning disable CS0618
@@ -98,10 +98,10 @@ public static class DependencyInjection
 
         // Phase 6B: Recurring job subscriber for deadline reminders
         services.AddScoped<IGstDeadlineCheckHandler, GstDeadlineCheckHandler>();
-        services.AddHostedService<GstRecurringJobsSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<GstRecurringJobsSubscriber>();
 
         // SEC-040: DPDP Act 2023 Right-to-Erasure cascade
-        services.AddHostedService<AccountDeletionSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();
 
         // Current user
         services.AddHttpContextAccessor();

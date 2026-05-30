@@ -9,7 +9,7 @@ namespace ItrService.Application.Dashboard.Queries.GetActivity;
 
 /// <summary>
 /// Daily ITR filing creation counts for the admin dashboard activity chart.
-/// SYSTEM_ADMIN only.
+/// SUPER_ADMIN only.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetActivityQuery(string Range = "7D") : IQuery<IReadOnlyList<DailyActivityPoint>>;

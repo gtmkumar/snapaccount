@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import type { AdminRole } from '@/hooks/useAuth'
 
 const ROLE_CONFIG: Record<AdminRole, { label: string; className: string }> = {
-  SYSTEM_ADMIN: {
+  SUPER_ADMIN: {
     label: 'Admin',
     className: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300',
   },

@@ -9,7 +9,7 @@ namespace DocumentService.Application.Admin.Queries.GetUserDocuments;
 
 /// <summary>
 /// Returns the most-recent N documents for a specific user, for the admin
-/// per-user detail page. Cross-org admin view — SYSTEM_ADMIN only.
+/// per-user detail page. Cross-org admin view — SUPER_ADMIN only.
 /// </summary>
 [RequiresPermission("admin.users.read")]
 public record GetUserDocumentsQuery(Guid UserId, int Limit = 20)

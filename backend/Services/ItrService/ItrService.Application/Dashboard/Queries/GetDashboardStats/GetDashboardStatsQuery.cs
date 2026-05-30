@@ -9,7 +9,7 @@ namespace ItrService.Application.Dashboard.Queries.GetDashboardStats;
 /// <summary>
 /// Admin dashboard counts for ItrService — filings that have been FILED but
 /// not yet E_VERIFIED (the e-verification window is the bottleneck stat).
-/// SYSTEM_ADMIN only — no org scoping.
+/// SUPER_ADMIN only — no org scoping.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetDashboardStatsQuery : IQuery<ItrDashboardStats>;

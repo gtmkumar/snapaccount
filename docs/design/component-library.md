@@ -1349,3 +1349,176 @@ Phase 6C canonical disclaimer is reused in: ReportsPage share-with-bank flow, Su
 - `PdfViewer` (6B) — Reports preview pane.
 - `BadgeQual` (6C) — reused in Plan eligibility chips on Subscriptions plan list.
 
+---
+
+## Auth & RBAC Module (Module 1) — new components
+
+> Added 2026-05-29 by ui-ux-agent. Screens: docs/design/screens/web-admin/auth-rbac-*.md.
+> Multi-tenant roles + constrained delegation. Extends existing primitives; nothing replaced.
+
+### Delegation pattern (cross-cutting — the CRITICAL rule)
+A permission/role control is **interactive only if** its key ∈ the caller's grantable set
+(`GET /auth/me/grantable-permissions`). Otherwise it renders **disabled/greyed**:
+text → `--text-tertiary`, a 14px `lucide Lock` icon, `Switch`/option in `disabled` state
+(track `neutral.200`/`neutral.700` dark, thumb `neutral.400`, `cursor:not-allowed`,
+`aria-disabled`, out of tab order — but the lock icon stays focusable to reach the tooltip).
+`Tooltip` copy: i18n `roles.matrix.notGrantable` (perms) / `members.role.notAssignable` (roles).
+Existing grant values are NEVER hidden — a disabled-ON switch shows ON, just uncontrollable.
+UI assistance only; server is authoritative (403 on escalation → toast + revert rejected rows).
+
+#### RoleListItem (NEW)
+- Left-rail selectable row. Radio-select semantics (`role="option"` in a `listbox`).
+- Content: `RoleChip` + role name, member count, `system`/`custom` tag, selected accent
+  (`color.brand.500` left-border 3px + `brand.50`/`brand.950` bg tint).
+- States: default / hover / selected / system (read-only badge). Min height 44px.
+
+#### PermissionModuleSection (NEW)
+- Collapsible disclosure grouping permission rows by module (Organization, Roles, GST,
+  Accounting, Documents, ITR, Loans, Chat, Callbacks…).
+- Header: chevron + module name + "N of M granted" counter + "Select all in module" control.
+- "Select all" toggles ONLY grantable rows; disabled entirely if module has zero grantable
+  rows (tooltip `roles.matrix.selectAllGrantableOnly`).
+- `aria` disclosure pattern; module color accent from `color.module.*` where applicable.
+
+#### PermissionRow (NEW)
+- Label + permission key (`--font-mono`, `--text-tertiary`) + `Switch`.
+- Variants: grantable (interactive) / non-grantable (disabled per delegation pattern) /
+  rejected (rose `error.500` 3px left-border after a server 403, reverts then clears).
+- `Switch` reuses existing Toggle (§1.9) with `disabled` state.
+
+#### DirtySaveBar (NEW)
+- Sticky bottom bar, appears when draft ≠ saved (slide 200ms; 0ms reduced-motion).
+- Shows "{n} changes unsaved" (`aria-live="polite"`) + Discard + Save (primary, spinner on save).
+- `shadow.md` to elevate above content. `cmd/ctrl+S` saves when dirty. Used by Role Matrix.
+
+#### CreateRoleDialog (NEW)
+- `Dialog size="md"`: name (req) + description (140). Duplicate-from-system pre-checks the
+  source role's grants ∩ caller grantable set; excluded perms noted inline.
+
+#### OrgSwitcher (NEW, SUPER_ADMIN only)
+- Header dropdown to set active org context on platform screens. Hidden for ORG_ADMIN/employees.
+- Searchable; shows org name + status pill. `combobox` semantics.
+
+#### CreateOrgDialog (NEW, platform)
+- Org legal name (req), GSTIN (15-char validated, optional), PAN (XXXXX9999X, optional),
+  primary admin email + phone (fires first Org-Admin invite). Mono font for GSTIN/PAN.
+
+#### InviteMemberDialog (NEW — extends TeamPage InviteDialog)
+- Adds: contact-method `SegmentedControl` (Email | Phone), `PhoneField` (+91 chip + 10-digit
+  numeric), delegation-aware `RoleCard` radios (non-assignable roles disabled per pattern),
+  optional message. Org-scoped `POST /auth/org/members/invite`.
+
+#### SegmentedControl (NEW)
+- `radiogroup` of pill segments; used for Email|Phone contact method. Selected = `brand.500`
+  fill + white text; rest = `--surface-sunken`. Min 44px targets.
+
+#### PhoneField (NEW)
+- Fixed `+91` prefix chip (`radius.full`, `--surface-sunken`) + 10-digit numeric input
+  (`inputmode="numeric"`, `maxlength=10`). Uses Shared `PhoneNumber` format. Reusable across
+  invite flows. `aria-describedby` shows format hint.
+
+#### RoleCard (NEW — radio variant)
+- Radio-selectable card: `RoleChip` + short description. Variants: default / selected
+  (`brand.500` border + `brand.50` bg) / disabled (delegation: greyed + lock + tooltip).
+
+#### AuthCardShell (existing, reused) + invite-acceptance terminal cards
+- Invite acceptance reuses the centered auth card layout (auth.md). Terminal states
+  (expired/revoked/accepted/invalid) render as semantic-tinted status cards (icon + text + CTA).
+- `PasswordStrengthMeter` — labeled meter (`error→warning→success` ramp), text label not color-only.
+
+### Increment 1.1 — Permission Catalog (added 2026-05-29)
+> Screen: docs/design/screens/web-admin/auth-rbac-permission-catalog.md (SUPER_ADMIN, `/settings/permissions`, gated `platform.permissions.manage`). i18n via `@/i18n` `t()` (NOT react-i18next).
+
+#### Callout / InfoBanner (NEW — lightweight)
+- Persistent informational banner. `variant="info"` = `color.info.50` bg / `color.info.700` text /
+  `color.info.500` left accent (3px) + `lucide Info` icon. `role="status"` (not alert).
+- Dismissible-per-session (X) but reappears next visit. Other variants follow semantic ramp
+  (warning/success/error 50/700/500) for reuse elsewhere.
+- First use: the "permissions are inert until enforced in backend code" caveat above the catalog table.
+
+#### CreatePermissionDialog (NEW)
+- `Dialog size="md"`. Resource `Combobox` (existing resources or type new, `[a-z0-9_]+`) + Action
+  free text (may contain dots) → **live mono code preview** `resource.action` validated against
+  `^[a-z0-9_]+(\.[a-z0-9_]+)+$` per keystroke (green check valid / `error.500` hint invalid;
+  submit disabled while invalid). Description required. Condensed caveat in footer. Duplicate (409)
+  → inline error on preview. `POST /auth/permissions`.
+
+#### EditPermissionDialog (NEW)
+- `Dialog size="md"`. Code read-only (immutable, with note). Edit Description + Active toggle.
+  `PUT /auth/permissions/{id}`.
+
+#### Permission Catalog reuse (no new primitives)
+- `PermissionModuleSection` (Module 1) — same module grouping as the Role Matrix.
+- `DataTable density="compact"` — catalog rows (Description / Code mono / # roles / Active toggle / Actions).
+- `Toggle` (§1.9) — inline active flag. `SegmentedControl` (Module 1) — Active|Inactive|All filter.
+- `Dialog` confirm — deactivate (soft-delete) with role-reference warning (count via `warning` tint).
+- Mono codes are copy-on-click (Tooltip "Copied", keyboard-reachable, `aria-live`).
+
+### Increment 1.3 — Admin Add User (added 2026-05-29)
+> Screen: docs/design/screens/web-admin/auth-rbac-add-user-dialog.md. Triggered from UserListPage `/users`. i18n via `@/i18n` `t()` (NOT react-i18next), keys under `users.addUser.*`.
+
+#### AddUserDialog (NEW — composition, no new primitives/tokens)
+- `Dialog size="lg" scrollableBody`. Create a user + assign role + per-user permission overrides.
+- Scope `SegmentedControl` (Platform | Organization). Platform shows a `Callout variant="warning"`
+  (SYSTEM_ADMIN is SUPER_ADMIN-only) and may be disabled for non-platform admins. Organization shows
+  an org `Combobox` + org Role.
+- Identity: Full name, Email, `PhoneField` (+91), optional DEV-only Initial password + `PasswordStrengthMeter`
+  (email-or-phone required).
+- Role = `RoleCard` radios from `GET /auth/assignable-roles?scope=` (non-assignable → disabled lock+tooltip,
+  delegation pattern). Picking a role shows a read-only inherited-permissions chip preview.
+- **Permission overrides** = `PermissionModuleSection` + `Toggle` matrix for EXTRA direct grants. Three
+  row states beyond the Role Matrix: grantable (interactive), **inherited-from-role** (dimmed + `✓ inherited`
+  `success` Badge, disabled ON, not counted), **non-grantable** (greyed + Lock + tooltip — same delegation rule).
+  Only grantable+not-inherited toggles feed `permissionIds[]`.
+- Live **effective-permissions** summary (role ∪ overrides, deduped, `aria-live`). Submit `POST /auth/admin/users`;
+  server 403 Role.PrivilegeEscalation → toast + revert offending rows/role.
+
+### Increment 1.4 Phase A — Reference Data (master data) (added 2026-05-29)
+> Screen: docs/design/screens/web-admin/auth-rbac-reference-data.md (SUPER_ADMIN, `/settings/reference-data`, gated `platform.refdata.manage`). i18n via `@/i18n` `t()` (NOT react-i18next), keys under `refdata.*`. Sibling of Permission Catalog.
+
+#### ReferenceDataDialog (NEW — create + edit, one dialog)
+- `Dialog size="md"`. Manages `auth.reference_data` rows. Category locked to current tab (read-only).
+  Fields: Name, Code (mono, live format-validated, immutable on edit), Sort order (numeric), Active `Toggle`.
+- **Country parent `Combobox`** shown ONLY for the STATE category (sourced from
+  `GET /auth/reference-data?category=COUNTRY&activeOnly=true`, `Name (CODE)`) → `parentCode`. Required for STATE.
+- Duplicate `(category, code)` → 409 inline on Code. `POST` / `PUT /auth/reference-data`.
+
+#### Reference Data reuse (no new primitives)
+- `SegmentedControl` (Module 1) — category switch (Languages|User Types|Genders|States|Countries),
+  active category mirrored in URL `?category=`; second `SegmentedControl` = Active|Inactive|All filter.
+- `DataTable density="compact"` — Name / Code(mono, copy-on-click) / Country(parent, STATE-only) / Active `Toggle` / Sort order / Actions. Default sort by sortOrder.
+- `Dialog` confirm — delete with **in-use 409 guard**: on 409 the dialog swaps to a non-destructive
+  "still in use" message + a "Deactivate instead" action (`PUT {isActive:false}`). COUNTRY-with-states warns first.
+- `Combobox` (OrgSwitcher base) reused for the STATE parent country picker.
+
+### Increment 1.4 Phase B — Full User CRUD (added 2026-05-29)
+> Screen: docs/design/screens/web-admin/auth-rbac-user-crud.md. Extends AddUserDialog (Incr 1.3) + new EditUserDialog + delete/deactivate UX on UserListPage/UserDetailPage. i18n via `@/i18n` `t()` (NOT react-i18next), keys `users.*` / `users.addUser.*` / `users.edit.*`.
+
+#### AddUserDialog — extended (no new primitives/tokens)
+- Now sectioned: **Identity** (full name, email/PhoneField, preferred language ←LANGUAGE, user type ←USER_TYPE [required, replaces auto-derive], active-on-create `Toggle`, DEV initial password) · **Access** (scope/role/overrides — unchanged from Incr 1.3) · **Profile/KYC** (collapsible `Disclosure`).
+- Profile/KYC fields: PAN (uppercase, `^[A-Z]{5}[0-9]{4}[A-Z]$`, "encrypted at rest" lock affordance, SEC-013), Aadhaar last-4 (`^[0-9]{4}$`), DOB (`DatePicker` mode=date maxDate=today, FY off), Gender ←GENDER, address1/2, city, Country ←COUNTRY (default IN), State ←STATE, pincode (`^[0-9]{6}$`).
+- **State↔Country dependency**: State `Select`/`Combobox` options filtered to STATE rows where `parentCode === selected country code`; disabled until country chosen; resets when country changes. Client logic over refdata, not a new component.
+
+#### EditUserDialog (NEW — composition)
+- `Dialog size="lg" scrollableBody`, prefilled from `GET /auth/admin/users/{id}`. Same sections.
+- **Read-only once set:** Email + Phone (lock + note), Scope + Organization (display only). Editable: name, language, user type, status toggle, role (delegation-greyed), permission overrides (matrix prechecked from current `user_permission`, grantable/inherited/non-grantable), all Profile/KYC.
+- PAN returned masked (`AAAA••••A`); "Change PAN" clears for re-entry; untouched → no PAN change (preserves encrypted value). Password NOT edited here (separate Reset password / Send invite action). Dirty-tracked Save. `PUT /auth/admin/users/{id}`; 403 escalation → toast + revert.
+
+#### Delete / Deactivate (Users list + detail)
+- Soft-delete labelled "Deactivate user" (distinct from existing Suspend). `Dialog Confirm.Destructive`.
+- Guards: **self-delete** disabled+tooltip; **last active SUPER_ADMIN** blocked+message. Server may also 409 defensively → same messages. `DELETE /auth/admin/users/{id}`.
+
+### Status badge map (member / org / invitation lifecycle)
+| Entity status | Variant | Icon |
+|---|---|---|
+| Member ACTIVE | success | check-circle |
+| Member SUSPENDED | neutral (or error in actions) | pause-circle |
+| Member INVITED | warning | clock |
+| Org ACTIVE | success | check-circle |
+| Org SUSPENDED | neutral | pause-circle |
+| Invite PENDING | warning | mail / clock |
+| Invite ACCEPTED | success | check-circle |
+| Invite REVOKED | neutral | x-circle |
+| Invite EXPIRED | warning | clock |
+All pairs WCAG AA ≥ 4.5:1 text / ≥ 3:1 UI; icon + text always, never color-only.
+

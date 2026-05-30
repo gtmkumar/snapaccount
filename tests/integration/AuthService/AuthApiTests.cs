@@ -54,10 +54,25 @@ public class AuthApiTests : IAsyncLifetime
     {
         await _postgres.StartAsync();
 
+        // Pre-create the schema BEFORE the factory builds: with LOCAL_AUTH=true the host
+        // runs LocalAuthService.EnsureDevAdminAsync at startup (queries auth.role).
+        var preSeedOpts = new DbContextOptionsBuilder<AuthService.Infrastructure.Persistence.AuthDbContext>()
+            .UseNpgsql(_postgres.GetConnectionString())
+            .Options;
+        using (var preSeedDb = new AuthService.Infrastructure.Persistence.AuthDbContext(preSeedOpts))
+        {
+            await preSeedDb.Database.EnsureCreatedAsync();
+        }
+
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Testing");
+                // Connection string for AddAuthInfrastructure (else the host fails to build),
+                // and LOCAL_AUTH=true so Firebase init is skipped (no GCP ADC) while auth
+                // enforcement stays ON — NOT DEV_AUTH_BYPASS, which would break the 401 tests.
+                builder.UseSetting("ConnectionStrings:DefaultConnection", _postgres.GetConnectionString());
+                builder.UseSetting("LOCAL_AUTH", "true");
                 builder.ConfigureServices(services =>
                 {
                     // Replace connection string with test container
@@ -120,24 +135,18 @@ public class AuthApiTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SendOtp_FourthRequestWithin30Minutes_Returns429()
+    public async Task SendOtp_ExceedingRateLimit_Returns429()
     {
-        // Send 3 OTPs for same phone — 4th hits cooldown because
-        // the 3rd attempt exhausts the OTP and sets CooldownUntil.
-        var phone = "9100000099";
-        for (var i = 0; i < 3; i++)
-            await _client.PostAsJsonAsync("/auth/otp/send", new { phoneNumber = phone });
+        // SEC-011: /auth/otp/send is rate-limited to 5 requests per 10-minute sliding
+        // window (Program.cs "otp" SlidingWindowLimiter, QueueLimit 0). The 6th request
+        // within the window must be rejected with 429.
+        HttpResponseMessage response = null!;
+        for (var i = 0; i < 6; i++)
+            response = await _client.PostAsJsonAsync("/auth/otp/send", new { phoneNumber = "9100000099" });
 
-        // 4th request should be rate-limited
-        var response = await _client.PostAsJsonAsync("/auth/otp/send", new { phoneNumber = phone });
-
-        // The API returns 400 (BadRequest) with a Cooldown error code when blocked.
-        // Accept either 429 or 400 with cooldown code — the spec says 429 but the
-        // current endpoint maps domain Conflict errors to 400.
-        response.StatusCode.Should().BeOneOf(
+        response.StatusCode.Should().Be(
             HttpStatusCode.TooManyRequests,
-            HttpStatusCode.BadRequest,
-            HttpStatusCode.Conflict);
+            "the 6th OTP request within the 5-per-10-minute window must be rate-limited (SEC-011)");
     }
 
     // ──────────────────────────────────────────────────────────────

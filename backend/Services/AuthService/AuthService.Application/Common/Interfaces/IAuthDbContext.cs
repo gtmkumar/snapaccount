@@ -54,6 +54,15 @@ public interface IAuthDbContext
     /// <summary>User preferences in <c>auth.user_preferences</c>.</summary>
     DbSet<UserPreference> UserPreferences { get; }
 
+    /// <summary>Org invitations in <c>auth.invitation</c>.</summary>
+    DbSet<Invitation> Invitations { get; }
+
+    /// <summary>Direct user permission grants in <c>auth.user_permission</c>.</summary>
+    DbSet<UserPermission> UserPermissions { get; }
+
+    /// <summary>Reference / lookup data entries in <c>auth.reference_data</c>.</summary>
+    DbSet<AuthService.Domain.Entities.ReferenceData> ReferenceData { get; }
+
     /// <summary>
     /// Read-only projection of <c>shared.audit_log</c>. All services write to
     /// the same partitioned table; AuthService exposes the admin-only read

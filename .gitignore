@@ -114,3 +114,14 @@ infra/.env
 .firebase/
 firebase-debug.log
 firestore-debug.log
+
+# Dev / agent / browser-automation artifacts (not source)
+.playwright-mcp/
+.claude-flow/
+**/.claude-flow/
+.swarm/
+ruvector.db
+.vscode/
+# Root-level screenshots captured during local verification
+/*.png
+.claude/worktrees/

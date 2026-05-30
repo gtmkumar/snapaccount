@@ -23,8 +23,8 @@ vi.mock('@/hooks/usePermission', () => ({
     canAccess: (roles: AdminRole[]) => roles.includes(mockUseAuth().user?.role),
     hasPermission: (_perm: string) => {
       const role = mockUseAuth().user?.role
-      // Simple allow-all for SYSTEM_ADMIN, deny for others
-      return role === 'SYSTEM_ADMIN'
+      // Simple allow-all for SUPER_ADMIN, deny for others
+      return role === 'SUPER_ADMIN'
     },
   })),
 }))
@@ -94,7 +94,7 @@ describe('RoleGuard', () => {
 
   it('shows spinner while auth is loading', () => {
     setLoading()
-    renderGuard({ allow: ['SYSTEM_ADMIN'] })
+    renderGuard({ allow: ['SUPER_ADMIN'] })
     // Loading spinner div is present
     const spinner = document.querySelector('.animate-spin')
     expect(spinner).toBeTruthy()
@@ -102,7 +102,7 @@ describe('RoleGuard', () => {
 
   it('does not show protected content while loading', () => {
     setLoading()
-    renderGuard({ allow: ['SYSTEM_ADMIN'] })
+    renderGuard({ allow: ['SUPER_ADMIN'] })
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
   })
 
@@ -112,7 +112,7 @@ describe('RoleGuard', () => {
 
   it('redirects to /login when user is not authenticated', () => {
     setUser(null)
-    renderGuard({ allow: ['SYSTEM_ADMIN'] })
+    renderGuard({ allow: ['SUPER_ADMIN'] })
     // MemoryRouter will navigate — the content should not render
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
   })
@@ -122,8 +122,8 @@ describe('RoleGuard', () => {
   // ---------------------------------------------------------------------------
 
   it('renders children when user role is in allow list', () => {
-    setUser('SYSTEM_ADMIN')
-    renderGuard({ allow: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER'] })
+    setUser('SUPER_ADMIN')
+    renderGuard({ allow: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'] })
     expect(screen.getByText('Protected Content')).toBeInTheDocument()
   })
 
@@ -145,14 +145,14 @@ describe('RoleGuard', () => {
 
   it('does not render children when role not in allow list', () => {
     setUser('DATA_ENTRY_OPERATOR')
-    renderGuard({ allow: ['SYSTEM_ADMIN', 'CA'], redirectOnDeny: false })
+    renderGuard({ allow: ['SUPER_ADMIN', 'CA'], redirectOnDeny: false })
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
   })
 
   it('renders fallback when user is unauthorized and fallback is provided', () => {
     setUser('DATA_ENTRY_OPERATOR')
     renderGuard({
-      allow: ['SYSTEM_ADMIN'],
+      allow: ['SUPER_ADMIN'],
       fallback: <div>Access Denied Fallback</div>,
     })
     expect(screen.getByText('Access Denied Fallback')).toBeInTheDocument()
@@ -162,7 +162,7 @@ describe('RoleGuard', () => {
   it('does not render children when fallback is shown', () => {
     setUser('SUPPORT_EXECUTIVE')
     renderGuard({
-      allow: ['SYSTEM_ADMIN'],
+      allow: ['SUPER_ADMIN'],
       fallback: <div>No access</div>,
     })
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
@@ -170,7 +170,7 @@ describe('RoleGuard', () => {
 
   it('renders null (nothing) when unauthorized, no fallback, redirectOnDeny=false', () => {
     setUser('DATA_ENTRY_OPERATOR')
-    renderGuard({ allow: ['SYSTEM_ADMIN'], redirectOnDeny: false })
+    renderGuard({ allow: ['SUPER_ADMIN'], redirectOnDeny: false })
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
     expect(screen.queryByText('Access Denied')).not.toBeInTheDocument()
   })
@@ -179,22 +179,22 @@ describe('RoleGuard', () => {
   // Multiple role checks
   // ---------------------------------------------------------------------------
 
-  it('SUPPORT_EXECUTIVE cannot access SYSTEM_ADMIN-only content', () => {
+  it('SUPPORT_EXECUTIVE cannot access SUPER_ADMIN-only content', () => {
     setUser('SUPPORT_EXECUTIVE')
-    renderGuard({ allow: ['SYSTEM_ADMIN'], redirectOnDeny: false })
+    renderGuard({ allow: ['SUPER_ADMIN'], redirectOnDeny: false })
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
   })
 
   it('OPERATIONS_MANAGER can access content allowed for OPERATIONS_MANAGER', () => {
     setUser('OPERATIONS_MANAGER')
-    renderGuard({ allow: ['OPERATIONS_MANAGER', 'SYSTEM_ADMIN'] })
+    renderGuard({ allow: ['OPERATIONS_MANAGER', 'SUPER_ADMIN'] })
     expect(screen.getByText('Protected Content')).toBeInTheDocument()
   })
 
   it('DATA_ENTRY_OPERATOR cannot access CA-only content', () => {
     setUser('DATA_ENTRY_OPERATOR')
     renderGuard({
-      allow: ['CA', 'OPERATIONS_MANAGER', 'SYSTEM_ADMIN'],
+      allow: ['CA', 'OPERATIONS_MANAGER', 'SUPER_ADMIN'],
       fallback: <div>Restricted</div>,
     })
     expect(screen.getByText('Restricted')).toBeInTheDocument()
@@ -211,7 +211,7 @@ describe('RoleGuard', () => {
       <MemoryRouter>
         <div>
           <h1>Page Content</h1>
-          <RoleGuard allow={['SYSTEM_ADMIN']} redirectOnDeny={false} fallback={<span>Feature locked</span>}>
+          <RoleGuard allow={['SUPER_ADMIN']} redirectOnDeny={false} fallback={<span>Feature locked</span>}>
             <button>Dangerous Action</button>
           </RoleGuard>
         </div>
@@ -223,12 +223,12 @@ describe('RoleGuard', () => {
   })
 
   it('inline usage: shows children for authorized role', () => {
-    setUser('SYSTEM_ADMIN')
+    setUser('SUPER_ADMIN')
     render(
       <MemoryRouter>
         <div>
           <h1>Page Content</h1>
-          <RoleGuard allow={['SYSTEM_ADMIN']} redirectOnDeny={false}>
+          <RoleGuard allow={['SUPER_ADMIN']} redirectOnDeny={false}>
             <button>Admin Action</button>
           </RoleGuard>
         </div>

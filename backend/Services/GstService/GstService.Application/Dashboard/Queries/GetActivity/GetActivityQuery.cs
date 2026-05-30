@@ -9,7 +9,7 @@ namespace GstService.Application.Dashboard.Queries.GetActivity;
 
 /// <summary>
 /// Daily GST return creation counts for the admin dashboard activity chart.
-/// SYSTEM_ADMIN only.
+/// SUPER_ADMIN only.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetActivityQuery(string Range = "7D") : IQuery<IReadOnlyList<DailyActivityPoint>>;

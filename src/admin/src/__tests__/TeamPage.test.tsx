@@ -317,7 +317,7 @@ describe('TeamPage', () => {
 
     await waitFor(() => {
       // RoleChip renders human-readable labels, not raw role names
-      // SYSTEM_ADMIN → 'Admin', OPERATIONS_MANAGER → 'Ops Manager', CA → 'CA'
+      // SUPER_ADMIN → 'Admin', OPERATIONS_MANAGER → 'Ops Manager', CA → 'CA'
       // Verify descriptions for all 6 roles appear (unique per role)
       expect(screen.getByText('Full access to all modules, settings, team management, and subscriptions.')).toBeInTheDocument()
       expect(screen.getByText('Chartered Accountant — access to ITR review, GST notices, chat, and reports.')).toBeInTheDocument()

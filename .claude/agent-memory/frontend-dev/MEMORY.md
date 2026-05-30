@@ -9,3 +9,4 @@
 - [Phase 6C Loan Hub Completion](project_phase6C_completion.md) — 4 loan pages + 8 UI primitives + loanApi/reportApi; 319→411 tests; t() second-arg must be vars object not string
 - [Phase 6F Completion](project_phase6F_completion.md) — FINAL phase: settings API wiring (6 sections), Dialog fix, StubPage cleanup, test fixes; 485/485 tests, 0 lint errors
 - [SEC-045 PayloadViewer OAuth hotfix](project_sec045_fix.md) — Bearer ***{last6} masking; 4 new tests; 34 pre-existing lint warnings also fixed
+- [Auth/RBAC Module 1 Completion](project_rbac_module1.md) — roles matrix, orgs list/detail, invite acceptance, permission-gated nav; 699 tests, 0 lint errors

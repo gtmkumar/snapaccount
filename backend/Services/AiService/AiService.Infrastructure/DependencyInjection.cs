@@ -42,7 +42,7 @@ public static class DependencyInjection
                 w.Ignore(RelationalEventId.PendingModelChangesWarning));
         });
 
-        if (FirebaseApp.DefaultInstance == null)
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration) && FirebaseApp.DefaultInstance == null)
         {
             var credentialJson = configuration["Firebase:ServiceAccountJson"];
 #pragma warning disable CS0618

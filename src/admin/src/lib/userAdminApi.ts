@@ -1,5 +1,5 @@
 /**
- * Admin per-user views — backs UserDetailPage.
+ * Admin per-user views — backs UserDetailPage + AddUserDialog (Increment 1.3).
  *
  * Each section of the page is fetched independently so a single backing
  * service being down doesn't break the rest. The user-detail call returns
@@ -18,6 +18,7 @@ const UserListItemSchema = z.object({
   phone: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
   isActive: z.boolean(),
+  userType: z.string().nullable().optional(),
   joinedAt: z.string(),
   organizationId: z.string().nullable().optional(),
   businessName: z.string().nullable().optional(),
@@ -41,6 +42,8 @@ export interface ListAdminUsersParams {
   pageSize?: number
   search?: string
   isActive?: boolean
+  /** Customer user-type filter (BUSINESS_OWNER | EMPLOYEE); omit for all customers. */
+  userType?: 'BUSINESS_OWNER' | 'EMPLOYEE'
 }
 
 export async function listAdminUsers(params: ListAdminUsersParams = {}): Promise<AdminUsersPage> {
@@ -62,6 +65,20 @@ const UserBusinessProfileSchema = z.object({
   state: z.string().nullable().optional(),
 })
 
+/** Personal KYC profile (PAN is masked, never the full value). */
+const UserProfileSchema = z.object({
+  panMasked: z.string().nullable().optional(),
+  aadhaarLast4: z.string().nullable().optional(),
+  dateOfBirth: z.string().nullable().optional(),
+  gender: z.string().nullable().optional(),
+  addressLine1: z.string().nullable().optional(),
+  addressLine2: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  state: z.string().nullable().optional(),
+  pincode: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+})
+
 const UserDetailSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -69,11 +86,19 @@ const UserDetailSchema = z.object({
   email: z.string().nullable().optional(),
   isActive: z.boolean(),
   preferredLanguage: z.string().nullable().optional(),
+  userType: z.string().nullable().optional(),
   joinedAt: z.string(),
+  // Role assignment (edit prefill)
+  roleId: z.string().nullable().optional(),
+  roleScope: z.enum(['platform', 'org']).nullable().optional(),
+  roleOrganizationId: z.string().nullable().optional(),
+  overridePermissionIds: z.array(z.string()).default([]),
+  profile: UserProfileSchema.nullable().optional(),
   business: UserBusinessProfileSchema.nullable().optional(),
 })
 export type UserDetail = z.infer<typeof UserDetailSchema>
 export type UserBusinessProfile = z.infer<typeof UserBusinessProfileSchema>
+export type UserProfileDetail = z.infer<typeof UserProfileSchema>
 
 export async function getAdminUserDetail(userId: string): Promise<UserDetail> {
   const res = await api.get(`/auth/admin/users/${userId}`)
@@ -121,4 +146,114 @@ export type UserGstReturn = z.infer<typeof UserGstReturnSchema>
 export async function getAdminOrgGstReturns(organizationId: string, limit = 20): Promise<UserGstReturn[]> {
   const res = await api.get(`/gst/admin/orgs/${organizationId}/returns`, { params: { limit } })
   return UserGstReturnsSchema.parse(res.data)
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Increment 1.3 — Add User (admin platform user creation)
+// ─────────────────────────────────────────────────────────────────────────
+
+export const AssignableRoleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  displayName: z.string(),
+  isSystemRole: z.boolean(),
+  permissionCount: z.number(),
+  // Full permission list included so the dialog can show the inherited-perms preview.
+  permissions: z.array(z.object({
+    permissionId: z.string(),
+    name: z.string(),
+  })).optional(),
+})
+export type AssignableRole = z.infer<typeof AssignableRoleSchema>
+
+export const CreateAdminUserResponseSchema = z.object({
+  userId: z.string(),
+  email: z.string().nullable().optional(),
+  scope: z.enum(['platform', 'org']),
+  roleId: z.string(),
+  grantedPermissions: z.array(z.string()),
+})
+export type CreateAdminUserResponse = z.infer<typeof CreateAdminUserResponseSchema>
+
+/** Optional KYC/profile fields captured at create/edit. PAN is sent only when (re)entered. */
+export interface AdminUserProfileInput {
+  panNumber?: string
+  aadhaarLast4?: string
+  dateOfBirth?: string   // ISO date (yyyy-mm-dd)
+  gender?: string
+  addressLine1?: string
+  addressLine2?: string
+  city?: string
+  state?: string
+  pincode?: string
+  country?: string
+}
+
+export interface CreateAdminUserParams {
+  fullName: string
+  email?: string
+  phoneNumber?: string
+  scope: 'platform' | 'org'
+  roleId: string
+  organizationId?: string
+  permissionIds?: string[]
+  initialPassword?: string
+  preferredLanguage?: string
+  userType?: string
+  isActive?: boolean
+  profile?: AdminUserProfileInput
+}
+
+/** PUT body — email/phone/scope/org are immutable and not sent. */
+export interface UpdateAdminUserParams {
+  fullName: string
+  roleId: string
+  permissionIds?: string[]
+  preferredLanguage?: string
+  userType?: string
+  isActive?: boolean
+  profile?: AdminUserProfileInput
+}
+
+export interface UpdateAdminUserResponse {
+  userId: string
+  scope: 'platform' | 'org'
+  roleId: string
+  grantedPermissions: string[]
+}
+
+export type AdminUserApiErrorCode =
+  | 'User.EmailConflict'
+  | 'User.PhoneConflict'
+  | 'Role.PrivilegeEscalation'
+  | 'User.PrivilegeEscalation'
+  | 'User.OrgMismatch'
+  | 'User.OrgRequired'
+  | 'User.InvalidPermissions'
+  | 'Role.PlatformScopeRestricted'
+  | 'User.NoRoleAssignment'
+  | 'User.SelfDelete'
+  | 'User.LastAdmin'
+  | 'User.NotFound'
+
+export async function listAssignableRoles(scope: 'platform' | 'org'): Promise<AssignableRole[]> {
+  const res = await api.get('/auth/admin/assignable-roles', { params: { scope } })
+  return z.array(AssignableRoleSchema).parse(res.data)
+}
+
+export async function createAdminUser(params: CreateAdminUserParams): Promise<CreateAdminUserResponse> {
+  const res = await api.post('/auth/admin/users', params)
+  return CreateAdminUserResponseSchema.parse(res.data)
+}
+
+export async function updateAdminUser(
+  userId: string,
+  params: UpdateAdminUserParams,
+): Promise<UpdateAdminUserResponse> {
+  const res = await api.put(`/auth/admin/users/${userId}`, params)
+  return res.data as UpdateAdminUserResponse
+}
+
+export async function deleteAdminUser(userId: string): Promise<void> {
+  await api.delete(`/auth/admin/users/${userId}`)
 }

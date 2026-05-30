@@ -15,7 +15,8 @@ VALUES
     (gen_random_uuid(), 'SUPPORT_EXECUTIVE',    'Support Executive',        'Calls users, provides support, files GST/ITR', TRUE, TRUE),
     (gen_random_uuid(), 'CA',                   'Chartered Accountant',     'Reviews financials, expert chat, tax computations', TRUE, TRUE),
     (gen_random_uuid(), 'OPERATIONS_MANAGER',   'Operations Manager',       'Manages team, monitors KPIs, handles escalations', TRUE, TRUE),
-    (gen_random_uuid(), 'SYSTEM_ADMIN',         'System Administrator',     'Platform configuration, user management, system health', TRUE, TRUE),
+    -- Platform super-admin is seeded canonically as SUPER_ADMIN by migration 036
+    -- (legacy SYSTEM_ADMIN retired in migration 041 — see two-families role decision).
     (gen_random_uuid(), 'PARTNER_BANK_REP',     'Partner Bank Representative', 'Views loan applications, updates status', TRUE, TRUE)
 ON CONFLICT (name) DO NOTHING;
 

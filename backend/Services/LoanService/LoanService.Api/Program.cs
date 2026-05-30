@@ -61,7 +61,7 @@ try
     });
 
     // SEC-004: Firebase Admin SDK initialisation (handled in AddLoanInfrastructure, guard here too)
-    if (FirebaseApp.DefaultInstance == null)
+    if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(builder.Configuration) && FirebaseApp.DefaultInstance == null)
     {
         var credentialJson = builder.Configuration["Firebase:ServiceAccountJson"];
         var credential = string.IsNullOrEmpty(credentialJson)

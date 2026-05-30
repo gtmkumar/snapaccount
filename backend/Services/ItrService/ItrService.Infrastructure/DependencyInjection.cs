@@ -50,7 +50,7 @@ public static class DependencyInjection
         services.AddScoped<IItrDbContext>(sp => sp.GetRequiredService<ItrServiceDbContext>());
 
         // ── Firebase Admin SDK ────────────────────────────────────────────────
-        if (FirebaseApp.DefaultInstance == null)
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration) && FirebaseApp.DefaultInstance == null)
         {
             var credentialJson = configuration["Firebase:ServiceAccountJson"];
 #pragma warning disable CS0618
@@ -81,10 +81,10 @@ public static class DependencyInjection
         services.AddScoped<IItrRefundPollingHandler, ItrRefundPollingHandler>();
 
         // ── Pub/Sub background subscriber ─────────────────────────────────────
-        services.AddHostedService<ItrRecurringJobsSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<ItrRecurringJobsSubscriber>();
 
         // SEC-040: DPDP Act 2023 Right-to-Erasure cascade
-        services.AddHostedService<AccountDeletionSubscriber>();
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();
 
         return services;
     }

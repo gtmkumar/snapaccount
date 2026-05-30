@@ -20,5 +20,11 @@ public class OrganizationMember : BaseAuditableEntity
             RoleId = roleId
         };
 
+    /// <summary>Reassigns this member to a different role.</summary>
+    public void AssignRole(Guid newRoleId) => RoleId = newRoleId;
+
+    /// <summary>Reactivates a previously suspended member.</summary>
+    public void Reactivate() => IsActive = true;
+
     public void Deactivate() => IsActive = false;
 }

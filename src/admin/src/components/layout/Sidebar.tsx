@@ -18,6 +18,10 @@ import {
   ChevronRight,
   Building2,
   PhoneCall,
+  Shield,
+  Globe,
+  ListChecks,
+  Database,
 } from 'lucide-react'
 import type { AdminRole } from '@/hooks/useAuth'
 
@@ -26,6 +30,8 @@ interface NavItem {
   href: string
   icon: React.FC<{ className?: string }>
   requiredRoles: AdminRole[]
+  /** Module 1: optional server-side permission code that ALSO gates this item */
+  requiredServerPermission?: string
   badge?: number
 }
 
@@ -34,94 +40,126 @@ const navItems: NavItem[] = [
     label: 'Dashboard',
     href: '/dashboard',
     icon: LayoutDashboard,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE', 'DATA_ENTRY_OPERATOR', 'PARTNER_BANK_REP'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE', 'DATA_ENTRY_OPERATOR', 'PARTNER_BANK_REP'],
   },
   {
     label: 'Documents',
     href: '/documents',
     icon: FileText,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'DATA_ENTRY_OPERATOR'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'DATA_ENTRY_OPERATOR'],
   },
   {
     label: 'GST',
     href: '/gst',
     icon: Receipt,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
   },
   {
     label: 'GST Notices',
     href: '/gst/notices',
     icon: Receipt,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
   },
   {
     label: 'ITR',
     href: '/itr',
     icon: FileSpreadsheet,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
   },
   {
     label: 'Loans',
     href: '/loans',
     icon: CreditCard,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE', 'PARTNER_BANK_REP'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE', 'PARTNER_BANK_REP'],
   },
   {
     // Phase 6C sub-nav: Bank communications
     label: 'Bank Comms',
     href: '/loans/bank-communications',
     icon: CreditCard,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
   },
   {
     // Phase 6C sub-nav: Partner banks settings
     label: 'Partner Banks',
     href: '/loans/partner-banks',
     icon: CreditCard,
-    requiredRoles: ['SYSTEM_ADMIN'],
+    requiredRoles: ['SUPER_ADMIN'],
   },
   {
     label: 'Chat',
     href: '/chat',
     icon: MessageSquare,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
   },
   {
     label: 'Users',
     href: '/users',
     icon: Users,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'SUPPORT_EXECUTIVE'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'SUPPORT_EXECUTIVE'],
   },
   {
     label: 'Team',
     href: '/team',
     icon: Users2,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
   },
   {
     label: 'Subscriptions',
     href: '/subscriptions',
     icon: Building2,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
   },
   {
     label: 'Reports',
     href: '/reports',
     icon: BarChart3,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'CA'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA'],
   },
   {
     // TODO Phase 6F: role-gate to CA + Admin + Ops only (real RBAC)
     label: 'Callbacks',
     href: '/callbacks',
     icon: PhoneCall,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
   },
   {
     label: 'Settings',
     href: '/settings',
     icon: Settings,
-    requiredRoles: ['SYSTEM_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
+  },
+  // Module 1 — Roles & Permissions (gated by org.roles.read)
+  {
+    label: 'Roles & Permissions',
+    href: '/settings/roles',
+    icon: Shield,
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredServerPermission: 'org.roles.read',
+  },
+  // Module 1 — Platform Organisations (SUPER_ADMIN only, gated by platform.orgs.read)
+  {
+    label: 'Organisations',
+    href: '/admin/organizations',
+    icon: Globe,
+    requiredRoles: ['SUPER_ADMIN'],
+    requiredServerPermission: 'platform.orgs.read',
+  },
+  // Module 1, Increment 1.1 — Permission Catalog (SUPER_ADMIN, platform.permissions.manage)
+  {
+    label: 'Permission Catalog',
+    href: '/settings/permissions',
+    icon: ListChecks,
+    requiredRoles: ['SUPER_ADMIN'],
+    requiredServerPermission: 'platform.permissions.manage',
+  },
+  // Module 1, Increment 1.4 — Reference Data (SUPER_ADMIN, platform.refdata.manage)
+  {
+    label: 'Reference Data',
+    href: '/settings/reference-data',
+    icon: Database,
+    requiredRoles: ['SUPER_ADMIN'],
+    requiredServerPermission: 'platform.refdata.manage',
   },
 ]
 
@@ -133,10 +171,20 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const { user, signOut } = useAuth()
-  const { canAccess } = usePermission()
+  const { canAccess, hasServerPermission, serverPermissions } = usePermission()
   const location = useLocation()
 
-  const visibleItems = navItems.filter(item => canAccess(item.requiredRoles))
+  const visibleItems = navItems.filter(item => {
+    // Role gate (always enforced)
+    if (!canAccess(item.requiredRoles)) return false
+    // Server permission gate (Module 1): if permission data is loaded and item has a requirement,
+    // hide the item when the user lacks the permission. While loading (serverPermissions empty
+    // for a brief moment) we show the item to avoid flicker — the page itself will gate properly.
+    if (item.requiredServerPermission && serverPermissions.length > 0) {
+      return hasServerPermission(item.requiredServerPermission)
+    }
+    return true
+  })
 
   return (
     <aside

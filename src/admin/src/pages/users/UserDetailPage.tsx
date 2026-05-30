@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Bell, MessageSquare, AlertTriangle, Trash2 } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { ArrowLeft, Bell, MessageSquare, AlertTriangle, Trash2, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -13,8 +14,12 @@ import {
   getAdminOrgGstReturns,
   getAdminUserDetail,
   getAdminUserDocuments,
+  deleteAdminUser,
+  type AdminUserApiErrorCode,
 } from '@/lib/userAdminApi'
+import { EditUserDialog } from '@/components/shared/EditUserDialog'
 import { getAdminAuditEvents } from '@/lib/dashboardApi'
+import { t } from '@/i18n'
 
 const tabs = ['Profile', 'Documents', 'GST Returns', 'ITR History', 'Loans', 'Subscription', 'Audit Log'] as const
 type Tab = typeof tabs[number]
@@ -22,8 +27,28 @@ type Tab = typeof tabs[number]
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<Tab>('Profile')
-  const { hasPermission } = usePermission()
+  const [showEdit, setShowEdit] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const { hasPermission, hasServerPermission } = usePermission()
+  const canManageUser = hasServerPermission('platform.admins.invite')
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteAdminUser(id!),
+    onSuccess: () => {
+      toast.success(t('users.deleteUser.success', { name: '' }))
+      void queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      void navigate('/users')
+    },
+    onError: (err: unknown) => {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code as AdminUserApiErrorCode | undefined
+      if (code === 'User.SelfDelete') toast.error(t('users.deleteUser.err.self'))
+      else if (code === 'User.LastAdmin') toast.error(t('users.deleteUser.err.lastAdmin'))
+      else toast.error(t('users.deleteUser.err.generic'))
+      setConfirmDelete(false)
+    },
+  })
 
   // Live user detail (profile + business)
   const { data: user, isLoading, isError, refetch } = useQuery({
@@ -84,6 +109,29 @@ export default function UserDetailPage() {
         Users
       </Button>
 
+      {/* Delete confirmation banner */}
+      {confirmDelete && (
+        <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 flex items-center justify-between">
+          <span className="text-rose-800 font-medium text-sm">
+            {t('users.deleteUser.confirm', { name: user.name })}
+          </span>
+          <div className="flex gap-2 ml-4">
+            <Button variant="secondary" size="sm" onClick={() => setConfirmDelete(false)} disabled={deleteMutation.isPending}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="bg-rose-600 text-white hover:bg-rose-700"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate()}
+            >
+              {t('users.deleteUser.confirmCta')}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* User header card */}
       <Card className="bg-gradient-to-r from-brand-50 to-white">
         <div className="flex items-start justify-between gap-6">
@@ -130,12 +178,28 @@ export default function UserDetailPage() {
             <Button variant="secondary" size="sm" leftIcon={<MessageSquare className="h-4 w-4" />}>
               Chat
             </Button>
+            {canManageUser && (
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<Pencil className="h-4 w-4" />}
+                onClick={() => setShowEdit(true)}
+              >
+                {t('users.editUser.cta')}
+              </Button>
+            )}
             <Button variant="ghost" size="sm" className="text-warning-600 hover:bg-warning-50" leftIcon={<AlertTriangle className="h-4 w-4" />}>
               Suspend
             </Button>
-            {hasPermission('users.delete') && (
-              <Button variant="ghost" size="sm" className="text-error-600 hover:bg-error-50" leftIcon={<Trash2 className="h-4 w-4" />}>
-                Delete
+            {canManageUser && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-error-600 hover:bg-error-50"
+                leftIcon={<Trash2 className="h-4 w-4" />}
+                onClick={() => setConfirmDelete(true)}
+              >
+                {t('users.deleteUser.cta')}
               </Button>
             )}
           </div>
@@ -361,6 +425,9 @@ export default function UserDetailPage() {
           </div>
         </Card>
       )}
+
+      {/* Edit User dialog */}
+      <EditUserDialog open={showEdit} onClose={() => setShowEdit(false)} userId={id ?? null} />
     </div>
   )
 }

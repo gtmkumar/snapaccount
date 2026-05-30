@@ -11,3 +11,4 @@
 - [Phase 6C Backend Build](project_phase6c_backend.md) — LoanService/ReportService/NotificationService; SEC-044/046/047/049 hotfix included; 313 tests passing
 - [Phase 6F Backend Build (FINAL)](project_phase6f_backend.md) — ChatService (16 ep) + SubscriptionService (13 ep) full builds; 375 tests passing; 0 501 stubs remain
 - [Phase 6F Security Hotfix (SEC-051..053/056)](project_security_hotfix_sec051_056.md) — Razorpay HMAC webhook, DPDP erasure for SubscriptionService, ChatService rate-limit. 391 tests.
+- [Auth/RBAC Module 1](project_auth_rbac_module1.md) — Org roles CRUD, permission matrix, delegation rule, invitations, RLS fix (SEC-RLS-001). 120 tests pass.

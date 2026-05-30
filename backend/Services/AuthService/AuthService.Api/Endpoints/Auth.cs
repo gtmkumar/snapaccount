@@ -84,13 +84,14 @@ public sealed class Auth : EndpointGroupBase
             return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
         }).RequireAuthorization();
 
-        // GET /auth/admin/users?page=&pageSize=&search=&isActive= — paginated user list
+        // GET /auth/admin/users?page=&pageSize=&search=&isActive=&userType= — paginated CUSTOMER list
+        // (excludes internal staff; userType filters BUSINESS_OWNER|EMPLOYEE within customers)
         groupBuilder.MapGet("/admin/users", static async (
-            int? page, int? pageSize, string? search, bool? isActive,
+            int? page, int? pageSize, string? search, bool? isActive, string? userType,
             ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(
-                new ListUsersQuery(page ?? 1, pageSize ?? 20, search, isActive), ct);
+                new ListUsersQuery(page ?? 1, pageSize ?? 20, search, isActive, userType), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
         }).RequireAuthorization();
 
@@ -145,15 +146,12 @@ public sealed class Auth : EndpointGroupBase
     }
 
     // GET /auth/me/permissions [Authorize]
-    // Phase 6F: returns effective permissions for role-based shell + client-side gating.
-    // Permission constants include all Phase 6F additions:
-    //   chat.thread.assign, chat.thread.resolve, chat.thread.escalate,
-    //   subscription.plan.create, subscription.plan.update,
-    //   team.invite, team.role.assign
+    // Returns effective permission codes (e.g. "org.members.invite") expanded from DB roles.
+    // NOT role names — see GetUserPermissionsQuery for the full expansion logic.
     private static async Task<IResult> GetPermissions(ISender sender)
     {
         var result = await sender.Send(new GetUserPermissionsQuery());
-        return result.IsSuccess ? Results.Ok(new { permissions = result.Value }) : Results.Unauthorized();
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.Unauthorized();
     }
 
     // PUT /auth/profile [Authorize]

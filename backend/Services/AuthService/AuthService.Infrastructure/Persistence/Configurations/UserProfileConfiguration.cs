@@ -14,8 +14,9 @@ public class UserProfileConfiguration : IEntityTypeConfiguration<UserProfile>
         builder.Property(p => p.Id).HasColumnName("id");
         builder.Property(p => p.UserId).HasColumnName("user_id");
         builder.Property(p => p.UserType).HasColumnName("user_type").HasMaxLength(50);
-        // SEC-013: PAN is stored AES-256 encrypted (Base64, IV+ciphertext). Max ~64 chars.
-        builder.Property(p => p.PanNumber).HasColumnName("pan_number").HasMaxLength(100);
+        // SEC-013: PAN is stored AES-256 encrypted (Base64, IV+ciphertext). Migration 040
+        // widened this column to varchar(512); keep the EF model in sync with the live schema.
+        builder.Property(p => p.PanNumber).HasColumnName("pan_number").HasMaxLength(512);
         builder.Property(p => p.AadhaarLast4).HasColumnName("aadhaar_last4").HasMaxLength(4);
         builder.Property(p => p.DateOfBirth).HasColumnName("date_of_birth");
         builder.Property(p => p.Gender).HasColumnName("gender").HasMaxLength(20);

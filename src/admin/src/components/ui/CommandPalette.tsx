@@ -246,7 +246,7 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
                   {t('palette.section.actions', 'Suggested actions')}
                 </div>
                 {SUGGESTED_ACTIONS
-                  .filter(a => !('adminOnly' in a && a.adminOnly) || user?.role === 'SYSTEM_ADMIN' || user?.role === 'OPERATIONS_MANAGER')
+                  .filter(a => !('adminOnly' in a && a.adminOnly) || user?.role === 'SUPER_ADMIN' || user?.role === 'OPERATIONS_MANAGER')
                   .map((action, i) => (
                     <ResultRow
                       key={`action-${i}`}

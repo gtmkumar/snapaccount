@@ -71,12 +71,17 @@ public sealed class CreateOrganizationCommandHandler(
     {
         var org = new Organization
         {
-            OwnerUserId = currentUser.UserId,
-            BusinessName = request.BusinessName,
-            Gstin = request.Gstin,
-            PanNumber = request.PanNumber,
+            OwnerUserId    = currentUser.UserId,
+            BusinessName   = request.BusinessName,
+            Gstin          = request.Gstin,
+            PanNumber      = request.PanNumber,
             IsGstRegistered = !string.IsNullOrEmpty(request.Gstin)
         };
+
+        // BUG-ORG-BUSINESSTYPE: BusinessType, IndustryType, AnnualTurnoverInr have private
+        // setters and cannot be assigned in the object-initialiser above. SetBusinessDetails
+        // is the correct domain method to populate them before the first persist.
+        org.SetBusinessDetails(request.BusinessType, request.IndustryType, request.AnnualTurnoverInr);
 
         org.AddDomainEvent(new OrganizationCreatedEvent(org.Id, currentUser.UserId, request.BusinessName));
         await organizationRepository.AddAsync(org, cancellationToken);

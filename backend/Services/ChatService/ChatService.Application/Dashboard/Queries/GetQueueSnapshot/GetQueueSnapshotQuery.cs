@@ -11,7 +11,7 @@ namespace ChatService.Application.Dashboard.Queries.GetQueueSnapshot;
 /// <summary>
 /// Top-N oldest open chat threads waiting for an agent.
 /// "Open" = ThreadStatus.Open AND assigned_to_user_id IS NULL.
-/// SYSTEM_ADMIN only — cross-org snapshot for the admin dashboard widget.
+/// SUPER_ADMIN only — cross-org snapshot for the admin dashboard widget.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetQueueSnapshotQuery(int Limit = 10) : IQuery<IReadOnlyList<QueueItem>>;

@@ -84,7 +84,9 @@ public sealed class RegisterUserCommandHandler(IUserRepository userRepository)
 
         // Preserve original behaviour: profile/preference objects are constructed but not
         // attached — EF change-tracking via owned navigation properties handles persistence.
-        _ = new UserProfile { UserId = user.Id, UserType = request.UserType };
+        var regProfile = new UserProfile { UserId = user.Id };
+        regProfile.SetUserType(request.UserType);
+        _ = regProfile;
         _ = new UserPreference { UserId = user.Id };
 
         user = await userRepository.AddAsync(user, cancellationToken);

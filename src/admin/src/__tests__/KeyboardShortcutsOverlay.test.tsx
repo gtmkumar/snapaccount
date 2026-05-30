@@ -15,7 +15,7 @@ import React from 'react'
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: vi.fn(() => ({
-    user: { uid: 'user-001', email: 'dev@snapaccount.in', displayName: 'Dev', role: 'SYSTEM_ADMIN' },
+    user: { uid: 'user-001', email: 'dev@snapaccount.in', displayName: 'Dev', role: 'SUPER_ADMIN' },
     loading: false,
     error: null,
     signInWithGoogle: vi.fn(),
@@ -206,12 +206,12 @@ describe('KeyboardShortcutsOverlay', () => {
     expect(screen.getByText('List / DataTable')).toBeInTheDocument()
   })
 
-  it('shows role label for SYSTEM_ADMIN', async () => {
+  it('shows role label for SUPER_ADMIN', async () => {
     renderOverlay()
     openCheatSheet()
 
     await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_ADMIN/)).toBeInTheDocument()
+      expect(screen.getByText(/SUPER_ADMIN/)).toBeInTheDocument()
     })
   })
 

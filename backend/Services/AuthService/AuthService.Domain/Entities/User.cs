@@ -24,6 +24,9 @@ public class User : BaseAuditableEntity
 
     public void SetPasswordHash(string hash) => PasswordHash = hash;
 
+    /// <summary>Admin-controlled activation toggle (distinct from DPDP erasure).</summary>
+    public void SetActive(bool active) => IsActive = active;
+
     private readonly List<UserDevice> _devices = [];
     public IReadOnlyCollection<UserDevice> Devices => _devices.AsReadOnly();
 
@@ -75,6 +78,20 @@ public class User : BaseAuditableEntity
 
         device.Deactivate();
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Admin-initiated soft delete (Phase B, Increment 1.4). Marks the user deleted +
+    /// inactive so they vanish from admin lists and can no longer authenticate. Distinct
+    /// from <see cref="RequestAccountDeletion"/> (DPDP self-erasure) — does NOT raise the
+    /// downstream erasure event, since this is an administrative removal, not a data-subject
+    /// erasure request.
+    /// </summary>
+    public void AdminSoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+        IsActive = false;
     }
 
     public Result RequestAccountDeletion()
