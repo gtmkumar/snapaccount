@@ -1,6 +1,6 @@
 # SnapAccount — Auth/RBAC Module — Session Handoff
 
-**Last updated:** 2026-05-30. **Branch:** `main`. **NOTHING IS COMMITTED** — all work is in the working tree.
+**Last updated:** 2026-05-31. **MERGED to `main`** via PR #29 (squash commit `6f3856f`) — the whole Auth/RBAC module (base + 1.1–1.4 + Users/Team customer-staff split + SUPER_ADMIN unification + GCP-optional local dev). All suites green: backend unit 314, integration 102, frontend vitest 794, lint+build clean. Branch `feat/auth-rbac-module` deleted. ⚠️ GitHub Actions CI could not run (account billing/spending-limit — all jobs failed at setup in 2–3s); verification was local only. Next session branches from `main`.
 Full plan & decisions: `.claude/orchestrator/auth-rbac-module-scope.md`. Local run details: memory `auth-local-dev-runbook`.
 
 ---
