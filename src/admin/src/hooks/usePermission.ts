@@ -156,5 +156,8 @@ export function usePermission() {
     hasAnyServerPermission,
     hasAllServerPermissions,
     serverPermissions,
+    // True once /auth/me/permissions has resolved (avoids guards flashing "forbidden"
+    // before the permission list is loaded).
+    permissionsLoaded: serverPermsData !== undefined,
   }
 }

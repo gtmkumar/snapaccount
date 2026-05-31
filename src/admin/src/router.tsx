@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router'
 import { AppShell } from '@/components/layout/AppShell'
 import { AuthGuard } from '@/components/shared/AuthGuard'
 import { ForbiddenPage } from '@/components/shared/RoleGuard'
+import { RoutePermissionGuard } from '@/components/shared/RoutePermissionGuard'
 import { CommandPaletteProvider } from '@/contexts/CommandPaletteContext'
 import { KeyboardShortcutsProvider } from '@/contexts/KeyboardShortcutsContext'
 import LoginPage from '@/pages/auth/LoginPage'
@@ -54,7 +55,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
       <KeyboardShortcutsProvider>
         <CommandPaletteProvider>
           <AppShell>
-            {children}
+            <RoutePermissionGuard>{children}</RoutePermissionGuard>
           </AppShell>
         </CommandPaletteProvider>
       </KeyboardShortcutsProvider>

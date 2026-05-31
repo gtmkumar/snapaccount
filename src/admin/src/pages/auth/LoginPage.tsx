@@ -22,7 +22,7 @@ export default function LoginPage() {
   }, [user, loading, navigate, from])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-600 via-brand-500 to-indigo-400 flex items-center justify-center p-4">
+    <div data-theme="light" className="min-h-screen bg-gradient-to-br from-brand-600 via-brand-500 to-indigo-400 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">

@@ -28,7 +28,14 @@ public record AssignableRoleDto(
     string Name,
     string DisplayName,
     bool IsSystemRole,
-    int PermissionCount);
+    int PermissionCount,
+    // The role's permission ids — needed by the Add/Edit-user dialog to show which
+    // permissions are inherited from the role (and compute the effective summary).
+    // Previously omitted, so the dialog reported "0 from role" despite PermissionCount > 0.
+    IReadOnlyList<AssignableRolePermissionDto> Permissions);
+
+/// <summary>A single permission reference carried on an assignable role.</summary>
+public record AssignableRolePermissionDto(Guid PermissionId, string Name);
 
 public sealed class GetAssignableRolesQueryHandler(
     IAuthDbContext db,
@@ -99,7 +106,11 @@ public sealed class GetAssignableRolesQueryHandler(
             })
             .Select(r => new AssignableRoleDto(
                 r.Id, r.Name, r.DisplayName, r.IsSystemRole,
-                r.Permissions.Count(rp => rp.DeletedAt == null)))
+                r.Permissions.Count(rp => rp.DeletedAt == null),
+                r.Permissions
+                    .Where(rp => rp.DeletedAt == null && rp.Permission != null)
+                    .Select(rp => new AssignableRolePermissionDto(rp.PermissionId, rp.Permission!.Name))
+                    .ToList()))
             .ToList();
 
         return Result<IReadOnlyList<AssignableRoleDto>>.Success(assignable);
