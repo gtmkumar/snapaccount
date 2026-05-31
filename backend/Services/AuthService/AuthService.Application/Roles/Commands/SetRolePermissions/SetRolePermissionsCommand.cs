@@ -22,7 +22,8 @@ namespace AuthService.Application.Roles.Commands.SetRolePermissions;
 [RequiresPermission(AuthService.Domain.Permissions.OrgPermissionsGrant)]
 public record SetRolePermissionsCommand(
     Guid RoleId,
-    IReadOnlyList<Guid> PermissionIds) : ICommand;
+    IReadOnlyList<Guid> PermissionIds,
+    IReadOnlyList<Guid>? DeniedPermissionIds = null) : ICommand;
 
 public sealed class SetRolePermissionsCommandValidator : AbstractValidator<SetRolePermissionsCommand>
 {
@@ -33,6 +34,16 @@ public sealed class SetRolePermissionsCommandValidator : AbstractValidator<SetRo
             .NotNull()
             .Must(ids => ids.Count <= 200)
             .WithMessage("Cannot assign more than 200 permissions to a single role.");
+        RuleFor(x => x.DeniedPermissionIds!)
+            .Must(ids => ids.Count <= 200)
+            .When(x => x.DeniedPermissionIds is not null)
+            .WithMessage("Cannot deny more than 200 permissions on a single role.");
+        // A permission cannot be both allowed and denied on the same role.
+        RuleFor(x => x)
+            .Must(x => x.DeniedPermissionIds is null
+                       || !x.PermissionIds.Intersect(x.DeniedPermissionIds).Any())
+            .WithMessage("A permission cannot be both allowed and denied on the same role.")
+            .WithName("PermissionIds");
     }
 }
 
@@ -82,15 +93,20 @@ public sealed class SetRolePermissionsCommandHandler : ICommandHandler<SetRolePe
         if (!isSuperAdmin && role.OrganizationId != orgId)
             return Result.Failure(Error.Forbidden("Role.AccessDenied", "You can only modify roles within your own organization."));
 
-        // Load the requested permissions from the DB (validates they exist)
-        var distinctIds = request.PermissionIds.Distinct().ToList();
+        // Allow + deny sets. Deny is restrictive (subtracts an allow) so it needs no
+        // delegation check; allow is bounded by the caller's own effective set below.
+        var allowIds = request.PermissionIds.Distinct().ToList();
+        var denyIds = (request.DeniedPermissionIds ?? []).Distinct().ToList();
+
+        // Load all referenced permissions (validates they exist).
+        var allReferenced = allowIds.Concat(denyIds).Distinct().ToList();
         var requestedPerms = await _db.Permissions
-            .Where(p => distinctIds.Contains(p.Id) && p.DeletedAt == null)
+            .Where(p => allReferenced.Contains(p.Id) && p.DeletedAt == null)
             .ToListAsync(cancellationToken);
 
-        if (requestedPerms.Count != distinctIds.Count)
+        if (requestedPerms.Count != allReferenced.Count)
         {
-            var missingIds = distinctIds.Except(requestedPerms.Select(p => p.Id));
+            var missingIds = allReferenced.Except(requestedPerms.Select(p => p.Id));
             return Result.Failure(Error.Validation(
                 "Role.InvalidPermissions",
                 $"The following permission IDs do not exist: {string.Join(", ", missingIds)}"));
@@ -106,7 +122,11 @@ public sealed class SetRolePermissionsCommandHandler : ICommandHandler<SetRolePe
             // also include JWT claim permissions
             callerEffectivePerms.UnionWith(_currentUser.Permissions.Where(p => p != "*"));
 
+            // Only ALLOW grants are bounded by delegation; a deny is restrictive and
+            // can target any catalog permission.
+            var allowSet = allowIds.ToHashSet();
             var requestedPermNames = requestedPerms
+                .Where(p => allowSet.Contains(p.Id))
                 .Select(p => p.Name)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -123,23 +143,31 @@ public sealed class SetRolePermissionsCommandHandler : ICommandHandler<SetRolePe
         }
         // ────────────────────────────────────────────────────────────────────────────
 
-        // Compute delta: soft-delete removed, add new
-        var existingPermIds = role.Permissions
-            .Where(rp => rp.DeletedAt == null)
-            .Select(rp => rp.PermissionId)
-            .ToHashSet();
+        // Desired state: permId → isAllowed (allow=true, deny=false). Anything not in
+        // this map is removed (inherit/none).
+        var desired = new Dictionary<Guid, bool>();
+        foreach (var id in denyIds) desired[id] = false;
+        foreach (var id in allowIds) desired[id] = true; // allow wins the local map (validator forbids overlap anyway)
 
-        var requestedPermIds = requestedPerms.Select(p => p.Id).ToHashSet();
+        var activeRows = role.Permissions.Where(rp => rp.DeletedAt == null).ToList();
+        var existingByPerm = activeRows.ToDictionary(rp => rp.PermissionId);
 
-        // Soft-delete removed permissions
-        foreach (var rp in role.Permissions.Where(rp => rp.DeletedAt == null && !requestedPermIds.Contains(rp.PermissionId)))
+        // Soft-delete rows no longer desired.
+        foreach (var rp in activeRows.Where(rp => !desired.ContainsKey(rp.PermissionId)))
             rp.DeletedAt = DateTime.UtcNow;
 
-        // Add new permissions
-        var toAdd = requestedPermIds
-            .Where(id => !existingPermIds.Contains(id))
-            .Select(id => RolePermission.Create(role.Id, id));
-        _db.RolePermissions.AddRange(toAdd);
+        // Flip the flag on existing rows whose allow/deny state changed.
+        foreach (var (permId, isAllowed) in desired)
+        {
+            if (existingByPerm.TryGetValue(permId, out var rp))
+            {
+                if (rp.IsAllowed != isAllowed) rp.SetAllowed(isAllowed);
+            }
+            else
+            {
+                _db.RolePermissions.Add(RolePermission.Create(role.Id, permId, isAllowed));
+            }
+        }
 
         await _db.SaveChangesAsync(cancellationToken);
         return Result.Success();

@@ -27,9 +27,13 @@ import {
   createPermission,
   updatePermission,
   deletePermission,
+  getPermissionMeta,
+  updateResourceType,
+  updateActionType,
   type CatalogPermission,
   type PermissionModule,
   type PermissionApiErrorCode,
+  type TypeEntry,
 } from '@/lib/rbacApi'
 
 // ── Query keys ────────────────────────────────────────────────────────────────
@@ -56,6 +60,7 @@ const KNOWN_RESOURCES = [
 
 export default function PermissionCatalogPage() {
   const [showCreate, setShowCreate] = useState(false)
+  const [showTypes, setShowTypes] = useState(false)
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [search, setSearch] = useState('')
   const [moduleFilter, setModuleFilter] = useState('all')
@@ -133,10 +138,15 @@ export default function PermissionCatalogPage() {
           title={t('permissions.catalog.title')}
           subtitle={t('permissions.catalog.subtitle')}
         />
-        <Button variant="primary" onClick={() => setShowCreate(true)}>
-          <Plus className="h-4 w-4 mr-1" />
-          {t('permissions.create.cta')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setShowTypes(true)}>
+            {t('permissions.types.manage')}
+          </Button>
+          <Button variant="primary" onClick={() => setShowCreate(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            {t('permissions.create.cta')}
+          </Button>
+        </div>
       </div>
 
       {/* Caveat info banner */}
@@ -263,6 +273,80 @@ export default function PermissionCatalogPage() {
         onClose={() => setShowCreate(false)}
         onCreated={handleCreated}
         existingResources={catalog?.map(m => m.module) ?? KNOWN_RESOURCES}
+      />
+
+      {/* Manage resource/action types (gap #3) */}
+      <ManageTypesDialog open={showTypes} onClose={() => setShowTypes(false)} />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ManageTypesDialog — rename / (de)activate resource & action types (gap #3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ManageTypesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const { data: meta } = useQuery({
+    queryKey: ['auth', 'permission-meta'],
+    queryFn: getPermissionMeta,
+    enabled: open,
+    staleTime: 60_000,
+  })
+
+  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['auth', 'permission-meta'] })
+
+  return (
+    <Dialog open={open} onClose={onClose} title={t('permissions.types.title')} size="lg"
+      footer={<Button variant="ghost" onClick={onClose}>{t('common.close')}</Button>}>
+      <p className="text-sm text-[var(--text-secondary)] mb-3">{t('permissions.types.subtitle')}</p>
+      <div className="grid grid-cols-2 gap-4">
+        <TypeColumn title={t('permissions.types.resources')} entries={meta?.resourceTypes ?? []} kind="resource" onSaved={invalidate} />
+        <TypeColumn title={t('permissions.types.actions')} entries={meta?.actionTypes ?? []} kind="action" onSaved={invalidate} />
+      </div>
+    </Dialog>
+  )
+}
+
+function TypeColumn({
+  title, entries, kind, onSaved,
+}: {
+  title: string
+  entries: TypeEntry[]
+  kind: 'resource' | 'action'
+  onSaved: () => void
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide mb-2">
+        {title} <span className="text-[var(--text-tertiary)]">({entries.length})</span>
+      </p>
+      <div className="max-h-80 overflow-y-auto rounded-lg border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)]">
+        {entries.map(e => <TypeRow key={e.id} entry={e} kind={kind} onSaved={onSaved} />)}
+      </div>
+    </div>
+  )
+}
+
+function TypeRow({ entry, kind, onSaved }: { entry: TypeEntry; kind: 'resource' | 'action'; onSaved: () => void }) {
+  const [name, setName] = useState(entry.name)
+  const save = useMutation({
+    mutationFn: (params: { name: string; isActive: boolean }) =>
+      kind === 'resource'
+        ? updateResourceType(entry.id, { name: params.name, description: entry.description ?? null, isActive: params.isActive })
+        : updateActionType(entry.id, { name: params.name, description: entry.description ?? null, isActive: params.isActive }),
+    onSuccess: () => { toast.success(t('permissions.types.saved')); onSaved() },
+    onError: () => toast.error(t('permissions.types.saveError')),
+  })
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5">
+      <code className="text-xs font-mono text-[var(--text-tertiary)] w-28 shrink-0 truncate" title={entry.key}>{entry.key}</code>
+      <input
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onBlur={() => { if (name.trim() && name !== entry.name) save.mutate({ name: name.trim(), isActive: true }) }}
+        className="flex-1 min-w-0 px-2 py-1 text-sm rounded border bg-[var(--surface-sunken)] border-[var(--border-default)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
       />
     </div>
   )
@@ -487,6 +571,19 @@ function CreatePermissionDialog({
   const [description, setDescription] = useState('')
   const [duplicateError, setDuplicateError] = useState(false)
   const [resourceOpen, setResourceOpen] = useState(false)
+  const [actionOpen, setActionOpen] = useState(false)
+
+  // Gap #3: resource + action options come from the configurable catalogs.
+  const { data: meta } = useQuery({
+    queryKey: ['auth', 'permission-meta'],
+    queryFn: getPermissionMeta,
+    enabled: open,
+    staleTime: 5 * 60_000,
+  })
+  const resourceKeys = (meta?.resourceTypes ?? []).map(r => r.key)
+  const actionKeys = (meta?.actionTypes ?? []).map(a => a.key)
+  const isNewResource = resource.length > 0 && !resourceKeys.includes(resource)
+  const isNewAction = action.length > 0 && !actionKeys.includes(action)
 
   const code = resource && action ? `${resource}.${action}` : ''
   const isValidCode = CODE_REGEX.test(code)
@@ -525,9 +622,13 @@ function CreatePermissionDialog({
 
   const canSubmit = isValidCode && description.trim().length > 0 && !mutation.isPending
 
-  // Unique sorted resources for the combobox
-  const allResources = Array.from(new Set([...KNOWN_RESOURCES, ...existingResources])).sort()
+  // Resource options: prefer the live resource-type catalog (gap #3), falling back
+  // to the seed + existing resources before meta loads.
+  const allResources = Array.from(new Set([
+    ...resourceKeys, ...KNOWN_RESOURCES, ...existingResources,
+  ])).sort()
   const filteredResources = allResources.filter(r => r.startsWith(resource.toLowerCase()))
+  const filteredActions = actionKeys.filter(a => a.startsWith(action.toLowerCase())).sort().slice(0, 50)
 
   return (
     <Dialog
@@ -567,7 +668,11 @@ function CreatePermissionDialog({
               placeholder="gst"
               className="w-full px-3 py-2 rounded-lg border bg-[var(--surface-sunken)] border-[var(--border-default)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
             />
-            <p className="mt-1 text-xs text-[var(--text-tertiary)]">{t('permissions.create.resourceHint')}</p>
+            <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+              {isNewResource
+                ? t('permissions.create.newResourceType')
+                : t('permissions.create.resourceHint')}
+            </p>
             {/* Dropdown */}
             {resourceOpen && filteredResources.length > 0 && (
               <div className="absolute z-20 top-full mt-1 left-0 right-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] shadow-[var(--shadow-md)] max-h-40 overflow-y-auto">
@@ -584,18 +689,37 @@ function CreatePermissionDialog({
             )}
           </div>
 
-          {/* Action */}
-          <div>
+          {/* Action combobox (sourced from the action-type catalog) */}
+          <div className="relative">
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
               {t('permissions.create.action')} <span className="text-rose-500">*</span>
             </label>
             <input
               value={action}
-              onChange={e => { setAction(e.target.value.toLowerCase()); setDuplicateError(false) }}
+              onChange={e => { setAction(e.target.value.toLowerCase()); setDuplicateError(false); setActionOpen(true) }}
+              onFocus={() => setActionOpen(true)}
+              onBlur={() => setTimeout(() => setActionOpen(false), 150)}
               placeholder="returns.file"
               className="w-full px-3 py-2 rounded-lg border bg-[var(--surface-sunken)] border-[var(--border-default)] text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
             />
-            <p className="mt-1 text-xs text-[var(--text-tertiary)]">{t('permissions.create.actionHint')}</p>
+            <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+              {isNewAction
+                ? t('permissions.create.newActionType')
+                : t('permissions.create.actionHint')}
+            </p>
+            {actionOpen && filteredActions.length > 0 && (
+              <div className="absolute z-20 top-full mt-1 left-0 right-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] shadow-[var(--shadow-md)] max-h-40 overflow-y-auto">
+                {filteredActions.map(a => (
+                  <button
+                    key={a}
+                    onMouseDown={() => { setAction(a); setActionOpen(false); setDuplicateError(false) }}
+                    className="w-full text-left px-3 py-1.5 text-sm font-mono text-[var(--text-primary)] hover:bg-[var(--surface-sunken)]"
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

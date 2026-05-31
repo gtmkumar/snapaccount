@@ -1,7 +1,11 @@
+import { useMemo } from 'react'
 import { NavLink, useLocation } from 'react-router'
+import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { usePermission } from '@/hooks/usePermission'
 import { useAuth } from '@/hooks/useAuth'
+import { getMyMenu, type MenuNode } from '@/lib/menuApi'
+import { navIcon } from './navIcons'
 import {
   LayoutDashboard,
   FileText,
@@ -22,6 +26,7 @@ import {
   Globe,
   ListChecks,
   Database,
+  ListTree,
 } from 'lucide-react'
 import type { AdminRole } from '@/hooks/useAuth'
 
@@ -161,7 +166,33 @@ const navItems: NavItem[] = [
     requiredRoles: ['SUPER_ADMIN'],
     requiredServerPermission: 'platform.refdata.manage',
   },
+  // Menu Management (SUPER_ADMIN, platform.permissions.manage) — fallback entry
+  {
+    label: 'Navigation',
+    href: '/settings/navigation',
+    icon: ListTree,
+    requiredRoles: ['SUPER_ADMIN'],
+    requiredServerPermission: 'platform.permissions.manage',
+  },
 ]
+
+/** Normalized render shape shared by the dynamic menu and the static fallback. */
+interface RenderItem {
+  label: string
+  href: string
+  Icon: React.FC<{ className?: string }>
+  badge?: number
+}
+
+/** Depth-first flatten of the backend menu tree into a render list. */
+function flattenMenu(nodes: MenuNode[]): RenderItem[] {
+  const out: RenderItem[] = []
+  for (const n of nodes) {
+    out.push({ label: n.label, href: n.url, Icon: navIcon(n.iconKey) })
+    if (n.children.length > 0) out.push(...flattenMenu(n.children))
+  }
+  return out
+}
 
 interface SidebarProps {
   collapsed: boolean
@@ -174,17 +205,33 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const { canAccess, hasServerPermission, serverPermissions } = usePermission()
   const location = useLocation()
 
-  const visibleItems = navItems.filter(item => {
-    // Role gate (always enforced)
-    if (!canAccess(item.requiredRoles)) return false
-    // Server permission gate (Module 1): if permission data is loaded and item has a requirement,
-    // hide the item when the user lacks the permission. While loading (serverPermissions empty
-    // for a brief moment) we show the item to avoid flicker — the page itself will gate properly.
-    if (item.requiredServerPermission && serverPermissions.length > 0) {
-      return hasServerPermission(item.requiredServerPermission)
-    }
-    return true
+  // Backend-driven menu (already permission-filtered server-side). The frontend
+  // is a pure consumer of this tree — gap #1 of the enhanced authz model.
+  const { data: menu } = useQuery({
+    queryKey: ['nav', 'menu'],
+    queryFn: getMyMenu,
+    staleTime: 300_000,
+    retry: false,
   })
+
+  // Resilient fallback: if the menu endpoint hasn't been seeded / is unavailable,
+  // render the legacy static list with the original client-side role + permission
+  // gates so the sidebar never disappears during rollout.
+  const fallbackItems: RenderItem[] = navItems
+    .filter(item => {
+      if (!canAccess(item.requiredRoles)) return false
+      if (item.requiredServerPermission && serverPermissions.length > 0) {
+        return hasServerPermission(item.requiredServerPermission)
+      }
+      return true
+    })
+    .map(item => ({ label: item.label, href: item.href, Icon: item.icon, badge: item.badge }))
+
+  const visibleItems: RenderItem[] = useMemo(
+    () => (menu && menu.length > 0 ? flattenMenu(menu) : fallbackItems),
+    // fallbackItems is cheap + derived from permission state; recompute is fine.
+    [menu, fallbackItems],
+  )
 
   return (
     <aside
@@ -214,7 +261,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto" aria-label="Primary navigation">
         {visibleItems.map((item) => {
           const isActive = location.pathname.startsWith(item.href)
-          const Icon = item.icon
+          const Icon = item.Icon
 
           return (
             <NavLink

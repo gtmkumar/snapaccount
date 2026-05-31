@@ -2,6 +2,8 @@ using AuthService.Application.Admin.Queries.GetAuditEvents;
 using AuthService.Application.Common.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using SnapAccount.Shared.Domain;
+using AuthService.Application.Admin.Queries.GetStaffList;
+using AuthService.Application.Navigation.Queries.GetMyMenu;
 using AuthService.Application.Admin.Queries.GetTeamMembers;
 using AuthService.Application.Admin.Queries.GetUserDetail;
 using AuthService.Application.Admin.Queries.ListUsers;
@@ -60,6 +62,12 @@ public sealed class Auth : EndpointGroupBase
         groupBuilder.MapGet("/me", GetMe).RequireAuthorization();
         // Phase 6F: role-based shell needs full permission list for client-side gating
         groupBuilder.MapGet("/me/permissions", GetPermissions).RequireAuthorization();
+        // Backend-driven navigation: the permission-filtered menu tree for this user
+        groupBuilder.MapGet("/me/menu", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetMyMenuQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        }).RequireAuthorization();
         groupBuilder.MapPut("/profile", UpdateProfile).RequireAuthorization();
         groupBuilder.MapGet("/devices", GetDevices).RequireAuthorization();
         groupBuilder.MapDelete("/devices/{deviceId:guid}", RemoveDevice).RequireAuthorization();
@@ -73,6 +81,14 @@ public sealed class Auth : EndpointGroupBase
         groupBuilder.MapGet("/admin/team-members", static async (string? role, ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetTeamMembersQuery(role), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        }).RequireAuthorization();
+
+        // GET /auth/admin/staff?role= — SnapAccount internal-staff list (Team › Staff, Screen 87)
+        // Richer than /admin/team-members: includes email, status, joined + last-active.
+        groupBuilder.MapGet("/admin/staff", static async (string? role, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetStaffListQuery(role), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
         }).RequireAuthorization();
 

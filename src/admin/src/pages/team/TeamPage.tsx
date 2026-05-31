@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import {
   UserPlus, Search, Mail,
   Ban, CheckCircle, Trash2, Shield,
+  Users2, LayoutGrid, BarChart3,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -31,6 +32,9 @@ import { toast } from 'sonner'
 import { format, formatDistanceToNow } from 'date-fns'
 import type { ColumnDef } from '@tanstack/react-table'
 import { getInitials } from '@/lib/utils'
+import { StaffTab } from './StaffTab'
+import { WorkloadTab } from './WorkloadTab'
+import { KpiTab } from './KpiTab'
 
 const ROLE_OPTIONS: AdminRole[] = ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE', 'DATA_ENTRY_OPERATOR', 'PARTNER_BANK_REP']
 const MODULE_OPTIONS = ['GST', 'ITR', 'Loans', 'Reports', 'Documents']
@@ -203,6 +207,18 @@ export default function TeamPage() {
           <TabTrigger id="roles">
             {t('team.tab.roles', 'Roles')}
           </TabTrigger>
+          <TabTrigger id="staff">
+            <Users2 className="h-4 w-4 mr-1 inline-block align-text-bottom" aria-hidden="true" />
+            {t('team.tab.staff', 'Staff')}
+          </TabTrigger>
+          <TabTrigger id="workload">
+            <LayoutGrid className="h-4 w-4 mr-1 inline-block align-text-bottom" aria-hidden="true" />
+            {t('team.tab.workload', 'Workload')}
+          </TabTrigger>
+          <TabTrigger id="kpis">
+            <BarChart3 className="h-4 w-4 mr-1 inline-block align-text-bottom" aria-hidden="true" />
+            {t('team.tab.kpis', 'KPIs')}
+          </TabTrigger>
         </TabList>
 
         <TabPanels className="mt-6">
@@ -271,6 +287,21 @@ export default function TeamPage() {
                 </div>
               ))}
             </div>
+          </TabPanel>
+
+          {/* Staff tab — design Screen 87 */}
+          <TabPanel id="staff">
+            <StaffTab onInvite={() => setShowInvite(true)} />
+          </TabPanel>
+
+          {/* Workload tab — design Screen 89 */}
+          <TabPanel id="workload">
+            <WorkloadTab />
+          </TabPanel>
+
+          {/* KPI tab — design Screen 90 */}
+          <TabPanel id="kpis">
+            <KpiTab />
           </TabPanel>
         </TabPanels>
       </Tabs>

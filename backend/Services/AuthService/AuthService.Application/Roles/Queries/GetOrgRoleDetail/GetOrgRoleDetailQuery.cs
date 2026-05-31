@@ -29,7 +29,8 @@ public record RolePermissionDto(
     string Name,
     string Resource,
     string Action,
-    string? Description);
+    string? Description,
+    bool IsAllowed);
 
 public sealed class GetOrgRoleDetailQueryHandler(
     IAuthDbContext db,
@@ -71,7 +72,8 @@ public sealed class GetOrgRoleDetailQueryHandler(
                     rp.Permission!.Name,
                     rp.Permission.Resource,
                     rp.Permission.Action,
-                    rp.Permission.Description))
+                    rp.Permission.Description,
+                    rp.IsAllowed))
                 .OrderBy(p => p.Name)
                 .ToList());
 

@@ -33,6 +33,13 @@ public class Permission : BaseAuditableEntity
     /// </summary>
     public bool IsActive { get; private set; } = true;
 
+    /// <summary>FK to the configurable <see cref="ResourceType"/> catalog (gap #3). Nullable
+    /// metadata; <see cref="Resource"/> remains the authoritative string for checks.</summary>
+    public Guid? ResourceTypeId { get; private set; }
+
+    /// <summary>FK to the configurable <see cref="ActionType"/> catalog (gap #3).</summary>
+    public Guid? ActionTypeId { get; private set; }
+
     private Permission() { }
 
     /// <summary>Creates a new active catalog permission.</summary>
@@ -52,6 +59,13 @@ public class Permission : BaseAuditableEntity
     /// decoration that references the old value.
     /// </summary>
     public void UpdateDescription(string? description) => Description = description;
+
+    /// <summary>Links this permission to its resource/action type catalog entries (gap #3).</summary>
+    public void SetTypes(Guid? resourceTypeId, Guid? actionTypeId)
+    {
+        ResourceTypeId = resourceTypeId;
+        ActionTypeId = actionTypeId;
+    }
 
     /// <summary>
     /// Activates or retires this permission.

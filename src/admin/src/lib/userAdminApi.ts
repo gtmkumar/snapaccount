@@ -93,6 +93,7 @@ const UserDetailSchema = z.object({
   roleScope: z.enum(['platform', 'org']).nullable().optional(),
   roleOrganizationId: z.string().nullable().optional(),
   overridePermissionIds: z.array(z.string()).default([]),
+  deniedOverridePermissionIds: z.array(z.string()).default([]),
   profile: UserProfileSchema.nullable().optional(),
   business: UserBusinessProfileSchema.nullable().optional(),
 })
@@ -209,6 +210,8 @@ export interface UpdateAdminUserParams {
   fullName: string
   roleId: string
   permissionIds?: string[]
+  /** Per-user deny overrides (is_allowed=false) — subtract a role-granted perm (gap #2). */
+  deniedPermissionIds?: string[]
   preferredLanguage?: string
   userType?: string
   isActive?: boolean
@@ -256,4 +259,14 @@ export async function updateAdminUser(
 
 export async function deleteAdminUser(userId: string): Promise<void> {
   await api.delete(`/auth/admin/users/${userId}`)
+}
+
+/**
+ * Toggles a platform user's active state (reversible access lock — roles and
+ * permission overrides are preserved). Used by the Team › Staff row actions.
+ * Server guards: self-deactivation (User.SelfDelete) and last super-admin
+ * (User.LastAdmin) both return 409.
+ */
+export async function setAdminUserActive(userId: string, isActive: boolean): Promise<void> {
+  await api.post(`/auth/admin/users/${userId}/${isActive ? 'activate' : 'deactivate'}`)
 }

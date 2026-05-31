@@ -60,6 +60,18 @@ public interface IAuthDbContext
     /// <summary>Direct user permission grants in <c>auth.user_permission</c>.</summary>
     DbSet<UserPermission> UserPermissions { get; }
 
+    /// <summary>Backend-driven navigation menu entries in <c>auth.navigation_item</c>.</summary>
+    DbSet<NavigationItem> NavigationItems { get; }
+
+    /// <summary>Menu→permission visibility mappings in <c>auth.menu_permission</c>.</summary>
+    DbSet<MenuPermission> MenuPermissions { get; }
+
+    /// <summary>Configurable permission resources in <c>auth.resource_type</c> (gap #3).</summary>
+    DbSet<ResourceType> ResourceTypes { get; }
+
+    /// <summary>Configurable permission actions in <c>auth.action_type</c> (gap #3).</summary>
+    DbSet<ActionType> ActionTypes { get; }
+
     /// <summary>Reference / lookup data entries in <c>auth.reference_data</c>.</summary>
     DbSet<AuthService.Domain.Entities.ReferenceData> ReferenceData { get; }
 

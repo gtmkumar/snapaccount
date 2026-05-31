@@ -61,7 +61,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         className="sr-only"
         role="status"
       >
-        {menuOpen ? '' : t('theme.announce.changed', { theme: effectiveTheme, defaultValue: 'Theme changed to {{theme}}' })}
+        {menuOpen ? '' : t('theme.announce.changed', `Theme changed to ${effectiveTheme}`)}
       </span>
 
       <button

@@ -34,6 +34,7 @@ public record UserDetailDto(
     string? RoleScope,           // "platform" | "org" | null (no role)
     Guid? RoleOrganizationId,    // set when RoleScope == "org"
     IReadOnlyList<Guid> OverridePermissionIds,
+    IReadOnlyList<Guid> DeniedOverridePermissionIds,
     // ── KYC / personal profile (for edit prefill) ───────────────────────────
     UserProfileDto? Profile,
     // ── Primary owned organisation (existing detail-page widget) ─────────────
@@ -139,12 +140,13 @@ public sealed class GetUserDetailQueryHandler(IAuthDbContext db, IPanEncryptionS
             }
         }
 
-        // ── Direct permission overrides (active grants) ──────────────────────
-        var overrideIds = await db.UserPermissions
+        // ── Direct permission overrides (active), split into allow vs deny ───
+        var overrideRows = await db.UserPermissions
             .Where(up => up.UserId == request.UserId && up.DeletedAt == null)
-            .Select(up => up.PermissionId)
-            .Distinct()
+            .Select(up => new { up.PermissionId, up.IsAllowed })
             .ToListAsync(ct);
+        var overrideIds = overrideRows.Where(x => x.IsAllowed).Select(x => x.PermissionId).Distinct().ToList();
+        var deniedOverrideIds = overrideRows.Where(x => !x.IsAllowed).Select(x => x.PermissionId).Distinct().ToList();
 
         // Primary organization (user's first owned org if any).
         var business = await db.Organizations
@@ -168,6 +170,7 @@ public sealed class GetUserDetailQueryHandler(IAuthDbContext db, IPanEncryptionS
             roleScope,
             roleOrgId,
             overrideIds,
+            deniedOverrideIds,
             profile,
             business);
     }

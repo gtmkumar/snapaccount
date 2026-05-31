@@ -58,6 +58,18 @@ public class AuthDbContext(DbContextOptions<AuthDbContext> options)
     public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
 
     /// <inheritdoc />
+    public DbSet<NavigationItem> NavigationItems => Set<NavigationItem>();
+
+    /// <inheritdoc />
+    public DbSet<MenuPermission> MenuPermissions => Set<MenuPermission>();
+
+    /// <inheritdoc />
+    public DbSet<ResourceType> ResourceTypes => Set<ResourceType>();
+
+    /// <inheritdoc />
+    public DbSet<ActionType> ActionTypes => Set<ActionType>();
+
+    /// <inheritdoc />
     public DbSet<ReferenceData> ReferenceData => Set<ReferenceData>();
 
     /// <inheritdoc />

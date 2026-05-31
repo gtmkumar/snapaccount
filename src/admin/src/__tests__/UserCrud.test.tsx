@@ -107,6 +107,7 @@ describe('EditUserDialog', () => {
       roleScope: 'platform',
       roleOrganizationId: null,
       overridePermissionIds: [],
+      deniedOverridePermissionIds: [],
       profile: {
         panMasked: 'ABCDE****F',
         aadhaarLast4: '1234',

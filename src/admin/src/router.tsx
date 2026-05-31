@@ -40,6 +40,7 @@ import CallbackKpiPage from '@/pages/callbacks/CallbackKpiPage'
 import RolesPermissionsPage from '@/pages/roles/RolesPermissionsPage'
 import PermissionCatalogPage from '@/pages/roles/PermissionCatalogPage'
 import ReferenceDataPage from '@/pages/settings/ReferenceDataPage'
+import NavigationManagementPage from '@/pages/settings/NavigationManagementPage'
 import OrganizationsPage from '@/pages/orgs/OrganizationsPage'
 import OrganizationDetailPage from '@/pages/orgs/OrganizationDetailPage'
 import InviteAcceptancePage from '@/pages/auth/InviteAcceptancePage'
@@ -311,6 +312,16 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedLayout>
         <PermissionCatalogPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // Menu Management — data-driven sidebar CRUD (SUPER_ADMIN, platform.permissions.manage)
+  {
+    path: '/settings/navigation',
+    element: (
+      <ProtectedLayout>
+        <NavigationManagementPage />
       </ProtectedLayout>
     ),
   },

@@ -16,7 +16,6 @@ import { t } from '@/i18n'
 import { Search, Plus, Lock, ChevronDown, ChevronRight, Shield, MoreHorizontal, Save, X, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
-import { Toggle } from '@/components/ui/Toggle'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
@@ -216,6 +215,9 @@ function RoleListItem({
 // PermissionMatrix — the right pane with dirty state management
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Tri-state of a permission within a role (gap #2). */
+type PermState = 'allow' | 'deny' | 'none'
+
 function PermissionMatrix({
   role, catalog, grantableIds,
 }: {
@@ -232,10 +234,13 @@ function PermissionMatrix({
     staleTime: 30_000,
   })
 
-  // Draft state: set of granted permission IDs
-  const [draft, setDraft] = useState<Set<string>>(new Set())
+  // Draft state: allow + deny sets (a perm in neither = inherit/none). Allow/Deny
+  // is gap #2 — the matrix is now tri-state.
+  const [draft, setDraft] = useState<Set<string>>(new Set())       // allowed perm ids
+  const [denyDraft, setDenyDraft] = useState<Set<string>>(new Set()) // denied perm ids
   const [isDirty, setIsDirty] = useState(false)
   const serverSnapshot = useRef<Set<string>>(new Set())
+  const serverDenySnapshot = useRef<Set<string>>(new Set())
 
   // Permission filter
   const [permFilter, setPermFilter] = useState('')
@@ -246,23 +251,34 @@ function PermissionMatrix({
   // Reset draft when role changes or data loads
   useEffect(() => {
     if (rolePerms) {
-      const granted = new Set(rolePerms.permissions.map(p => p.permissionId))
-      serverSnapshot.current = new Set(granted)
-      setDraft(new Set(granted))
+      const allowed = new Set(rolePerms.permissions.filter(p => p.isAllowed).map(p => p.permissionId))
+      const denied = new Set(rolePerms.permissions.filter(p => !p.isAllowed).map(p => p.permissionId))
+      serverSnapshot.current = new Set(allowed)
+      serverDenySnapshot.current = new Set(denied)
+      setDraft(new Set(allowed))
+      setDenyDraft(new Set(denied))
       setIsDirty(false)
       // Expand all modules by default when first loading
       setExpandedModules(new Set(catalog.map(m => m.module)))
     }
   }, [rolePerms, role.id, catalog])
 
-  const togglePermission = useCallback((permId: string) => {
+  /** Current tri-state of a permission in the draft. */
+  const permState = useCallback(
+    (permId: string): PermState => (draft.has(permId) ? 'allow' : denyDraft.has(permId) ? 'deny' : 'none'),
+    [draft, denyDraft],
+  )
+
+  /** Sets a permission to allow / deny / none, keeping the two sets mutually exclusive. */
+  const setPermState = useCallback((permId: string, state: PermState) => {
     setDraft(prev => {
       const next = new Set(prev)
-      if (next.has(permId)) {
-        next.delete(permId)
-      } else {
-        next.add(permId)
-      }
+      if (state === 'allow') next.add(permId); else next.delete(permId)
+      return next
+    })
+    setDenyDraft(prev => {
+      const next = new Set(prev)
+      if (state === 'deny') next.add(permId); else next.delete(permId)
       return next
     })
     setIsDirty(true)
@@ -274,13 +290,14 @@ function PermissionMatrix({
 
     setDraft(prev => {
       const next = new Set(prev)
-      if (allGranted) {
-        // Remove only grantable ones from this module
-        grantableInModule.forEach(p => next.delete(p.id))
-      } else {
-        // Add all grantable ones
-        grantableInModule.forEach(p => next.add(p.id))
-      }
+      if (allGranted) grantableInModule.forEach(p => next.delete(p.id))
+      else grantableInModule.forEach(p => next.add(p.id))
+      return next
+    })
+    // Selecting all as allow clears any deny on those perms.
+    setDenyDraft(prev => {
+      const next = new Set(prev)
+      grantableInModule.forEach(p => next.delete(p.id))
       return next
     })
     setIsDirty(true)
@@ -300,13 +317,15 @@ function PermissionMatrix({
 
   const discard = () => {
     setDraft(new Set(serverSnapshot.current))
+    setDenyDraft(new Set(serverDenySnapshot.current))
     setIsDirty(false)
   }
 
   const saveMutation = useMutation({
-    mutationFn: () => setRolePermissions(role.id, Array.from(draft)),
+    mutationFn: () => setRolePermissions(role.id, Array.from(draft), Array.from(denyDraft)),
     onSuccess: () => {
       serverSnapshot.current = new Set(draft)
+      serverDenySnapshot.current = new Set(denyDraft)
       setIsDirty(false)
       toast.success(t('roles.matrix.saved'))
       void queryClient.invalidateQueries({ queryKey: ['org', 'roles', role.id, 'permissions'] })
@@ -317,6 +336,7 @@ function PermissionMatrix({
       if (status === 403) {
         // Revert draft to server snapshot on escalation rejection
         setDraft(new Set(serverSnapshot.current))
+        setDenyDraft(new Set(serverDenySnapshot.current))
         setIsDirty(false)
         toast.error(t('roles.matrix.escalationRejected'))
       } else {
@@ -447,8 +467,8 @@ function PermissionMatrix({
                 grantedCount={grantedCount}
                 totalCount={module.permissions.length}
                 grantableIds={grantableIds}
-                draft={draft}
-                onTogglePerm={isReadOnly ? undefined : togglePermission}
+                permState={permState}
+                onSetPermState={isReadOnly ? undefined : setPermState}
                 onSelectAll={isReadOnly || hasNoGrantable ? undefined : () => toggleModule(module)}
                 allGrantableSelected={allGrantable}
                 hasNoGrantable={hasNoGrantable}
@@ -461,8 +481,10 @@ function PermissionMatrix({
       {/* Dirty save bar */}
       {isDirty && !isReadOnly && (
         <DirtySaveBar
-          draft={draft}
-          snapshot={serverSnapshot.current}
+          changeCount={
+            countChanges(draft, serverSnapshot.current) +
+            countChanges(denyDraft, serverDenySnapshot.current)
+          }
           onDiscard={discard}
           onSave={() => saveMutation.mutate()}
           saving={saveMutation.isPending}
@@ -479,8 +501,8 @@ function PermissionMatrix({
 function PermissionModuleSection({
   module, isExpanded, onToggleExpand,
   grantedCount, totalCount,
-  grantableIds, draft,
-  onTogglePerm, onSelectAll, allGrantableSelected, hasNoGrantable,
+  grantableIds, permState,
+  onSetPermState, onSelectAll, allGrantableSelected, hasNoGrantable,
 }: {
   module: PermissionModule
   isExpanded: boolean
@@ -488,8 +510,8 @@ function PermissionModuleSection({
   grantedCount: number
   totalCount: number
   grantableIds: Set<string>
-  draft: Set<string>
-  onTogglePerm?: (permId: string) => void
+  permState: (permId: string) => PermState
+  onSetPermState?: (permId: string, state: PermState) => void
   onSelectAll?: () => void
   allGrantableSelected: boolean
   hasNoGrantable: boolean
@@ -544,9 +566,9 @@ function PermissionModuleSection({
             <PermissionRow
               key={perm.id}
               perm={perm}
-              isGranted={draft.has(perm.id)}
+              state={permState(perm.id)}
               isGrantable={grantableIds.has(perm.id)}
-              onToggle={onTogglePerm ? () => onTogglePerm(perm.id) : undefined}
+              onSetState={onSetPermState ? (s) => onSetPermState(perm.id, s) : undefined}
             />
           ))}
         </div>
@@ -560,32 +582,40 @@ function PermissionModuleSection({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function PermissionRow({
-  perm, isGranted, isGrantable, onToggle,
+  perm, state, isGrantable, onSetState,
 }: {
   perm: CatalogPermission
-  isGranted: boolean
+  state: PermState
   isGrantable: boolean
-  onToggle?: () => void
+  onSetState?: (state: PermState) => void
 }) {
-  const isReadOnly = !onToggle
-  const isDisabled = isReadOnly || !isGrantable
+  const isReadOnly = !onSetState
+  // Allow requires the perm be grantable (delegation); deny + inherit are always
+  // available to an editor since deny is restrictive.
+  const allowDisabled = isReadOnly || !isGrantable
 
   const tooltipText = !isGrantable
     ? t('roles.matrix.notGrantable', { permission: perm.name })
     : undefined
 
+  const segments: { value: PermState; label: string; activeClass: string }[] = [
+    { value: 'none', label: t('roles.matrix.state.inherit'), activeClass: 'bg-[var(--surface-sunken)] text-[var(--text-primary)]' },
+    { value: 'allow', label: t('roles.matrix.state.allow'), activeClass: 'bg-emerald-500 text-white' },
+    { value: 'deny', label: t('roles.matrix.state.deny'), activeClass: 'bg-rose-500 text-white' },
+  ]
+
   return (
     <div className={cn(
       'flex items-center gap-4 px-4 py-3 bg-[var(--surface-raised)]',
-      isDisabled && !isGranted && 'opacity-60'
+      allowDisabled && state === 'none' && 'opacity-60'
     )}>
       {/* Label + perm key */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className={cn('text-sm font-medium', isDisabled ? 'text-[var(--text-tertiary)]' : 'text-[var(--text-primary)]')}>
+          <span className={cn('text-sm font-medium', allowDisabled && state === 'none' ? 'text-[var(--text-tertiary)]' : 'text-[var(--text-primary)]')}>
             {perm.description ?? perm.name}
           </span>
-          {!isGrantable && onToggle !== undefined && (
+          {!isGrantable && !isReadOnly && (
             <span title={tooltipText} className="inline-flex items-center">
               <Lock className="h-3.5 w-3.5 text-[var(--text-tertiary)] shrink-0" aria-hidden="true" />
             </span>
@@ -596,15 +626,35 @@ function PermissionRow({
         </code>
       </div>
 
-      {/* Toggle */}
-      <div title={tooltipText}>
-        <Toggle
-          checked={isGranted}
-          onChange={isDisabled ? () => undefined : () => onToggle?.()}
-          disabled={isDisabled}
-          size="sm"
-          id={`perm-toggle-${perm.id}`}
-        />
+      {/* Tri-state segmented control */}
+      <div
+        className="inline-flex rounded-lg border border-[var(--border-default)] overflow-hidden text-xs font-medium"
+        role="group"
+        aria-label={t('roles.matrix.stateFor', { permission: perm.name })}
+      >
+        {segments.map(seg => {
+          const isActive = state === seg.value
+          // Block switching INTO allow for non-grantable perms; current state stays visible.
+          const disabled = isReadOnly || (seg.value === 'allow' && !isGrantable && !isActive)
+          return (
+            <button
+              key={seg.value}
+              type="button"
+              id={`perm-${perm.id}-${seg.value}`}
+              aria-pressed={isActive}
+              disabled={disabled}
+              title={seg.value === 'allow' ? tooltipText : undefined}
+              onClick={() => onSetState?.(seg.value)}
+              className={cn(
+                'px-2.5 py-1 transition-colors',
+                isActive ? seg.activeClass : 'bg-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-sunken)]',
+                disabled && 'cursor-not-allowed opacity-50',
+              )}
+            >
+              {seg.label}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -614,23 +664,22 @@ function PermissionRow({
 // DirtySaveBar
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Counts entries that differ between a draft set and its server snapshot. */
+function countChanges(draft: Set<string>, snapshot: Set<string>): number {
+  let n = 0
+  draft.forEach(id => { if (!snapshot.has(id)) n++ })
+  snapshot.forEach(id => { if (!draft.has(id)) n++ })
+  return n
+}
+
 function DirtySaveBar({
-  draft, snapshot, onDiscard, onSave, saving,
+  changeCount, onDiscard, onSave, saving,
 }: {
-  draft: Set<string>
-  snapshot: Set<string>
+  changeCount: number
   onDiscard: () => void
   onSave: () => void
   saving: boolean
 }) {
-
-  // Count added and removed
-  let added = 0
-  let removed = 0
-  draft.forEach(id => { if (!snapshot.has(id)) added++ })
-  snapshot.forEach(id => { if (!draft.has(id)) removed++ })
-  const total = added + removed
-
   return (
     <div
       className={cn(
@@ -644,12 +693,7 @@ function DirtySaveBar({
       aria-live="polite"
     >
       <span className="flex-1 text-sm text-[var(--text-primary)]">
-        {t('roles.matrix.unsavedChanges', { count: total })}
-        {added > 0 && removed > 0 && (
-          <span className="text-[var(--text-tertiary)] ml-1">
-            ({t('roles.matrix.changesDetail', { added, removed })})
-          </span>
-        )}
+        {t('roles.matrix.unsavedChanges', { count: changeCount })}
       </span>
       <Button variant="ghost" size="sm" onClick={onDiscard} disabled={saving}>
         <X className="h-4 w-4 mr-1" />

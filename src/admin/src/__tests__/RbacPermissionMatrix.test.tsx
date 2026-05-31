@@ -233,8 +233,8 @@ describe('RolesPermissionsPage', () => {
   const mockRolePerms: rbacApi.RolePermissions = {
     roleId: 'role-001',
     permissions: [
-      { permissionId: 'perm-001', name: 'org.roles.read', resource: 'org', action: 'roles.read' },
-      { permissionId: 'perm-002', name: 'org.members.invite', resource: 'org', action: 'members.invite' },
+      { permissionId: 'perm-001', name: 'org.roles.read', resource: 'org', action: 'roles.read', isAllowed: true },
+      { permissionId: 'perm-002', name: 'org.members.invite', resource: 'org', action: 'members.invite', isAllowed: true },
     ],
   }
 
@@ -351,33 +351,36 @@ describe('RolesPermissionsPage', () => {
     expect(rbacApi.getGrantablePermissions).toHaveBeenCalledOnce()
   })
 
-  it('dirty save bar appears after toggling a grantable permission', async () => {
+  it('dirty save bar appears after allowing a grantable permission', async () => {
     wrap(<RolesPermissionsPage />)
     await waitFor(() => screen.getByText('Organisation'))
 
-    // org.permissions.grant (perm-003) is grantable but NOT currently granted — toggle it on
-    const toggle = document.querySelector('#perm-toggle-perm-003') as HTMLInputElement | null
-    if (toggle) {
-      fireEvent.click(toggle)
-      await waitFor(() => {
-        expect(screen.getByText(/changes unsaved/i)).toBeInTheDocument()
-      })
-    }
+    // org.permissions.grant (perm-003) is grantable but NOT currently granted — set it to Allow.
+    const allowBtn = document.querySelector('#perm-perm-003-allow') as HTMLButtonElement | null
+    expect(allowBtn).not.toBeNull()
+    fireEvent.click(allowBtn!)
+    await waitFor(() => {
+      expect(screen.getByText(/changes unsaved/i)).toBeInTheDocument()
+    })
   })
 
-  it('Save changes button calls setRolePermissions', async () => {
+  it('denying a permission marks dirty and Save sends allow + deny lists', async () => {
     wrap(<RolesPermissionsPage />)
     await waitFor(() => screen.getByText('Organisation'))
 
-    const toggle = document.querySelector('#perm-toggle-perm-003') as HTMLInputElement | null
-    if (toggle) {
-      fireEvent.click(toggle)
-      await waitFor(() => screen.getByRole('button', { name: /Save changes/i }))
-      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }))
-      await waitFor(() => {
-        expect(rbacApi.setRolePermissions).toHaveBeenCalledWith('role-001', expect.any(Array))
-      })
-    }
+    // Set perm-003 to Deny via the tri-state control.
+    const denyBtn = document.querySelector('#perm-perm-003-deny') as HTMLButtonElement | null
+    expect(denyBtn).not.toBeNull()
+    fireEvent.click(denyBtn!)
+
+    await waitFor(() => screen.getByRole('button', { name: /Save changes/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }))
+
+    await waitFor(() => {
+      // Now called with (roleId, allowIds[], denyIds[]) — perm-003 in the deny list.
+      expect(rbacApi.setRolePermissions).toHaveBeenCalledWith(
+        'role-001', expect.any(Array), expect.arrayContaining(['perm-003']))
+    })
   })
 
   it('no native alert() — uses sonner toast', async () => {

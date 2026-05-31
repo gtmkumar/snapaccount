@@ -27,6 +27,7 @@ public class UserPermissionConfiguration : IEntityTypeConfiguration<UserPermissi
         builder.Property(up => up.PermissionId).HasColumnName("permission_id").IsRequired();
         builder.Property(up => up.OrganizationId).HasColumnName("organization_id");
         builder.Property(up => up.GrantedByUserId).HasColumnName("granted_by_user_id").IsRequired();
+        builder.Property(up => up.IsAllowed).HasColumnName("is_allowed");
         builder.Property(up => up.CreatedAt).HasColumnName("created_at");
         builder.Property(up => up.UpdatedAt).HasColumnName("updated_at");
         builder.Property(up => up.DeletedAt).HasColumnName("deleted_at");
