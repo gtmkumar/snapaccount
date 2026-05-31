@@ -46,6 +46,7 @@ export function EditUserDialog({ open, onClose, userId }: EditUserDialogProps) {
   const [fullName, setFullName] = useState('')
   const [selectedRoleId, setSelectedRoleId] = useState('')
   const [overrides, setOverrides] = useState<Set<string>>(new Set())
+  const [deniedOverrides, setDeniedOverrides] = useState<Set<string>>(new Set())
   const [attrs, setAttrs] = useState<UserAttributesValue>(emptyUserAttributes())
   const [permFilter, setPermFilter] = useState('')
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set())
@@ -107,8 +108,9 @@ export function EditUserDialog({ open, onClose, userId }: EditUserDialogProps) {
   const effectivePermIds: Set<string> = useMemo(() => {
     const all = new Set(inheritedPermIds)
     overrides.forEach(id => { if (!inheritedPermIds.has(id)) all.add(id) })
+    deniedOverrides.forEach(id => all.delete(id)) // per-user deny subtracts (gap #2)
     return all
-  }, [inheritedPermIds, overrides])
+  }, [inheritedPermIds, overrides, deniedOverrides])
 
   const effectiveCount = effectivePermIds.size
   const rolePermCount = inheritedPermIds.size
@@ -126,6 +128,7 @@ export function EditUserDialog({ open, onClose, userId }: EditUserDialogProps) {
     setFullName(detail.name === '(no name)' ? '' : detail.name)
     setSelectedRoleId(detail.roleId ?? '')
     setOverrides(new Set(detail.overridePermissionIds ?? []))
+    setDeniedOverrides(new Set(detail.deniedOverridePermissionIds ?? []))
     const p = detail.profile
     setAttrs({
       preferredLanguage: detail.preferredLanguage || 'en',
@@ -163,6 +166,18 @@ export function EditUserDialog({ open, onClose, userId }: EditUserDialogProps) {
     })
   }
 
+  // Per-user deny of an inherited permission (gap #2). Toggling the inherited
+  // row OFF adds a deny override; ON removes it.
+  const toggleDeny = (permId: string) => {
+    if (!inheritedPermIds.has(permId)) return
+    setDeniedOverrides(prev => {
+      const next = new Set(prev)
+      if (next.has(permId)) next.delete(permId)
+      else next.add(permId)
+      return next
+    })
+  }
+
   const toggleModuleAll = (module: PermissionModule) => {
     const grantableNotInherited = module.permissions.filter(
       p => grantableIds.has(p.id) && !inheritedPermIds.has(p.id)
@@ -190,6 +205,7 @@ export function EditUserDialog({ open, onClose, userId }: EditUserDialogProps) {
       fullName: fullName.trim(),
       roleId: selectedRoleId,
       permissionIds: Array.from(overrides),
+      deniedPermissionIds: Array.from(deniedOverrides),
       preferredLanguage: attrs.preferredLanguage || undefined,
       userType: attrs.userType || undefined,
       isActive: attrs.isActive,
@@ -373,6 +389,9 @@ export function EditUserDialog({ open, onClose, userId }: EditUserDialogProps) {
                   grantableIds={grantableIds}
                   onToggle={toggleOverride}
                   onSelectAll={() => toggleModuleAll(module)}
+                  allowDeny
+                  deniedOverrides={deniedOverrides}
+                  onToggleDeny={toggleDeny}
                 />
               ))}
             </div>

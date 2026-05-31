@@ -2,7 +2,10 @@ using AuthService.Application.PermissionCatalog.Commands.CreatePermission;
 using AuthService.Application.PermissionCatalog.Commands.DeletePermission;
 using AuthService.Application.PermissionCatalog.Commands.UpdatePermission;
 using AuthService.Application.PermissionCatalog.Queries.GetGrantablePermissions;
+using AuthService.Application.PermissionCatalog.Commands.UpdateActionType;
+using AuthService.Application.PermissionCatalog.Commands.UpdateResourceType;
 using AuthService.Application.PermissionCatalog.Queries.GetPermissionCatalog;
+using AuthService.Application.PermissionCatalog.Queries.GetPermissionMeta;
 using MediatR;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Domain;
@@ -43,6 +46,15 @@ public sealed class PermissionsEndpoints : EndpointGroupBase
                 "Permission IDs the caller may grant to other roles. " +
                 "Drives greyed/disabled toggles in the permission matrix UI.");
 
+        // GET /auth/permission-meta — configurable ResourceType + ActionType catalogs (gap #3)
+        group.MapGet("/permission-meta", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetPermissionMetaQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        })
+            .RequireAuthorization()
+            .WithSummary("Resource + action type catalogs for composing permissions. Requires platform.permissions.manage.");
+
         // ── Write (TASK B) ────────────────────────────────────────────────────
 
         // POST /auth/permissions
@@ -70,6 +82,23 @@ public sealed class PermissionsEndpoints : EndpointGroupBase
                 "Soft-delete a catalog permission. " +
                 "Blocked (409) if the permission is currently granted to any roles. " +
                 "Required permission: platform.permissions.manage.");
+
+        // ── Resource/Action type management (gap #3) ──────────────────────────
+        group.MapPut("/resource-types/{id:guid}", static async (Guid id, UpdateTypeRequest req, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new UpdateResourceTypeCommand(id, req.Name, req.Description, req.IsActive ?? true), ct);
+            return result.IsSuccess ? Results.NoContent()
+                : result.Error.Type == ErrorType.NotFound ? Results.NotFound(new { error = result.Error.Message })
+                : Results.BadRequest(new { error = result.Error.Message });
+        }).RequireAuthorization().WithSummary("Rename / (de)activate a resource type. Requires platform.permissions.manage.");
+
+        group.MapPut("/action-types/{id:guid}", static async (Guid id, UpdateTypeRequest req, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new UpdateActionTypeCommand(id, req.Name, req.Description, req.IsActive ?? true), ct);
+            return result.IsSuccess ? Results.NoContent()
+                : result.Error.Type == ErrorType.NotFound ? Results.NotFound(new { error = result.Error.Message })
+                : Results.BadRequest(new { error = result.Error.Message });
+        }).RequireAuthorization().WithSummary("Rename / (de)activate an action type. Requires platform.permissions.manage.");
     }
 
     // ── Handlers ─────────────────────────────────────────────────────────────
@@ -135,3 +164,6 @@ internal record CreatePermissionRequest(string Name, string? Description = null)
 
 /// <summary>PUT /auth/permissions/{id} request body.</summary>
 internal record UpdatePermissionRequest(string? Description = null, bool? IsActive = null);
+
+/// <summary>PUT /auth/{resource|action}-types/{id} request body.</summary>
+internal record UpdateTypeRequest(string Name, string? Description = null, bool? IsActive = null);

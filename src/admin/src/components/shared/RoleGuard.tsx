@@ -98,10 +98,7 @@ export function ForbiddenPage() {
         </h1>
 
         <p className="text-[var(--text-secondary)] mb-8">
-          {t('403.body', {
-            defaultValue: "Your role ({{roleLabel}}) doesn't include this area. If you believe this is a mistake, contact your administrator.",
-            roleLabel,
-          })}
+          {t('403.body', `Your role (${roleLabel}) doesn't include this area. If you believe this is a mistake, contact your administrator.`)}
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">

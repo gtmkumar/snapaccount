@@ -40,7 +40,8 @@ public record UpdateUserAdminCommand(
     string? PreferredLanguage = null,
     string? UserType = null,
     bool IsActive = true,
-    UserProfileInput? Profile = null) : ICommand<UpdateUserAdminResponse>;
+    UserProfileInput? Profile = null,
+    IReadOnlyList<Guid>? DeniedPermissionIds = null) : ICommand<UpdateUserAdminResponse>;
 
 /// <summary>Optional profile/KYC fields captured at admin user edit.</summary>
 public record UserProfileInput(
@@ -73,6 +74,18 @@ public sealed class UpdateUserAdminCommandValidator : AbstractValidator<UpdateUs
         RuleFor(x => x.PermissionIds)
             .Must(ids => ids == null || ids.Count <= 100)
             .WithMessage("Cannot assign more than 100 direct permission overrides.");
+
+        RuleFor(x => x.DeniedPermissionIds!)
+            .Must(ids => ids.Count <= 100)
+            .When(x => x.DeniedPermissionIds is not null)
+            .WithMessage("Cannot deny more than 100 direct permission overrides.");
+
+        // An override permission can't be both allowed and denied for the same user.
+        RuleFor(x => x)
+            .Must(x => x.DeniedPermissionIds is null || x.PermissionIds is null
+                       || !x.PermissionIds.Intersect(x.DeniedPermissionIds).Any())
+            .WithMessage("A permission cannot be both granted and denied for the same user.")
+            .WithName("PermissionIds");
 
         When(x => x.Profile is not null, () =>
         {
@@ -217,6 +230,23 @@ public sealed class UpdateUserAdminCommandHandler(
             }
         }
 
+        // ── Resolve deny overrides (restrictive → no delegation check needed) ──────
+        List<Permission> denyPerms = [];
+        if (request.DeniedPermissionIds?.Count > 0)
+        {
+            var distinctDeny = request.DeniedPermissionIds.Distinct().ToList();
+            denyPerms = await db.Permissions
+                .Where(p => distinctDeny.Contains(p.Id) && p.IsActive && p.DeletedAt == null)
+                .ToListAsync(cancellationToken);
+
+            if (denyPerms.Count != distinctDeny.Count)
+            {
+                var missing = distinctDeny.Except(denyPerms.Select(p => p.Id));
+                return Error.Validation("User.InvalidPermissions",
+                    $"Permission IDs not found: {string.Join(", ", missing)}");
+            }
+        }
+
         // ── Apply user-level changes ───────────────────────────────────────────
         user.FullName = request.FullName.Trim();
         if (!string.IsNullOrWhiteSpace(request.PreferredLanguage))
@@ -275,25 +305,39 @@ public sealed class UpdateUserAdminCommandHandler(
                 orgMember.AssignRole(role.Id);
         }
 
-        // ── Reconcile permission overrides (replace set) ────────────────────────
+        // ── Reconcile permission overrides (allow + deny, replace set) ──────────
         var existingOverrides = await db.UserPermissions
             .Where(up => up.UserId == user.Id && up.DeletedAt == null)
             .ToListAsync(cancellationToken);
 
-        var desiredIds = overridePerms.Select(p => p.Id).ToHashSet();
-        var existingIds = existingOverrides.Select(up => up.PermissionId).ToHashSet();
+        // permId → isAllowed (allow override = true, deny override = false). Anything
+        // not in this map is removed (the user inherits the role's decision).
+        var desired = new Dictionary<Guid, bool>();
+        foreach (var p in denyPerms) desired[p.Id] = false;
+        foreach (var p in overridePerms) desired[p.Id] = true; // validator forbids overlap
+        var existingByPerm = existingOverrides.ToDictionary(up => up.PermissionId);
 
         // Soft-delete overrides no longer desired.
-        foreach (var up in existingOverrides.Where(up => !desiredIds.Contains(up.PermissionId)))
+        foreach (var up in existingOverrides.Where(up => !desired.ContainsKey(up.PermissionId)))
             up.DeletedAt = DateTime.UtcNow;
 
-        // Add newly desired overrides.
-        foreach (var perm in overridePerms.Where(p => !existingIds.Contains(p.Id)))
-            db.UserPermissions.Add(UserPermission.Create(
-                userId:          user.Id,
-                permissionId:    perm.Id,
-                organizationId:  targetOrgId,   // NULL for platform scope
-                grantedByUserId: currentUser.UserId));
+        // Add new / flip existing overrides to the desired allow|deny state.
+        foreach (var (permId, isAllowed) in desired)
+        {
+            if (existingByPerm.TryGetValue(permId, out var up))
+            {
+                if (up.IsAllowed != isAllowed) up.SetAllowed(isAllowed);
+            }
+            else
+            {
+                db.UserPermissions.Add(UserPermission.Create(
+                    userId:          user.Id,
+                    permissionId:    permId,
+                    organizationId:  targetOrgId,   // NULL for platform scope
+                    grantedByUserId: currentUser.UserId,
+                    isAllowed:       isAllowed));
+            }
+        }
 
         await db.SaveChangesAsync(cancellationToken);
 

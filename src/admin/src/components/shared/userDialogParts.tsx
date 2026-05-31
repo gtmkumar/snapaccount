@@ -32,6 +32,7 @@ export function OverrideModuleSection({
   module, isExpanded, onToggleExpand,
   overrides, inheritedPermIds, grantableIds,
   onToggle, onSelectAll,
+  allowDeny = false, deniedOverrides, onToggleDeny,
 }: {
   module: PermissionModule
   isExpanded: boolean
@@ -41,6 +42,10 @@ export function OverrideModuleSection({
   grantableIds: Set<string>
   onToggle: (permId: string) => void
   onSelectAll: () => void
+  /** Edit mode (gap #2): allow denying an inherited permission per-user. */
+  allowDeny?: boolean
+  deniedOverrides?: Set<string>
+  onToggleDeny?: (permId: string) => void
 }) {
   const grantableNotInherited = module.permissions.filter(
     p => grantableIds.has(p.id) && !inheritedPermIds.has(p.id)
@@ -80,6 +85,9 @@ export function OverrideModuleSection({
               isGrantable={grantableIds.has(perm.id)}
               isOverrideOn={overrides.has(perm.id)}
               onToggle={() => onToggle(perm.id)}
+              allowDeny={allowDeny}
+              isDenied={deniedOverrides?.has(perm.id) ?? false}
+              onToggleDeny={onToggleDeny ? () => onToggleDeny(perm.id) : undefined}
             />
           ))}
         </div>
@@ -90,21 +98,32 @@ export function OverrideModuleSection({
 
 export function OverridePermissionRow({
   perm, isInherited, isGrantable, isOverrideOn, onToggle,
+  allowDeny = false, isDenied = false, onToggleDeny,
 }: {
   perm: CatalogPermission
   isInherited: boolean
   isGrantable: boolean
   isOverrideOn: boolean
   onToggle: () => void
+  allowDeny?: boolean
+  isDenied?: boolean
+  onToggleDeny?: () => void
 }) {
-  const isDisabled = isInherited || !isGrantable
-  const checked = isInherited || isOverrideOn
+  // Edit mode: an inherited permission's toggle is interactive — ON = inherited
+  // (allowed by role), OFF = explicit per-user deny that subtracts it (gap #2).
+  const denyMode = allowDeny && isInherited
 
-  const tooltipText = isInherited
-    ? t('users.addUser.alreadyInherited')
-    : !isGrantable
-      ? t('users.addUser.notGrantable')
-      : undefined
+  const isDisabled = denyMode ? false : (isInherited || !isGrantable)
+  const checked = denyMode ? !isDenied : (isInherited || isOverrideOn)
+  const handleChange = denyMode ? (onToggleDeny ?? (() => undefined)) : onToggle
+
+  const tooltipText = denyMode
+    ? t('users.editUser.denyHint')
+    : isInherited
+      ? t('users.addUser.alreadyInherited')
+      : !isGrantable
+        ? t('users.addUser.notGrantable')
+        : undefined
 
   return (
     <div className={cn(
@@ -116,7 +135,12 @@ export function OverridePermissionRow({
           <span className={cn('text-sm', isDisabled ? 'text-[var(--text-tertiary)]' : 'text-[var(--text-primary)]')}>
             {perm.description ?? perm.name}
           </span>
-          {isInherited && (
+          {denyMode && isDenied && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+              denied
+            </span>
+          )}
+          {isInherited && !(denyMode && isDenied) && (
             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
               <Check className="h-3 w-3" />
               inherited
@@ -134,7 +158,7 @@ export function OverridePermissionRow({
       <div title={tooltipText}>
         <Toggle
           checked={checked}
-          onChange={isDisabled ? () => undefined : onToggle}
+          onChange={isDisabled ? () => undefined : handleChange}
           disabled={isDisabled}
           size="sm"
           id={`override-${perm.id}`}

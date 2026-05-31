@@ -82,6 +82,27 @@ public sealed class CreatePermissionCommandHandler(IAuthDbContext db)
         var action   = request.Name[(dotIndex + 1)..];
 
         var permission = Permission.Create(request.Name, resource, action, request.Description);
+
+        // Gap #3: link to (and auto-grow) the configurable resource/action catalogs.
+        // A resource/action used for the first time becomes a first-class catalog entry
+        // — "add a new module/action without code". Existing entries are reused.
+        var resourceType = await db.ResourceTypes
+            .FirstOrDefaultAsync(r => r.Key == resource && r.DeletedAt == null, cancellationToken);
+        if (resourceType is null)
+        {
+            resourceType = ResourceType.Create(resource, Humanize(resource));
+            db.ResourceTypes.Add(resourceType);
+        }
+
+        var actionType = await db.ActionTypes
+            .FirstOrDefaultAsync(a => a.Key == action && a.DeletedAt == null, cancellationToken);
+        if (actionType is null)
+        {
+            actionType = ActionType.Create(action, Humanize(action));
+            db.ActionTypes.Add(actionType);
+        }
+
+        permission.SetTypes(resourceType.Id, actionType.Id);
         db.Permissions.Add(permission);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -91,5 +112,12 @@ public sealed class CreatePermissionCommandHandler(IAuthDbContext db)
             permission.Resource,
             permission.Action,
             permission.Description);
+    }
+
+    /// <summary>Readable default name for a new type key (e.g. "returns.file" → "Returns File").</summary>
+    private static string Humanize(string key)
+    {
+        var words = key.Replace('_', ' ').Replace('.', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(' ', words.Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
     }
 }

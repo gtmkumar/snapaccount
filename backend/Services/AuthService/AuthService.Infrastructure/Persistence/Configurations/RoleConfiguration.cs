@@ -48,6 +48,9 @@ public class PermissionConfiguration : IEntityTypeConfiguration<Permission>
         builder.Property(p => p.Description).HasColumnName("description");
         // I1.1 (migration 037): is_active column — RETIRED vs ACTIVE distinction
         builder.Property(p => p.IsActive).HasColumnName("is_active");
+        // Gap #3 (migration 044): resource/action type catalog FKs
+        builder.Property(p => p.ResourceTypeId).HasColumnName("resource_type_id");
+        builder.Property(p => p.ActionTypeId).HasColumnName("action_type_id");
         builder.Property(p => p.CreatedAt).HasColumnName("created_at");
         builder.Property(p => p.UpdatedAt).HasColumnName("updated_at");
         builder.Property(p => p.DeletedAt).HasColumnName("deleted_at");
@@ -58,6 +61,13 @@ public class PermissionConfiguration : IEntityTypeConfiguration<Permission>
         builder.HasIndex(p => p.Name)
             .IsUnique()
             .HasDatabaseName("ix_permission_name_ci");
+
+        // Gap #3 (migration 044): FK relationships to the type catalogs. Declared so
+        // EF orders inserts (type before permission) when a new type is created in the
+        // same SaveChanges. No navigation properties — relationship-only.
+        builder.HasOne<ResourceType>().WithMany().HasForeignKey(p => p.ResourceTypeId).OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<ActionType>().WithMany().HasForeignKey(p => p.ActionTypeId).OnDelete(DeleteBehavior.SetNull);
+
         builder.Ignore(p => p.DomainEvents);
     }
 }
@@ -72,6 +82,7 @@ public class RolePermissionConfiguration : IEntityTypeConfiguration<RolePermissi
         builder.Property(rp => rp.Id).HasColumnName("id");
         builder.Property(rp => rp.RoleId).HasColumnName("role_id");
         builder.Property(rp => rp.PermissionId).HasColumnName("permission_id");
+        builder.Property(rp => rp.IsAllowed).HasColumnName("is_allowed");
         builder.Property(rp => rp.CreatedAt).HasColumnName("created_at");
         builder.Property(rp => rp.UpdatedAt).HasColumnName("updated_at");
         builder.Property(rp => rp.DeletedAt).HasColumnName("deleted_at");

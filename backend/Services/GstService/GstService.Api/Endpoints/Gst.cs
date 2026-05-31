@@ -17,6 +17,7 @@ using GstService.Application.Invoices.Queries.ListReturnInvoices;
 using GstService.Application.Admin.Queries.GetUserReturns;
 using GstService.Application.Dashboard.Queries.GetActivity;
 using GstService.Application.Dashboard.Queries.GetDashboardStats;
+using GstService.Application.Dashboard.Queries.GetWorkloadByUser;
 using GstService.Application.ItcReconciliation.Commands.ReconcileItc;
 using GstService.Application.ItcReconciliation.Queries.GetItcMismatches;
 using GstService.Application.Notices.Commands.AssignNoticeToCa;
@@ -165,6 +166,16 @@ public sealed class Gst : EndpointGroupBase
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetGstAdminFilingQueue")
             .WithSummary("CA filing queue — GST returns ordered by SLA expiry for admin assignment.");
+
+        // GET /gst/admin/workload-by-user — per-CA GST notice workload (Team workload grid, Screen 89)
+        groupBuilder.MapGet("/admin/workload-by-user", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetWorkloadByUserQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetGstAdminWorkloadByUser")
+            .WithSummary("Per-assignee GST notice workload — admin team-workload grid.");
     }
 
     // ── Return handlers ───────────────────────────────────────────────────────

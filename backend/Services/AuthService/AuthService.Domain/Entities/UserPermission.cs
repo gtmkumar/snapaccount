@@ -32,22 +32,35 @@ public class UserPermission : BaseAuditableEntity
     /// <summary>User who created this grant (for audit trail).</summary>
     public Guid GrantedByUserId { get; private set; }
 
+    /// <summary>
+    /// TRUE = direct grant (allow); FALSE = explicit per-user deny that overrides
+    /// any role-granted allow when effective permissions are resolved (migration
+    /// 043, gap #2). The "*" wildcard is not constrained by deny.
+    /// </summary>
+    public bool IsAllowed { get; private set; } = true;
+
     // Navigation
     public Permission? Permission { get; private set; }
 
     private UserPermission() { }
 
-    /// <summary>Creates a new direct permission grant.</summary>
+    /// <summary>Creates a new direct permission grant (allow) or, when
+    /// <paramref name="isAllowed"/> is false, an explicit per-user deny.</summary>
     public static UserPermission Create(
         Guid userId,
         Guid permissionId,
         Guid? organizationId,
-        Guid grantedByUserId)
+        Guid grantedByUserId,
+        bool isAllowed = true)
         => new()
         {
             UserId          = userId,
             PermissionId    = permissionId,
             OrganizationId  = organizationId,
             GrantedByUserId = grantedByUserId,
+            IsAllowed       = isAllowed,
         };
+
+    /// <summary>Flips an existing override between allow and deny (per-user edit).</summary>
+    public void SetAllowed(bool isAllowed) => IsAllowed = isAllowed;
 }

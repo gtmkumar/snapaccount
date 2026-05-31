@@ -1,5 +1,6 @@
 using AuthService.Application.Admin.Commands.CreateUserAdmin;
 using AuthService.Application.Admin.Commands.DeleteUserAdmin;
+using AuthService.Application.Admin.Commands.SetUserActiveAdmin;
 using AuthService.Application.Admin.Commands.UpdateUserAdmin;
 using AuthService.Application.Admin.Queries.GetAssignableRoles;
 using MediatR;
@@ -54,6 +55,19 @@ public sealed class AdminUsers : EndpointGroupBase
             .WithSummary(
                 "Soft-delete a user. Refuses self-delete (409 User.SelfDelete) and removal of the " +
                 "last active wildcard SUPER_ADMIN (409 User.LastAdmin). Requires platform.admins.invite.");
+
+        // POST /auth/admin/users/{id}/deactivate — reversible access lock (Team › Staff)
+        group.MapPost("/users/{id:guid}/deactivate", DeactivateUser)
+            .RequireAuthorization()
+            .WithSummary(
+                "Deactivate a user (sets IsActive=false; roles/permissions untouched). Refuses " +
+                "self-deactivation (409 User.SelfDelete) and the last active wildcard SUPER_ADMIN " +
+                "(409 User.LastAdmin). Requires platform.admins.invite.");
+
+        // POST /auth/admin/users/{id}/activate — reverse of deactivate
+        group.MapPost("/users/{id:guid}/activate", ActivateUser)
+            .RequireAuthorization()
+            .WithSummary("Reactivate a previously deactivated user. Requires platform.admins.invite.");
     }
 
     // POST /auth/admin/users
@@ -99,7 +113,8 @@ public sealed class AdminUsers : EndpointGroupBase
             req.PreferredLanguage,
             req.UserType,
             req.IsActive ?? true,
-            req.Profile), ct);
+            req.Profile,
+            req.DeniedPermissionIds), ct);
 
         return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
     }
@@ -109,6 +124,22 @@ public sealed class AdminUsers : EndpointGroupBase
         Guid id, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new DeleteUserAdminCommand(id), ct);
+        return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
+    }
+
+    // POST /auth/admin/users/{id}/deactivate
+    private static async Task<IResult> DeactivateUser(
+        Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new SetUserActiveAdminCommand(id, false), ct);
+        return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
+    }
+
+    // POST /auth/admin/users/{id}/activate
+    private static async Task<IResult> ActivateUser(
+        Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new SetUserActiveAdminCommand(id, true), ct);
         return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
     }
 
@@ -147,4 +178,5 @@ internal record UpdateUserAdminRequest(
     string? PreferredLanguage = null,
     string? UserType = null,
     bool? IsActive = null,
-    AuthService.Application.Admin.Commands.UpdateUserAdmin.UserProfileInput? Profile = null);
+    AuthService.Application.Admin.Commands.UpdateUserAdmin.UserProfileInput? Profile = null,
+    IReadOnlyList<Guid>? DeniedPermissionIds = null);

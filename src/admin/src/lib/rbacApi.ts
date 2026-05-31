@@ -32,6 +32,8 @@ export const PermissionDetailSchema = z.object({
   resource: z.string(),
   action: z.string(),
   description: z.string().nullable().optional(),
+  // Allow/Deny (gap #2). Absent on older payloads → treated as allow.
+  isAllowed: z.boolean().optional().default(true),
 })
 export type PermissionDetail = z.infer<typeof PermissionDetailSchema>
 
@@ -199,8 +201,12 @@ export async function getRolePermissions(roleId: string): Promise<RolePermission
   return RolePermissionsSchema.parse(res.data)
 }
 
-export async function setRolePermissions(roleId: string, permissionIds: string[]): Promise<void> {
-  await api.put(`/auth/org/roles/${roleId}/permissions`, { permissionIds })
+export async function setRolePermissions(
+  roleId: string,
+  permissionIds: string[],
+  deniedPermissionIds: string[] = [],
+): Promise<void> {
+  await api.put(`/auth/org/roles/${roleId}/permissions`, { permissionIds, deniedPermissionIds })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,6 +225,38 @@ export async function listPermissions(includeInactive?: boolean): Promise<Permis
   const params = includeInactive ? { includeInactive: true } : undefined
   const res = await api.get('/auth/permissions', { params })
   return z.array(PermissionModuleSchema).parse(res.data)
+}
+
+// ── Permission meta: configurable Resource/Action type catalogs (gap #3) ────────
+
+export const TypeEntrySchema = z.object({
+  id: z.string(),
+  key: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+})
+export type TypeEntry = z.infer<typeof TypeEntrySchema>
+
+export const PermissionMetaSchema = z.object({
+  resourceTypes: z.array(TypeEntrySchema),
+  actionTypes: z.array(TypeEntrySchema),
+})
+export type PermissionMeta = z.infer<typeof PermissionMetaSchema>
+
+/** Resource + action type catalogs that permissions are composed from (gap #3). */
+export async function getPermissionMeta(): Promise<PermissionMeta> {
+  const res = await api.get('/auth/permission-meta')
+  return PermissionMetaSchema.parse(res.data)
+}
+
+export interface UpdateTypeParams { name: string; description?: string | null; isActive: boolean }
+
+export async function updateResourceType(id: string, params: UpdateTypeParams): Promise<void> {
+  await api.put(`/auth/resource-types/${id}`, params)
+}
+
+export async function updateActionType(id: string, params: UpdateTypeParams): Promise<void> {
+  await api.put(`/auth/action-types/${id}`, params)
 }
 
 export async function getGrantablePermissions(): Promise<GrantablePermissions> {

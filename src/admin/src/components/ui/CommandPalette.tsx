@@ -275,7 +275,7 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
             </div>
           ) : displayItems.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-[var(--text-tertiary)]">
-              {t('palette.empty.noResults', { query, defaultValue: 'No matches for {{query}}' })}
+              {t('palette.empty.noResults', `No matches for ${query}`)}
             </div>
           ) : (
             displayItems.map((item, i) => (

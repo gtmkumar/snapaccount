@@ -112,7 +112,8 @@ public sealed class OrgRoles : EndpointGroupBase
     private static async Task<IResult> SetRolePermissions(
         Guid id, SetRolePermissionsRequest req, ISender sender, CancellationToken ct)
     {
-        var result = await sender.Send(new SetRolePermissionsCommand(id, req.PermissionIds), ct);
+        var result = await sender.Send(
+            new SetRolePermissionsCommand(id, req.PermissionIds, req.DeniedPermissionIds), ct);
         return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
     }
 
@@ -129,4 +130,6 @@ public sealed class OrgRoles : EndpointGroupBase
 // Request DTOs
 internal record CreateOrgRoleRequest(string Name, string DisplayName, string? Description = null);
 internal record UpdateOrgRoleRequest(string DisplayName, string? Description = null);
-internal record SetRolePermissionsRequest(IReadOnlyList<Guid> PermissionIds);
+internal record SetRolePermissionsRequest(
+    IReadOnlyList<Guid> PermissionIds,
+    IReadOnlyList<Guid>? DeniedPermissionIds = null);

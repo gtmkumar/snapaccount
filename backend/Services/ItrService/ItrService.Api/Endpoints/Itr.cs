@@ -2,6 +2,7 @@ using ItrService.Application.Assessees.Commands.UpdateProfile;
 using ItrService.Application.Assessees.Queries.GetProfile;
 using ItrService.Application.Dashboard.Queries.GetActivity;
 using ItrService.Application.Dashboard.Queries.GetDashboardStats;
+using ItrService.Application.Dashboard.Queries.GetWorkloadByUser;
 using ItrService.Application.DocChecklist.Queries.GetDocChecklist;
 using ItrService.Application.Grievances.Commands.CreateGrievance;
 using ItrService.Application.Grievances.Queries.ListGrievances;
@@ -348,6 +349,17 @@ public sealed class Itr : EndpointGroupBase
         })
         .WithName("GetItrAdminActivity")
         .WithSummary("Daily ITR filing creation counts for the cross-service activity chart.")
+        .RequireAuthorization()
+        .WithTags("Admin");
+
+        // GET /itr/admin/workload-by-user — per-assignee ITR grievance workload (Team workload grid, Screen 89)
+        group.MapGet("/admin/workload-by-user", async (IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetWorkloadByUserQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+        })
+        .WithName("GetItrAdminWorkloadByUser")
+        .WithSummary("Per-assignee ITR grievance workload — admin team-workload grid.")
         .RequireAuthorization()
         .WithTags("Admin");
     }
