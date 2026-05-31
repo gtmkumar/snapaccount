@@ -30,15 +30,11 @@ using Xunit;
 
 namespace AuthService.IntegrationTests;
 
-[Collection("PermCatalogApi")]
-public class PermissionCatalogApiTests : IAsyncLifetime
+[Collection("integration")]
+public class PermissionCatalogApiTests(PostgresFixture pg) : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
-        .WithDatabase("snapaccount_permcat_test")
-        .WithUsername("postgres")
-        .WithPassword("postgres_permcat_test")
-        .Build();
+    private readonly PostgresFixture _pg = pg;
+    private string _connectionString = null!;
 
     private WebApplicationFactory<Program> _factory = null!;
     private HttpClient _unauthenticated = null!;
@@ -47,7 +43,7 @@ public class PermissionCatalogApiTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        _connectionString = _pg.NewDatabaseConnectionString();
 
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -61,7 +57,7 @@ public class PermissionCatalogApiTests : IAsyncLifetime
                     services.RemoveAll<DbContextOptions>();
                     services.RemoveAll<DbContextOptions<AuthService.Infrastructure.Persistence.AuthDbContext>>();
                     services.AddDbContext<AuthService.Infrastructure.Persistence.AuthDbContext>(opts =>
-                        opts.UseNpgsql(_postgres.GetConnectionString()));
+                        opts.UseNpgsql(_connectionString));
 
                     services.RemoveAll<IFirebaseAuthService>();
                     var fbMock = new Mock<IFirebaseAuthService>();
@@ -98,7 +94,6 @@ public class PermissionCatalogApiTests : IAsyncLifetime
     {
         _unauthenticated.Dispose();
         await _factory.DisposeAsync();
-        await _postgres.DisposeAsync();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────

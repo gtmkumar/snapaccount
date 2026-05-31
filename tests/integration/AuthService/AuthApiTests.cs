@@ -33,15 +33,11 @@ namespace AuthService.IntegrationTests;
 /// The IOtpService is partially mocked: SendOtpAsync behaves as real but
 /// VerifyOtpAsync is controllable per-test via the mock.
 /// </summary>
-[Collection("AuthApi")]
-public class AuthApiTests : IAsyncLifetime
+[Collection("integration")]
+public class AuthApiTests(PostgresFixture pg) : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
-        .WithDatabase("snapaccount_test")
-        .WithUsername("postgres")
-        .WithPassword("postgres_test")
-        .Build();
+    private readonly PostgresFixture _pg = pg;
+    private string _connectionString = null!;
 
     private HttpClient _client = null!;
     private WebApplicationFactory<Program> _factory = null!;
@@ -52,12 +48,12 @@ public class AuthApiTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        _connectionString = _pg.NewDatabaseConnectionString();
 
         // Pre-create the schema BEFORE the factory builds: with LOCAL_AUTH=true the host
         // runs LocalAuthService.EnsureDevAdminAsync at startup (queries auth.role).
         var preSeedOpts = new DbContextOptionsBuilder<AuthService.Infrastructure.Persistence.AuthDbContext>()
-            .UseNpgsql(_postgres.GetConnectionString())
+            .UseNpgsql(_connectionString)
             .Options;
         using (var preSeedDb = new AuthService.Infrastructure.Persistence.AuthDbContext(preSeedOpts))
         {
@@ -71,7 +67,7 @@ public class AuthApiTests : IAsyncLifetime
                 // Connection string for AddAuthInfrastructure (else the host fails to build),
                 // and LOCAL_AUTH=true so Firebase init is skipped (no GCP ADC) while auth
                 // enforcement stays ON — NOT DEV_AUTH_BYPASS, which would break the 401 tests.
-                builder.UseSetting("ConnectionStrings:DefaultConnection", _postgres.GetConnectionString());
+                builder.UseSetting("ConnectionStrings:DefaultConnection", _connectionString);
                 builder.UseSetting("LOCAL_AUTH", "true");
                 builder.ConfigureServices(services =>
                 {
@@ -80,7 +76,7 @@ public class AuthApiTests : IAsyncLifetime
                     services.RemoveAll<DbContextOptions<AuthService.Infrastructure.Persistence.AuthDbContext>>();
 
                     services.AddDbContext<AuthService.Infrastructure.Persistence.AuthDbContext>(options =>
-                        options.UseNpgsql(_postgres.GetConnectionString()));
+                        options.UseNpgsql(_connectionString));
 
                     // Replace Firebase with a no-op mock
                     services.RemoveAll<IFirebaseAuthService>();
@@ -104,7 +100,6 @@ public class AuthApiTests : IAsyncLifetime
     {
         _client.Dispose();
         await _factory.DisposeAsync();
-        await _postgres.DisposeAsync();
     }
 
     // ──────────────────────────────────────────────────────────────

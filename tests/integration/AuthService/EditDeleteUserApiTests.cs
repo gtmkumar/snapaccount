@@ -34,15 +34,11 @@ using Xunit;
 
 namespace AuthService.IntegrationTests;
 
-[Collection("EditDeleteUserApi")]
-public class EditDeleteUserApiTests : IAsyncLifetime
+[Collection("integration")]
+public class EditDeleteUserApiTests(PostgresFixture pg) : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
-        .WithDatabase("snapaccount_editdelete_test")
-        .WithUsername("postgres")
-        .WithPassword("postgres_editdelete_test")
-        .Build();
+    private readonly PostgresFixture _pg = pg;
+    private string _connectionString = null!;
 
     private WebApplicationFactory<Program> _factory = null!;
     private HttpClient _unauthenticated = null!;
@@ -61,10 +57,10 @@ public class EditDeleteUserApiTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        _connectionString = _pg.NewDatabaseConnectionString();
 
         var preSeedOpts = new DbContextOptionsBuilder<AuthService.Infrastructure.Persistence.AuthDbContext>()
-            .UseNpgsql(_postgres.GetConnectionString())
+            .UseNpgsql(_connectionString)
             .Options;
         using (var preSeedDb = new AuthService.Infrastructure.Persistence.AuthDbContext(preSeedOpts))
         {
@@ -79,14 +75,14 @@ public class EditDeleteUserApiTests : IAsyncLifetime
                 builder.UseSetting("LOCAL_AUTH", "true");
                 builder.UseSetting(
                     "ConnectionStrings:DefaultConnection",
-                    _postgres.GetConnectionString());
+                    _connectionString);
 
                 builder.ConfigureServices(services =>
                 {
                     services.RemoveAll<DbContextOptions>();
                     services.RemoveAll<DbContextOptions<AuthService.Infrastructure.Persistence.AuthDbContext>>();
                     services.AddDbContext<AuthService.Infrastructure.Persistence.AuthDbContext>(opts =>
-                        opts.UseNpgsql(_postgres.GetConnectionString()));
+                        opts.UseNpgsql(_connectionString));
 
                     services.RemoveAll<IFirebaseAuthService>();
                     var fb = new Mock<IFirebaseAuthService>();
@@ -99,7 +95,7 @@ public class EditDeleteUserApiTests : IAsyncLifetime
             });
 
         var seedOpts = new DbContextOptionsBuilder<AuthService.Infrastructure.Persistence.AuthDbContext>()
-            .UseNpgsql(_postgres.GetConnectionString())
+            .UseNpgsql(_connectionString)
             .Options;
         using var seedDb = new AuthService.Infrastructure.Persistence.AuthDbContext(seedOpts);
         await SeedTestDataAsync(seedDb);
@@ -111,7 +107,6 @@ public class EditDeleteUserApiTests : IAsyncLifetime
     {
         _unauthenticated.Dispose();
         await _factory.DisposeAsync();
-        await _postgres.DisposeAsync();
     }
 
     // ── Seed ──────────────────────────────────────────────────────────────────

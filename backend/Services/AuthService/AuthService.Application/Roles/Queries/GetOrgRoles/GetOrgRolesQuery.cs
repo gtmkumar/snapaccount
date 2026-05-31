@@ -60,18 +60,38 @@ public sealed class GetOrgRolesQueryHandler(
         // Count active members per role scoped to the caller's org
         var roleIds = roles.Select(r => r.Id).ToList();
 
-        Dictionary<Guid, int> memberCounts = [];
+        // "Members" = DISTINCT users holding the role via EITHER an active platform
+        // user_role (e.g. SUPER_ADMIN / operational staff — assigned globally, not via
+        // org membership) OR an active organization membership in the caller's org.
+        // Counting only org members previously reported 0 for platform/system roles
+        // even when staff held them via user_role (visible on the Team page).
+        var membersByRole = new Dictionary<Guid, HashSet<Guid>>();
+        void AddHolder(Guid roleId, Guid userId)
+        {
+            if (!membersByRole.TryGetValue(roleId, out var set))
+                membersByRole[roleId] = set = [];
+            set.Add(userId);
+        }
+
+        var userRoleHolders = await db.UserRoles
+            .Where(ur => ur.IsActive && ur.DeletedAt == null && roleIds.Contains(ur.RoleId))
+            .Select(ur => new { ur.RoleId, ur.UserId })
+            .ToListAsync(cancellationToken);
+        foreach (var h in userRoleHolders) AddHolder(h.RoleId, h.UserId);
+
         if (orgId.HasValue)
         {
-            memberCounts = await db.OrganizationMembers
+            var orgMemberHolders = await db.OrganizationMembers
                 .Where(m => m.OrganizationId == orgId.Value
                          && m.IsActive
                          && m.DeletedAt == null
                          && roleIds.Contains(m.RoleId))
-                .GroupBy(m => m.RoleId)
-                .Select(g => new { RoleId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.RoleId, x => x.Count, cancellationToken);
+                .Select(m => new { m.RoleId, m.UserId })
+                .ToListAsync(cancellationToken);
+            foreach (var h in orgMemberHolders) AddHolder(h.RoleId, h.UserId);
         }
+
+        var memberCounts = membersByRole.ToDictionary(kv => kv.Key, kv => kv.Value.Count);
 
         IReadOnlyList<OrgRoleDto> dtos = roles.Select(r => new OrgRoleDto(
             r.Id,

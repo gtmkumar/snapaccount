@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router'
+import { useParams, useNavigate, useLocation } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowLeft, Bell, MessageSquare, AlertTriangle, Trash2, Pencil } from 'lucide-react'
+import { ArrowLeft, Bell, MessageSquare, AlertTriangle, Trash2, Pencil, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -15,6 +15,7 @@ import {
   getAdminUserDetail,
   getAdminUserDocuments,
   deleteAdminUser,
+  setAdminUserActive,
   type AdminUserApiErrorCode,
 } from '@/lib/userAdminApi'
 import { EditUserDialog } from '@/components/shared/EditUserDialog'
@@ -27,7 +28,13 @@ type Tab = typeof tabs[number]
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
+  // Reached from Team › Staff (URL under /team) vs the Users list — drives the
+  // back link/label so navigation returns to the section you came from.
+  const inTeamContext = location.pathname.startsWith('/team')
+  const backTo = inTeamContext ? '/team' : '/users'
+  const backLabel = inTeamContext ? 'Team' : 'Users'
   const [activeTab, setActiveTab] = useState<Tab>('Profile')
   const [showEdit, setShowEdit] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -39,7 +46,7 @@ export default function UserDetailPage() {
     onSuccess: () => {
       toast.success(t('users.deleteUser.success', { name: '' }))
       void queryClient.invalidateQueries({ queryKey: ['admin-users'] })
-      void navigate('/users')
+      void navigate(backTo)
     },
     onError: (err: unknown) => {
       const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code as AdminUserApiErrorCode | undefined
@@ -47,6 +54,22 @@ export default function UserDetailPage() {
       else if (code === 'User.LastAdmin') toast.error(t('users.deleteUser.err.lastAdmin'))
       else toast.error(t('users.deleteUser.err.generic'))
       setConfirmDelete(false)
+    },
+  })
+
+  // Suspend / reactivate (reversible access lock). Roles & permissions are preserved.
+  const setActiveMutation = useMutation({
+    mutationFn: (nextActive: boolean) => setAdminUserActive(id!, nextActive),
+    onSuccess: (_data, nextActive) => {
+      toast.success(nextActive ? 'User reactivated' : 'User suspended')
+      void queryClient.invalidateQueries({ queryKey: ['admin-user-detail', id] })
+      void queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+    },
+    onError: (err: unknown) => {
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code as AdminUserApiErrorCode | undefined
+      if (code === 'User.SelfDelete') toast.error('You cannot suspend your own account.')
+      else if (code === 'User.LastAdmin') toast.error('Cannot suspend the last active super-admin.')
+      else toast.error('Failed to update access. Please try again.')
     },
   })
 
@@ -97,16 +120,26 @@ export default function UserDetailPage() {
   const initials = getInitials(user.name)
   const bgColor = getAvatarColor(user.name)
   const status = user.isActive ? 'Active' : 'Suspended'
+  // Internal SnapAccount staff hold a PLATFORM-scoped role; customers are org-scoped
+  // (or unscoped). Staff have no business/GST/ITR/loan/subscription context, so this
+  // page adapts rather than showing an empty customer layout.
+  const isStaff = user.roleScope === 'platform'
+  const CUSTOMER_ONLY_TABS: Tab[] = ['Documents', 'GST Returns', 'ITR History', 'Loans', 'Subscription']
+  const visibleTabs = tabs.filter(tab => {
+    if (tab === 'Audit Log') return hasPermission('audit.view')
+    if (isStaff && CUSTOMER_ONLY_TABS.includes(tab)) return false
+    return true
+  })
 
   return (
     <div className="space-y-5">
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => void navigate('/users')}
+        onClick={() => void navigate(backTo)}
         leftIcon={<ArrowLeft className="h-4 w-4" />}
       >
-        Users
+        {backLabel}
       </Button>
 
       {/* Delete confirmation banner */}
@@ -151,7 +184,11 @@ export default function UserDetailPage() {
                 {user.email && <><span>{user.email}</span><span>·</span></>}
                 <span>Joined {formatDate(user.joinedAt)}</span>
               </div>
-              {user.business && (
+              {isStaff ? (
+                <div className="mt-1 text-sm">
+                  <Badge variant="info" size="sm">Internal staff</Badge>
+                </div>
+              ) : user.business && (
                 <div className="flex items-center gap-4 mt-1 text-sm text-neutral-500">
                   <span className="font-medium text-neutral-700">{user.business.businessName}</span>
                   {user.business.gstin && (
@@ -172,10 +209,21 @@ export default function UserDetailPage() {
           </div>
 
           <div className="flex gap-2 shrink-0">
-            <Button variant="secondary" size="sm" leftIcon={<Bell className="h-4 w-4" />}>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<Bell className="h-4 w-4" />}
+              disabled
+              title="Notification composer coming soon"
+            >
               Notify
             </Button>
-            <Button variant="secondary" size="sm" leftIcon={<MessageSquare className="h-4 w-4" />}>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<MessageSquare className="h-4 w-4" />}
+              onClick={() => void navigate('/chat')}
+            >
               Chat
             </Button>
             {canManageUser && (
@@ -188,9 +236,18 @@ export default function UserDetailPage() {
                 {t('users.editUser.cta')}
               </Button>
             )}
-            <Button variant="ghost" size="sm" className="text-warning-600 hover:bg-warning-50" leftIcon={<AlertTriangle className="h-4 w-4" />}>
-              Suspend
-            </Button>
+            {canManageUser && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className={user.isActive ? 'text-warning-600 hover:bg-warning-50' : 'text-success-600 hover:bg-success-50'}
+                leftIcon={user.isActive ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                loading={setActiveMutation.isPending}
+                onClick={() => setActiveMutation.mutate(!user.isActive)}
+              >
+                {user.isActive ? 'Suspend' : 'Reactivate'}
+              </Button>
+            )}
             {canManageUser && (
               <Button
                 variant="ghost"
@@ -208,7 +265,7 @@ export default function UserDetailPage() {
 
       {/* Tab navigation */}
       <div className="flex border-b border-neutral-200 overflow-x-auto" role="tablist">
-        {tabs.filter(tab => tab !== 'Audit Log' || hasPermission('audit.view')).map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab}
             role="tab"
@@ -230,9 +287,29 @@ export default function UserDetailPage() {
       {activeTab === 'Profile' && (
         <div className="grid grid-cols-2 gap-5">
           <Card>
-            <CardHeader title="Business Details" />
+            <CardHeader title={isStaff ? 'Staff Details' : 'Business Details'} />
             <dl className="space-y-3 text-sm">
-              {user.business ? (
+              {isStaff ? (
+                <>
+                  <div className="flex justify-between">
+                    <dt className="text-neutral-500">Account type</dt>
+                    <dd className="font-medium">Internal staff</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-neutral-500">Role scope</dt>
+                    <dd>Platform</dd>
+                  </div>
+                  {user.userType && (
+                    <div className="flex justify-between">
+                      <dt className="text-neutral-500">User type</dt>
+                      <dd>{user.userType}</dd>
+                    </div>
+                  )}
+                  <p className="text-neutral-400 text-xs pt-1">
+                    Use “Edit” to change this staff member’s role and permissions.
+                  </p>
+                </>
+              ) : user.business ? (
                 <>
                   <div className="flex justify-between">
                     <dt className="text-neutral-500">Business Name</dt>

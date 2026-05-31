@@ -31,19 +31,15 @@ using Xunit;
 
 namespace AuthService.IntegrationTests;
 
-[Collection("AddUserApi")]
-public class AddUserApiTests : IAsyncLifetime
+[Collection("integration")]
+public class AddUserApiTests(PostgresFixture pg) : IAsyncLifetime
 {
     // ─────────────────────────────────────────────────────────────────────
     // Infrastructure
     // ─────────────────────────────────────────────────────────────────────
 
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
-        .WithDatabase("snapaccount_adduser_test")
-        .WithUsername("postgres")
-        .WithPassword("postgres_adduser_test")
-        .Build();
+    private readonly PostgresFixture _pg = pg;
+    private string _connectionString = null!;
 
     private WebApplicationFactory<Program> _factory = null!;
     private HttpClient _unauthenticated = null!;
@@ -66,14 +62,14 @@ public class AddUserApiTests : IAsyncLifetime
         // only populates IConfiguration, so set the env var too for the local-login tests.
         Environment.SetEnvironmentVariable("LOCAL_AUTH", "true");
 
-        await _postgres.StartAsync();
+        _connectionString = _pg.NewDatabaseConnectionString();
 
         // ── Step 1: Create the schema BEFORE the WebApplicationFactory builds.
         // The factory startup (Program.cs) runs LocalAuthService.EnsureDevAdminAsync which
         // queries auth.role. If the schema doesn't exist yet, startup crashes.
         // Solution: create schema via a direct DbContext BEFORE factory construction.
         var preSeedOpts = new DbContextOptionsBuilder<AuthService.Infrastructure.Persistence.AuthDbContext>()
-            .UseNpgsql(_postgres.GetConnectionString())
+            .UseNpgsql(_connectionString)
             .Options;
         using (var preSeedDb = new AuthService.Infrastructure.Persistence.AuthDbContext(preSeedOpts))
         {
@@ -89,14 +85,14 @@ public class AddUserApiTests : IAsyncLifetime
                 // Override the connection string so BOTH EF Core AND Hangfire point to the test DB
                 builder.UseSetting(
                     "ConnectionStrings:DefaultConnection",
-                    _postgres.GetConnectionString());
+                    _connectionString);
 
                 builder.ConfigureServices(services =>
                 {
                     services.RemoveAll<DbContextOptions>();
                     services.RemoveAll<DbContextOptions<AuthService.Infrastructure.Persistence.AuthDbContext>>();
                     services.AddDbContext<AuthService.Infrastructure.Persistence.AuthDbContext>(opts =>
-                        opts.UseNpgsql(_postgres.GetConnectionString()));
+                        opts.UseNpgsql(_connectionString));
 
                     services.RemoveAll<IFirebaseAuthService>();
                     var fb = new Mock<IFirebaseAuthService>();
@@ -110,7 +106,7 @@ public class AddUserApiTests : IAsyncLifetime
 
         // ── Step 2: Seed test data via a direct DbContext (no DI interceptors)
         var seedOpts = new DbContextOptionsBuilder<AuthService.Infrastructure.Persistence.AuthDbContext>()
-            .UseNpgsql(_postgres.GetConnectionString())
+            .UseNpgsql(_connectionString)
             .Options;
         using var seedDb = new AuthService.Infrastructure.Persistence.AuthDbContext(seedOpts);
         await SeedTestDataAsync(seedDb);
@@ -123,7 +119,6 @@ public class AddUserApiTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("LOCAL_AUTH", null);
         _unauthenticated.Dispose();
         await _factory.DisposeAsync();
-        await _postgres.DisposeAsync();
     }
 
     // ─────────────────────────────────────────────────────────────────────

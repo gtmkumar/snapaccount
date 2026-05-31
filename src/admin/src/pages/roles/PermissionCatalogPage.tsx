@@ -6,7 +6,7 @@
  *
  * i18n: uses @/i18n t() — NOT react-i18next.
  */
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, Plus, Info, X, Pencil, Ban, CheckCircle2,
@@ -24,6 +24,7 @@ import { toast } from 'sonner'
 import { t } from '@/i18n'
 import {
   listPermissions,
+  listOrgRoles,
   createPermission,
   updatePermission,
   deletePermission,
@@ -97,6 +98,23 @@ export default function PermissionCatalogPage() {
 
   // Build unique module options for the filter select
   const moduleOptions = catalog?.map(m => ({ value: m.module, label: m.displayName })) ?? []
+
+  // Map each resource → the actions already used with it, so the Create dialog can
+  // suggest actions scoped to the chosen resource (e.g. gst → returns.file, …)
+  // instead of the whole global action catalog.
+  const resourceActions = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    for (const m of catalog ?? []) {
+      for (const p of m.permissions) {
+        const list = map[p.resource] ?? (map[p.resource] = [])
+        list.push(p.action)
+      }
+    }
+    for (const key of Object.keys(map)) {
+      map[key] = Array.from(new Set(map[key])).sort()
+    }
+    return map
+  }, [catalog])
 
   // Filter + search the catalog
   const filteredCatalog: PermissionModule[] = (catalog ?? [])
@@ -273,6 +291,7 @@ export default function PermissionCatalogPage() {
         onClose={() => setShowCreate(false)}
         onCreated={handleCreated}
         existingResources={catalog?.map(m => m.module) ?? KNOWN_RESOURCES}
+        resourceActions={resourceActions}
       />
 
       {/* Manage resource/action types (gap #3) */}
@@ -427,7 +446,28 @@ function PermissionRow({ perm, highlighted }: { perm: CatalogPermission; highlig
   const [copied, setCopied] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [showDeactivate, setShowDeactivate] = useState(false)
+  const [showRoles, setShowRoles] = useState(false)
+  const [rolesPos, setRolesPos] = useState<{ top: number; left: number } | null>(null)
+  const rolesBtnRef = useRef<HTMLButtonElement>(null)
   const isInactive = !perm.isActive
+
+  // Which roles hold this permission — resolved from the shared roles cache (one
+  // fetch for the whole page). Names are matched on the permission code.
+  const { data: roles } = useQuery({
+    queryKey: ['org', 'roles'],
+    queryFn: listOrgRoles,
+    staleTime: 60_000,
+  })
+  const rolesWithPerm = (roles ?? [])
+    .filter(r => r.permissionNames.includes(perm.name))
+    .map(r => r.displayName)
+    .sort()
+
+  const openRoles = () => {
+    const rect = rolesBtnRef.current?.getBoundingClientRect()
+    if (rect) setRolesPos({ top: rect.bottom + 4, left: rect.left + rect.width / 2 })
+    setShowRoles(v => !v)
+  }
 
   // Optimistic active toggle
   const toggleMutation = useMutation({
@@ -497,13 +537,48 @@ function PermissionRow({ perm, highlighted }: { perm: CatalogPermission; highlig
         <span aria-live="polite" className="sr-only">{copied ? t('permissions.catalog.codeCopied') : ''}</span>
       </div>
 
-      {/* # roles — real value from API, no client-side default */}
-      <span className={cn(
-        'text-sm text-center tabular-nums',
-        perm.roleCount === 0 ? 'text-[var(--text-tertiary)]' : 'text-[var(--text-secondary)]'
-      )}>
-        {perm.roleCount}
-      </span>
+      {/* # roles — click to see which roles hold this permission */}
+      <div className="flex justify-center">
+        {perm.roleCount === 0 ? (
+          <span className="text-sm tabular-nums text-[var(--text-tertiary)]">0</span>
+        ) : (
+          <button
+            ref={rolesBtnRef}
+            type="button"
+            onClick={openRoles}
+            onBlur={() => setTimeout(() => setShowRoles(false), 150)}
+            aria-expanded={showRoles}
+            title={t('permissions.catalog.rolesTooltip', { count: perm.roleCount })}
+            className="text-sm tabular-nums text-[var(--text-secondary)] underline decoration-dotted underline-offset-2 hover:text-[var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)] rounded px-1"
+          >
+            {perm.roleCount}
+          </button>
+        )}
+        {showRoles && rolesPos && (
+          // Fixed positioning escapes the module card's overflow-hidden clip.
+          <div
+            style={{ position: 'fixed', top: rolesPos.top, left: rolesPos.left, transform: 'translateX(-50%)' }}
+            className="z-50 min-w-44 max-w-64 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] shadow-[var(--shadow-md)] p-2 text-left"
+          >
+            <p className="px-1 pb-1 text-xs font-medium text-[var(--text-tertiary)]">
+              {t('permissions.catalog.rolesPopoverTitle')}
+            </p>
+            {rolesWithPerm.length === 0 ? (
+              <p className="px-1 py-1 text-xs text-[var(--text-tertiary)]">
+                {roles ? t('permissions.catalog.rolesUnresolved') : t('common.loading')}
+              </p>
+            ) : (
+              <ul className="max-h-48 overflow-y-auto space-y-0.5">
+                {rolesWithPerm.map(name => (
+                  <li key={name} className="px-1.5 py-1 text-sm text-[var(--text-primary)] rounded hover:bg-[var(--surface-sunken)]">
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Active toggle — real value from API */}
       <div className="flex justify-center">
@@ -558,12 +633,14 @@ function PermissionRow({ perm, highlighted }: { perm: CatalogPermission; highlig
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CreatePermissionDialog({
-  open, onClose, onCreated, existingResources,
+  open, onClose, onCreated, existingResources, resourceActions,
 }: {
   open: boolean
   onClose: () => void
   onCreated: (perm: CatalogPermission) => void
   existingResources: string[]
+  /** resource key → actions already used with it, for resource-scoped suggestions. */
+  resourceActions: Record<string, string[]>
 }) {
   const queryClient = useQueryClient()
   const [resource, setResource] = useState('')
@@ -628,7 +705,16 @@ function CreatePermissionDialog({
     ...resourceKeys, ...KNOWN_RESOURCES, ...existingResources,
   ])).sort()
   const filteredResources = allResources.filter(r => r.startsWith(resource.toLowerCase()))
-  const filteredActions = actionKeys.filter(a => a.startsWith(action.toLowerCase())).sort().slice(0, 50)
+
+  // Scope action suggestions to the chosen resource when it already has actions
+  // (e.g. gst → its own actions). Brand-new/unknown resources fall back to the full
+  // action catalog. Free-typing a new action stays available either way.
+  const scopedActions = resourceActions[resource.toLowerCase()]
+  const actionPool = scopedActions && scopedActions.length > 0 ? scopedActions : actionKeys
+  const filteredActions = Array.from(new Set(actionPool))
+    .filter(a => a.startsWith(action.toLowerCase()))
+    .sort()
+    .slice(0, 50)
 
   return (
     <Dialog

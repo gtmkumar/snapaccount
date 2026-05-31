@@ -55,25 +55,30 @@ export function OverrideModuleSection({
 
   return (
     <div className="rounded-xl border border-[var(--border-subtle)] overflow-hidden">
-      <button
-        type="button"
-        onClick={onToggleExpand}
-        aria-expanded={isExpanded}
-        className="w-full flex items-center gap-3 px-4 py-2.5 bg-[var(--surface-sunken)] hover:bg-[var(--surface-raised)] transition-colors text-left"
-      >
-        {isExpanded ? <ChevronDown className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" /> : <ChevronRight className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" />}
-        <span className="flex-1 text-sm font-semibold text-[var(--text-primary)]">{module.displayName}</span>
+      {/* Two sibling buttons inside a row — never nest a <button> inside a <button>
+          (invalid HTML / React hydration error). The expand control wraps only the
+          chevron + label; "Select all" is a separate sibling. */}
+      <div className="w-full flex items-center gap-3 px-4 py-2.5 bg-[var(--surface-sunken)] hover:bg-[var(--surface-raised)] transition-colors">
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          aria-expanded={isExpanded}
+          className="flex flex-1 items-center gap-3 text-left min-w-0"
+        >
+          {isExpanded ? <ChevronDown className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" /> : <ChevronRight className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" />}
+          <span className="flex-1 text-sm font-semibold text-[var(--text-primary)] truncate">{module.displayName}</span>
+        </button>
         {anyGrantable && (
           <button
             type="button"
-            onClick={e => { e.stopPropagation(); onSelectAll() }}
-            className="text-xs text-[var(--brand-primary)] hover:underline px-1"
+            onClick={onSelectAll}
+            className="text-xs text-[var(--brand-primary)] hover:underline px-1 shrink-0"
             title={t('users.addUser.selectAllGrantable')}
           >
             {allSelected ? 'Deselect all' : t('users.addUser.selectAllGrantable')}
           </button>
         )}
-      </button>
+      </div>
 
       {isExpanded && (
         <div className="divide-y divide-[var(--border-subtle)]">

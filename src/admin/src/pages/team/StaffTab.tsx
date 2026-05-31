@@ -1,7 +1,7 @@
 /**
  * StaffTab — design Screen 87 (Staff List).
  * SnapAccount internal-staff roster with live queue load + activity, plus row
- * actions: View profile (→ /users/:id), Edit role (reuses EditUserDialog), and
+ * actions: View profile (→ /team/staff/:id), Edit role (reuses EditUserDialog), and
  * Deactivate / Reactivate (reversible access lock). Mutating actions are gated by
  * platform.admins.invite; View is always available.
  * Shares the workload-grid query with WorkloadTab (TanStack cache).
@@ -166,7 +166,7 @@ export function StaffTab({ onInvite }: StaffTabProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => void navigate(`/users/${r.original.userId}`)}
+              onClick={() => void navigate(`/team/staff/${r.original.userId}`)}
               aria-label={t('team.staff.action.view', 'View profile')}
               title={t('team.staff.action.view', 'View profile')}
             >

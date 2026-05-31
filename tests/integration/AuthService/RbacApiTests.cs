@@ -30,19 +30,15 @@ using Xunit;
 
 namespace AuthService.IntegrationTests;
 
-[Collection("RbacApi")]
-public class RbacApiTests : IAsyncLifetime
+[Collection("integration")]
+public class RbacApiTests(PostgresFixture pg) : IAsyncLifetime
 {
     // ─────────────────────────────────────────────────────────────────────
     // Infrastructure
     // ─────────────────────────────────────────────────────────────────────
 
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
-        .WithDatabase("snapaccount_rbac_test")
-        .WithUsername("postgres")
-        .WithPassword("postgres_rbac_test")
-        .Build();
+    private readonly PostgresFixture _pg = pg;
+    private string _connectionString = null!;
 
     private WebApplicationFactory<Program> _factory = null!;
     private HttpClient _clientUnauthenticated = null!;
@@ -53,7 +49,7 @@ public class RbacApiTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        _connectionString = _pg.NewDatabaseConnectionString();
 
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -67,7 +63,7 @@ public class RbacApiTests : IAsyncLifetime
                     services.RemoveAll<DbContextOptions>();
                     services.RemoveAll<DbContextOptions<AuthService.Infrastructure.Persistence.AuthDbContext>>();
                     services.AddDbContext<AuthService.Infrastructure.Persistence.AuthDbContext>(options =>
-                        options.UseNpgsql(_postgres.GetConnectionString()));
+                        options.UseNpgsql(_connectionString));
 
                     services.RemoveAll<IFirebaseAuthService>();
                     var firebaseMock = new Mock<IFirebaseAuthService>();
@@ -92,7 +88,6 @@ public class RbacApiTests : IAsyncLifetime
     {
         _clientUnauthenticated.Dispose();
         await _factory.DisposeAsync();
-        await _postgres.DisposeAsync();
     }
 
     // ─────────────────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { t } from '@/i18n'
-import { Search, Plus, Lock, ChevronDown, ChevronRight, Shield, MoreHorizontal, Save, X, AlertTriangle } from 'lucide-react'
+import { Search, Plus, Lock, ChevronDown, ChevronRight, Shield, MoreHorizontal, Save, X, AlertTriangle, Copy } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -80,6 +80,44 @@ export default function RolesPermissionsPage() {
     setShowCreateDialog(false)
     setSelectedRoleId(roleId)
   }
+
+  // Duplicate a (typically system / read-only) role into a new editable custom
+  // role, copying its permission grants, then select the copy for editing.
+  const queryClient = useQueryClient()
+  const duplicateMutation = useMutation({
+    mutationFn: async (source: OrgRoleSummary) => {
+      const existing = new Set((roles ?? []).map(r => r.name.toLowerCase()))
+      const base = `${source.name.toLowerCase()}_copy`
+      let name = base
+      let n = 2
+      while (existing.has(name)) name = `${base}_${n++}`
+
+      const created = await createOrgRole({
+        name,
+        displayName: `${source.displayName} (Copy)`,
+        description: source.description ?? undefined,
+      })
+      const perms = await getRolePermissions(source.id)
+      const allow = perms.permissions.filter(p => p.isAllowed).map(p => p.permissionId)
+      const deny = perms.permissions.filter(p => !p.isAllowed).map(p => p.permissionId)
+      if (allow.length || deny.length) {
+        await setRolePermissions(created.roleId, allow, deny)
+      }
+      return created.roleId
+    },
+    onSuccess: (roleId) => {
+      toast.success(t('roles.duplicated'))
+      void queryClient.invalidateQueries({ queryKey: ['org', 'roles'] })
+      setSelectedRoleId(roleId)
+    },
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      // 403 = the copy was created but some grants exceed the caller's own
+      // permissions (delegation rule); the partial copy is still selected.
+      toast.error(status === 403 ? t('roles.duplicatePartial') : t('roles.createError'))
+      void queryClient.invalidateQueries({ queryKey: ['org', 'roles'] })
+    },
+  })
 
   return (
     <div className="flex flex-col h-full">
@@ -155,6 +193,8 @@ export default function RolesPermissionsPage() {
                 role={selectedRole}
                 catalog={permCatalog ?? []}
                 grantableIds={grantableIds}
+                onDuplicate={() => duplicateMutation.mutate(selectedRole)}
+                duplicating={duplicateMutation.isPending}
               />
             )}
           </div>
@@ -219,11 +259,13 @@ function RoleListItem({
 type PermState = 'allow' | 'deny' | 'none'
 
 function PermissionMatrix({
-  role, catalog, grantableIds,
+  role, catalog, grantableIds, onDuplicate, duplicating,
 }: {
   role: OrgRoleSummary
   catalog: PermissionModule[]
   grantableIds: Set<string>
+  onDuplicate?: () => void
+  duplicating?: boolean
 }) {
   const queryClient = useQueryClient()
 
@@ -403,6 +445,18 @@ function PermissionMatrix({
               {t('roles.matrix.systemReadOnly')}
             </p>
           </div>
+          {onDuplicate && (
+            <Button
+              variant="primary"
+              size="sm"
+              className="shrink-0"
+              onClick={onDuplicate}
+              loading={duplicating}
+            >
+              <Copy className="h-4 w-4 mr-1" />
+              {t('roles.duplicateToEdit')}
+            </Button>
+          )}
         </div>
       )}
 

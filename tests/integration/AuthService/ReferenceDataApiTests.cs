@@ -31,19 +31,15 @@ using Xunit;
 
 namespace AuthService.IntegrationTests;
 
-[Collection("RefDataApi")]
-public class ReferenceDataApiTests : IAsyncLifetime
+[Collection("integration")]
+public class ReferenceDataApiTests(PostgresFixture pg) : IAsyncLifetime
 {
     // ─────────────────────────────────────────────────────────────────────
     // Infrastructure
     // ─────────────────────────────────────────────────────────────────────
 
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
-        .WithDatabase("snapaccount_refdata_test")
-        .WithUsername("postgres")
-        .WithPassword("postgres_refdata_test")
-        .Build();
+    private readonly PostgresFixture _pg = pg;
+    private string _connectionString = null!;
 
     private WebApplicationFactory<Program> _factory = null!;
     private HttpClient _unauthenticated = null!;
@@ -59,11 +55,11 @@ public class ReferenceDataApiTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        _connectionString = _pg.NewDatabaseConnectionString();
 
         // ── Step 1: Create schema BEFORE factory (avoids EnsureDevAdminAsync race) ──
         var preSeedOpts = new DbContextOptionsBuilder<AuthService.Infrastructure.Persistence.AuthDbContext>()
-            .UseNpgsql(_postgres.GetConnectionString())
+            .UseNpgsql(_connectionString)
             .Options;
         await using (var preSeedDb = new AuthService.Infrastructure.Persistence.AuthDbContext(preSeedOpts))
         {
@@ -85,14 +81,14 @@ public class ReferenceDataApiTests : IAsyncLifetime
                 builder.UseSetting("LOCAL_AUTH", "false");
                 builder.UseSetting(
                     "ConnectionStrings:DefaultConnection",
-                    _postgres.GetConnectionString());
+                    _connectionString);
 
                 builder.ConfigureServices(services =>
                 {
                     services.RemoveAll<DbContextOptions>();
                     services.RemoveAll<DbContextOptions<AuthService.Infrastructure.Persistence.AuthDbContext>>();
                     services.AddDbContext<AuthService.Infrastructure.Persistence.AuthDbContext>(opts =>
-                        opts.UseNpgsql(_postgres.GetConnectionString()));
+                        opts.UseNpgsql(_connectionString));
 
                     services.RemoveAll<IFirebaseAuthService>();
                     var fb = new Mock<IFirebaseAuthService>();
@@ -111,7 +107,6 @@ public class ReferenceDataApiTests : IAsyncLifetime
     {
         _unauthenticated.Dispose();
         await _factory.DisposeAsync();
-        await _postgres.DisposeAsync();
     }
 
     // ─────────────────────────────────────────────────────────────────────

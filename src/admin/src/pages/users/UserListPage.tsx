@@ -21,13 +21,23 @@ import { EditUserDialog } from '@/components/shared/EditUserDialog'
 import { usePermission } from '@/hooks/usePermission'
 import { t } from '@/i18n'
 
-// Customer user-type display labels (staff types never appear on this list).
+// Customer user-type display labels (staff/org-member types never appear on this
+// list — the backend now lists only real customers: business owners + employees).
 function formatUserType(code?: string | null): string {
   switch (code) {
     case 'BUSINESS_OWNER': return 'Business Owner'
     case 'EMPLOYEE': return 'Employee'
     default: return '—'
   }
+}
+
+// A listed customer either owns a business (→ Business Owner) or carries an explicit
+// customer type. When the explicit type is missing but they own an organisation, show
+// "Business Owner" rather than a bare "—".
+function displayUserType(user: AdminUserListItem): string {
+  if (user.userType) return formatUserType(user.userType)
+  if (user.organizationId || user.businessName) return 'Business Owner'
+  return '—'
 }
 
 function buildUserColumns(
@@ -69,7 +79,7 @@ function buildUserColumns(
     {
       accessorKey: 'userType',
       header: 'User Type',
-      cell: ({ row }) => <span className="text-sm text-neutral-600">{formatUserType(row.original.userType)}</span>,
+      cell: ({ row }) => <span className="text-sm text-neutral-600">{displayUserType(row.original)}</span>,
     },
     {
       accessorKey: 'businessName',

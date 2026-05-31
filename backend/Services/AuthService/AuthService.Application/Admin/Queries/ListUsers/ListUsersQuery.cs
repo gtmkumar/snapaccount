@@ -11,12 +11,21 @@ namespace AuthService.Application.Admin.Queries.ListUsers;
 /// Paginated CUSTOMER list for the admin Users page (design Screen 84).
 ///
 /// SCOPE — customers only: this list is the public/mobile population (SME owners +
-/// their employees). Internal SnapAccount staff (CA, reviewer, ops, admins) are
-/// EXCLUDED — they live on the Team page. The structural separator is the platform
-/// role assignment: internal staff always hold an active <c>auth.user_role</c>
-/// (see <see cref="AuthService.Application.Admin.Queries.GetTeamMembers"/>); customers
-/// never do (mobile signup creates no UserRole; they get org membership or nothing).
-/// So "customer" == "no active platform user_role".
+/// their employees). Internal SnapAccount staff (CA, reviewer, ops, admins) AND the
+/// operator's own org members (e.g. ORG_ADMIN, DEV_LIMITED_MANAGER) are EXCLUDED —
+/// they live on the Team page.
+///
+/// "Customer" is defined POSITIVELY (a real product end-user), not merely by the
+/// absence of a platform role. A user is a customer when BOTH hold:
+///   (a) they have NO active platform <c>auth.user_role</c> (those are internal staff —
+///       see <see cref="AuthService.Application.Admin.Queries.GetTeamMembers"/>), AND
+///   (b) they are a genuine product user — i.e. they OWN an organisation (a business
+///       owner) OR carry a customer profile type (BUSINESS_OWNER / EMPLOYEE; mobile
+///       signup always creates such a profile via RegisterUserCommand).
+///
+/// The negative-only rule ("no user_role") previously leaked operator org-members who
+/// hold neither a platform role nor any customer signal (org-membership only) into the
+/// customer list; clause (b) closes that leak without hiding any real customer.
 ///
 /// <paramref name="UserType"/> further narrows within customers (BUSINESS_OWNER /
 /// EMPLOYEE); null = all customer types. Joins each user to their primary owned
@@ -63,6 +72,10 @@ public sealed class ListUsersQueryValidator : AbstractValidator<ListUsersQuery>
 public sealed class ListUsersQueryHandler(IAuthDbContext db)
     : IQueryHandler<ListUsersQuery, PaginatedResult<UserListItemDto>>
 {
+    // Customer-facing profile types (staff use STAFF / null). A user carrying one of
+    // these — or owning an organisation — is treated as a real customer.
+    private static readonly string[] CustomerUserTypes = ["BUSINESS_OWNER", "EMPLOYEE"];
+
     public async Task<Result<PaginatedResult<UserListItemDto>>> Handle(ListUsersQuery request, CancellationToken ct)
     {
         var page = Math.Max(1, request.Page);
@@ -83,6 +96,15 @@ public sealed class ListUsersQueryHandler(IAuthDbContext db)
                 on u.Id equals profJoin.UserId into profGroup
             from prof in profGroup.DefaultIfEmpty()
             select new { u, o, prof };
+
+        // POSITIVE customer test (closes the org-member leak — see class doc clause (b)):
+        // keep only genuine product end-users — those who own an organisation (business
+        // owners) or carry a customer profile type. A user with no platform role AND no
+        // customer signal (org-membership only, e.g. an operator's ORG_ADMIN /
+        // DEV_LIMITED_MANAGER) is NOT a customer and is filtered out here.
+        baseQuery = baseQuery.Where(x =>
+            x.o != null
+            || (x.prof != null && CustomerUserTypes.Contains(x.prof.UserType)));
 
         if (request.IsActive.HasValue)
             baseQuery = baseQuery.Where(x => x.u.IsActive == request.IsActive.Value);

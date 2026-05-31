@@ -263,6 +263,16 @@ export const router = createBrowserRouter([
       </ProtectedLayout>
     ),
   },
+  {
+    // Staff profile lives under the Team namespace so the sidebar stays on "Team"
+    // (not "Users"). Reuses UserDetailPage, which renders a staff-adapted view.
+    path: '/team/staff/:id',
+    element: (
+      <ProtectedLayout>
+        <UserDetailPage />
+      </ProtectedLayout>
+    ),
+  },
 
   // Subscriptions — Phase 6F full build (ADMIN only)
   {
