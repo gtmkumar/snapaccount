@@ -38,15 +38,35 @@ const API_BASE_URL = resolveHost(
   (extra.apiBaseUrl as string | undefined) ?? 'http://localhost:5101',
 );
 
-// Document service (upload / OCR / scan)
-const DOCUMENTS_BASE_URL = resolveHost(
-  (extra.documentsBaseUrl as string | undefined) ?? API_BASE_URL,
-);
+// Host root (scheme + host, no port) derived from API_BASE_URL so the Android
+// loopback rewrite and any app.json host override apply to every service.
+const HOST_ROOT = API_BASE_URL.replace(/:\d+$/, '');
+
+// Per-service ports — match the fixed, directly-bound ports pinned by the
+// Aspire AppHost (backend/AppHost/AppHost.cs WithDevLoopDefaults(..., port)).
+// When only Auth+Document run standalone, set extra.documentsBaseUrl in app.json
+// to override the document host; everything else still points at these ports.
+const SERVICE_PORTS: Record<string, number> = {
+  '/auth': 5101,
+  '/me': 5101,
+  '/documents': 5102,
+  '/accounting': 5103,
+  '/gst': 5104,
+  '/loans': 5105,
+  '/itr': 5106,
+  '/chat': 5107,
+  '/notifications': 5108,
+  '/reports': 5109,
+  '/subscription': 5110,
+  '/ai': 5111,
+  '/callbacks': 5112,
+};
 
 /** Pick the service host for a given request path. */
 function baseUrlForPath(url?: string): string {
-  if (url && url.startsWith('/documents')) return DOCUMENTS_BASE_URL;
-  return API_BASE_URL;
+  if (!url) return API_BASE_URL;
+  const prefix = Object.keys(SERVICE_PORTS).find((p) => url.startsWith(p));
+  return prefix ? `${HOST_ROOT}:${SERVICE_PORTS[prefix]}` : API_BASE_URL;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

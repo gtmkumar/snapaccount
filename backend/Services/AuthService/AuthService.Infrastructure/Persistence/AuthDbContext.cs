@@ -75,6 +75,14 @@ public class AuthDbContext(DbContextOptions<AuthDbContext> options)
     /// <inheritdoc />
     public DbSet<AuditLogEntry> AuditEvents => Set<AuditLogEntry>();
 
+    public DbSet<AiConfiguration> AiConfigurations => Set<AiConfiguration>();
+
+    public DbSet<AiProviderKey> AiProviderKeys => Set<AiProviderKey>();
+
+    public DbSet<AiModelPrice> AiModelPrices => Set<AiModelPrice>();
+
+    public DbSet<AiUsageLog> AiUsageLogs => Set<AiUsageLog>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -69,7 +69,7 @@
         "projectId": "snapaccount-app"
       },
       "apiBaseUrl": "http://localhost:5101",
-      "documentsBaseUrl": "http://localhost:5047"
+      "documentsBaseUrl": "http://localhost:5102"
     }
   }
 }

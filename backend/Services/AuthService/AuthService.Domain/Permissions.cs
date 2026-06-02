@@ -39,4 +39,5 @@ public static class Permissions
     public const string PlatformRolesManage     = "platform.roles.manage";
     public const string PlatformPermissionsManage = "platform.permissions.manage";
     public const string PlatformRefDataManage     = "platform.refdata.manage";
+    public const string PlatformAiManage          = "platform.ai.manage";
 }

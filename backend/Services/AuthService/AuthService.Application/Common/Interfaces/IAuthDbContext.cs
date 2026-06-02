@@ -82,6 +82,18 @@ public interface IAuthDbContext
     /// </summary>
     DbSet<AuditLogEntry> AuditEvents { get; }
 
+    /// <summary>Platform-wide AI configuration (single row) in <c>auth.ai_configuration</c>.</summary>
+    DbSet<AiConfiguration> AiConfigurations { get; }
+
+    /// <summary>Encrypted AI provider API keys in <c>auth.ai_provider_key</c>.</summary>
+    DbSet<AiProviderKey> AiProviderKeys { get; }
+
+    /// <summary>Maintained AI model price catalog in <c>auth.ai_model_price</c>.</summary>
+    DbSet<AiModelPrice> AiModelPrices { get; }
+
+    /// <summary>Append-only metered AI usage ledger in <c>auth.ai_usage_log</c>.</summary>
+    DbSet<AiUsageLog> AiUsageLogs { get; }
+
     /// <summary>Persists changes to the auth schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

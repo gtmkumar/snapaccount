@@ -94,8 +94,16 @@ public static class DependencyInjection
             // ── Local dev (GCP-free) ── NEVER reached in staging/production ──
             services.AddSingleton<ICloudStorageService, LocalFileStorageService>();
             services.AddSingleton<IPubSubPublisher, NoOpPubSubPublisher>();
-            // Completes OCR inline with stub extraction (no Document AI).
-            services.AddScoped<IOcrJobEnqueuer, DevOcrJobEnqueuer>();
+            // Real, free, offline extraction via the local Tesseract CLI (default provider).
+            services.AddScoped<Services.Ocr.TesseractOcrService>();
+            services.AddScoped<IOcrService>(sp => sp.GetRequiredService<Services.Ocr.TesseractOcrService>());
+            // Resolver picks the provider (Tesseract default; Gemini/etc. when configured + keyed)
+            // from the platform AI config in AuthService. Typed HttpClient for the config + Gemini calls.
+            services.AddHttpClient<Application.Documents.Interfaces.IOcrServiceResolver, Services.Ocr.OcrServiceResolver>();
+            // Reports metered AI usage to the central ledger in AuthService (best-effort).
+            services.AddHttpClient<Application.Documents.Interfaces.IAiUsageReporter, Services.Ocr.HttpAiUsageReporter>();
+            // Runs OCR inline and persists structured fields (replaces the old stub enqueuer).
+            services.AddScoped<IOcrJobEnqueuer, Services.Ocr.InlineOcrJobEnqueuer>();
         }
 
         // Current user — reads Firebase JWT claims from HttpContext.Items

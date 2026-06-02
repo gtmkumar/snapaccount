@@ -60,6 +60,12 @@ public class DocumentDbContext(DbContextOptions<DocumentDbContext> options)
         {
             entityType.SetTableName(ToSnakeCase(entityType.ClrType.Name));
         }
+
+        // jsonb columns — without an explicit column type EF treats these string properties as
+        // `text`, and Npgsql then rejects them against the jsonb columns
+        // ("column is of type jsonb but expression is of type text").
+        modelBuilder.Entity<OcrResult>().Property(o => o.RawResponse).HasColumnType("jsonb");
+        modelBuilder.Entity<OcrField>().Property(f => f.BoundingBox).HasColumnType("jsonb");
     }
 
     /// <summary>Converts a PascalCase identifier to snake_case (e.g. OcrResult -> ocr_result).</summary>

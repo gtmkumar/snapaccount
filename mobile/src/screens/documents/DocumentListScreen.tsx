@@ -5,7 +5,7 @@
  * Matches docs/design/mobile/camera-screen-deltas.md §2
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useQuery } from '@tanstack/react-query';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
@@ -179,7 +180,7 @@ export function DocumentListScreen({ navigation }: Props) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showSearch, setShowSearch] = useState(false);
 
-  const { queue, retry, remove } = useDocumentQueue();
+  const { queue, retry, remove, markReady, enqueue } = useDocumentQueue();
 
   // Show queue items that are still in-flight (not READY — those appear as server docs)
   const activeQueueItems = queue.filter(
@@ -193,10 +194,80 @@ export function DocumentListScreen({ navigation }: Props) {
       if (selectedCategory !== 'All') params.set('category', selectedCategory);
       if (searchQuery) params.set('q', searchQuery);
       const res = await apiClient.get<DocumentDto[]>(`/documents?${params}`);
-      return res.data;
+      // Backend may return either a bare array or a paginated envelope.
+      const data = res.data as unknown;
+      if (Array.isArray(data)) return data as DocumentDto[];
+      return ((data as { items?: DocumentDto[] })?.items ?? []) as DocumentDto[];
     },
     placeholderData: [],
   });
+
+  // ── Poll in-flight (uploaded but still processing) items until the server finishes OCR.
+  // Tesseract OCR completes inline, so this usually resolves on the first poll. When a doc
+  // reaches a terminal status we mark the optimistic card READY and refetch so the server
+  // card (with extracted vendor/amount) replaces it. (SignalR push can supersede this later.)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const processingIds = queue
+    .filter((i) => i.serverId && (i.status === 'PROCESSING' || i.status === 'UPLOADING'))
+    .map((i) => i.serverId!)
+    .join(',');
+
+  useEffect(() => {
+    if (!processingIds) {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      return;
+    }
+    const ids = processingIds.split(',');
+    const tick = async () => {
+      let anyDone = false;
+      await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const res = await apiClient.get<{ status: string }>(`/documents/${id}`);
+            const s = res.data?.status;
+            if (s === 'PROCESSED' || s === 'OCR_COMPLETE' || s === 'IN_REVIEW' || s === 'REJECTED') {
+              markReady(id);
+              anyDone = true;
+            }
+          } catch {
+            // transient — keep polling
+          }
+        }),
+      );
+      if (anyDone) void refetch();
+    };
+    void tick();
+    pollRef.current = setInterval(tick, 2500);
+    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+  }, [processingIds, markReady, refetch]);
+
+  const handlePickFromGallery = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission needed', 'Allow photo library access to upload from gallery.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.9,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const filename = asset.fileName ?? `gallery_${Date.now()}.jpg`;
+      await enqueue({ localUri: asset.uri, filename });
+    } catch {
+      Alert.alert('Error', 'Could not pick image from gallery.');
+    }
+  };
+
+  const handleAddDocument = () => {
+    Alert.alert('Add Document', 'Choose how to add a document', [
+      { text: 'Take Photo', onPress: () => navigation.navigate('Camera') },
+      { text: 'Upload from Gallery', onPress: handlePickFromGallery },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -305,7 +376,7 @@ export function DocumentListScreen({ navigation }: Props) {
               </Text>
               <Pressable
                 style={styles.emptyBtn}
-                onPress={() => navigation.navigate('Camera')}
+                onPress={handleAddDocument}
               >
                 <Ionicons name="camera-outline" size={18} color={Colors.neutral[0]} style={{ marginRight: 6 }} />
                 <Text style={styles.emptyBtnText}>Capture First Document</Text>
@@ -318,7 +389,7 @@ export function DocumentListScreen({ navigation }: Props) {
       {/* FAB */}
       <Pressable
         style={styles.fab}
-        onPress={() => navigation.navigate('Camera')}
+        onPress={handleAddDocument}
         accessibilityLabel="Add document"
         accessibilityRole="button"
       >

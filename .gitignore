@@ -128,3 +128,6 @@ ruvector.db
 # Root-level screenshots captured during local verification
 /*.png
 .claude/worktrees/
+
+# Local OCR scratch dir (runtime temp)
+.ocr-scratch/
