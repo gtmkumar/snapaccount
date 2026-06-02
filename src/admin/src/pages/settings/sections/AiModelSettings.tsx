@@ -3,7 +3,7 @@
  * Wired to GET/PATCH /auth/config/ai.
  * Replaces local-state-only version.
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Save, Brain, Zap, Clock } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { getAiConfig, updateAiConfig, getAiUsage, testAiConnection } from '@/lib/settingsApi'
+import { getAiConfig, updateAiConfig, getAiUsage, testAiConnection, type AiConfig } from '@/lib/settingsApi'
 import { toast } from 'sonner'
 
 // Provider ids match the backend (auth.ai_configuration.ocr_provider). `needsKey` controls
@@ -64,7 +64,9 @@ export function AiModelSettings() {
   const [autoClassifyEnabled, setAutoClassifyEnabled] = useState(true)
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.75)
   const [showAdvanced, setShowAdvanced] = useState(false)
-  const [enabledLanguages, setEnabledLanguages] = useState<string[]>(['Hindi', 'Bengali'])
+  const [enabledLanguages, setEnabledLanguages] = useState<string[]>([])
+  // Per-feature model/temperature overrides, keyed by feature name (persisted).
+  const [featureModels, setFeatureModels] = useState<Record<string, { model: string; temperature: number }>>({})
   // Raw API keys typed by the admin (write-only; cleared after save). Keyed by provider id.
   const [keyInputs, setKeyInputs] = useState<Record<string, string>>({})
   const keyInputRef = useRef<HTMLInputElement>(null)
@@ -90,15 +92,21 @@ export function AiModelSettings() {
     staleTime: 30_000,
   })
 
+  // Reset all form state to a server config snapshot (used on load and on Cancel).
+  const applyServerConfig = useCallback((d: AiConfig) => {
+    if (d.provider) setProvider(d.provider)
+    if (d.modelId) setModelId(d.modelId)
+    if (d.ocrEnabled !== undefined) setOcrEnabled(d.ocrEnabled)
+    if (d.autoClassifyEnabled !== undefined) setAutoClassifyEnabled(d.autoClassifyEnabled)
+    if (d.confidenceThreshold !== undefined) setConfidenceThreshold(d.confidenceThreshold)
+    setEnabledLanguages(d.sarvamLanguages ?? [])
+    setFeatureModels(d.featureModels ?? {})
+    setKeyInputs({})
+  }, [])
+
   useEffect(() => {
-    if (data) {
-      if (data.provider) setProvider(data.provider)
-      if (data.modelId) setModelId(data.modelId)
-      if (data.ocrEnabled !== undefined) setOcrEnabled(data.ocrEnabled)
-      if (data.autoClassifyEnabled !== undefined) setAutoClassifyEnabled(data.autoClassifyEnabled)
-      if (data.confidenceThreshold !== undefined) setConfidenceThreshold(data.confidenceThreshold)
-    }
-  }, [data])
+    if (data) applyServerConfig(data)
+  }, [data, applyServerConfig])
 
   // Masked key status from the server, by provider.
   const keyStatus = (data?.providerKeys ?? []).reduce<Record<string, { configured: boolean; last4?: string | null }>>(
@@ -108,6 +116,16 @@ export function AiModelSettings() {
 
   const models = MODELS_BY_PROVIDER[provider] ?? MODELS_BY_PROVIDER.gemini
   const selectedProvider = AI_PROVIDERS.find((p) => p.id === provider)
+
+  // Effective per-feature override (server value, else this provider's first model @ temp 0.3).
+  const featureValue = (feature: string) =>
+    featureModels[feature] ?? { model: models[0]?.value ?? '', temperature: 0.3 }
+
+  // A key-needing provider must have a key already stored or a new one typed in this session.
+  const keyMissing =
+    !!selectedProvider?.needsKey &&
+    !keyStatus[provider]?.configured &&
+    !(keyInputs[provider]?.trim())
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -121,6 +139,9 @@ export function AiModelSettings() {
         ocrEnabled,
         autoClassifyEnabled,
         confidenceThreshold,
+        sarvamLanguages: enabledLanguages,
+        // Persist an override for every feature so values round-trip without loss.
+        featureModels: Object.fromEntries(FEATURE_MODELS.map((f) => [f, featureValue(f)])),
         ...(Object.keys(providerKeys).length > 0 ? { providerKeys } : {}),
       })
     },
@@ -131,6 +152,16 @@ export function AiModelSettings() {
     },
     onError: () => toast.error('Failed to save AI configuration'),
   })
+
+  // Validate before saving: a paid provider with no key would silently fall back to Tesseract.
+  const handleSave = () => {
+    if (keyMissing) {
+      toast.error(`Enter an API key for ${selectedProvider?.label} before saving (or pick Tesseract).`)
+      focusKeyField()
+      return
+    }
+    saveMutation.mutate()
+  }
 
   const testMutation = useMutation({
     mutationFn: () => testAiConnection(provider),
@@ -296,7 +327,7 @@ export function AiModelSettings() {
         </div>
       </Card>
 
-      {/* Sarvam AI (display-only, languages managed via LanguageSettings) */}
+      {/* Sarvam AI — enabled languages persist to auth.ai_configuration.sarvam_languages */}
       <Card>
         <CardHeader title="Sarvam AI — Indian Language Support" subtitle="Manage which languages use Sarvam AI for processing" />
         <div className="space-y-4">
@@ -343,15 +374,33 @@ export function AiModelSettings() {
               <span>Model</span>
               <span>Temperature</span>
             </div>
-            {FEATURE_MODELS.map((feature) => (
+            {FEATURE_MODELS.map((feature) => {
+              const fv = featureValue(feature)
+              // Always include the stored model as an option, even if it belongs to another provider.
+              const optionValues = Array.from(new Set([...models.map((m) => m.value), fv.model])).filter(Boolean)
+              return (
               <div key={feature} className="grid grid-cols-3 gap-2 items-center py-2 border-b border-[var(--border-default)] last:border-0">
                 <span className="text-sm text-[var(--text-primary)] px-2">{feature}</span>
-                <select className="h-9 rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] text-xs px-2 text-[var(--text-primary)] focus:border-[var(--brand-primary)] outline-none" aria-label={`Model for ${feature}`}>
-                  {models.map((m) => <option key={m.value} value={m.value}>{m.value}</option>)}
+                <select
+                  value={fv.model}
+                  onChange={(e) => setFeatureModels((p) => ({ ...p, [feature]: { ...fv, model: e.target.value } }))}
+                  className="h-9 rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] text-xs px-2 text-[var(--text-primary)] focus:border-[var(--brand-primary)] outline-none"
+                  aria-label={`Model for ${feature}`}
+                >
+                  {optionValues.map((v) => <option key={v} value={v}>{v}</option>)}
                 </select>
-                <input type="number" defaultValue="0.3" step="0.1" min="0" max="1" className="h-9 w-20 rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] text-xs px-2 font-mono text-[var(--text-primary)] focus:border-[var(--brand-primary)] outline-none" aria-label={`Temperature for ${feature}`} />
+                <input
+                  type="number"
+                  value={fv.temperature}
+                  step="0.1"
+                  min="0"
+                  max="1"
+                  onChange={(e) => setFeatureModels((p) => ({ ...p, [feature]: { ...fv, temperature: Number(e.target.value) } }))}
+                  className="h-9 w-20 rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] text-xs px-2 font-mono text-[var(--text-primary)] focus:border-[var(--brand-primary)] outline-none"
+                  aria-label={`Temperature for ${feature}`}
+                />
               </div>
-            ))}
+            )})}
           </div>
         )}
       </Card>
@@ -378,14 +427,19 @@ export function AiModelSettings() {
         />
       </div>
 
-      <div className="flex justify-end gap-3 pt-2">
+      <div className="flex items-center justify-end gap-3 pt-2">
+        {keyMissing && (
+          <span className="text-xs text-[var(--status-warning-fg,#b45309)] mr-auto">
+            {selectedProvider?.label} needs an API key before it can be saved.
+          </span>
+        )}
         <Button variant="secondary" size="sm" onClick={() => testMutation.mutate()} loading={testMutation.isPending}>
           Test Connection
         </Button>
-        <Button variant="ghost" onClick={() => queryClient.invalidateQueries({ queryKey: ['ai-config'] })}>
+        <Button variant="ghost" onClick={() => { if (data) applyServerConfig(data) }}>
           Cancel
         </Button>
-        <Button variant="primary" onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+        <Button variant="primary" onClick={handleSave} loading={saveMutation.isPending}>
           <Save className="h-4 w-4 mr-1" />
           Save AI Configuration
         </Button>

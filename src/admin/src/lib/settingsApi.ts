@@ -66,6 +66,13 @@ export const ProviderKeyStatusSchema = z.object({
 })
 export type ProviderKeyStatus = z.infer<typeof ProviderKeyStatusSchema>
 
+// Per-feature model/temperature override (keyed by feature name in featureModels).
+export const FeatureModelSchema = z.object({
+  model: z.string(),
+  temperature: z.number(),
+})
+export type FeatureModel = z.infer<typeof FeatureModelSchema>
+
 export const AiConfigSchema = z.object({
   provider: z.string().optional(),
   modelId: z.string().optional(),
@@ -75,6 +82,9 @@ export const AiConfigSchema = z.object({
   confidenceThreshold: z.number().optional(),
   // Per-provider key STATUS (never the raw key).
   providerKeys: z.array(ProviderKeyStatusSchema).optional(),
+  // Sarvam AI processing languages + per-feature model overrides (persisted).
+  sarvamLanguages: z.array(z.string()).optional(),
+  featureModels: z.record(z.string(), FeatureModelSchema).optional(),
 })
 export type AiConfig = z.infer<typeof AiConfigSchema>
 

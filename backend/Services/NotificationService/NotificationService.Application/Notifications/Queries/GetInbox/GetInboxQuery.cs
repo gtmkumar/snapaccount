@@ -39,20 +39,29 @@ public sealed class GetInboxQueryHandler(INotificationDbContext dbContext)
     /// <inheritdoc />
     public async Task<Result<InboxDto>> Handle(GetInboxQuery request, CancellationToken cancellationToken)
     {
-        var query = dbContext.NotificationLog
-            .Where(l => l.UserId == request.UserId
-                     && l.Channel == NotificationChannel.InApp
-                     && l.DeletedAt == null);
+        // Reads the real in-app inbox table (notification.notification) via the InboxNotification
+        // read model. Unread = not yet marked read.
+        var query = dbContext.InboxNotifications
+            .Where(n => n.UserId == request.UserId && n.DeletedAt == null);
 
         var total = await query.CountAsync(cancellationToken);
-        var unread = await query.CountAsync(l => l.Status == DispatchStatus.Sent, cancellationToken);
+        var unread = await query.CountAsync(n => !n.IsRead, cancellationToken);
 
-        var items = await query
-            .OrderByDescending(l => l.CreatedAt)
+        var rows = await query
+            .OrderByDescending(n => n.CreatedAt)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(l => new InboxItem(l.Id, l.EventCode, l.RenderedBody, l.Status, l.CreatedAt))
+            .Select(n => new { n.Id, n.EventType, n.Title, n.Body, n.Status, n.CreatedAt })
             .ToListAsync(cancellationToken);
+
+        var items = rows
+            .Select(n => new InboxItem(
+                n.Id,
+                n.EventType,
+                string.IsNullOrWhiteSpace(n.Body) ? n.Title : n.Body,
+                Enum.TryParse<DispatchStatus>(n.Status, ignoreCase: true, out var s) ? s : DispatchStatus.Sent,
+                n.CreatedAt))
+            .ToList();
 
         return new InboxDto(items, total, unread);
     }

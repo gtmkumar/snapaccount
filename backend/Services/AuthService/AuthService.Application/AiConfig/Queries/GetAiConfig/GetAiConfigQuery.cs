@@ -11,6 +11,9 @@ public record GetAiConfigQuery : IQuery<AiConfigDto>;
 
 public record ProviderKeyStatusDto(string Provider, bool Configured, string? Last4);
 
+/// <summary>Per-feature model/temperature override returned to the admin UI.</summary>
+public record FeatureModelDto(string Model, decimal Temperature);
+
 public record AiConfigDto(
     string Provider,
     string? ModelId,
@@ -18,7 +21,9 @@ public record AiConfigDto(
     decimal ConfidenceThreshold,
     bool OcrEnabled,
     bool AutoClassifyEnabled,
-    IReadOnlyList<ProviderKeyStatusDto> ProviderKeys);
+    IReadOnlyList<ProviderKeyStatusDto> ProviderKeys,
+    IReadOnlyList<string> SarvamLanguages,
+    IReadOnlyDictionary<string, FeatureModelDto> FeatureModels);
 
 public sealed class GetAiConfigQueryHandler(IAuthDbContext db)
     : IQueryHandler<GetAiConfigQuery, AiConfigDto>
@@ -34,8 +39,12 @@ public sealed class GetAiConfigQueryHandler(IAuthDbContext db)
             .Select(k => new ProviderKeyStatusDto(k.Provider, k.EncryptedKey != "", k.KeyLast4))
             .ToListAsync(ct);
 
+        var featureModels = cfg.FeatureModels.ToDictionary(
+            kv => kv.Key, kv => new FeatureModelDto(kv.Value.Model, kv.Value.Temperature));
+
         return new AiConfigDto(
             cfg.OcrProvider, cfg.OcrModel, cfg.OcrTier, cfg.ConfidenceThreshold,
-            cfg.OcrEnabled, cfg.AutoClassifyEnabled, keys);
+            cfg.OcrEnabled, cfg.AutoClassifyEnabled, keys,
+            cfg.SarvamLanguages, featureModels);
     }
 }

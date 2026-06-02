@@ -45,7 +45,9 @@ try
              .AllowAnyHeader()
              .AllowCredentials()));
 
-    builder.Services.AddAuthorization();
+    // Passthrough auth scheme + authorization (FirebaseAuthMiddleware sets the principal; this
+    // makes RequireAuthorization() return a clean 401 instead of a 500 on unauthenticated calls).
+    builder.Services.AddSnapAuthentication();
     builder.Services.AddHttpContextAccessor();
 
     // SEC-011: AI endpoints rate-limited to 20 req/min per user (cost guardrail)

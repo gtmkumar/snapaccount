@@ -35,6 +35,12 @@ IResourceBuilder<T> WithDevLoopDefaults<T>(IResourceBuilder<T> b, int httpPort)
     var gac = Environment.GetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS");
     var localAuth = Environment.GetEnvironmentVariable("LOCAL_AUTH");
     var localAuthSecret = Environment.GetEnvironmentVariable("LOCAL_AUTH__SECRET");
+    // Forward the AppHost's own environment to every child so GcpStartup.IsEnabled
+    // (which reads ASPNETCORE_ENVIRONMENT) sees "Development" and services boot GCP-free
+    // locally. Without this, CallbackService's boot-time Firebase ADC init throws.
+    var aspnetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+        ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
+    if (!string.IsNullOrEmpty(aspnetEnv)) b = b.WithEnvironment("ASPNETCORE_ENVIRONMENT", aspnetEnv);
     if (!string.IsNullOrEmpty(devBypass)) b = b.WithEnvironment("DEV_AUTH_BYPASS", devBypass);
     if (!string.IsNullOrEmpty(gac)) b = b.WithEnvironment("GOOGLE_APPLICATION_CREDENTIALS", gac);
     // LOCAL_AUTH: username/password login against the local DB instead of Firebase.

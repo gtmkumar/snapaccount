@@ -88,16 +88,9 @@ try
     builder.Services.AddHealthChecks();
 
     // Authentication + Authorization
-    // Firebase JWT validation is implemented as a middleware (FirebaseAuthMiddleware) that
-    // sets HttpContext.User directly, but ASP.NET Core's RequireAuthorization() still needs
-    // an IAuthenticationService to be registered, otherwise the auth pipeline throws
-    // InvalidOperationException at request time. Register a no-op default scheme so the
-    // middleware's principal flows through unchallenged.
-    builder.Services.AddAuthentication("FirebaseMiddleware")
-        .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions,
-                   SnapAccount.Shared.Infrastructure.Auth.PassthroughAuthHandler>(
-            "FirebaseMiddleware", _ => { });
-    builder.Services.AddAuthorization();
+    // FirebaseAuthMiddleware sets HttpContext.User directly, but RequireAuthorization() still needs
+    // a registered IAuthenticationService scheme — see AddSnapAuthentication for the full rationale.
+    builder.Services.AddSnapAuthentication();
 
     // CustomExceptionHandler: maps ValidationException/NotFoundException/ForbiddenAccessException → ProblemDetails
     builder.Services.AddExceptionHandler<CustomExceptionHandler>();
