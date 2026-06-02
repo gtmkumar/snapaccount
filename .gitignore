@@ -30,6 +30,9 @@ service-account*.json
 *-service-account.json
 *service-account*.json
 *credentials*.json
+*-adminsdk-*.json
+*firebase-adminsdk*.json
+snap-account-firebase-adminsdk-*.json
 application_default_credentials.json
 gcloud_credentials.json
 gcp-key.json

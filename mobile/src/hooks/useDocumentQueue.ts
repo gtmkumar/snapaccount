@@ -209,7 +209,7 @@ export function useDocumentQueue() {
         } as unknown as Blob);
         if (item.category) formData.append('category', item.category);
 
-        const uploadRes = await apiClient.post<{ id: string; status: string }>(
+        const uploadRes = await apiClient.post<{ documentId: string; status: string }>(
           '/documents/upload',
           formData,
           {
@@ -223,7 +223,7 @@ export function useDocumentQueue() {
           },
         );
 
-        const serverId = uploadRes.data.id;
+        const serverId = uploadRes.data.documentId;
         updateItem(localId, {
           serverId,
           status: 'PROCESSING',
@@ -232,7 +232,7 @@ export function useDocumentQueue() {
         });
 
         // Fire OCR request
-        await apiClient.post(`/documents/${serverId}/ocr/request`);
+        await apiClient.post(`/documents/${serverId}/ocr`);
 
         // Start OCR timeout watchdog
         const timer = setTimeout(() => {

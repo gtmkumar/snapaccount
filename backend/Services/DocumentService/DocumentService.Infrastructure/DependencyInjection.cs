@@ -69,19 +69,34 @@ public static class DependencyInjection
         // Repository — command handlers depend on IDocumentRepository
         services.AddScoped<IDocumentRepository, DocumentRepository>();
 
-        // GCS storage (singleton — thread-safe, expensive to create)
-        services.AddSingleton<ICloudStorageService, GoogleCloudStorageService>();
+        // Storage + OCR + Pub/Sub: real GCP services in staging/prod, local dev fallbacks
+        // otherwise so the upload + scan flow works without Google Application Default Creds.
+        var gcpEnabled = SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration);
         services.AddScoped<IDocumentStorageService, DocumentStorageService>();
 
-        // Google Document AI — OCR
-        services.AddScoped<IOcrService, GoogleDocumentAiService>();
+        if (gcpEnabled)
+        {
+            // GCS storage (singleton — thread-safe, expensive to create)
+            services.AddSingleton<ICloudStorageService, GoogleCloudStorageService>();
 
-        // Pub/Sub publisher (shared infra) + OCR job enqueuer
-        services.AddSingleton<IPubSubPublisher, GooglePubSubPublisher>();
-        services.AddScoped<IOcrJobEnqueuer, PubSubOcrJobEnqueuer>();
+            // Google Document AI — OCR
+            services.AddScoped<IOcrService, GoogleDocumentAiService>();
 
-        // OCR worker — subscribes to snapaccount.document.ocr.requested
-        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<OcrJobSubscriber>();
+            // Pub/Sub publisher (shared infra) + OCR job enqueuer
+            services.AddSingleton<IPubSubPublisher, GooglePubSubPublisher>();
+            services.AddScoped<IOcrJobEnqueuer, PubSubOcrJobEnqueuer>();
+
+            // OCR worker — subscribes to snapaccount.document.ocr.requested
+            services.AddHostedService<OcrJobSubscriber>();
+        }
+        else
+        {
+            // ── Local dev (GCP-free) ── NEVER reached in staging/production ──
+            services.AddSingleton<ICloudStorageService, LocalFileStorageService>();
+            services.AddSingleton<IPubSubPublisher, NoOpPubSubPublisher>();
+            // Completes OCR inline with stub extraction (no Document AI).
+            services.AddScoped<IOcrJobEnqueuer, DevOcrJobEnqueuer>();
+        }
 
         // Current user — reads Firebase JWT claims from HttpContext.Items
         services.AddHttpContextAccessor();

@@ -1,7 +1,25 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router'
+
+// Action-level RBAC: the Review/Assign/Export actions are gated by the <Can>
+// component, which calls usePermission().hasServerPermission(). Mock it with a
+// controllable permission set so we can exercise both the permitted operator
+// case (buttons visible) and the stripped-user case (buttons hidden).
+const { perms } = vi.hoisted(() => ({
+  perms: { loaded: true, granted: new Set<string>(['document.read', 'document.update']) },
+}))
+
+vi.mock('@/hooks/usePermission', () => ({
+  usePermission: () => ({
+    hasServerPermission: (code: string) => perms.granted.has(code),
+    hasAnyServerPermission: (codes: string[]) => codes.some((c) => perms.granted.has(c)),
+    hasAllServerPermissions: (codes: string[]) => codes.every((c) => perms.granted.has(c)),
+    permissionsLoaded: perms.loaded,
+    serverPermissions: [...perms.granted],
+  }),
+}))
 
 // We import the page lazily to avoid issues with dynamic imports in tests
 // The page uses useNavigate so it must be wrapped in MemoryRouter.
@@ -46,6 +64,12 @@ function renderPage() {
 // ──────────────────────────────────────────────────────────────
 
 describe('DocumentQueuePage', () => {
+  beforeEach(() => {
+    // Default: a genuine data-entry operator with the document permissions.
+    perms.loaded = true
+    perms.granted = new Set<string>(['document.read', 'document.update'])
+  })
+
   it('renders the page heading', () => {
     renderPage()
     expect(screen.getByText('Document Queue')).toBeInTheDocument()
@@ -157,6 +181,32 @@ describe('DocumentQueuePage', () => {
     renderPage()
 
     expect(screen.getByRole('button', { name: /Export/i })).toBeInTheDocument()
+  })
+
+  it('hides Review/Assign/Export when the user lacks document permissions', async () => {
+    // Stripped user: only menu.documents.view (no document.read / document.update).
+    perms.granted = new Set<string>()
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Assign' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Export/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Review but hides Assign for a read-only user', async () => {
+    perms.granted = new Set<string>(['document.read'])
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+    })
+
+    expect(screen.getAllByRole('button', { name: 'Review' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Assign' })).not.toBeInTheDocument()
   })
 
   it('renders OCR confidence percentage for each document', async () => {

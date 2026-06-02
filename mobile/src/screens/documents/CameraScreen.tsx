@@ -97,6 +97,7 @@ export function CameraScreen({ navigation }: Props) {
     auto: 'flash-outline',
     on: 'flash',
     off: 'flash-off-outline',
+    screen: 'sunny-outline',
   };
 
   return (
@@ -106,7 +107,14 @@ export function CameraScreen({ navigation }: Props) {
         style={styles.camera}
         facing={facing}
         flash={flash}
-      >
+      />
+
+      {/* Overlays are SIBLINGS of CameraView, not children: nesting views inside
+          CameraView crashes the Fabric renderer (new architecture) with
+          "Attempt to unmount a view which has [the wrong index]" when those
+          children mount/unmount (e.g. the toast appearing as the preview closes).
+          box-none lets touches fall through to the camera between controls. */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
         {/* Toast */}
         {toastVisible && (
           <View style={styles.toast} pointerEvents="none">
@@ -225,7 +233,7 @@ export function CameraScreen({ navigation }: Props) {
             </Pressable>
           </View>
         </View>
-      </CameraView>
+      </View>
 
       {/* Preview overlay */}
       {showPreview && (

@@ -1,8 +1,30 @@
-# Pending — Action-level (in-page) RBAC gating
+# Action-level (in-page) RBAC gating — IMPLEMENTED
 
-**Status:** DEFERRED. Do NOT implement yet — the team lead will trigger this. Keep the current mock/ungated pages as-is until then.
-**Chosen approach when we do it:** Option 2 — provision the role with its real operational permissions **and** gate the in-page actions by permission.
-**Logged:** 2026-06-01.
+**Status:** ✅ DONE (Option 2). Triggered + implemented 2026-06-01.
+**Chosen approach:** provision the role with its real operational permissions **and** gate the in-page actions by permission.
+
+## What shipped
+1. **Role provisioned** — migration `database/migrations/046_grant_data_entry_operator_document_perms.sql`
+   grants `DATA_ENTRY_OPERATOR` → `document.read` + `document.update` (applied to local DB).
+   Verified live: `dataentry@snap.local` `/auth/me/permissions` now returns
+   `["document.read","document.update","menu.documents.view"]`.
+2. **Reusable gate** — `src/admin/src/components/shared/Can.tsx`: `<Can permission="..." | anyOf=[] | allOf=[]>`
+   backed by `usePermission().hasServerPermission`; renders `fallback` until `permissionsLoaded`
+   (no flash). SUPER_ADMIN passes because the wildcard is expanded server-side by
+   `GetUserPermissionsQuery`.
+3. **Documents page gated** — `src/admin/src/pages/documents/DocumentQueuePage.tsx`:
+   Review → `document.read`, Assign → `document.update`, Export → `document.read`.
+4. **Tests** — `src/admin/src/__tests__/DocumentQueuePage.test.tsx` updated with a controllable
+   permission mock + negative tests (stripped user hides all; read-only shows Review, hides Assign).
+   Full admin suite green (807 passed).
+
+## Still mock-data (future, unchanged)
+The Documents list itself is still `mockDocuments` (not wired to the RBAC-enforced Document
+service). Roll the `<Can>` pattern out to the other operational pages (GST, GST Notices, ITR,
+Loans, Callbacks) and replace mock queries with the real services when those are wired.
+
+---
+## Original context (for reference)
 
 ---
 

@@ -48,5 +48,38 @@ public class DocumentDbContext(DbContextOptions<DocumentDbContext> options)
         modelBuilder.HasDefaultSchema("document");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(DocumentDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
+
+        // The DB schema (built from database/migrations/*.sql) uses snake_case, SINGULAR
+        // table names (document, document_category, ocr_result, …). There are no entity
+        // configurations setting ToTable, so EF would otherwise default to the PascalCase
+        // DbSet name ("Documents"), which does not exist. Map every entity to the
+        // snake_case singular of its CLR type name to match the actual tables.
+        // Note: EF sets a default table-name annotation from the DbSet name, so we set
+        // unconditionally here. There are no ToTable configs in this service to preserve.
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            entityType.SetTableName(ToSnakeCase(entityType.ClrType.Name));
+        }
+    }
+
+    /// <summary>Converts a PascalCase identifier to snake_case (e.g. OcrResult -> ocr_result).</summary>
+    private static string ToSnakeCase(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return name;
+        var sb = new System.Text.StringBuilder(name.Length + 8);
+        for (var i = 0; i < name.Length; i++)
+        {
+            var c = name[i];
+            if (char.IsUpper(c))
+            {
+                if (i > 0) sb.Append('_');
+                sb.Append(char.ToLowerInvariant(c));
+            }
+            else
+            {
+                sb.Append(c);
+            }
+        }
+        return sb.ToString();
     }
 }

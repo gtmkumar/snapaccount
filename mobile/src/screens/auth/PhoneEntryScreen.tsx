@@ -19,10 +19,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/ui/Button';
 import { PhoneInput } from '../../components/forms/PhoneInput';
 import { Colors } from '../../constants/colors';
-import { FirebaseAuth } from '../../lib/firebase';
+import apiClient, { getApiError } from '../../lib/api';
 import { isValidPhone } from '../../lib/utils';
+import { useAuthMethods } from '../../hooks/useAuthMethods';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
-import { FirebaseAuthTypes } from '../../lib/firebase';
 
 type PhoneEntryNavProp = NativeStackNavigationProp<AuthStackParamList, 'PhoneEntry'>;
 
@@ -35,6 +35,9 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // When SMS/WhatsApp OTP is enabled, the phone+password option is hidden (optional fallback).
+  const { showPasswordOption } = useAuthMethods();
+
   const canSubmit = isValidPhone(phone) && !loading;
 
   const handleSendOTP = async () => {
@@ -44,21 +47,18 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
     setLoading(true);
 
     try {
-      const fullNumber = `+91${phone}`;
-      const confirmation = await FirebaseAuth.sendOTP(fullNumber);
+      // Backend expects a bare 10-digit Indian number (no +91 prefix).
+      await apiClient.post('/auth/otp/send', { phoneNumber: phone });
 
-      navigation.navigate('OTPVerify', {
-        phone,
-        confirmation: confirmation as FirebaseAuthTypes.ConfirmationResult,
-      });
+      navigation.navigate('OTPVerify', { phone });
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '';
-      if (errorMessage.includes('too-many-requests')) {
-        setError('Too many attempts. Please try after 30 minutes.');
-      } else if (errorMessage.includes('invalid-phone-number')) {
-        setError('Invalid phone number. Please check and try again.');
+      const apiErr = getApiError(err);
+      if (apiErr.statusCode === 429) {
+        setError('Too many attempts. Please try again in a few minutes.');
+      } else if (apiErr.statusCode >= 400 && apiErr.statusCode < 500) {
+        setError(apiErr.message || 'Invalid phone number. Please check and try again.');
       } else {
-        Alert.alert('Error', 'Something went wrong. Please try again.');
+        Alert.alert('Error', 'Could not send OTP. Please check your connection and try again.');
       }
     } finally {
       setLoading(false);
@@ -126,6 +126,16 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
 
           {/* Social login */}
           <View style={styles.socialArea}>
+            {showPasswordOption && (
+              <Button
+                label="Phone number & password"
+                variant="secondary"
+                fullWidth
+                size="lg"
+                leftIcon={<Ionicons name="lock-closed-outline" size={20} color={Colors.neutral[700]} />}
+                onPress={() => navigation.navigate('PasswordAuth')}
+              />
+            )}
             <Button
               label="Google"
               variant="secondary"
@@ -133,6 +143,7 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
               size="lg"
               leftIcon={<Ionicons name="logo-google" size={20} color={Colors.neutral[700]} />}
               onPress={() => Alert.alert('Coming soon', 'Google Sign-In will be available soon.')}
+              style={showPasswordOption ? { marginTop: 12 } : undefined}
             />
             {Platform.OS === 'ios' && (
               <Button
