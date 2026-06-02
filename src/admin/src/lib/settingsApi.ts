@@ -59,22 +59,70 @@ export async function updateOrgSettings(settings: Partial<OrgSettings>): Promise
 
 // ── AI model configuration ────────────────────────────────────────────────────
 
+export const ProviderKeyStatusSchema = z.object({
+  provider: z.string(),
+  configured: z.boolean(),
+  last4: z.string().nullable().optional(),
+})
+export type ProviderKeyStatus = z.infer<typeof ProviderKeyStatusSchema>
+
 export const AiConfigSchema = z.object({
   provider: z.string().optional(),
   modelId: z.string().optional(),
+  ocrTier: z.string().optional(),
   ocrEnabled: z.boolean().optional(),
   autoClassifyEnabled: z.boolean().optional(),
   confidenceThreshold: z.number().optional(),
+  // Per-provider key STATUS (never the raw key).
+  providerKeys: z.array(ProviderKeyStatusSchema).optional(),
 })
 export type AiConfig = z.infer<typeof AiConfigSchema>
+
+/** Update payload: config fields + optional write-only provider keys (raw → encrypted server-side). */
+export type AiConfigUpdate = Partial<Omit<AiConfig, 'providerKeys'>> & {
+  providerKeys?: Record<string, string>
+}
 
 export async function getAiConfig(): Promise<AiConfig> {
   const res = await api.get('/auth/config/ai')
   return AiConfigSchema.parse(res.data)
 }
 
-export async function updateAiConfig(config: Partial<AiConfig>): Promise<void> {
+export async function updateAiConfig(config: AiConfigUpdate): Promise<void> {
   await api.patch('/auth/config/ai', config)
+}
+
+// Real AI usage metrics (current month) — replaces the hardcoded metric cards.
+export const ModelUsageSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  calls: z.number(),
+  costUsd: z.number(),
+})
+export const AiUsageSchema = z.object({
+  callsThisMonth: z.number(),
+  estimatedCostUsd: z.number(),
+  avgResponseMs: z.number(),
+  byModel: z.array(ModelUsageSchema),
+})
+export type AiUsage = z.infer<typeof AiUsageSchema>
+
+export async function getAiUsage(): Promise<AiUsage> {
+  const res = await api.get('/auth/config/ai/usage')
+  return AiUsageSchema.parse(res.data)
+}
+
+// Test the active (or given) provider's credentials — cheap auth check, no token cost.
+export const AiTestResultSchema = z.object({
+  ok: z.boolean(),
+  provider: z.string(),
+  message: z.string(),
+})
+export type AiTestResult = z.infer<typeof AiTestResultSchema>
+
+export async function testAiConnection(provider?: string): Promise<AiTestResult> {
+  const res = await api.post('/auth/config/ai/test', { provider })
+  return AiTestResultSchema.parse(res.data)
 }
 
 // ── Feature flags ─────────────────────────────────────────────────────────────

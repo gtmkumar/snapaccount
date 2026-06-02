@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, CameraType, FlashMode, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -93,10 +94,34 @@ export function CameraScreen({ navigation }: Props) {
     showToast();
   };
 
+  const handlePickFromGallery = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission needed', 'Allow photo library access to upload from gallery.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.9,
+        allowsMultipleSelection: false,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const ext = asset.fileName?.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const filename = asset.fileName ?? `gallery_${Date.now()}.${ext}`;
+      await enqueue({ localUri: asset.uri, filename });
+      showToast();
+    } catch {
+      Alert.alert('Error', 'Could not pick image from gallery.');
+    }
+  };
+
   const flashIconName: Record<FlashMode, keyof typeof Ionicons.glyphMap> = {
     auto: 'flash-outline',
     on: 'flash',
     off: 'flash-off-outline',
+    screen: 'sunny-outline',
   };
 
   return (
@@ -106,7 +131,14 @@ export function CameraScreen({ navigation }: Props) {
         style={styles.camera}
         facing={facing}
         flash={flash}
-      >
+      />
+
+      {/* Overlays are SIBLINGS of CameraView, not children: nesting views inside
+          CameraView crashes the Fabric renderer (new architecture) with
+          "Attempt to unmount a view which has [the wrong index]" when those
+          children mount/unmount (e.g. the toast appearing as the preview closes).
+          box-none lets touches fall through to the camera between controls. */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
         {/* Toast */}
         {toastVisible && (
           <View style={styles.toast} pointerEvents="none">
@@ -198,7 +230,9 @@ export function CameraScreen({ navigation }: Props) {
             {/* Gallery shortcut */}
             <Pressable
               style={styles.sideBtn}
+              onPress={handlePickFromGallery}
               accessibilityLabel="Open gallery"
+              accessibilityRole="button"
               hitSlop={8}
             >
               <Ionicons name="images-outline" size={22} color="#fff" />
@@ -225,7 +259,7 @@ export function CameraScreen({ navigation }: Props) {
             </Pressable>
           </View>
         </View>
-      </CameraView>
+      </View>
 
       {/* Preview overlay */}
       {showPreview && (

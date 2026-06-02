@@ -21,11 +21,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/ui/Button';
 import { OTPInput, OTPResendTimer } from '../../components/forms/OTPInput';
 import { Colors } from '../../constants/colors';
-import { FirebaseAuth, FirebaseAuthTypes } from '../../lib/firebase';
 import { formatPhoneDisplay } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
-import apiClient from '../../lib/api';
+import apiClient, { getApiError } from '../../lib/api';
 
 type OTPNavProp = NativeStackNavigationProp<AuthStackParamList, 'OTPVerify'>;
 type OTPRouteProp = RouteProp<AuthStackParamList, 'OTPVerify'>;
@@ -36,8 +35,8 @@ interface OTPVerifyScreenProps {
 }
 
 export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
-  const { phone, confirmation } = route.params;
-  const { setAuthenticated, setOrganizations } = useAuthStore();
+  const { phone } = route.params;
+  const { setAuthenticated, setSession, setOrganizations } = useAuthStore();
 
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -56,67 +55,70 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
       setErrorMessage('');
 
       try {
-        const credential = await FirebaseAuth.verifyOTP(confirmation as FirebaseAuthTypes.ConfirmationResult, otpValue);
-        const token = await credential.user.getIdToken();
-
+        // Verify against the real backend. Returns a session token (a Firebase custom
+        // token in prod; a LOCAL_AUTH JWT in local dev) used as the bearer for all services.
         const response = await apiClient.post<{
-          user: {
-            id: string;
-            firebaseUid: string;
-            phone: string;
-            userType: 'business_owner' | 'employee' | null;
-            profileComplete: boolean;
-            name?: string;
-            aadhaarVerified: boolean;
-          };
-          organizations: Array<{
-            id: string;
-            name: string;
-            gstin?: string;
-            panNumber?: string;
-          }>;
           isNewUser: boolean;
-        }>('/auth/verify-token', { idToken: token });
+          firebaseCustomToken: string | null;
+          userId: string;
+        }>('/auth/otp/verify', { phoneNumber: phone, otp: otpValue });
 
-        const { user, organizations, isNewUser } = response.data;
+        const { isNewUser, firebaseCustomToken, userId } = response.data;
+        if (!firebaseCustomToken) {
+          throw new Error('No session token returned.');
+        }
 
-        setAuthenticated(token, {
-          id: user.id,
-          firebaseUid: user.firebaseUid,
-          phone: user.phone,
-          userType: user.userType,
-          profileComplete: user.profileComplete,
-          name: user.name,
-          aadhaarVerified: user.aadhaarVerified,
+        const profile = {
+          id: userId,
+          firebaseUid: '',
+          phone,
+          userType: isNewUser ? null : ('business_owner' as const),
+          profileComplete: !isNewUser,
+          aadhaarVerified: false,
           createdAt: new Date().toISOString(),
-        });
+        };
 
-        if (organizations.length > 0) {
-          setOrganizations(organizations);
-        }
-
-        if (isNewUser || !user.profileComplete) {
+        if (isNewUser) {
+          // Keep the token for authenticated onboarding calls, but stay in the
+          // Auth stack until the business profile is completed.
+          setSession(firebaseCustomToken, profile);
           navigation.replace('BusinessProfileWizard');
-        } else {
-          navigation.replace('App' as never, {} as never);
+          return;
         }
+
+        setAuthenticated(firebaseCustomToken, profile);
+
+        // Returning user — enrich profile + organizations, then enter the app.
+        try {
+          const orgsRes = await apiClient.get<
+            Array<{ id: string; businessName?: string; name?: string; gstin?: string; panNumber?: string }>
+          >('/auth/organizations');
+          const orgs = (orgsRes.data ?? []).map((o) => ({
+            id: o.id,
+            name: o.businessName ?? o.name ?? 'My Business',
+            gstin: o.gstin,
+            panNumber: o.panNumber,
+          }));
+          if (orgs.length > 0) setOrganizations(orgs);
+        } catch {
+          // Non-fatal — the app can fetch organizations later.
+        }
+        // isAuthenticated is now true → RootNavigator swaps to the app automatically.
       } catch (err: unknown) {
         setLoading(false);
         setError(true);
         setOtp('');
-        const errorMessage = err instanceof Error ? err.message : '';
-        if (errorMessage.includes('invalid-verification-code')) {
-          const attemptsMatch = errorMessage.match(/(\d+) attempt/);
-          const remaining = attemptsMatch ? attemptsMatch[1] : '2';
-          setErrorMessage(`Incorrect OTP. ${remaining} attempts remaining.`);
-        } else if (errorMessage.includes('session-expired')) {
-          setErrorMessage('OTP expired. Please request a new one.');
+        const apiErr = getApiError(err);
+        if (apiErr.statusCode === 429) {
+          setErrorMessage('Too many attempts. Please wait a few minutes.');
+        } else if (apiErr.message) {
+          setErrorMessage(apiErr.message);
         } else {
           setErrorMessage('Verification failed. Please try again.');
         }
       }
     },
-    [confirmation, navigation, setAuthenticated, setOrganizations],
+    [phone, navigation, setAuthenticated, setSession, setOrganizations],
   );
 
   const handleOTPComplete = useCallback(
@@ -128,7 +130,7 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
 
   const handleResendOTP = async () => {
     try {
-      await FirebaseAuth.sendOTP(`+91${phone}`);
+      await apiClient.post('/auth/otp/send', { phoneNumber: phone });
       setOtp('');
       setError(false);
       setErrorMessage('');

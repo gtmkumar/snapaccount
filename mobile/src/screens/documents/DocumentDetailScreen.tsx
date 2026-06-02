@@ -57,6 +57,65 @@ interface DocumentDetail {
   processedAt?: string;
 }
 
+// Shape returned by GET /documents/{id} (DocumentService GetDocumentQuery.DocumentDto).
+interface BackendOcrField { name: string; value?: string | null; confidence?: number | null }
+interface BackendDocumentDto {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes?: number | null;
+  status: string;
+  storageUrl?: string | null;
+  amount?: number | null;
+  vendorName?: string | null;
+  documentDate?: string | null;
+  uploadedAt: string;
+  ocrConfidence?: number | null;       // 0..1
+  ocrConfidenceLevel?: string | null;  // GREEN | YELLOW | RED
+  fields?: BackendOcrField[] | null;
+}
+
+// Human-readable labels for the well-known extracted field keys.
+const FIELD_LABELS: Record<string, string> = {
+  vendor_name: 'Vendor',
+  amount: 'Amount',
+  document_date: 'Date',
+  gstin: 'GSTIN',
+  invoice_number: 'Invoice No.',
+  gst_rate: 'GST Rate',
+  tax_amount: 'Tax',
+  total_amount: 'Total',
+};
+
+function prettyLabel(key: string): string {
+  return FIELD_LABELS[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function mapDocument(d: BackendDocumentDto): DocumentDetail {
+  const conf = Math.round((d.ocrConfidence ?? 0) * 100);
+  return {
+    id: d.id,
+    filename: d.fileName,
+    category: 'Document',
+    status: d.status as DocumentStatus,
+    imageUrl: d.storageUrl ?? '',
+    date: d.documentDate ?? undefined,
+    vendor: d.vendorName ?? undefined,
+    amount: d.amount ?? undefined,
+    ocrConfidence: conf,
+    ocrFields: (d.fields ?? [])
+      .filter((f) => f.value != null && f.value !== '')
+      .map((f) => ({
+        label: prettyLabel(f.name),
+        value: String(f.value),
+        confidence: Math.round((f.confidence ?? d.ocrConfidence ?? 0) * 100),
+      })),
+    tags: [],
+    fileSize: d.fileSizeBytes ?? 0,
+    uploadedAt: d.uploadedAt,
+  };
+}
+
 const DOCUMENT_STATUS_STEPS = [
   { id: 'uploaded', label: 'Uploaded' },
   { id: 'ocr_complete', label: 'OCR Complete' },
@@ -113,9 +172,14 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
 
   const { data: document, isLoading } = useQuery({
     queryKey: ['document', documentId],
+    // Re-fetch while the doc is still being processed so extracted fields appear when ready.
+    refetchInterval: (q) => {
+      const s = (q.state.data as DocumentDetail | undefined)?.status;
+      return s && s !== 'UPLOADED' && s !== 'OCR_COMPLETE' ? false : 2500;
+    },
     queryFn: async () => {
-      const res = await apiClient.get<DocumentDetail>(`/documents/${documentId}`);
-      return res.data;
+      const res = await apiClient.get<BackendDocumentDto>(`/documents/${documentId}`);
+      return mapDocument(res.data);
     },
   });
 

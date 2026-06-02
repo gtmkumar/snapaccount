@@ -1,5 +1,6 @@
 using AuthService.Application.Admin.Queries.GetAuditEvents;
 using AuthService.Application.Common.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SnapAccount.Shared.Domain;
 using AuthService.Application.Admin.Queries.GetStaffList;
@@ -7,6 +8,7 @@ using AuthService.Application.Navigation.Queries.GetMyMenu;
 using AuthService.Application.Admin.Queries.GetTeamMembers;
 using AuthService.Application.Admin.Queries.GetUserDetail;
 using AuthService.Application.Admin.Queries.ListUsers;
+using AuthService.Application.Auth.Commands.PasswordAuth;
 using AuthService.Application.Otp.Commands.SendOtp;
 using AuthService.Application.Otp.Commands.VerifyOtp;
 using AuthService.Application.RefreshTokens.Commands.RefreshToken;
@@ -40,6 +42,25 @@ public sealed class Auth : EndpointGroupBase
         // SEC-011: OTP endpoints rate-limited at 5 req / 10 min per client IP
         groupBuilder.MapPost("/otp/send", SendOtp).RequireRateLimiting("otp");
         groupBuilder.MapPost("/otp/verify", VerifyOtp).RequireRateLimiting("otp");
+
+        // Phone-number + password auth (no SMS). Anonymous; rate-limited like OTP.
+        groupBuilder.MapPost("/password/register", RegisterWithPassword).RequireRateLimiting("otp");
+        groupBuilder.MapPost("/password/login", LoginWithPassword).RequireRateLimiting("otp");
+
+        // GET /auth/methods — which login methods the client should offer. Anonymous.
+        // When SMS or WhatsApp OTP is enabled, clients HIDE the password option
+        // (password is an optional fallback, used only when no OTP channel exists).
+        // Auto-detects SMS from the MSG91 key; explicit Auth:Methods:* overrides.
+        groupBuilder.MapGet("/methods", static (IConfiguration config) =>
+        {
+            var smsConfigured = !string.IsNullOrWhiteSpace(config["Msg91:OtpAuthKey"])
+                                || !string.IsNullOrWhiteSpace(config["Msg91:ApiKey"]);
+            var otp = config.GetValue<bool?>("Auth:Methods:Otp") ?? smsConfigured;
+            var whatsapp = config.GetValue<bool?>("Auth:Methods:WhatsApp") ?? false;
+            var password = config.GetValue<bool?>("Auth:Methods:Password") ?? true;
+            return Results.Ok(new AuthMethodsResponse(otp, whatsapp, password));
+        });
+
         groupBuilder.MapPost("/token/refresh", RefreshToken);
 
         // LOCAL_AUTH dev login (username/password against local DB). Anonymous.
@@ -145,6 +166,26 @@ public sealed class Auth : EndpointGroupBase
             : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
     }
 
+    // POST /auth/password/register — create account with phone + password (no OTP)
+    private static async Task<IResult> RegisterWithPassword(RegisterWithPasswordRequest req, ISender sender)
+    {
+        var result = await sender.Send(new RegisterWithPasswordCommand(req.PhoneNumber, req.Password, req.FullName));
+        if (result.IsSuccess)
+            return Results.Ok(result.Value);
+        var status = result.Error.Type == ErrorType.Conflict ? 409 : 400;
+        return Results.Json(new { error = result.Error.Message, code = result.Error.Code }, statusCode: status);
+    }
+
+    // POST /auth/password/login — log in with phone + password (no OTP)
+    private static async Task<IResult> LoginWithPassword(LoginWithPasswordRequest req, ISender sender)
+    {
+        var result = await sender.Send(new LoginWithPasswordCommand(req.PhoneNumber, req.Password));
+        if (result.IsSuccess)
+            return Results.Ok(result.Value);
+        var status = result.Error.Type == ErrorType.Unauthorized ? 401 : 400;
+        return Results.Json(new { error = result.Error.Message, code = result.Error.Code }, statusCode: status);
+    }
+
     // POST /auth/token/refresh
     private static async Task<IResult> RefreshToken(RefreshTokenRequest req, ISender sender)
     {
@@ -232,6 +273,10 @@ public sealed class Auth : EndpointGroupBase
 internal record LocalLoginRequest(string Email, string Password);
 internal record SendOtpRequest(string PhoneNumber);
 internal record VerifyOtpRequest(string PhoneNumber, string Otp, string? DeviceId = null);
+internal record RegisterWithPasswordRequest(string PhoneNumber, string Password, string? FullName = null);
+internal record LoginWithPasswordRequest(string PhoneNumber, string Password);
+/// <summary>Enabled login methods the mobile/admin clients should surface.</summary>
+public record AuthMethodsResponse(bool Otp, bool WhatsApp, bool Password);
 internal record RefreshTokenRequest(string Token);
 internal record UpdateUserProfileRequest(
     string? FullName, string? Email, string? PanNumber, string? AadhaarLast4,

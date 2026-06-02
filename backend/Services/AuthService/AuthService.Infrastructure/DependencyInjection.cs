@@ -108,6 +108,12 @@ public static class DependencyInjection
         // SEC-013: PAN encryption service — AES-256 key from GCP Secret Manager
         services.AddSingleton<IPanEncryptionService, AesPanEncryptionService>();
 
+        // SEC-013: AES protector for AI provider API keys (encrypted at rest).
+        services.AddSingleton<IAiKeyProtector, AesAiKeyProtector>();
+
+        // Lightweight provider connection tester ("Test with Sample Query").
+        services.AddHttpClient<IAiProviderTester, HttpAiProviderTester>();
+
         // SEC-007: Pub/Sub publisher for cross-service domain event propagation
         services.AddSingleton<IPubSubPublisher, GooglePubSubPublisher>();
         services.AddScoped<IEventPublisher, PubSubEventPublisher>();

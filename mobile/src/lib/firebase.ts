@@ -24,8 +24,9 @@ const mockUser: FirebaseAuthTypes['User'] = {
   getIdToken: async () => 'mock-id-token',
 };
 
-// Start logged IN so SplashScreen navigates to App
-let _currentUser: FirebaseAuthTypes['User'] | null = mockUser;
+// Start logged OUT so the phone-OTP signup flow runs against the real backend.
+// (Auth state is driven by the backend token in the auth store, not this mock.)
+let _currentUser: FirebaseAuthTypes['User'] | null = null;
 const _listeners: Array<(user: FirebaseAuthTypes['User'] | null) => void> = [];
 
 export const auth = () => ({

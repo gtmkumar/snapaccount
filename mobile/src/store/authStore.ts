@@ -53,6 +53,11 @@ export interface AuthState {
 
   // Actions
   setAuthenticated: (token: string, user: UserProfile) => void;
+  // Store the session token + user WITHOUT entering the app yet (used during
+  // new-user onboarding so the wizard can make authenticated calls while the
+  // Auth stack stays visible). Call markAuthenticated() to enter the app.
+  setSession: (token: string, user: UserProfile) => void;
+  markAuthenticated: () => void;
   setUser: (user: UserProfile) => void;
   setOrganizations: (orgs: Organization[]) => void;
   setCurrentOrganization: (org: Organization) => void;
@@ -96,6 +101,19 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
           firebaseToken: token,
           user,
+          isLoading: false,
+        }),
+
+      setSession: (token, user) =>
+        set({
+          firebaseToken: token,
+          user,
+          isLoading: false,
+        }),
+
+      markAuthenticated: () =>
+        set({
+          isAuthenticated: true,
           isLoading: false,
         }),
 

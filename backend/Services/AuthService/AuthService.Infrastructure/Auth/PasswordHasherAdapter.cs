@@ -7,4 +7,7 @@ public sealed class PasswordHasherAdapter : IPasswordHasher
 {
     /// <inheritdoc />
     public string Hash(string password) => PasswordHasher.Hash(password);
+
+    /// <inheritdoc />
+    public bool Verify(string password, string? stored) => PasswordHasher.Verify(password, stored);
 }

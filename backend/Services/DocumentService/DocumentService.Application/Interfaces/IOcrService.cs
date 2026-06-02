@@ -6,7 +6,9 @@ public record OcrExtractedData(
     decimal? ConfidenceScore,
     IReadOnlyDictionary<string, string> Fields,
     string? RawResponse,
-    int ProcessingTimeMs);
+    int ProcessingTimeMs,
+    int InputTokens = 0,
+    int OutputTokens = 0);
 
 public interface IOcrService
 {

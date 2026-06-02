@@ -1,7 +1,9 @@
 using AuthService.Application.Interfaces;
 using FirebaseAdmin.Auth;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SnapAccount.Shared.Domain;
+using SnapAccount.Shared.Infrastructure.Auth;
 
 namespace AuthService.Infrastructure.Services;
 
@@ -9,8 +11,26 @@ namespace AuthService.Infrastructure.Services;
 /// Firebase Auth service using FirebaseAdmin SDK.
 /// NOT Microsoft.Identity.Web.
 /// </summary>
-public sealed class FirebaseAuthService(ILogger<FirebaseAuthService> logger) : IFirebaseAuthService
+public sealed class FirebaseAuthService(
+    ILogger<FirebaseAuthService> logger,
+    IConfiguration configuration) : IFirebaseAuthService
 {
+    // LOCAL_AUTH / DEV_AUTH_BYPASS dev mode: Firebase is not configured locally, so
+    // CreateCustomTokenAsync mints a locally-signed HS256 JWT (the same kind LOCAL_AUTH
+    // login issues) that the shared FirebaseAuthMiddleware accepts across all services.
+    // This lets the mobile phone-OTP flow work end-to-end without Firebase. NEVER in prod.
+    private static readonly TimeSpan DevTokenLifetime = TimeSpan.FromHours(12);
+
+    private bool DevAuthEnabled =>
+        string.Equals(configuration["LOCAL_AUTH"], "true", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Environment.GetEnvironmentVariable("LOCAL_AUTH"), "true", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(configuration["DEV_AUTH_BYPASS"], "true", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_BYPASS"), "true", StringComparison.OrdinalIgnoreCase);
+
+    private string LocalAuthSecret =>
+        configuration["LOCAL_AUTH:SECRET"]
+        ?? Environment.GetEnvironmentVariable("LOCAL_AUTH__SECRET")
+        ?? FirebaseAuthMiddleware.DefaultLocalSecret;
     public async Task<Result<string>> VerifyIdTokenAsync(string idToken, CancellationToken ct = default)
     {
         try
@@ -30,6 +50,39 @@ public sealed class FirebaseAuthService(ILogger<FirebaseAuthService> logger) : I
         IDictionary<string, object>? claims = null,
         CancellationToken ct = default)
     {
+        // ── Local dev: mint a LOCAL_AUTH HS256 JWT instead of a Firebase custom token ──
+        // Firebase Admin is not initialised without GCP creds, so the real path would throw.
+        // The token carries the caller's userId so ICurrentUser resolves the freshly
+        // registered phone-OTP user across AuthService + DocumentService + …
+        if (DevAuthEnabled)
+        {
+            var userId = claims is not null && claims.TryGetValue("userId", out var uidVal)
+                ? uidVal?.ToString()
+                : null;
+            var phone = claims is not null && claims.TryGetValue("phoneNumber", out var phoneVal)
+                ? phoneVal?.ToString()
+                : null;
+
+            var jwtClaims = new Dictionary<string, object?>
+            {
+                ["userId"]         = userId,
+                // No org yet at signup time; empty GUID satisfies handlers that require a
+                // non-null OrganizationId (e.g. document OCR) without scoping to a real org.
+                ["organizationId"] = Guid.Empty.ToString(),
+                ["roles"]          = new[] { "BUSINESS_OWNER" },
+                // Dev-only wildcard so the mobile customer can exercise document/GST/loan
+                // flows without modelling the full BUSINESS_OWNER permission set locally.
+                ["permissions"]    = new[] { "*" },
+                ["phone_number"]   = phone,
+                ["firebase_uid"]   = uid,
+            };
+
+            logger.LogWarning(
+                "LOCAL_AUTH/DEV_AUTH_BYPASS: issuing a local HS256 token for uid {Uid} (NEVER in production).",
+                uid);
+            return LocalJwt.Issue(jwtClaims, LocalAuthSecret, DevTokenLifetime);
+        }
+
         try
         {
             var token = await FirebaseAuth.DefaultInstance.CreateCustomTokenAsync(uid, claims, ct);

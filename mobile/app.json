@@ -60,14 +60,16 @@
         }
       ],
       "expo-asset",
-      "@react-native-firebase/app",
-      "@react-native-firebase/crashlytics"
+      "expo-font",
+      "expo-status-bar"
     ],
     "scheme": "snapaccount",
     "extra": {
       "eas": {
         "projectId": "snapaccount-app"
-      }
+      },
+      "apiBaseUrl": "http://localhost:5101",
+      "documentsBaseUrl": "http://localhost:5102"
     }
   }
 }

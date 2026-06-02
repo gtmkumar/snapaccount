@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { AlertBanner } from '@/components/shared/AlertBanner'
+import { Can } from '@/components/shared/Can'
 import { formatRelativeTime, getOcrConfidenceBg } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 
@@ -151,14 +152,19 @@ function buildColumns(navigate: ReturnType<typeof useNavigate>): ColumnDef<Docum
       header: 'Actions',
       cell: ({ row }) => (
         <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => void navigate(`/documents/${row.original.id}`)}
-          >
-            Review
-          </Button>
-          <Button variant="ghost" size="sm">Assign</Button>
+          {/* Action-level RBAC: Review needs document.read, Assign needs document.update. */}
+          <Can permission="document.read">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => void navigate(`/documents/${row.original.id}`)}
+            >
+              Review
+            </Button>
+          </Can>
+          <Can permission="document.update">
+            <Button variant="ghost" size="sm">Assign</Button>
+          </Can>
         </div>
       ),
     },
@@ -210,9 +216,11 @@ export default function DocumentQueuePage() {
         title="Document Queue"
         subtitle={`${(data ?? []).length} documents pending review${breachedCount > 0 ? ` · ${breachedCount} SLA breaches` : ''}`}
         actions={
-          <Button variant="secondary" size="sm" leftIcon={<Download className="h-4 w-4" />}>
-            Export
-          </Button>
+          <Can permission="document.read">
+            <Button variant="secondary" size="sm" leftIcon={<Download className="h-4 w-4" />}>
+              Export
+            </Button>
+          </Can>
         }
       />
 

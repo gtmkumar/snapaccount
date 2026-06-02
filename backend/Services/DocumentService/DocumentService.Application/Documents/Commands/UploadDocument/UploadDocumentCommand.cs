@@ -79,7 +79,9 @@ public sealed class UploadDocumentCommandHandler(
         var document = new Document
         {
             UserId = currentUser.UserId,
-            OrganizationId = request.OrganizationId,
+            // Attribute the document to the uploader's active organization when the
+            // caller doesn't specify one, so it surfaces in the org-scoped document list.
+            OrganizationId = request.OrganizationId ?? currentUser.OrganizationId,
             FileName = request.FileName,
             OriginalFileName = request.FileName,
             MimeType = request.MimeType,

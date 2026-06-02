@@ -20,7 +20,13 @@ public record DocumentDto(
     decimal? Amount,
     string? VendorName,
     DateOnly? DocumentDate,
-    DateTime UploadedAt);
+    DateTime UploadedAt,
+    decimal? OcrConfidence = null,
+    string? OcrConfidenceLevel = null,
+    IReadOnlyList<OcrFieldDto>? Fields = null);
+
+/// <summary>A single extracted OCR field surfaced to clients (Document Detail screen).</summary>
+public record OcrFieldDto(string Name, string? Value, decimal? Confidence);
 
 public sealed class GetDocumentQueryHandler(IDocumentDbContext db, ICurrentUser currentUser)
     : IQueryHandler<GetDocumentQuery, DocumentDto>
@@ -39,6 +45,38 @@ public sealed class GetDocumentQueryHandler(IDocumentDbContext db, ICurrentUser 
 
         if (doc is null)
             return Error.NotFound("Document.NotFound", $"Document {request.DocumentId} not found.");
+
+        // Attach the latest OCR result's fields + confidence for the detail view.
+        var ocr = await db.OcrResults
+            .Where(r => r.DocumentId == request.DocumentId && r.DeletedAt == null)
+            .OrderByDescending(r => r.ProcessedAt)
+            .Select(r => new
+            {
+                r.ConfidenceScore,
+                Fields = r.Fields
+                    .Select(f => new OcrFieldDto(
+                        f.FieldName,
+                        f.IsOverridden ? f.OverriddenValue : f.FieldValue,
+                        f.ConfidenceScore))
+                    .ToList()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (ocr is not null)
+        {
+            var level = ocr.ConfidenceScore switch
+            {
+                >= 0.8m => "GREEN",
+                >= 0.5m => "YELLOW",
+                _ => "RED"
+            };
+            doc = doc with
+            {
+                OcrConfidence = ocr.ConfidenceScore,
+                OcrConfidenceLevel = level,
+                Fields = ocr.Fields
+            };
+        }
 
         // SEC-IDOR: verify the document belongs to the caller's organisation,
         // re-querying ownership separately to keep the projection lean.

@@ -26,7 +26,7 @@ import { OTPInput } from '../../components/forms/OTPInput';
 import { Colors } from '../../constants/colors';
 import { isValidPAN, isValidGSTIN, isValidAadhaar, maskAadhaar } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
-import apiClient from '../../lib/api';
+import apiClient, { getApiError } from '../../lib/api';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
 type WizardNavProp = NativeStackNavigationProp<AuthStackParamList, 'BusinessProfileWizard'>;
@@ -88,12 +88,20 @@ const INDIAN_STATES = [
   'Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
 ];
 
+/** Convert a DD/MM/YYYY date string to ISO YYYY-MM-DD (backend DateOnly). Returns undefined if unparseable. */
+function toIsoDate(ddmmyyyy?: string): string | undefined {
+  if (!ddmmyyyy || !ddmmyyyy.includes('/')) return undefined;
+  const [d, m, y] = ddmmyyyy.split('/');
+  if (!d || !m || !y || y.length !== 4) return undefined;
+  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function BusinessProfileWizardScreen({ navigation }: Props) {
-  const { updateProfile, setOrganizations } = useAuthStore();
+  const { updateProfile, setOrganizations, markAuthenticated } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -167,37 +175,52 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
   const handleStep4Submit = form4.handleSubmit(async (data) => {
     setLoading(true);
     try {
-      const payload = {
-        pan: step1Data?.pan,
-        fullName: step1Data?.fullName,
-        dateOfBirth: step1Data?.dateOfBirth,
-        gstin: step2Data?.gstin,
+      // 1) Update the user's personal profile (best-effort — must not block signup).
+      try {
+        await apiClient.put('/auth/profile', {
+          fullName: step1Data?.fullName,
+          panNumber: step1Data?.pan,
+          dateOfBirth: toIsoDate(step1Data?.dateOfBirth),
+          addressLine1: data.addressLine1,
+          state: data.state,
+          pincode: data.pinCode,
+        });
+      } catch {
+        // Profile row may not exist yet for a brand-new user; org creation below is
+        // the source of truth for "signed-up customer". Continue regardless.
+      }
+
+      // 2) Create the business organization (the required step).
+      const orgRes = await apiClient.post<{ organizationId: string }>('/auth/organizations', {
         businessName: data.businessName,
+        gstin: step2Data?.gstin || null,
+        panNumber: step1Data?.pan || null,
         businessType: data.businessType,
-        industry: data.industry,
-        addressLine1: data.addressLine1,
-        state: data.state,
-        pinCode: data.pinCode,
-        aadhaarVerified,
-        userType: 'business_owner' as const,
-      };
+        industryType: data.industry,
+        annualTurnoverInr: null,
+      });
 
-      const response = await apiClient.post('/auth/complete-profile', payload);
-      const { organizations } = response.data as {
-        organizations: Array<{
-          id: string;
-          name: string;
-          gstin?: string;
-          panNumber?: string;
-        }>;
-      };
+      updateProfile({
+        profileComplete: true,
+        userType: 'business_owner',
+        name: step1Data?.fullName,
+      });
+      setOrganizations([
+        {
+          id: orgRes.data.organizationId,
+          name: data.businessName,
+          gstin: step2Data?.gstin || undefined,
+          businessType: data.businessType,
+          state: data.state,
+          pinCode: data.pinCode,
+          industry: data.industry,
+        },
+      ]);
 
-      updateProfile({ profileComplete: true, userType: 'business_owner' });
-      if (organizations) setOrganizations(organizations);
-
-      navigation.replace('LanguageSelection');
-    } catch {
-      Alert.alert('Error', 'Could not save profile. Please try again.');
+      // Onboarding complete — enter the app (RootNavigator swaps to AppNavigator).
+      markAuthenticated();
+    } catch (err: unknown) {
+      Alert.alert('Error', getApiError(err).message || 'Could not save profile. Please try again.');
     } finally {
       setLoading(false);
     }
