@@ -18,6 +18,7 @@ public class NotificationServiceDbContext(
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
     public DbSet<NotificationTemplate> NotificationTemplates => Set<NotificationTemplate>();
     public DbSet<NotificationLogEntry> NotificationLog => Set<NotificationLogEntry>();
+    public DbSet<InboxNotification> InboxNotifications => Set<InboxNotification>();
     public DbSet<DlqItem> DlqItems => Set<DlqItem>();
     public DbSet<PushToken> PushTokens => Set<PushToken>();
 

@@ -9,6 +9,9 @@ import {
   Flag,
   Bell,
   Zap,
+  User,
+  Monitor,
+  ShieldCheck,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -23,6 +26,9 @@ import { PartnerBanksSettings } from './sections/PartnerBanksSettings'
 import { TallySettings } from './sections/TallySettings'
 import { FeatureFlagsSettings } from './sections/FeatureFlagsSettings'
 import { NotificationSettings } from './sections/NotificationSettings'
+import { UserPreferencesSettings } from './sections/UserPreferencesSettings'
+import { DevicesSettings } from './sections/DevicesSettings'
+import { TwoFaSettings } from './sections/TwoFaSettings'
 
 type SettingSection =
   | 'payment-gateway'
@@ -34,6 +40,9 @@ type SettingSection =
   | 'subscriptions'
   | 'feature-flags'
   | 'notifications'
+  | 'preferences'
+  | 'devices'
+  | 'two-fa'
 
 interface NavItem {
   id: SettingSection
@@ -52,6 +61,9 @@ const navItems: NavItem[] = [
   { id: 'language', label: 'Language Settings', icon: Globe, group: 'Platform' },
   { id: 'subscriptions', label: 'Subscription Tiers', icon: Zap, group: 'Platform' },
   { id: 'feature-flags', label: 'Feature Flags', icon: Flag, group: 'Platform' },
+  { id: 'preferences', label: 'My Preferences', icon: User, group: 'Account' },
+  { id: 'devices', label: 'Logged-in Devices', icon: Monitor, group: 'Account' },
+  { id: 'two-fa', label: 'Two-Factor Authentication', icon: ShieldCheck, group: 'Account' },
 ]
 
 const sectionComponents: Record<SettingSection, ReactNode> = {
@@ -61,6 +73,9 @@ const sectionComponents: Record<SettingSection, ReactNode> = {
   'language': <LanguageSettings />,
   'partner-banks': <PartnerBanksSettings />,
   'tally': <TallySettings />,
+  'preferences': <UserPreferencesSettings />,
+  'devices': <DevicesSettings />,
+  'two-fa': <TwoFaSettings />,
   'subscriptions': (
     <div className="space-y-5">
       <h2 className="text-xl font-semibold text-neutral-900">Subscription Plans</h2>

@@ -54,13 +54,29 @@ export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
         ? { phoneNumber: phone, password, fullName: fullName.trim() }
         : { phoneNumber: phone, password };
 
+      // SEC-025: response also carries refreshToken + refreshExpiresAt when the backend
+      // supports rotation (gracefully absent in older builds).
+      // 2FA: a password login may return { requires2fa: true, challengeToken } with
+      // token/refreshToken null — the user must then complete the TOTP challenge.
       const res = await apiClient.post<{
         isNewUser: boolean;
         token: string | null;
         userId: string;
+        refreshToken?: string | null;
+        refreshExpiresAt?: string | null;
+        requires2fa?: boolean;
+        challengeToken?: string | null;
       }>(endpoint, payload);
 
-      const { isNewUser, token, userId } = res.data;
+      const { isNewUser, token, userId, refreshToken, requires2fa, challengeToken } = res.data;
+
+      // 2FA gate — only password/local login can require this (OTP login never does).
+      if (requires2fa && challengeToken) {
+        setLoading(false);
+        navigation.navigate('TwoFactorChallenge', { challengeToken, phone });
+        return;
+      }
+
       if (!token) throw new Error('No session token returned.');
 
       const profile = {
@@ -76,12 +92,12 @@ export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
 
       if (isNewUser) {
         // Keep the token for onboarding calls; stay in Auth stack until the wizard completes.
-        setSession(token, profile);
+        setSession(token, profile, refreshToken ?? null);
         navigation.replace('BusinessProfileWizard');
         return;
       }
 
-      setAuthenticated(token, profile);
+      setAuthenticated(token, profile, refreshToken ?? null);
       try {
         const orgsRes = await apiClient.get<
           Array<{ id: string; businessName?: string; name?: string; gstin?: string }>

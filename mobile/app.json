@@ -14,6 +14,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.snapaccount.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "SnapAccount uses the camera to photograph bills and documents for OCR processing.",
         "NSPhotoLibraryUsageDescription": "SnapAccount needs access to your photo library to upload documents.",
@@ -61,7 +62,9 @@
       ],
       "expo-asset",
       "expo-font",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-web-browser",
+      "expo-apple-authentication"
     ],
     "scheme": "snapaccount",
     "extra": {
@@ -69,7 +72,17 @@
         "projectId": "snapaccount-app"
       },
       "apiBaseUrl": "http://localhost:5101",
-      "documentsBaseUrl": "http://localhost:5102"
+      "documentsBaseUrl": "http://localhost:5102",
+      "firebase": {
+        "apiKey": "",
+        "authDomain": "",
+        "projectId": ""
+      },
+      "googleAuth": {
+        "iosClientId": "",
+        "androidClientId": "",
+        "webClientId": ""
+      }
     }
   }
 }

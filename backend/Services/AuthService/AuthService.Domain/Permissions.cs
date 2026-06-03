@@ -35,6 +35,7 @@ public static class Permissions
     public const string PlatformOrgsRead        = "platform.orgs.read";
     public const string PlatformOrgsCreate      = "platform.orgs.create";
     public const string PlatformOrgsSuspend     = "platform.orgs.suspend";
+
     public const string PlatformAdminsInvite    = "platform.admins.invite";
     public const string PlatformRolesManage     = "platform.roles.manage";
     public const string PlatformPermissionsManage = "platform.permissions.manage";

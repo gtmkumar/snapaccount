@@ -16,7 +16,8 @@ public record OrganizationDto(
     string? BusinessType,
     bool IsGstRegistered,
     bool IsMsmeRegistered,
-    bool IsActive);
+    bool IsActive,
+    bool GovernmentVerificationEnabled);
 
 /// <summary>
 /// Returns all active organizations for the current user via the repository.
@@ -38,7 +39,8 @@ public sealed class GetOrganizationsQueryHandler(
             .Where(o => o.DeletedAt == null)
             .Select(o => new OrganizationDto(
                 o.Id, o.BusinessName, o.Gstin, o.PanNumber,
-                o.BusinessType, o.IsGstRegistered, o.IsMsmeRegistered, o.IsActive))
+                o.BusinessType, o.IsGstRegistered, o.IsMsmeRegistered, o.IsActive,
+                o.GovernmentVerificationEnabled))
             .ToList()
             .AsReadOnly();
 

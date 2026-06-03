@@ -57,13 +57,17 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
       try {
         // Verify against the real backend. Returns a session token (a Firebase custom
         // token in prod; a LOCAL_AUTH JWT in local dev) used as the bearer for all services.
+        // SEC-025: response also carries refreshToken + refreshExpiresAt when the backend
+        // supports rotation (gracefully absent in older builds).
         const response = await apiClient.post<{
           isNewUser: boolean;
           firebaseCustomToken: string | null;
           userId: string;
+          refreshToken?: string | null;
+          refreshExpiresAt?: string | null;
         }>('/auth/otp/verify', { phoneNumber: phone, otp: otpValue });
 
-        const { isNewUser, firebaseCustomToken, userId } = response.data;
+        const { isNewUser, firebaseCustomToken, userId, refreshToken } = response.data;
         if (!firebaseCustomToken) {
           throw new Error('No session token returned.');
         }
@@ -81,12 +85,12 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
         if (isNewUser) {
           // Keep the token for authenticated onboarding calls, but stay in the
           // Auth stack until the business profile is completed.
-          setSession(firebaseCustomToken, profile);
+          setSession(firebaseCustomToken, profile, refreshToken ?? null);
           navigation.replace('BusinessProfileWizard');
           return;
         }
 
-        setAuthenticated(firebaseCustomToken, profile);
+        setAuthenticated(firebaseCustomToken, profile, refreshToken ?? null);
 
         // Returning user — enrich profile + organizations, then enter the app.
         try {

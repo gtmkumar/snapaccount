@@ -45,6 +45,32 @@ public sealed class FirebaseAuthService(
         }
     }
 
+    /// <inheritdoc />
+    public async Task<Result<FirebaseTokenClaims>> VerifyIdTokenAndGetClaimsAsync(
+        string idToken,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken, ct);
+
+            var email = decodedToken.Claims.TryGetValue("email", out var emailObj)
+                ? emailObj?.ToString()
+                : null;
+
+            var name = decodedToken.Claims.TryGetValue("name", out var nameObj)
+                ? nameObj?.ToString()
+                : null;
+
+            return new FirebaseTokenClaims(decodedToken.Uid, email, name);
+        }
+        catch (FirebaseAuthException ex)
+        {
+            logger.LogWarning("Firebase token verification failed during social sign-in: {Message}", ex.Message);
+            return Error.Unauthorized("Firebase.TokenInvalid", "The provided Firebase ID token is invalid or expired.");
+        }
+    }
+
     public async Task<Result<string>> CreateCustomTokenAsync(
         string uid,
         IDictionary<string, object>? claims = null,

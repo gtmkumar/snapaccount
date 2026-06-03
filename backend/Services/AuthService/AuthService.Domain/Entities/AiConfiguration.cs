@@ -3,6 +3,12 @@ using SnapAccount.Shared.Domain;
 namespace AuthService.Domain.Entities;
 
 /// <summary>
+/// Per-feature model + temperature override (e.g. use a cheaper model for document classification).
+/// Stored inside <see cref="AiConfiguration.FeatureModels"/> keyed by a feature name.
+/// </summary>
+public record AiFeatureModel(string Model, decimal Temperature);
+
+/// <summary>
 /// Platform-wide AI configuration (a single row). Selects the active provider/model/tier for
 /// AI features (OCR extraction, classification, chatbot). API keys are stored separately and
 /// encrypted in <see cref="AiProviderKey"/>. Managed by Super Admin (platform.ai.manage).
@@ -30,8 +36,17 @@ public class AiConfiguration : BaseAuditableEntity
     /// <summary>AI auto-classification of documents by type.</summary>
     public bool AutoClassifyEnabled { get; private set; } = true;
 
+    /// <summary>Indian languages enabled for Sarvam AI processing (e.g. Hindi, Bengali).</summary>
+    public IReadOnlyList<string> SarvamLanguages { get; private set; } = [];
+
+    /// <summary>Per-feature model/temperature overrides keyed by feature name.</summary>
+    public IReadOnlyDictionary<string, AiFeatureModel> FeatureModels { get; private set; }
+        = new Dictionary<string, AiFeatureModel>();
+
     public void Update(string? provider, string? model, string? tier,
-        decimal? confidenceThreshold, bool? ocrEnabled, bool? autoClassifyEnabled)
+        decimal? confidenceThreshold, bool? ocrEnabled, bool? autoClassifyEnabled,
+        IReadOnlyList<string>? sarvamLanguages = null,
+        IReadOnlyDictionary<string, AiFeatureModel>? featureModels = null)
     {
         if (!string.IsNullOrWhiteSpace(provider)) OcrProvider = provider.Trim().ToLowerInvariant();
         if (model is not null) OcrModel = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
@@ -39,6 +54,10 @@ public class AiConfiguration : BaseAuditableEntity
         if (confidenceThreshold is >= 0 and <= 1) ConfidenceThreshold = confidenceThreshold.Value;
         if (ocrEnabled.HasValue) OcrEnabled = ocrEnabled.Value;
         if (autoClassifyEnabled.HasValue) AutoClassifyEnabled = autoClassifyEnabled.Value;
+        if (sarvamLanguages is not null)
+            SarvamLanguages = sarvamLanguages.Where(l => !string.IsNullOrWhiteSpace(l)).Distinct().ToList();
+        if (featureModels is not null)
+            FeatureModels = new Dictionary<string, AiFeatureModel>(featureModels);
     }
 
     public static AiConfiguration CreateDefault() => new() { Id = SingletonId };

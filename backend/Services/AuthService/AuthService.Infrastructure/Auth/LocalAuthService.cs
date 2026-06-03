@@ -1,6 +1,7 @@
 using AuthService.Application.Common.DevSeed;
 using AuthService.Application.Common.Helpers;
 using AuthService.Application.Common.Interfaces;
+using AuthService.Application.Interfaces;
 using AuthService.Domain.Entities;
 using AuthService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,7 @@ namespace AuthService.Infrastructure.Auth;
 public sealed class LocalAuthService(
     AuthDbContext db,
     IConfiguration configuration,
+    IChallengeTokenService challengeTokenService,
     ILogger<LocalAuthService> logger) : ILocalAuthService
 {
     private const string AdminEmail    = "admin@snapaccount.local";
@@ -101,6 +103,24 @@ public sealed class LocalAuthService(
 
         var orgId = orgMembership?.OrganizationId ?? DevOrgId;
 
+        // 2FA gate: if TOTP is enabled, return a challenge token instead of the JWT
+        var hasTotpEnabled = await db.UserTotps
+            .AnyAsync(t => t.UserId == user.Id && t.IsEnabled && t.DeletedAt == null, ct);
+        if (hasTotpEnabled)
+        {
+            var challengeToken = challengeTokenService.Issue(user.Id);
+            logger.LogInformation("LOCAL_AUTH: 2FA required for {Email} — challenge token issued.", email);
+            return new LocalLoginResult(
+                Token: null!,
+                UserId: user.Id,
+                Email: user.Email!,
+                FullName: user.FullName,
+                Roles: [],
+                Permissions: [],
+                Requires2fa: true,
+                ChallengeToken: challengeToken);
+        }
+
         user.LastLoginAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
@@ -117,7 +137,7 @@ public sealed class LocalAuthService(
         };
 
         var token = LocalJwt.Issue(claims, Secret, TokenLifetime);
-        return new LocalLoginResult(token, user.Id, user.Email!, user.FullName, allRoles, permissions);
+        return new LocalLoginResult(token, user.Id, user.Email!, user.FullName, allRoles, permissions, Requires2fa: false);
     }
 
     /// <summary>

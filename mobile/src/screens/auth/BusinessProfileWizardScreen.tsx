@@ -20,13 +20,15 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { OTPInput } from '../../components/forms/OTPInput';
+import { PanInput } from '../../components/shared/PanInput';
 import { Colors } from '../../constants/colors';
-import { isValidPAN, isValidGSTIN, isValidAadhaar, maskAadhaar } from '../../lib/utils';
+import { isValidPAN, isValidGSTIN, isValidAadhaar } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import apiClient, { getApiError } from '../../lib/api';
+import { saveDocument, type DocumentKind } from '../../api/documents';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
 type WizardNavProp = NativeStackNavigationProp<AuthStackParamList, 'BusinessProfileWizard'>;
@@ -102,16 +104,18 @@ function toIsoDate(ddmmyyyy?: string): string | undefined {
 
 export function BusinessProfileWizardScreen({ navigation }: Props) {
   const { updateProfile, setOrganizations, markAuthenticated } = useAuthStore();
+  const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
   // Collected data across steps
   const [step1Data, setStep1Data] = useState<Step1Data | null>(null);
   const [step2Data, setStep2Data] = useState<Step2Data | null>(null);
-  const [aadhaarVerified, setAadhaarVerified] = useState(false);
-  const [aadhaarOtp, setAadhaarOtp] = useState('');
-  const [aadhaarOtpSent, setAadhaarOtpSent] = useState(false);
-  const [maskedAadhaar, setMaskedAadhaar] = useState('');
+  const [panError, setPanError] = useState('');
+  const [panVerified, setPanVerified] = useState(false);
+  // Aadhaar is collected locally and persisted as a document after the org is
+  // created (Step 4). The 12-digit value is held only transiently in state.
+  const [aadhaarNumber, setAadhaarNumber] = useState('');
 
   const form1 = useForm<Step1Data>({ resolver: zodResolver(step1Schema) });
   const form2 = useForm<Step2Data>({ resolver: zodResolver(step2Schema) });
@@ -122,18 +126,15 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
     else navigation.goBack();
   };
 
-  // ── Step 1: PAN
-  const handleStep1Submit = form1.handleSubmit(async (data) => {
-    setLoading(true);
-    try {
-      // TODO: call PAN verification API
-      setStep1Data(data);
-      setCurrentStep(2);
-    } catch {
-      Alert.alert('Error', 'PAN verification failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+  // ── Step 1: PAN — collected locally; persisted as a document after the org is
+  //    created (Step 4). Government verification (OTP) is handled on the Identity
+  //    Documents screen — the canonical /auth/me/documents path — not here, since
+  //    no organization exists yet during onboarding.
+  const handleStep1Submit = form1.handleSubmit((data) => {
+    setPanError('');
+    setPanVerified(true);
+    setStep1Data(data);
+    setCurrentStep(2);
   });
 
   // ── Step 2: GSTIN
@@ -142,33 +143,30 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
     setCurrentStep(3);
   });
 
-  // ── Step 3: Aadhaar KYC
-  const handleSendAadhaarOTP = async (aadhaar: string) => {
+  // ── Step 3: Aadhaar — collected locally and persisted as a document after the
+  //    org exists. Verification (OTP) happens on the Identity Documents screen.
+  const handleAadhaarContinue = (aadhaar: string) => {
     if (!isValidAadhaar(aadhaar)) return;
-    setLoading(true);
-    try {
-      // TODO: call Aadhaar OTP API
-      setMaskedAadhaar(maskAadhaar(aadhaar));
-      setAadhaarOtpSent(true);
-    } catch {
-      Alert.alert('Error', 'Could not send Aadhaar OTP. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    setAadhaarNumber(aadhaar.replace(/[\s-]/g, ''));
+    setCurrentStep(4);
   };
 
-  const handleVerifyAadhaarOTP = async () => {
-    if (aadhaarOtp.length !== 6) return;
-    setLoading(true);
-    try {
-      // TODO: call Aadhaar OTP verify API
-      setAadhaarVerified(true);
-      setCurrentStep(4);
-    } catch {
-      Alert.alert('Error', 'Invalid Aadhaar OTP. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+  /**
+   * Best-effort persistence of the collected identity documents as SAVED records
+   * via the canonical /auth/me/documents path. Runs after org creation so the
+   * documents are org-scoped. Never blocks onboarding — government verification
+   * is completed later on the Identity Documents screen.
+   */
+  const persistDocuments = async () => {
+    const toSave: { kind: DocumentKind; number: string }[] = [];
+    if (step1Data?.pan) toSave.push({ kind: 'PAN', number: step1Data.pan });
+    if (aadhaarNumber) toSave.push({ kind: 'AADHAAR', number: aadhaarNumber });
+    if (step2Data?.gstin) toSave.push({ kind: 'GSTIN', number: step2Data.gstin });
+    await Promise.allSettled(
+      toSave.map((d) =>
+        saveDocument(d.kind, d.number, step1Data?.fullName).catch(() => undefined),
+      ),
+    );
   };
 
   // ── Step 4: Business Details
@@ -217,6 +215,12 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
         },
       ]);
 
+      // 3) Persist the collected identity documents (PAN/Aadhaar/GSTIN) as SAVED
+      //    records via the canonical /auth/me/documents path now that the org
+      //    exists. Best-effort — verification is completed later on the Identity
+      //    Documents screen.
+      await persistDocuments();
+
       // Onboarding complete — enter the app (RootNavigator swaps to AppNavigator).
       markAuthenticated();
     } catch (err: unknown) {
@@ -264,17 +268,25 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 control={form1.control}
                 name="pan"
                 render={({ field, fieldState }) => (
-                  <Input
+                  <PanInput
                     label="PAN Number"
-                    placeholder="ABCDE1234F"
-                    value={field.value}
-                    onChangeText={(v) => field.onChange(v.toUpperCase())}
-                    error={fieldState.error?.message}
-                    autoCapitalize="characters"
-                    maxLength={10}
+                    value={field.value ?? ''}
+                    onChangeText={(v) => {
+                      field.onChange(v);
+                      if (panError) setPanError('');
+                      if (panVerified) setPanVerified(false);
+                    }}
+                    error={fieldState.error?.message ?? (panError || undefined)}
                   />
                 )}
               />
+
+              {panVerified && (
+                <View style={styles.verifiedRow}>
+                  <Ionicons name="checkmark-circle" size={16} color={Colors.success[600]} />
+                  <Text style={styles.verifiedText}>{t('mobile.auth.kyc.panVerified')}</Text>
+                </View>
+              )}
 
               <Controller
                 control={form1.control}
@@ -366,61 +378,34 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
             </View>
           )}
 
-          {/* ── Step 3: KYC ── */}
+          {/* ── Step 3: Aadhaar collection (verification deferred to the
+                 Identity Documents screen via /auth/me/documents) ── */}
           {currentStep === 3 && (
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Complete KYC</Text>
+              <Text style={styles.stepTitle}>Add Your Aadhaar</Text>
               <Text style={styles.stepSubtitle}>
-                Required for loan applications and financial services
+                Used for loan applications and financial services
               </Text>
 
-              {!aadhaarOtpSent ? (
-                <>
-                  <AadhaarInputSection onSendOTP={handleSendAadhaarOTP} loading={loading} />
+              <AadhaarInputSection onContinue={handleAadhaarContinue} />
 
-                  <View style={styles.warningBanner}>
-                    <View style={styles.bannerRow}>
-                      <Ionicons name="warning-outline" size={14} color={Colors.warning[600]} style={styles.bannerIcon} />
-                      <Text style={styles.warningBannerText}>
-                        Your Aadhaar number is masked and never stored in full — UIDAI guidelines.
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Button
-                    label="Skip KYC for now"
-                    variant="ghost"
-                    onPress={() => setCurrentStep(4)}
-                    fullWidth
-                    size="lg"
-                  />
-                </>
-              ) : (
-                <>
-                  <Text style={styles.maskedAadhaar}>
-                    Aadhaar: {maskedAadhaar}
+              <View style={styles.warningBanner}>
+                <View style={styles.bannerRow}>
+                  <Ionicons name="warning-outline" size={14} color={Colors.warning[600]} style={styles.bannerIcon} />
+                  <Text style={styles.warningBannerText}>
+                    Your Aadhaar number is masked and never stored in full — UIDAI guidelines.
+                    You can verify it later from Profile → Identity Documents.
                   </Text>
-                  <Text style={styles.otpSentText}>
-                    OTP sent to your Aadhaar-linked mobile
-                  </Text>
+                </View>
+              </View>
 
-                  <OTPInput
-                    value={aadhaarOtp}
-                    onChange={setAadhaarOtp}
-                    onComplete={() => {}}
-                    disabled={loading}
-                  />
-
-                  <Button
-                    label="Verify Aadhaar"
-                    onPress={handleVerifyAadhaarOTP}
-                    disabled={aadhaarOtp.length < 6}
-                    loading={loading}
-                    fullWidth
-                    size="lg"
-                  />
-                </>
-              )}
+              <Button
+                label="Skip for now"
+                variant="ghost"
+                onPress={() => setCurrentStep(4)}
+                fullWidth
+                size="lg"
+              />
             </View>
           )}
 
@@ -534,11 +519,9 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
 
 // Sub-component for Aadhaar input
 function AadhaarInputSection({
-  onSendOTP,
-  loading,
+  onContinue,
 }: {
-  onSendOTP: (aadhaar: string) => void;
-  loading: boolean;
+  onContinue: (aadhaar: string) => void;
 }) {
   const [aadhaar, setAadhaar] = useState('');
   const isValid = isValidAadhaar(aadhaar);
@@ -556,10 +539,9 @@ function AadhaarInputSection({
         hint="Your Aadhaar number is masked and never stored"
       />
       <Button
-        label="Send OTP to Aadhaar-linked mobile"
-        onPress={() => onSendOTP(aadhaar)}
+        label="Continue"
+        onPress={() => onContinue(aadhaar)}
         disabled={!isValid}
-        loading={loading}
         fullWidth
         size="lg"
       />
@@ -647,18 +629,15 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     flex: 1,
   },
-  maskedAadhaar: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.neutral[800],
-    textAlign: 'center',
-    marginBottom: 8,
-    fontFamily: 'Courier New',
+  verifiedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
   },
-  otpSentText: {
-    fontSize: 14,
-    color: Colors.neutral[500],
-    textAlign: 'center',
-    marginBottom: 24,
+  verifiedText: {
+    fontSize: 13,
+    color: Colors.success[600],
+    fontWeight: '600',
   },
 });

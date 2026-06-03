@@ -66,6 +66,16 @@ public sealed class UserRepository(AuthDbContext dbContext) : IUserRepository
 
     public async Task UpdateAsync(User user, CancellationToken ct = default)
     {
+        // If a new UserPreference was just attached to the aggregate (i.e. no row existed
+        // before this request) its entity state will be Detached after Users.Update() marks
+        // the root as Modified — EF does not automatically escalate a freshly-set reference
+        // navigation to Added. We detect this and explicitly Add it so EF issues an INSERT.
+        if (user.Preference is not null &&
+            dbContext.Entry(user.Preference).State == EntityState.Detached)
+        {
+            dbContext.UserPreferences.Add(user.Preference);
+        }
+
         dbContext.Users.Update(user);
         await dbContext.SaveChangesAsync(ct);
     }

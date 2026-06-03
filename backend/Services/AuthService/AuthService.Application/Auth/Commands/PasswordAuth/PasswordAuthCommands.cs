@@ -1,7 +1,10 @@
+using System.Security.Cryptography;
+using AuthService.Application.Common.Interfaces;
 using AuthService.Application.Interfaces;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Events;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Domain;
 
@@ -16,11 +19,28 @@ namespace AuthService.Application.Auth.Commands.PasswordAuth;
 // signed LOCAL_AUTH JWT in dev — see FirebaseAuthService.CreateCustomTokenAsync).
 // =============================================================================
 
-/// <summary>Shared response for password register/login — mirrors VerifyOtpResponse.</summary>
+/// <summary>
+/// Shared response for password register/login — mirrors VerifyOtpResponse.
+/// When 2FA is active, <see cref="Requires2fa"/> is true and <see cref="ChallengeToken"/> is set;
+/// the caller must complete POST /auth/2fa/challenge to obtain the JWT.
+/// </summary>
 /// <param name="IsNewUser">True when this call created the account (client routes to onboarding).</param>
-/// <param name="Token">Bearer session token (Firebase custom token / LOCAL_AUTH JWT).</param>
+/// <param name="Token">Bearer session token (Firebase custom token / LOCAL_AUTH JWT). Null when 2FA is required.</param>
 /// <param name="UserId">The authenticated user's id.</param>
-public record PasswordAuthResponse(bool IsNewUser, string? Token, Guid UserId);
+/// <param name="RefreshToken">
+/// Opaque 64-byte base64 refresh token (plaintext). Null when 2FA is required.
+/// </param>
+/// <param name="RefreshExpiresAt">UTC expiry of the refresh token (30 days from issuance). Null when 2FA required.</param>
+/// <param name="Requires2fa">When true, 2FA is enabled — complete the challenge before using the session.</param>
+/// <param name="ChallengeToken">Short-lived (5 min) challenge token to pass to POST /auth/2fa/challenge. Set when Requires2fa=true.</param>
+public record PasswordAuthResponse(
+    bool IsNewUser,
+    string? Token,
+    Guid UserId,
+    string? RefreshToken = null,
+    DateTime? RefreshExpiresAt = null,
+    bool Requires2fa = false,
+    string? ChallengeToken = null);
 
 // ── Register ────────────────────────────────────────────────────────────────
 
@@ -44,7 +64,8 @@ public sealed class RegisterWithPasswordCommandValidator : AbstractValidator<Reg
 public sealed class RegisterWithPasswordCommandHandler(
     IUserRepository userRepository,
     IPasswordHasher passwordHasher,
-    IFirebaseAuthService firebaseAuthService)
+    IFirebaseAuthService firebaseAuthService,
+    IRefreshTokenRepository refreshTokenRepository)
     : ICommandHandler<RegisterWithPasswordCommand, PasswordAuthResponse>
 {
     public async Task<Result<PasswordAuthResponse>> Handle(
@@ -93,7 +114,22 @@ public sealed class RegisterWithPasswordCommandHandler(
         user.LastLoginAt = DateTime.UtcNow;
         await userRepository.UpdateAsync(user, cancellationToken);
 
-        return new PasswordAuthResponse(isNewUser, tokenResult.Value, user.Id);
+        // Issue initial refresh token — same generation pattern as RefreshTokenCommandHandler.
+        var tokenBytes = RandomNumberGenerator.GetBytes(64);
+        var tokenPlain = Convert.ToBase64String(tokenBytes);
+        var tokenHash = Convert.ToHexString(
+            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(tokenPlain)));
+
+        var refreshToken = new Domain.Entities.RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = tokenHash,
+            DeviceId = null,
+            ExpiresAt = DateTime.UtcNow.AddDays(30)
+        };
+        await refreshTokenRepository.AddAsync(refreshToken, cancellationToken);
+
+        return new PasswordAuthResponse(isNewUser, tokenResult.Value, user.Id, tokenPlain, refreshToken.ExpiresAt);
     }
 }
 
@@ -116,7 +152,10 @@ public sealed class LoginWithPasswordCommandValidator : AbstractValidator<LoginW
 public sealed class LoginWithPasswordCommandHandler(
     IUserRepository userRepository,
     IPasswordHasher passwordHasher,
-    IFirebaseAuthService firebaseAuthService)
+    IFirebaseAuthService firebaseAuthService,
+    IRefreshTokenRepository refreshTokenRepository,
+    IAuthDbContext db,
+    IChallengeTokenService challengeTokenService)
     : ICommandHandler<LoginWithPasswordCommand, PasswordAuthResponse>
 {
     public async Task<Result<PasswordAuthResponse>> Handle(
@@ -135,6 +174,17 @@ public sealed class LoginWithPasswordCommandHandler(
         if (!user.IsActive)
             return Error.Unauthorized("Auth.Inactive", "This account is inactive.");
 
+        // 2FA gate: if TOTP is enabled, return a challenge token instead of the JWT
+        var hasTotpEnabled = await db.UserTotps
+            .AnyAsync(t => t.UserId == user.Id && t.IsEnabled && t.DeletedAt == null, cancellationToken);
+        if (hasTotpEnabled)
+        {
+            var challengeToken = challengeTokenService.Issue(user.Id);
+            return new PasswordAuthResponse(
+                IsNewUser: false, Token: null, UserId: user.Id,
+                Requires2fa: true, ChallengeToken: challengeToken);
+        }
+
         var firebaseUid = user.FirebaseUid ?? $"phone_{request.PhoneNumber}";
         var tokenResult = await firebaseAuthService.CreateCustomTokenAsync(
             firebaseUid,
@@ -150,6 +200,21 @@ public sealed class LoginWithPasswordCommandHandler(
         user.LastLoginAt = DateTime.UtcNow;
         await userRepository.UpdateAsync(user, cancellationToken);
 
-        return new PasswordAuthResponse(IsNewUser: false, tokenResult.Value, user.Id);
+        // Issue initial refresh token — same generation pattern as RefreshTokenCommandHandler.
+        var tokenBytes = RandomNumberGenerator.GetBytes(64);
+        var tokenPlain = Convert.ToBase64String(tokenBytes);
+        var tokenHash = Convert.ToHexString(
+            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(tokenPlain)));
+
+        var refreshToken = new Domain.Entities.RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = tokenHash,
+            DeviceId = null,
+            ExpiresAt = DateTime.UtcNow.AddDays(30)
+        };
+        await refreshTokenRepository.AddAsync(refreshToken, cancellationToken);
+
+        return new PasswordAuthResponse(IsNewUser: false, tokenResult.Value, user.Id, tokenPlain, refreshToken.ExpiresAt);
     }
 }

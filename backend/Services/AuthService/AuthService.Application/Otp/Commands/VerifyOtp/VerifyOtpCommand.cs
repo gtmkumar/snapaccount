@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using AuthService.Application.Interfaces;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Events;
@@ -14,8 +15,18 @@ namespace AuthService.Application.Otp.Commands.VerifyOtp;
 public record VerifyOtpCommand(string PhoneNumber, string Otp, string? DeviceId = null)
     : ICommand<VerifyOtpResponse>;
 
-/// <summary>Response returned after successful OTP verification.</summary>
-public record VerifyOtpResponse(bool IsNewUser, string? FirebaseCustomToken, Guid UserId);
+/// <summary>
+/// Response returned after successful OTP verification.
+/// <para><c>RefreshToken</c> is a 64-byte random opaque string (base64). Store it securely
+/// (Expo SecureStore / Android Keystore) and exchange via POST /auth/token/refresh.
+/// <c>RefreshExpiresAt</c> is UTC ISO-8601.</para>
+/// </summary>
+public record VerifyOtpResponse(
+    bool IsNewUser,
+    string? FirebaseCustomToken,
+    Guid UserId,
+    string? RefreshToken = null,
+    DateTime? RefreshExpiresAt = null);
 
 /// <summary>FluentValidation validator for <see cref="VerifyOtpCommand"/>.</summary>
 public sealed class VerifyOtpCommandValidator : AbstractValidator<VerifyOtpCommand>
@@ -36,12 +47,14 @@ public sealed class VerifyOtpCommandValidator : AbstractValidator<VerifyOtpComma
 
 /// <summary>
 /// Verifies the OTP (enforcing 3-attempt limit + 30-min lockout via <see cref="IOtpService"/>),
-/// finds or creates the <see cref="User"/> aggregate, and issues a Firebase custom token.
+/// finds or creates the <see cref="User"/> aggregate, issues a Firebase custom token,
+/// and persists an initial refresh token so clients can call /auth/token/refresh immediately.
 /// </summary>
 public sealed class VerifyOtpCommandHandler(
     IOtpService otpService,
     IUserRepository userRepository,
-    IFirebaseAuthService firebaseAuthService)
+    IFirebaseAuthService firebaseAuthService,
+    IRefreshTokenRepository refreshTokenRepository)
     : ICommandHandler<VerifyOtpCommand, VerifyOtpResponse>
 {
     /// <inheritdoc />
@@ -82,6 +95,32 @@ public sealed class VerifyOtpCommandHandler(
         user.LastLoginAt = DateTime.UtcNow;
         await userRepository.UpdateAsync(user, cancellationToken);
 
-        return new VerifyOtpResponse(isNewUser, customTokenResult.Value, user.Id);
+        // Issue initial refresh token — same generation pattern as RefreshTokenCommandHandler.
+        // 64 random bytes → base64 plaintext returned to caller; SHA-256 hex stored in DB.
+        var tokenBytes = RandomNumberGenerator.GetBytes(64);
+        var tokenPlain = Convert.ToBase64String(tokenBytes);
+        var tokenHash = Convert.ToHexString(
+            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(tokenPlain)));
+
+        // DeviceId: parse command string → Guid? (null if absent or not a valid Guid)
+        Guid? deviceId = Guid.TryParse(request.DeviceId, out var parsedDevice)
+            ? parsedDevice
+            : null;
+
+        var refreshToken = new Domain.Entities.RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = tokenHash,
+            DeviceId = deviceId,
+            ExpiresAt = DateTime.UtcNow.AddDays(30)
+        };
+        await refreshTokenRepository.AddAsync(refreshToken, cancellationToken);
+
+        return new VerifyOtpResponse(
+            isNewUser,
+            customTokenResult.Value,
+            user.Id,
+            tokenPlain,
+            refreshToken.ExpiresAt);
     }
 }

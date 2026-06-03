@@ -6,6 +6,8 @@ import { RoutePermissionGuard } from '@/components/shared/RoutePermissionGuard'
 import { CommandPaletteProvider } from '@/contexts/CommandPaletteContext'
 import { KeyboardShortcutsProvider } from '@/contexts/KeyboardShortcutsContext'
 import LoginPage from '@/pages/auth/LoginPage'
+import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
+import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
 import DashboardPage from '@/pages/dashboard/DashboardPage'
 import DocumentQueuePage from '@/pages/documents/DocumentQueuePage'
 import DocumentReviewPage from '@/pages/documents/DocumentReviewPage'
@@ -45,6 +47,8 @@ import NavigationManagementPage from '@/pages/settings/NavigationManagementPage'
 import OrganizationsPage from '@/pages/orgs/OrganizationsPage'
 import OrganizationDetailPage from '@/pages/orgs/OrganizationDetailPage'
 import InviteAcceptancePage from '@/pages/auth/InviteAcceptancePage'
+// Admin utilities — audit log (admin.dashboard.read)
+import AuditLogPage from '@/pages/admin/AuditLogPage'
 
 // Layout wrapper for protected routes
 // KeyboardShortcutsProvider uses useNavigate() so it must live inside the
@@ -74,6 +78,16 @@ export const router = createBrowserRouter([
   {
     path: '/invite/:token',
     element: <InviteAcceptancePage />,
+  },
+
+  // Password reset flow (PUBLIC, no auth required)
+  {
+    path: '/forgot-password',
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
   },
 
   // 403 Forbidden
@@ -361,6 +375,16 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedLayout>
         <OrganizationDetailPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // Audit Log (admin.dashboard.read)
+  {
+    path: '/admin/audit-log',
+    element: (
+      <ProtectedLayout>
+        <AuditLogPage />
       </ProtectedLayout>
     ),
   },

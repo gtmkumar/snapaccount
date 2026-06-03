@@ -1,13 +1,16 @@
 /**
  * OrganizationDetailPage — Auth/RBAC Module 1 (SUPER_ADMIN)
  * Route: /admin/organizations/:orgId
- * Shows org overview with stat cards, tabs for Members / Roles / Invites / Settings.
+ * Shows org overview with stat cards, tabs for Overview / Members / Settings.
  */
 import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { t } from '@/i18n'
-import { ChevronRight, CheckCircle, PauseCircle, Users, Shield, Mail } from 'lucide-react'
+import {
+  ChevronRight, CheckCircle, PauseCircle, Users, Shield, Mail,
+  UserCheck, Clock, AlertCircle,
+} from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Tabs, TabList, TabTrigger, TabPanels, TabPanel } from '@/components/ui/Tabs'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
@@ -15,7 +18,13 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { Dialog } from '@/components/ui/Dialog'
 import { cn, formatDate, isValidGSTIN, isValidPAN } from '@/lib/utils'
 import { toast } from 'sonner'
-import { listOrganizations, suspendOrganization, type OrgListItem } from '@/lib/rbacApi'
+import {
+  listOrganizations, suspendOrganization, updateOrgSettings,
+  listOrgMembers, listOrgInvites,
+  type OrgListItem, type OrgMember, type OrgInvite,
+} from '@/lib/rbacApi'
+import { Toggle } from '@/components/ui/Toggle'
+import { usePermission } from '@/hooks/usePermission'
 
 export default function OrganizationDetailPage() {
   const { orgId } = useParams<{ orgId: string }>()
@@ -121,16 +130,18 @@ export default function OrganizationDetailPage() {
             </ErrorBoundary>
           </TabPanel>
 
-          {/* Members tab */}
+          {/* Members tab — live data */}
           <TabPanel id="members">
-            <p className="text-sm text-[var(--text-secondary)]">
-              {t('orgs.tab.membersHint')}
-            </p>
+            <ErrorBoundary scope="pane">
+              <OrgMembersTab orgId={orgId!} />
+            </ErrorBoundary>
           </TabPanel>
 
-          {/* Settings tab */}
+          {/* Settings tab — pending invites + editable metadata */}
           <TabPanel id="settings">
-            <OrgSettings org={org} />
+            <ErrorBoundary scope="pane">
+              <OrgSettingsTab orgId={orgId!} org={org} />
+            </ErrorBoundary>
           </TabPanel>
         </TabPanels>
       </Tabs>
@@ -240,7 +251,358 @@ function OrgOverview({ org }: { org: OrgListItem }) {
   )
 }
 
-function OrgSettings({ org }: { org: OrgListItem }) {
+// ── Members tab ───────────────────────────────────────────────────────────────
+
+function OrgMembersTab({ orgId }: { orgId: string }) {
+  const [page, setPage] = useState(1)
+  const pageSize = 20
+
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['platform', 'organizations', orgId, 'members', { page, pageSize }],
+    queryFn: () => listOrgMembers(orgId, { page, pageSize }),
+    staleTime: 30_000,
+  })
+
+  if (isLoading) return <Skeleton variant="list" />
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-12">
+        <AlertCircle className="h-8 w-8 text-[var(--text-tertiary)]" />
+        <p className="text-sm text-[var(--text-secondary)]">{t('orgs.members.error')}</p>
+        <Button variant="ghost" onClick={() => void refetch()}>{t('common.retry')}</Button>
+      </div>
+    )
+  }
+
+  const items = data?.items ?? []
+  const totalCount = data?.totalCount ?? 0
+  const totalPages = Math.ceil(totalCount / pageSize)
+
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16">
+        <Users className="h-10 w-10 text-[var(--text-tertiary)]" />
+        <p className="text-sm text-[var(--text-secondary)]">{t('orgs.members.empty')}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-[var(--text-tertiary)]">
+        {t('orgs.members.total', { count: totalCount })}
+      </p>
+
+      <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+        <table className="w-full text-sm" aria-label={t('orgs.members.tableLabel')}>
+          <thead>
+            <tr className="bg-[var(--surface-raised)] border-b border-[var(--border-subtle)]">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
+                {t('orgs.members.col.member')}
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
+                {t('orgs.members.col.role')}
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
+                {t('orgs.members.col.status')}
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
+                {t('orgs.members.col.joined')}
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border-subtle)]">
+            {items.map(member => (
+              <MemberRow key={member.userId} member={member} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+          >
+            {t('common.previous')}
+          </Button>
+          <span className="text-sm text-[var(--text-tertiary)]">
+            {t('common.pageOf', { page, total: totalPages })}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage(p => p + 1)}
+          >
+            {t('common.next')}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MemberRow({ member }: { member: OrgMember }) {
+  const initials = (member.displayName ?? member.email)
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+
+  return (
+    <tr className="bg-[var(--surface-default)] hover:bg-[var(--surface-raised)] transition-colors">
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-full bg-[var(--brand-primary)] text-white flex items-center justify-center text-xs font-bold shrink-0">
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+              {member.displayName ?? member.email}
+            </p>
+            {member.displayName && (
+              <p className="text-xs text-[var(--text-tertiary)] truncate">{member.email}</p>
+            )}
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+          {member.role}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        {member.status === 'active' ? (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+            <UserCheck className="h-3 w-3" />
+            {t('orgs.members.status.active')}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+            <PauseCircle className="h-3 w-3" />
+            {t('orgs.members.status.inactive')}
+          </span>
+        )}
+      </td>
+      <td className="px-4 py-3 text-sm text-[var(--text-secondary)]">
+        {member.joinedAt ? formatDate(member.joinedAt) : '—'}
+      </td>
+    </tr>
+  )
+}
+
+// ── Settings tab ───────────────────────────────────────────────────────────────
+
+function OrgSettingsTab({ orgId, org }: { orgId: string; org: OrgListItem }) {
+  return (
+    <div className="space-y-8">
+      {/* Government Verification */}
+      <section>
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">
+          {t('orgs.settings.govVerification.title')}
+        </h3>
+        <GovVerificationSection orgId={orgId} org={org} />
+      </section>
+
+      {/* Pending invites */}
+      <section>
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">
+          {t('orgs.settings.pendingInvites')}
+        </h3>
+        <OrgInvitesPanel orgId={orgId} />
+      </section>
+
+      {/* Editable org metadata */}
+      <section>
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">
+          {t('orgs.settings.registration')}
+        </h3>
+        <OrgMetadataForm org={org} />
+      </section>
+    </div>
+  )
+}
+
+// ── Government Verification section ──────────────────────────────────────────
+
+function GovVerificationSection({ orgId, org }: { orgId: string; org: OrgListItem }) {
+  const queryClient = useQueryClient()
+  const { hasServerPermission } = usePermission()
+  const canWrite = hasServerPermission('org.settings.update')
+
+  const [optimisticValue, setOptimisticValue] = useState<boolean | null>(null)
+  // Use optimistic local state when available; fall back to server value.
+  const currentValue = optimisticValue ?? (org.governmentVerificationEnabled ?? false)
+
+  const mutation = useMutation({
+    mutationFn: (enabled: boolean) =>
+      updateOrgSettings(orgId, { governmentVerificationEnabled: enabled }),
+    onMutate: (enabled) => {
+      // Optimistic update: reflect the new value immediately in the UI.
+      setOptimisticValue(enabled)
+    },
+    onSuccess: () => {
+      // Clear optimistic override and let the cache provide truth.
+      setOptimisticValue(null)
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'organizations'] })
+      toast.success(t('orgs.settings.govVerification.saved'))
+    },
+    onError: () => {
+      // Roll back optimistic value on failure.
+      setOptimisticValue(null)
+      toast.error(t('orgs.settings.govVerification.saveError'))
+    },
+  })
+
+  const helperKey = currentValue
+    ? 'orgs.settings.govVerification.helperOn'
+    : 'orgs.settings.govVerification.helperOff'
+
+  return (
+    <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-raised)] max-w-xl">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-[var(--text-primary)]">
+            {t('orgs.settings.govVerification.label')}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)] leading-relaxed">
+            {t(helperKey)}
+          </p>
+        </div>
+        <Toggle
+          checked={currentValue}
+          onChange={(enabled) => mutation.mutate(enabled)}
+          disabled={!canWrite || mutation.isPending}
+          loading={mutation.isPending}
+          size="md"
+        />
+      </div>
+      {!canWrite && (
+        <p className="mt-3 text-xs text-[var(--text-tertiary)] flex items-center gap-1.5">
+          <Shield className="h-3.5 w-3.5 shrink-0" />
+          {t('orgs.settings.govVerification.readOnly')}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function OrgInvitesPanel({ orgId }: { orgId: string }) {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['platform', 'organizations', orgId, 'invites'],
+    queryFn: () => listOrgInvites(orgId),
+    staleTime: 30_000,
+  })
+
+  if (isLoading) return <Skeleton variant="list" />
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+        <AlertCircle className="h-4 w-4 text-rose-500" />
+        {t('orgs.settings.invites.error')}
+        <button
+          onClick={() => void refetch()}
+          className="underline text-[var(--text-primary)]"
+        >
+          {t('common.retry')}
+        </button>
+      </div>
+    )
+  }
+
+  const invites = data ?? []
+
+  if (invites.length === 0) {
+    return (
+      <p className="text-sm text-[var(--text-secondary)]">{t('orgs.settings.invites.empty')}</p>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+      <table className="w-full text-sm" aria-label={t('orgs.settings.invites.tableLabel')}>
+        <thead>
+          <tr className="bg-[var(--surface-raised)] border-b border-[var(--border-subtle)]">
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
+              {t('orgs.settings.invites.col.recipient')}
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
+              {t('orgs.settings.invites.col.role')}
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
+              {t('orgs.settings.invites.col.status')}
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
+              {t('orgs.settings.invites.col.expires')}
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--border-subtle)]">
+          {invites.map(invite => (
+            <InviteRow key={invite.inviteId} invite={invite} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+const INVITE_STATUS_STYLES: Record<string, string> = {
+  PENDING: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  ACCEPTED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  REVOKED: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300',
+  EXPIRED: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300',
+}
+
+function InviteRow({ invite }: { invite: OrgInvite }) {
+  const recipient = invite.email ?? '—'
+  // Backend sends lowercase status ("pending" | "expired" | …); normalise for styling/labels.
+  const status = invite.status.toUpperCase()
+  const statusStyle =
+    INVITE_STATUS_STYLES[status] ??
+    'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'
+  const now = Date.now()
+  const expiresMs = new Date(invite.expiresAt).getTime()
+  const isExpiringSoon = status === 'PENDING' && expiresMs - now < 24 * 60 * 60 * 1000
+
+  return (
+    <tr className="bg-[var(--surface-default)] hover:bg-[var(--surface-raised)] transition-colors">
+      <td className="px-4 py-3 text-[var(--text-primary)]">{recipient}</td>
+      <td className="px-4 py-3">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+          {invite.role}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', statusStyle)}>
+          {status}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1.5 text-sm">
+          {isExpiringSoon && (
+            <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+          )}
+          <span className={cn(
+            isExpiringSoon ? 'text-amber-600 dark:text-amber-400' : 'text-[var(--text-secondary)]'
+          )}>
+            {formatDate(invite.expiresAt)}
+          </span>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+function OrgMetadataForm({ org }: { org: OrgListItem }) {
   const [gstin, setGstin] = useState(org.gstin ?? '')
   const [panNumber, setPanNumber] = useState(org.panNumber ?? '')
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -261,7 +623,6 @@ function OrgSettings({ org }: { org: OrgListItem }) {
 
   return (
     <div className="max-w-lg space-y-4">
-      <h3 className="text-sm font-semibold text-[var(--text-primary)]">{t('orgs.tab.settings')}</h3>
       <div>
         <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">{t('orgs.field.gstin')}</label>
         <input
@@ -288,6 +649,25 @@ function OrgSettings({ org }: { org: OrgListItem }) {
         />
         {errors.panNumber && <p className="mt-1 text-xs text-rose-600">{errors.panNumber}</p>}
       </div>
+
+      {/* Read-only metadata summary */}
+      <div className="pt-2 border-t border-[var(--border-subtle)]">
+        <dl className="grid grid-cols-2 gap-y-2 gap-x-6 text-sm">
+          <div>
+            <dt className="text-[var(--text-tertiary)]">{t('orgs.col.created')}</dt>
+            <dd className="text-[var(--text-primary)]">{formatDate(org.createdAt)}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--text-tertiary)]">{t('orgs.stat.type')}</dt>
+            <dd className="text-[var(--text-primary)]">{org.businessType ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--text-tertiary)]">{t('orgs.stat.gst')}</dt>
+            <dd className="text-[var(--text-primary)]">{org.isGstRegistered ? t('common.yes') : t('common.no')}</dd>
+          </div>
+        </dl>
+      </div>
+
       <Button variant="primary" onClick={handleSave}>{t('common.saveChanges')}</Button>
     </div>
   )

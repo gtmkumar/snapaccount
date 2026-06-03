@@ -71,6 +71,16 @@ try
             opt.QueueLimit = 0;
         });
 
+        // Password reset: 5 req/10 min per IP (mirrors OTP rate to prevent abuse)
+        options.AddSlidingWindowLimiter("password-reset", opt =>
+        {
+            opt.PermitLimit = 5;
+            opt.Window = TimeSpan.FromMinutes(10);
+            opt.SegmentsPerWindow = 2;
+            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            opt.QueueLimit = 0;
+        });
+
         // M1-R-INFO-001: Public invite-token lookup — fixed window 20 req/min per IP.
         // Prevents token enumeration on the public GET /auth/invite/{token} endpoint.
         options.AddFixedWindowLimiter("invite-token-lookup", opt =>
@@ -88,16 +98,9 @@ try
     builder.Services.AddHealthChecks();
 
     // Authentication + Authorization
-    // Firebase JWT validation is implemented as a middleware (FirebaseAuthMiddleware) that
-    // sets HttpContext.User directly, but ASP.NET Core's RequireAuthorization() still needs
-    // an IAuthenticationService to be registered, otherwise the auth pipeline throws
-    // InvalidOperationException at request time. Register a no-op default scheme so the
-    // middleware's principal flows through unchallenged.
-    builder.Services.AddAuthentication("FirebaseMiddleware")
-        .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions,
-                   SnapAccount.Shared.Infrastructure.Auth.PassthroughAuthHandler>(
-            "FirebaseMiddleware", _ => { });
-    builder.Services.AddAuthorization();
+    // FirebaseAuthMiddleware sets HttpContext.User directly, but RequireAuthorization() still needs
+    // a registered IAuthenticationService scheme — see AddSnapAuthentication for the full rationale.
+    builder.Services.AddSnapAuthentication();
 
     // CustomExceptionHandler: maps ValidationException/NotFoundException/ForbiddenAccessException → ProblemDetails
     builder.Services.AddExceptionHandler<CustomExceptionHandler>();

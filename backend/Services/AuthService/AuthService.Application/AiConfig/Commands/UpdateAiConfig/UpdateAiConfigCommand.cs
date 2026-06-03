@@ -22,7 +22,9 @@ public record UpdateAiConfigCommand(
     decimal? ConfidenceThreshold,
     bool? OcrEnabled,
     bool? AutoClassifyEnabled,
-    Dictionary<string, string>? ProviderKeys) : ICommand<AiConfigDto>;
+    Dictionary<string, string>? ProviderKeys,
+    List<string>? SarvamLanguages = null,
+    Dictionary<string, FeatureModelDto>? FeatureModels = null) : ICommand<AiConfigDto>;
 
 public sealed class UpdateAiConfigCommandHandler(
     IAuthDbContext db,
@@ -38,8 +40,12 @@ public sealed class UpdateAiConfigCommandHandler(
             db.AiConfigurations.Add(cfg);
         }
 
+        var featureModels = request.FeatureModels?.ToDictionary(
+            kv => kv.Key, kv => new AiFeatureModel(kv.Value.Model, kv.Value.Temperature));
+
         cfg.Update(request.Provider, request.ModelId, request.OcrTier,
-            request.ConfidenceThreshold, request.OcrEnabled, request.AutoClassifyEnabled);
+            request.ConfidenceThreshold, request.OcrEnabled, request.AutoClassifyEnabled,
+            request.SarvamLanguages, featureModels);
 
         // Upsert any supplied provider keys (skip empty values — those mean "leave unchanged").
         if (request.ProviderKeys is { Count: > 0 })
@@ -71,7 +77,11 @@ public sealed class UpdateAiConfigCommandHandler(
             .Select(k => new ProviderKeyStatusDto(k.Provider, k.EncryptedKey != "", k.KeyLast4))
             .ToListAsync(ct);
 
+        var resultFeatureModels = cfg.FeatureModels.ToDictionary(
+            kv => kv.Key, kv => new FeatureModelDto(kv.Value.Model, kv.Value.Temperature));
+
         return new AiConfigDto(cfg.OcrProvider, cfg.OcrModel, cfg.OcrTier, cfg.ConfidenceThreshold,
-            cfg.OcrEnabled, cfg.AutoClassifyEnabled, keys);
+            cfg.OcrEnabled, cfg.AutoClassifyEnabled, keys,
+            cfg.SarvamLanguages, resultFeatureModels);
     }
 }

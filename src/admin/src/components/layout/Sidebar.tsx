@@ -27,6 +27,7 @@ import {
   ListChecks,
   Database,
   ListTree,
+  ClipboardList,
 } from 'lucide-react'
 import type { AdminRole } from '@/hooks/useAuth'
 
@@ -149,6 +150,14 @@ const navItems: NavItem[] = [
     icon: Globe,
     requiredRoles: ['SUPER_ADMIN'],
     requiredServerPermission: 'platform.orgs.read',
+  },
+  // Audit Log (SUPER_ADMIN, admin.dashboard.read)
+  {
+    label: 'Audit Log',
+    href: '/admin/audit-log',
+    icon: ClipboardList,
+    requiredRoles: ['SUPER_ADMIN'],
+    requiredServerPermission: 'admin.dashboard.read',
   },
   // Module 1, Increment 1.1 — Permission Catalog (SUPER_ADMIN, platform.permissions.manage)
   {

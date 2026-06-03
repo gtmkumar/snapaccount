@@ -42,7 +42,9 @@ try
              .AllowAnyHeader()
              .AllowCredentials()));
 
-    builder.Services.AddAuthorization();
+    // Passthrough auth scheme + authorization (FirebaseAuthMiddleware sets the principal; this
+    // makes RequireAuthorization() return a clean 401 instead of a 500 on unauthenticated calls).
+    builder.Services.AddSnapAuthentication();
 
     // Rate limiting: 100 req/min for standard endpoints; 20 req/min for OCR (AI cost guardrail)
     builder.Services.AddRateLimiter(options =>

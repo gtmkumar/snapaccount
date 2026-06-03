@@ -31,6 +31,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   '/subscriptions': 'menu.subscriptions.view',
   '/reports': 'menu.reports.view',
   '/callbacks': 'menu.callbacks.view',
+  '/admin/audit-log': 'admin.dashboard.read',
   '/admin/organizations': 'platform.orgs.read',
   '/settings/roles': 'org.roles.read',
   '/settings/permissions': 'platform.permissions.manage',
