@@ -31,6 +31,9 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
         builder.Property(o => o.MsmeUdyamNumber).HasColumnName("msme_udyam_number").HasMaxLength(50);
         builder.Property(o => o.LogoUrl).HasColumnName("logo_url");
         builder.Property(o => o.IsActive).HasColumnName("is_active");
+        builder.Property(o => o.GovernmentVerificationEnabled)
+            .HasColumnName("government_verification_enabled")
+            .HasDefaultValue(false);
         builder.Property(o => o.CreatedAt).HasColumnName("created_at");
         builder.Property(o => o.UpdatedAt).HasColumnName("updated_at");
         builder.Property(o => o.DeletedAt).HasColumnName("deleted_at");

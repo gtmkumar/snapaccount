@@ -1,6 +1,12 @@
 /**
- * Axios API client with Firebase Auth token injection
- * All requests automatically include Bearer token from Firebase
+ * Axios API client with Firebase Auth token injection and refresh-token rotation.
+ *
+ * 401 handling (SEC-025):
+ *   1. If the failed request is for /auth/token/refresh itself → signOut (avoid loops).
+ *   2. If the request has already been retried (_retry flag) → signOut.
+ *   3. If a refreshToken exists → call POST /auth/token/refresh; on success rotate
+ *      tokens in the store and retry the original request ONCE with the new Bearer.
+ *   4. On any refresh failure → signOut.
  */
 
 import axios, {
@@ -11,6 +17,13 @@ import axios, {
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useAuthStore } from '../store/authStore';
+
+// Augment InternalAxiosRequestConfig to carry the retry sentinel.
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    _retry?: boolean;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config — microservices run on separate ports in local dev (no gateway), so we
@@ -109,16 +122,54 @@ apiClient.interceptors.request.use(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Response interceptor — on 401 the session token is invalid/expired: sign out.
+// Response interceptor — 401 handling with refresh-token rotation (SEC-025).
 // ─────────────────────────────────────────────────────────────────────────────
+
+const REFRESH_URL = '/auth/token/refresh';
 
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      useAuthStore.getState().signOut();
+    const originalConfig = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    if (error.response?.status !== 401) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    // Guard 1: never attempt refresh for the refresh endpoint itself.
+    // Guard 2: never retry more than once per request.
+    const isRefreshCall = originalConfig?.url?.includes(REFRESH_URL);
+    if (isRefreshCall || originalConfig?._retry) {
+      useAuthStore.getState().signOut();
+      return Promise.reject(error);
+    }
+
+    const { refreshToken } = useAuthStore.getState();
+    if (!refreshToken) {
+      useAuthStore.getState().signOut();
+      return Promise.reject(error);
+    }
+
+    // Mark this request so a second 401 on the retry falls through to signOut.
+    originalConfig._retry = true;
+
+    try {
+      const refreshRes = await apiClient.post<{
+        accessToken: string;
+        newRefreshToken: string;
+        expiresAt: string;
+      }>(REFRESH_URL, { token: refreshToken });
+
+      const { accessToken, newRefreshToken } = refreshRes.data;
+      useAuthStore.getState().rotateTokens(accessToken, newRefreshToken);
+
+      // Retry the original request with the new access token.
+      originalConfig.headers.Authorization = `Bearer ${accessToken}`;
+      return apiClient(originalConfig);
+    } catch {
+      useAuthStore.getState().signOut();
+      return Promise.reject(error);
+    }
   },
 );
 
@@ -162,6 +213,18 @@ export function getApiError(error: unknown): ApiError {
     message: 'An unexpected error occurred',
     statusCode: 0,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth-specific API helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * DELETE /auth/account — DPDP Act 2023 Right to Erasure.
+ * Returns 204 on success. Caller must invoke authStore.signOut() afterwards.
+ */
+export async function deleteAccount(): Promise<void> {
+  await apiClient.delete('/auth/account');
 }
 
 export default apiClient;

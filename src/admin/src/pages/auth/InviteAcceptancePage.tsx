@@ -461,7 +461,7 @@ function LinkAccountForm({
       </Button>
 
       <p className="text-center text-sm text-[var(--text-tertiary)]">
-        <a href="/login?forgot=1" className="text-[var(--brand-primary)] hover:underline">
+        <a href="/forgot-password" className="text-[var(--brand-primary)] hover:underline">
           {t('invite.forgotPassword')}
         </a>
       </p>

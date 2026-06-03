@@ -53,6 +53,13 @@ public class User : BaseAuditableEntity
     /// </summary>
     public void SetProfile(UserProfile profile) => Profile = profile;
 
+    /// <summary>
+    /// Creates or replaces the <see cref="UserPreference"/> child on this aggregate.
+    /// Called by the preferences command handler when no preference row exists yet
+    /// so that EF Core can track the new entity for INSERT on the next SaveChanges.
+    /// </summary>
+    public void SetPreference(UserPreference preference) => Preference = preference;
+
     public Result AddDevice(string deviceId, string deviceName, string platform, string? osVersion, string? appVersion, string? fcmToken)
     {
         var activeDeviceCount = _devices.Count(d => d.IsActive && d.DeletedAt == null);

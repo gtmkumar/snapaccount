@@ -24,6 +24,13 @@ public class Organization : BaseAuditableEntity
     public string? LogoUrl { get; private set; }
     public bool IsActive { get; private set; } = true;
 
+    /// <summary>
+    /// When true, every document kind (PAN/AADHAAR/GSTIN/TAN) requires OTP-based
+    /// government verification before the record moves to VERIFIED status.
+    /// Mapped to <c>auth.organization.government_verification_enabled</c> (migration 053).
+    /// </summary>
+    public bool GovernmentVerificationEnabled { get; private set; }
+
     private readonly List<OrganizationMember> _members = [];
     public IReadOnlyCollection<OrganizationMember> Members => _members.AsReadOnly();
 
@@ -42,5 +49,15 @@ public class Organization : BaseAuditableEntity
         BusinessType      = businessType;
         IndustryType      = industryType;
         AnnualTurnoverInr = annualTurnoverInr;
+    }
+
+    /// <summary>
+    /// Enables or disables mandatory government (OTP-based) verification for all document
+    /// kinds in this organization. Idempotent — safe to call with the current value.
+    /// </summary>
+    /// <param name="enabled">True to require OTP verification; false to allow SAVED status.</param>
+    public void SetGovernmentVerification(bool enabled)
+    {
+        GovernmentVerificationEnabled = enabled;
     }
 }

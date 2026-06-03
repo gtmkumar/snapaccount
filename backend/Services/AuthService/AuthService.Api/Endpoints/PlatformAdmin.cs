@@ -1,5 +1,8 @@
 using AuthService.Application.Organizations.Commands.CreateOrganization;
 using AuthService.Application.PlatformAdmin.Commands.SuspendOrganization;
+using AuthService.Application.PlatformAdmin.Commands.UpdateOrganizationSettings;
+using AuthService.Application.PlatformAdmin.Queries.ListOrgInvitesForAdmin;
+using AuthService.Application.PlatformAdmin.Queries.ListOrgMembersForAdmin;
 using AuthService.Application.PlatformAdmin.Queries.ListPlatformOrganizations;
 using MediatR;
 using SnapAccount.Shared.Api;
@@ -33,6 +36,24 @@ public sealed class PlatformAdmin : EndpointGroupBase
         group.MapPost("/organizations/{id:guid}/suspend", SuspendOrg)
             .RequireAuthorization()
             .WithSummary("Suspend an organization (SUPER_ADMIN only). Sets is_active=false.");
+
+        // GET /auth/admin/organizations/{orgId}/members?page=&pageSize=
+        group.MapGet("/organizations/{orgId:guid}/members", ListOrgMembers)
+            .RequireAuthorization()
+            .WithSummary("List members of a specific organization (SUPER_ADMIN only). " +
+                         "Returns the same OrgMembersListDto shape as GET /auth/org/members.");
+
+        // GET /auth/admin/organizations/{orgId}/invites
+        group.MapGet("/organizations/{orgId:guid}/invites", ListOrgInvites)
+            .RequireAuthorization()
+            .WithSummary("List all invitations for a specific organization (SUPER_ADMIN only). " +
+                         "Returns the same OrgInviteDto[] shape as GET /auth/org/invites.");
+
+        // PATCH /auth/admin/organizations/{orgId}/settings
+        group.MapPatch("/organizations/{orgId:guid}/settings", UpdateOrgSettings)
+            .RequireAuthorization()
+            .WithSummary("Update configurable settings for an organization (org.settings.update). " +
+                         "Currently supports: governmentVerificationEnabled.");
     }
 
     // GET /auth/admin/organizations
@@ -63,6 +84,33 @@ public sealed class PlatformAdmin : EndpointGroupBase
         return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
     }
 
+    // GET /auth/admin/organizations/{orgId}/members?page=&pageSize=
+    private static async Task<IResult> ListOrgMembers(
+        Guid orgId, int? page, int? pageSize,
+        ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new ListOrgMembersForAdminQuery(orgId, page ?? 1, pageSize ?? 20), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+    }
+
+    // GET /auth/admin/organizations/{orgId}/invites
+    private static async Task<IResult> ListOrgInvites(
+        Guid orgId, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new ListOrgInvitesForAdminQuery(orgId), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+    }
+
+    // PATCH /auth/admin/organizations/{orgId}/settings
+    private static async Task<IResult> UpdateOrgSettings(
+        Guid orgId, UpdateOrgSettingsRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new UpdateOrganizationSettingsCommand(orgId, req.GovernmentVerificationEnabled), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+    }
+
     private static IResult MapError(Error error) => error.Type switch
     {
         ErrorType.NotFound   => Results.NotFound(new { error = error.Message, code = error.Code }),
@@ -73,9 +121,15 @@ public sealed class PlatformAdmin : EndpointGroupBase
     };
 }
 
-// Request DTO
+// Request DTOs
 internal record CreateOrgAdminRequest(
     string BusinessName,
     string? Gstin = null,
     string? PanNumber = null,
     string? BusinessType = null);
+
+/// <summary>
+/// Body for PATCH /auth/admin/organizations/{orgId}/settings.
+/// Extensible — additional settings can be added as nullable fields without breaking callers.
+/// </summary>
+internal record UpdateOrgSettingsRequest(bool GovernmentVerificationEnabled);

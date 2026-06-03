@@ -111,6 +111,35 @@ public static class DependencyInjection
         // SEC-013: AES protector for AI provider API keys (encrypted at rest).
         services.AddSingleton<IAiKeyProtector, AesAiKeyProtector>();
 
+        // TOTP encryption service — AES-256-CBC keyed from ENCRYPTION_KEY env var / config.
+        services.AddSingleton<IEncryptionService, AesEncryptionService>();
+
+        // RFC 6238 TOTP code validator (Otp.NET backed, ±1 step window).
+        services.AddSingleton<ITotpValidator, OtpNetTotpValidator>();
+
+        // 2FA challenge token issuance + validation (HMAC-SHA256 signed, 5 min TTL).
+        services.AddSingleton<IChallengeTokenService, ChallengeTokenService>();
+
+        // Email sender — SendGrid v3 in production; logs to console when key is absent.
+        services.AddSingleton<IEmailSender, SendGridEmailSender>();
+
+        // Password reset URL builder — reads App:BaseUrl from config.
+        services.AddSingleton<IPasswordResetUrlBuilder, PasswordResetUrlBuilder>();
+
+        // Document verification provider — selected by KYC_PROVIDER env var (default: "mock").
+        // MockDocumentVerificationProvider implements BOTH IDocumentVerificationProvider and
+        // IKycProvider so the legacy /auth/me/kyc/* endpoints continue to work without changes.
+        var kycProvider = configuration["KYC_PROVIDER"]
+            ?? Environment.GetEnvironmentVariable("KYC_PROVIDER")
+            ?? "mock";
+        if (string.Equals(kycProvider, "mock", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<MockDocumentVerificationProvider>();
+            services.AddScoped<IKycProvider>(sp => sp.GetRequiredService<MockDocumentVerificationProvider>());
+            services.AddScoped<IDocumentVerificationProvider>(sp => sp.GetRequiredService<MockDocumentVerificationProvider>());
+        }
+        // else: register real provider adapters here
+
         // Lightweight provider connection tester ("Test with Sample Query").
         services.AddHttpClient<IAiProviderTester, HttpAiProviderTester>();
 

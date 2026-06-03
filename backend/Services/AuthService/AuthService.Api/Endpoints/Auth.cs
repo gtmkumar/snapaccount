@@ -9,8 +9,11 @@ using AuthService.Application.Admin.Queries.GetTeamMembers;
 using AuthService.Application.Admin.Queries.GetUserDetail;
 using AuthService.Application.Admin.Queries.ListUsers;
 using AuthService.Application.Auth.Commands.PasswordAuth;
+using AuthService.Application.Auth.Commands.SocialFirebaseAuth;
 using AuthService.Application.Otp.Commands.SendOtp;
 using AuthService.Application.Otp.Commands.VerifyOtp;
+using AuthService.Application.Preferences.Commands.UpdatePreferences;
+using AuthService.Application.Preferences.Queries.GetPreferences;
 using AuthService.Application.RefreshTokens.Commands.RefreshToken;
 using AuthService.Application.Users.Commands.RequestAccountDeletion;
 using AuthService.Application.Users.Commands.UpdateUserProfile;
@@ -39,6 +42,10 @@ public sealed class Auth : EndpointGroupBase
     /// <inheritdoc />
     public override void Map(RouteGroupBuilder groupBuilder)
     {
+        // POST /auth/social/firebase — Google / Apple social sign-in exchange.
+        // Anonymous (this endpoint ESTABLISHES auth). Rate-limited like OTP to prevent abuse.
+        groupBuilder.MapPost("/social/firebase", SocialFirebaseAuth).RequireRateLimiting("otp");
+
         // SEC-011: OTP endpoints rate-limited at 5 req / 10 min per client IP
         groupBuilder.MapPost("/otp/send", SendOtp).RequireRateLimiting("otp");
         groupBuilder.MapPost("/otp/verify", VerifyOtp).RequireRateLimiting("otp");
@@ -89,6 +96,12 @@ public sealed class Auth : EndpointGroupBase
             var result = await sender.Send(new GetMyMenuQuery(), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
         }).RequireAuthorization();
+
+        // GET /auth/me/preferences — current preferences (defaults when no row exists yet)
+        groupBuilder.MapGet("/me/preferences", GetPreferences).RequireAuthorization();
+        // PATCH /auth/me/preferences — partial update; null fields = keep existing value
+        groupBuilder.MapMethods("/me/preferences", ["PATCH"], PatchPreferences).RequireAuthorization();
+
         groupBuilder.MapPut("/profile", UpdateProfile).RequireAuthorization();
         groupBuilder.MapGet("/devices", GetDevices).RequireAuthorization();
         groupBuilder.MapDelete("/devices/{deviceId:guid}", RemoveDevice).RequireAuthorization();
@@ -259,6 +272,18 @@ public sealed class Auth : EndpointGroupBase
             : Results.BadRequest(new { error = result.Error.Message });
     }
 
+    // POST /auth/social/firebase [Anonymous] — Google/Apple social sign-in exchange
+    private static async Task<IResult> SocialFirebaseAuth(
+        SocialFirebaseAuthRequest req, ISender sender)
+    {
+        var result = await sender.Send(
+            new SocialFirebaseAuthCommand(req.FirebaseIdToken, req.Provider, req.Email, req.DisplayName));
+        if (result.IsSuccess)
+            return Results.Ok(result.Value);
+        var status = result.Error.Type == ErrorType.Unauthorized ? 401 : 400;
+        return Results.Json(new { error = result.Error.Message, code = result.Error.Code }, statusCode: status);
+    }
+
     // DELETE /auth/account [Authorize] — DPDP Act 2023 Right to Erasure
     private static async Task<IResult> DeleteAccount(ISender sender)
     {
@@ -267,9 +292,57 @@ public sealed class Auth : EndpointGroupBase
             ? Results.NoContent()
             : Results.BadRequest(new { error = result.Error.Message });
     }
+
+    // GET /auth/me/preferences [Authorize]
+    // Returns current preferences; if no UserPreference row exists yet, returns defaults
+    // (Theme=SYSTEM, language from user aggregate, all notifications enabled except WhatsApp).
+    private static async Task<IResult> GetPreferences(ISender sender)
+    {
+        var result = await sender.Send(new GetPreferencesQuery());
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.NotFound(new { error = result.Error.Message });
+    }
+
+    // PATCH /auth/me/preferences [Authorize]
+    // Partial update — any null field keeps its existing value.
+    // Returns 204 No Content on success; 404 if the authenticated user does not exist.
+    private static async Task<IResult> PatchPreferences(
+        UpdatePreferencesRequest req, ISender sender)
+    {
+        var result = await sender.Send(new UpdatePreferencesCommand(
+            req.PreferredLanguage,
+            req.Theme,
+            req.PushNotificationsEnabled,
+            req.SmsNotificationsEnabled,
+            req.EmailNotificationsEnabled,
+            req.WhatsappNotificationsEnabled));
+
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error.Type == ErrorType.NotFound
+                ? Results.NotFound(new { error = result.Error.Message })
+                : Results.BadRequest(new { error = result.Error.Message });
+    }
 }
 
 // Request/Response DTOs (same as pre-refactor Program.cs record declarations)
+
+/// <summary>
+/// POST /auth/social/firebase request body.
+/// <para>
+/// <c>firebaseIdToken</c> — Firebase ID token from Google/Apple sign-in (client SDK).
+/// <c>provider</c> — <c>"google"</c> or <c>"apple"</c>.
+/// <c>email</c> — optional client hint; required when DEV_AUTH_BYPASS is active.
+/// <c>displayName</c> — optional client hint used when creating a new user.
+/// </para>
+/// </summary>
+internal record SocialFirebaseAuthRequest(
+    string FirebaseIdToken,
+    string Provider,
+    string? Email = null,
+    string? DisplayName = null);
+
 internal record LocalLoginRequest(string Email, string Password);
 internal record SendOtpRequest(string PhoneNumber);
 internal record VerifyOtpRequest(string PhoneNumber, string Otp, string? DeviceId = null);
@@ -285,3 +358,19 @@ internal record UpdateUserProfileRequest(
 internal record CreateOrganizationRequest(
     string BusinessName, string? Gstin, string? PanNumber,
     string? BusinessType, string? IndustryType, decimal? AnnualTurnoverInr);
+
+/// <summary>
+/// PATCH /auth/me/preferences request body. All fields are optional (nullable).
+/// Omit a field (or pass null) to keep the current stored value.
+/// <list type="bullet">
+///   <item><term>PreferredLanguage</term><description>BCP-47 tag, e.g. "en", "hi", "ta".</description></item>
+///   <item><term>Theme</term><description>One of "LIGHT", "DARK", "SYSTEM".</description></item>
+/// </list>
+/// </summary>
+internal record UpdatePreferencesRequest(
+    string? PreferredLanguage,
+    string? Theme,
+    bool? PushNotificationsEnabled,
+    bool? SmsNotificationsEnabled,
+    bool? EmailNotificationsEnabled,
+    bool? WhatsappNotificationsEnabled);

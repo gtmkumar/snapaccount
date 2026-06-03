@@ -84,6 +84,15 @@ public class AuthDbContext(DbContextOptions<AuthDbContext> options)
     public DbSet<AiUsageLog> AiUsageLogs => Set<AiUsageLog>();
 
     /// <inheritdoc />
+    public DbSet<UserTotp> UserTotps => Set<UserTotp>();
+
+    /// <inheritdoc />
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+
+    /// <inheritdoc />
+    public DbSet<KycVerification> KycVerifications => Set<KycVerification>();
+
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("auth");

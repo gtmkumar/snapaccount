@@ -16,12 +16,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
 import { PhoneInput } from '../../components/forms/PhoneInput';
 import { Colors } from '../../constants/colors';
 import apiClient, { getApiError } from '../../lib/api';
 import { isValidPhone } from '../../lib/utils';
 import { useAuthMethods } from '../../hooks/useAuthMethods';
+import { useAuthStore } from '../../store/authStore';
+import {
+  isFirebaseConfigured,
+  signInWithGoogle,
+  signInWithApple,
+  SocialSignInCancelled,
+  type SocialSessionResult,
+} from '../../lib/socialAuth';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
 type PhoneEntryNavProp = NativeStackNavigationProp<AuthStackParamList, 'PhoneEntry'>;
@@ -31,14 +40,87 @@ interface PhoneEntryScreenProps {
 }
 
 export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
+  const { t } = useTranslation();
+  const { setAuthenticated, setSession, setOrganizations } = useAuthStore();
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [socialLoading, setSocialLoading] = useState<'google' | 'apple' | null>(null);
 
   // When SMS/WhatsApp OTP is enabled, the phone+password option is hidden (optional fallback).
   const { showPasswordOption } = useAuthMethods();
 
   const canSubmit = isValidPhone(phone) && !loading;
+
+  /**
+   * Shared completion for a social session: store the token + minimal profile,
+   * then enter the app (or onboarding when the profile is incomplete).
+   */
+  const completeSocialSession = async (result: SocialSessionResult) => {
+    const profile = {
+      id: result.userId,
+      firebaseUid: '',
+      phone: '',
+      userType: 'business_owner' as const,
+      profileComplete: true,
+      aadhaarVerified: false,
+      createdAt: new Date().toISOString(),
+    };
+    setAuthenticated(result.token, profile, result.refreshToken ?? null);
+    try {
+      const orgsRes = await apiClient.get<
+        { id: string; businessName?: string; name?: string; gstin?: string }[]
+      >('/auth/organizations');
+      const orgs = (orgsRes.data ?? []).map((o) => ({
+        id: o.id,
+        name: o.businessName ?? o.name ?? 'My Business',
+        gstin: o.gstin,
+      }));
+      if (orgs.length === 0) {
+        // No org yet → finish onboarding in the wizard.
+        setSession(result.token, profile, result.refreshToken ?? null);
+        navigation.replace('BusinessProfileWizard');
+        return;
+      }
+      setOrganizations(orgs);
+    } catch {
+      // Non-fatal — organizations can be fetched later.
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (!isFirebaseConfigured()) {
+      Alert.alert('', t('mobile.auth.social.notConfigured'));
+      return;
+    }
+    setSocialLoading('google');
+    try {
+      const result = await signInWithGoogle();
+      await completeSocialSession(result);
+    } catch (err: unknown) {
+      if (err instanceof SocialSignInCancelled) return; // user backed out — no-op
+      Alert.alert('', getApiError(err).message || t('mobile.auth.social.googleError'));
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    if (!isFirebaseConfigured()) {
+      Alert.alert('', t('mobile.auth.social.notConfigured'));
+      return;
+    }
+    setSocialLoading('apple');
+    try {
+      const result = await signInWithApple();
+      await completeSocialSession(result);
+    } catch (err: unknown) {
+      if (err instanceof SocialSignInCancelled) return;
+      Alert.alert('', getApiError(err).message || t('mobile.auth.social.appleError'));
+    } finally {
+      setSocialLoading(null);
+    }
+  };
 
   const handleSendOTP = async () => {
     if (!canSubmit) return;
@@ -141,8 +223,10 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
               variant="secondary"
               fullWidth
               size="lg"
+              loading={socialLoading === 'google'}
+              disabled={socialLoading !== null}
               leftIcon={<Ionicons name="logo-google" size={20} color={Colors.neutral[700]} />}
-              onPress={() => Alert.alert('Coming soon', 'Google Sign-In will be available soon.')}
+              onPress={handleGoogleSignIn}
               style={showPasswordOption ? { marginTop: 12 } : undefined}
             />
             {Platform.OS === 'ios' && (
@@ -151,8 +235,10 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
                 variant="secondary"
                 fullWidth
                 size="lg"
+                loading={socialLoading === 'apple'}
+                disabled={socialLoading !== null}
                 leftIcon={<Ionicons name="logo-apple" size={20} color={Colors.neutral[900]} />}
-                onPress={() => Alert.alert('Coming soon', 'Apple Sign-In will be available soon.')}
+                onPress={handleAppleSignIn}
                 style={{ marginTop: 12 }}
               />
             )}

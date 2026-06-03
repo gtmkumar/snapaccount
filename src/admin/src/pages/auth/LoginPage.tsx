@@ -3,11 +3,115 @@ import { useNavigate, useLocation } from 'react-router'
 import { useAuth } from '@/hooks/useAuth'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { Button } from '@/components/ui/Button'
+import { cn } from '@/lib/utils'
 
 const LOCAL_AUTH = import.meta.env.VITE_LOCAL_AUTH === 'true'
 
+// ── 2FA challenge step ────────────────────────────────────────────────────────
+
+function TwoFaStep({
+  loading,
+  error,
+  onSubmit,
+  onCancel,
+}: {
+  loading: boolean
+  error: string | null
+  onSubmit: (code: string) => void
+  onCancel: () => void
+}) {
+  const [code, setCode] = useState('')
+
+  const inputClass = cn(
+    'w-full rounded-lg border px-3 py-2.5 text-center tracking-widest font-mono text-lg',
+    'text-neutral-900 outline-none',
+    'focus:border-brand-500 focus:ring-2 focus:ring-brand-100',
+    error ? 'border-rose-400' : 'border-neutral-200'
+  )
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (code.trim()) onSubmit(code.trim())
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="text-center">
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-brand-50 mb-4">
+          <svg
+            className="h-7 w-7 text-brand-600"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+        </div>
+        <h2 className="text-xl font-semibold text-neutral-800">Two-factor authentication</h2>
+        <p className="text-sm text-neutral-500 mt-1">
+          Enter the 6-digit code from your authenticator app, or a recovery code.
+        </p>
+      </div>
+
+      {error && (
+        <AlertBanner
+          type="error"
+          title="Verification failed"
+          description={error}
+        />
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="totp-code" className="sr-only">
+            Authenticator code
+          </label>
+          <input
+            id="totp-code"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={8}
+            placeholder="000000"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\s/g, ''))}
+            className={inputClass}
+            autoFocus
+            aria-label="Authenticator code"
+          />
+        </div>
+
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={loading}
+          disabled={!code.trim()}
+        >
+          Verify
+        </Button>
+
+        <button
+          type="button"
+          onClick={onCancel}
+          className="w-full text-sm text-neutral-500 hover:text-neutral-700 py-1"
+        >
+          Back to sign in
+        </button>
+      </form>
+    </div>
+  )
+}
+
+// ── Main login page ───────────────────────────────────────────────────────────
+
 export default function LoginPage() {
-  const { user, loading, error, signInWithGoogle, signInWithEmailPassword } = useAuth()
+  const { user, loading, error, signInWithGoogle, signInWithEmailPassword, submit2FaChallenge, twoFaChallenge } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: string })?.from ?? '/dashboard'
@@ -21,6 +125,28 @@ export default function LoginPage() {
     }
   }, [user, loading, navigate, from])
 
+  // ── 2FA challenge active — show the second step ──────────────────────────
+  if (twoFaChallenge?.pending) {
+    return (
+      <div data-theme="light" className="min-h-screen bg-gradient-to-br from-brand-600 via-brand-500 to-indigo-400 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-2xl p-8">
+            <TwoFaStep
+              loading={loading}
+              error={error}
+              onSubmit={(code) => void submit2FaChallenge(code)}
+              onCancel={() => window.location.reload()}
+            />
+          </div>
+          <p className="text-center text-xs text-white/60 mt-6">
+            SnapAccount Admin Panel — Secure Financial Operations
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Normal login form ─────────────────────────────────────────────────────
   return (
     <div data-theme="light" className="min-h-screen bg-gradient-to-br from-brand-600 via-brand-500 to-indigo-400 flex items-center justify-center p-4">
       <div className="w-full max-w-md">

@@ -62,6 +62,21 @@ All endpoints require `.RequireAuthorization()` unless noted.
 | POST | /auth/admin/organizations | `platform.orgs.create` | `{ businessName: string, gstin?: string, panNumber?: string, businessType?: string }` | `{ organizationId }` 201 |
 | POST | /auth/admin/organizations/{id}/suspend | `platform.orgs.suspend` | — | 204 |
 
+### Social Sign-In — `/auth/social`
+
+| Method | Route | Auth | Request Body | Response |
+|--------|-------|------|-------------|----------|
+| POST | /auth/social/firebase | **Anonymous** (establishes auth) | `{ firebaseIdToken: string, provider: "google"\|"apple", email?: string, displayName?: string }` | `{ isNewUser, token, userId, refreshToken, refreshExpiresAt }` 200 — OR `{ isNewUser, userId, requires2fa: true, challengeToken }` when 2FA is enabled |
+
+**Notes:**
+- `provider` must be exactly `"google"` or `"apple"` (case-insensitive).
+- `firebaseIdToken`: Firebase ID token from the mobile-side Google/Apple sign-in SDK.
+- `email` / `displayName`: optional client hints. Server-verified values from the Firebase token always take precedence.
+- `email` is **required** when `DEV_AUTH_BYPASS=true` (local dev only — no Firebase token to extract it from).
+- When `Requires2fa=true`: call `POST /auth/2fa/challenge { challengeToken, code }` to complete sign-in.
+- Rate limit: same "otp" policy — 5 req / 10 min per IP (SEC-011).
+- User find-or-create: lookup by Firebase UID first, then by email; creates a new user if neither matches.
+
 ### Existing Auth Endpoints — Updated
 
 | Method | Route | Notes |
@@ -417,3 +432,105 @@ Hub: `ws://{host}/hubs/chat` — SignalR, requires `Authorization: Bearer <token
 ## Phase 5 (prior)
 
 See git history for Phase 5 endpoints (Auth, Document, GST stubs, Loan, ITR, Chat, Report, Subscription, AI).
+
+---
+
+## Tasks #17 / #18 / #19 — AuthService: 2FA TOTP, Password Reset, KYC
+
+All new endpoints are on AuthService (`http://localhost:5101`).
+
+### #17 — 2FA TOTP
+
+#### Authenticated management (`RequireAuthorization`)
+
+| Method | Route | Description | Request Body | Response |
+|--------|-------|-------------|--------------|----------|
+| POST | `/auth/me/2fa/enroll` | Generate TOTP secret, store encrypted + unconfirmed | — | `{ otpauthUri: string, base32Secret: string }` 200 |
+| POST | `/auth/me/2fa/confirm` | Verify first TOTP code; enable 2FA; return one-time recovery codes | `{ code: string }` | `{ recoveryCodes: string[] }` 200 |
+| POST | `/auth/me/2fa/disable` | Disable 2FA (TOTP code OR recovery code accepted) | `{ code: string }` | 204 |
+| GET | `/auth/me/2fa/status` | Current 2FA state | — | `{ enabled: bool, confirmedAt: string\|null }` 200 |
+
+#### Anonymous (login second step)
+
+| Method | Route | Description | Request Body | Response |
+|--------|-------|-------------|--------------|----------|
+| POST | `/auth/2fa/challenge` | Complete 2FA login: validate challenge token + TOTP/recovery code → issue JWT | `{ challengeToken: string, code: string }` | `{ token: string, userId: string, refreshToken: string, refreshExpiresAt: string }` 200 |
+
+#### 2FA login flow (modified login response)
+
+When 2FA is enabled, `POST /auth/password/login` and `POST /auth/local/login` return:
+```json
+{
+  "isNewUser": false,
+  "token": null,
+  "userId": "uuid",
+  "refreshToken": null,
+  "refreshExpiresAt": null,
+  "requires2fa": true,
+  "challengeToken": "<5-min-signed-token>"
+}
+```
+The client must call `POST /auth/2fa/challenge` with this challenge token + the TOTP code.
+
+#### enroll response shape
+```json
+{ "otpauthUri": "otpauth://totp/SnapAccount%3Auser%40example.com?secret=BASE32&issuer=SnapAccount&algorithm=SHA1&digits=6&period=30", "base32Secret": "JBSWY3DP..." }
+```
+
+#### confirm response shape
+```json
+{ "recoveryCodes": ["AABBCC-112233", "DDEEFF-445566", ...] }
+```
+Recovery codes are 8 values in format `XXXXXX-XXXXXX` (uppercase hex). Shown **once only**. Store securely.
+
+---
+
+### #18 — Password Reset
+
+Both endpoints are **anonymous** (no bearer token needed). Rate-limited to 5 req / 10 min per IP.
+
+| Method | Route | Description | Request Body | Response |
+|--------|-------|-------------|--------------|----------|
+| POST | `/auth/password/forgot` | Initiate reset — always 204 (no user enumeration) | `{ email: string }` | 204 |
+| POST | `/auth/password/reset` | Consume token, set new password | `{ token: string, newPassword: string }` | 204 or 400 |
+
+Reset link is emailed via SendGrid. When `SendGrid:ApiKey` is absent or `DEV_AUTH_BYPASS=true`, the link is **logged** to stdout instead.
+Link format: `{App:BaseUrl}/reset-password?token=<base64url-32bytes>` (default base URL: `http://localhost:3000`).
+
+Error response (400):
+```json
+{ "error": "The reset link is invalid, expired, or has already been used.", "code": "PasswordReset.InvalidToken" }
+```
+
+---
+
+### #19 — KYC (mock provider)
+
+All endpoints require authorization. Provider controlled by `KYC_PROVIDER=mock` env var (default).
+
+| Method | Route | Description | Request Body | Response |
+|--------|-------|-------------|--------------|----------|
+| POST | `/auth/me/kyc/pan/verify` | Verify PAN format; mock always VERIFIED for valid format | `{ pan: string, name?: string }` | `{ status: "VERIFIED"\|"FAILED", verifiedAt: string\|null }` 200 |
+| POST | `/auth/me/kyc/aadhaar/otp/send` | Initiate Aadhaar OTP (mock logs dev OTP) | `{ aadhaar: string }` (12 digits) | `{ transactionId: string }` 200 |
+| POST | `/auth/me/kyc/aadhaar/otp/verify` | Verify Aadhaar OTP against transaction | `{ transactionId: string, otp: string }` | `{ status: "VERIFIED"\|"FAILED", verifiedAt: string\|null }` 200 |
+
+**DPDP Act 2023 compliance:** Full Aadhaar is never stored. `reference_number` in DB is masked as `XXXX-XXXX-1234` (last 4 digits only).
+
+**PAN validation:** format `XXXXX9999X` (5 uppercase alpha, 4 digits, 1 uppercase alpha). Input normalized to uppercase before validation.
+
+---
+
+### New env vars
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `ENCRYPTION_KEY` | derived dev key (warning logged) | AES-256-CBC key for TOTP secret storage (base64 32 bytes) |
+| `KYC_PROVIDER` | `mock` | KYC provider selection (`mock`; future: `uidai`, `nsdl`) |
+| `SendGrid:ApiKey` | _(none)_ | SendGrid API key for password reset emails |
+| `App:BaseUrl` | `http://localhost:3000` | Base URL for password reset link |
+
+### New NuGet packages
+
+| Package | Version | Layer |
+|---------|---------|-------|
+| `Otp.NET` | 1.4.1 | `AuthService.Infrastructure` |

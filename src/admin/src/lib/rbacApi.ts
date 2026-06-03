@@ -95,6 +95,9 @@ export const OrgListItemSchema = z.object({
   isActive: z.boolean(),
   memberCount: z.number(),
   createdAt: z.string(),
+  // Government Verification flag — present on GET /auth/admin/organizations responses.
+  // Optional so older responses without the field remain valid.
+  governmentVerificationEnabled: z.boolean().optional().default(false),
 })
 export type OrgListItem = z.infer<typeof OrgListItemSchema>
 
@@ -300,6 +303,80 @@ export async function createOrganization(params: CreateOrgParams): Promise<{ org
 
 export async function suspendOrganization(orgId: string): Promise<void> {
   await api.post(`/auth/admin/organizations/${orgId}/suspend`)
+}
+
+// ── Org settings (SUPER_ADMIN / platform.orgs.write) ─────────────────────────
+
+export const OrgSettingsResponseSchema = z.object({
+  organizationId: z.string(),
+  governmentVerificationEnabled: z.boolean(),
+})
+export type OrgSettingsResponse = z.infer<typeof OrgSettingsResponseSchema>
+
+export interface UpdateOrgSettingsParams {
+  governmentVerificationEnabled: boolean
+}
+
+/**
+ * PATCH /auth/admin/organizations/{orgId}/settings
+ * Updates per-org platform settings.  Gated by platform.orgs.write (SUPER_ADMIN).
+ */
+export async function updateOrgSettings(
+  orgId: string,
+  params: UpdateOrgSettingsParams,
+): Promise<OrgSettingsResponse> {
+  const res = await api.patch(`/auth/admin/organizations/${orgId}/settings`, params)
+  return OrgSettingsResponseSchema.parse(res.data)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Platform Org — members + invites (SUPER_ADMIN, platform.orgs.read)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Shape matches AuthService OrgMemberDto (GET /auth/admin/organizations/{id}/members):
+// role = role name, status = "active" | "suspended".
+export const OrgMemberSchema = z.object({
+  userId: z.string(),
+  email: z.string(),
+  displayName: z.string().nullable().optional(),
+  role: z.string(),
+  status: z.string(),
+  modules: z.array(z.string()).optional(),
+  joinedAt: z.string().nullable().optional(),
+  lastActiveAt: z.string().nullable().optional(),
+  photoUrl: z.string().nullable().optional(),
+})
+export type OrgMember = z.infer<typeof OrgMemberSchema>
+
+export const OrgMembersResponseSchema = z.object({
+  items: z.array(OrgMemberSchema),
+  totalCount: z.number(),
+})
+
+// Shape matches AuthService OrgInviteDto (GET /auth/admin/organizations/{id}/invites):
+// role = role name, status is lowercase ("pending" | "accepted" | "revoked" | "expired").
+export const OrgInviteSchema = z.object({
+  inviteId: z.string(),
+  email: z.string().nullable().optional(),
+  role: z.string(),
+  invitedByUserId: z.string().nullable().optional(),
+  invitedAt: z.string().nullable().optional(),
+  expiresAt: z.string(),
+  status: z.string(),
+})
+export type OrgInvite = z.infer<typeof OrgInviteSchema>
+
+export async function listOrgMembers(
+  orgId: string,
+  params?: { page?: number; pageSize?: number },
+): Promise<{ items: OrgMember[]; totalCount: number }> {
+  const res = await api.get(`/auth/admin/organizations/${orgId}/members`, { params })
+  return OrgMembersResponseSchema.parse(res.data)
+}
+
+export async function listOrgInvites(orgId: string): Promise<OrgInvite[]> {
+  const res = await api.get(`/auth/admin/organizations/${orgId}/invites`)
+  return z.array(OrgInviteSchema).parse(res.data)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

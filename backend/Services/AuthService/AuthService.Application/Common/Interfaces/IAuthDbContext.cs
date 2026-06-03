@@ -94,6 +94,15 @@ public interface IAuthDbContext
     /// <summary>Append-only metered AI usage ledger in <c>auth.ai_usage_log</c>.</summary>
     DbSet<AiUsageLog> AiUsageLogs { get; }
 
+    /// <summary>TOTP 2FA enrollment records in <c>auth.user_totp</c>.</summary>
+    DbSet<UserTotp> UserTotps { get; }
+
+    /// <summary>Single-use password reset tokens in <c>auth.password_reset_token</c>.</summary>
+    DbSet<PasswordResetToken> PasswordResetTokens { get; }
+
+    /// <summary>KYC verification records (PAN / Aadhaar) in <c>auth.kyc_verification</c>.</summary>
+    DbSet<KycVerification> KycVerifications { get; }
+
     /// <summary>Persists changes to the auth schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

@@ -9,6 +9,7 @@ import { SplashScreen } from '../screens/auth/SplashScreen';
 import { PhoneEntryScreen } from '../screens/auth/PhoneEntryScreen';
 import { PasswordAuthScreen } from '../screens/auth/PasswordAuthScreen';
 import { OTPVerifyScreen } from '../screens/auth/OTPVerifyScreen';
+import { TwoFactorChallengeScreen } from '../screens/auth/TwoFactorChallengeScreen';
 import { BusinessProfileWizardScreen } from '../screens/auth/BusinessProfileWizardScreen';
 import { LanguageSelectionScreen } from '../screens/auth/LanguageSelectionScreen';
 import { PermissionRequestsScreen } from '../screens/auth/PermissionRequestsScreen';
@@ -19,6 +20,10 @@ export type AuthStackParamList = {
   PasswordAuth: undefined;
   OTPVerify: {
     phone: string;
+  };
+  TwoFactorChallenge: {
+    challengeToken: string;
+    phone?: string;
   };
   BusinessProfileWizard: undefined;
   LanguageSelection: undefined;
@@ -40,6 +45,7 @@ export function AuthNavigator() {
       <Stack.Screen name="PhoneEntry" component={PhoneEntryScreen} />
       <Stack.Screen name="PasswordAuth" component={PasswordAuthScreen} />
       <Stack.Screen name="OTPVerify" component={OTPVerifyScreen} />
+      <Stack.Screen name="TwoFactorChallenge" component={TwoFactorChallengeScreen} />
       <Stack.Screen name="BusinessProfileWizard" component={BusinessProfileWizardScreen} />
       <Stack.Screen name="LanguageSelection" component={LanguageSelectionScreen} />
       <Stack.Screen name="PermissionRequests" component={PermissionRequestsScreen} />

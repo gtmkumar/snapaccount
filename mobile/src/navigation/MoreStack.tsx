@@ -2,6 +2,9 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MoreScreen } from '../screens/profile/MoreScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
+import { DevicesScreen } from '../screens/profile/DevicesScreen';
+import { IdentityDocumentsScreen } from '../screens/profile/IdentityDocumentsScreen';
+import { NotificationPreferencesScreen } from '../screens/profile/NotificationPreferencesScreen';
 import { NotificationCenterScreen } from '../screens/notifications/NotificationCenterScreen';
 import { ChatStack } from './ChatStack';
 import { ITRDashboardScreen } from '../screens/itr/ITRDashboardScreen';
@@ -12,6 +15,12 @@ import type { CtaCategory, LinkedEntity } from '../components/callbacks/RequestC
 export type MoreStackParamList = {
   More: undefined;
   Profile: undefined;
+  /** Logged-in device management (GET/DELETE /auth/devices) */
+  Devices: undefined;
+  /** Tax/identity documents collection (GET/POST /auth/me/documents …) */
+  IdentityDocuments: undefined;
+  /** Notification + language preferences (GET/PATCH /auth/me/preferences) */
+  NotificationPreferences: undefined;
   NotificationCenter: undefined;
   /** ChatStack entry — routes internally to ChatList + ChatDetail */
   Chat: undefined;
@@ -34,6 +43,9 @@ export function MoreStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="More" component={MoreScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="Devices" component={DevicesScreen} />
+      <Stack.Screen name="IdentityDocuments" component={IdentityDocumentsScreen} />
+      <Stack.Screen name="NotificationPreferences" component={NotificationPreferencesScreen} />
       <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
       {/* Phase 6F: Chat now has its own stack (ChatList + ChatDetail) */}
       <Stack.Screen name="Chat" component={ChatStack} />

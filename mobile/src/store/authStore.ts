@@ -46,23 +46,29 @@ export interface AuthState {
   isLoading: boolean;
   firebaseToken: string | null;
 
+  // SEC-025: Refresh token for silent re-authentication.
+  // Stored in SecureStore via the persist adapter (same security as firebaseToken).
+  refreshToken: string | null;
+
   // User data
   user: UserProfile | null;
   currentOrganization: Organization | null;
   organizations: Organization[];
 
   // Actions
-  setAuthenticated: (token: string, user: UserProfile) => void;
+  setAuthenticated: (token: string, user: UserProfile, refreshToken?: string | null) => void;
   // Store the session token + user WITHOUT entering the app yet (used during
   // new-user onboarding so the wizard can make authenticated calls while the
   // Auth stack stays visible). Call markAuthenticated() to enter the app.
-  setSession: (token: string, user: UserProfile) => void;
+  setSession: (token: string, user: UserProfile, refreshToken?: string | null) => void;
   markAuthenticated: () => void;
   setUser: (user: UserProfile) => void;
   setOrganizations: (orgs: Organization[]) => void;
   setCurrentOrganization: (org: Organization) => void;
   updateProfile: (updates: Partial<UserProfile>) => void;
   setLoading: (loading: boolean) => void;
+  // Rotate tokens after a successful silent refresh.
+  rotateTokens: (accessToken: string, newRefreshToken: string) => void;
   signOut: () => void;
 }
 
@@ -92,21 +98,24 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: true,
       firebaseToken: null,
+      refreshToken: null,
       user: null,
       currentOrganization: null,
       organizations: [],
 
-      setAuthenticated: (token, user) =>
+      setAuthenticated: (token, user, refreshToken = null) =>
         set({
           isAuthenticated: true,
           firebaseToken: token,
+          refreshToken,
           user,
           isLoading: false,
         }),
 
-      setSession: (token, user) =>
+      setSession: (token, user, refreshToken = null) =>
         set({
           firebaseToken: token,
+          refreshToken,
           user,
           isLoading: false,
         }),
@@ -134,10 +143,17 @@ export const useAuthStore = create<AuthState>()(
 
       setLoading: (loading) => set({ isLoading: loading }),
 
+      rotateTokens: (accessToken, newRefreshToken) =>
+        set({
+          firebaseToken: accessToken,
+          refreshToken: newRefreshToken,
+        }),
+
       signOut: () =>
         set({
           isAuthenticated: false,
           firebaseToken: null,
+          refreshToken: null,
           user: null,
           currentOrganization: null,
           organizations: [],
@@ -170,7 +186,11 @@ export const useAuthStore = create<AuthState>()(
           ...org,
           panNumber: undefined, // Strip PAN from all org entries
         })),
-        // Note: firebaseToken NOT persisted — always refreshed from Firebase
+        // SEC-025: refreshToken IS persisted so the app can silently re-authenticate
+        // on the next launch without forcing the user through OTP/password again.
+        // SecureStore uses iOS Keychain / Android Keystore — encrypted at rest.
+        // accessToken (firebaseToken) is NOT persisted — always re-issued via refresh.
+        refreshToken: state.refreshToken,
       }),
     },
   ),

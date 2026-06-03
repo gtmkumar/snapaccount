@@ -5,7 +5,9 @@
  * - Reads preference from AsyncStorage (non-sensitive; theme pref is not secret).
  * - 'system' (default) follows Appearance API.
  * - Provides isDark boolean + setTheme(pref) + theme colors to children.
- * - PATCH /me/preferences {theme} debounced (best-effort, not blocking).
+ * - PATCH /auth/me/preferences {theme} debounced (best-effort, not blocking).
+ *   The backend enum is LIGHT|DARK|SYSTEM, so the local lowercase preference is
+ *   mapped to upper-case before syncing.
  */
 
 import React, {
@@ -160,13 +162,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setPreference(pref);
     void savePreference(pref);
 
-    // Debounced server sync — best effort, no blocking
+    // Debounced server sync — best effort, no blocking. The backend ThemePreference
+    // enum is LIGHT|DARK|SYSTEM, so map the lowercase local pref before PATCHing.
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { apiClient } = require('../lib/api') as { apiClient: { patch: (url: string, data: unknown) => Promise<unknown> } };
-        void apiClient.patch('/me/preferences', { theme: pref });
+        const theme = pref.toUpperCase(); // 'system' → 'SYSTEM', etc.
+        void apiClient.patch('/auth/me/preferences', { theme });
       } catch {
         // silent — local preference is source of truth
       }

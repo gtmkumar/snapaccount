@@ -13,10 +13,17 @@ public interface ILocalAuthService
     Task EnsureDevAdminAsync(CancellationToken ct);
 }
 
+/// <summary>
+/// Result of a LOCAL_AUTH login attempt.
+/// When <see cref="Requires2fa"/> is true, the caller must complete
+/// POST /auth/2fa/challenge with the <see cref="ChallengeToken"/> to obtain the JWT.
+/// </summary>
 public sealed record LocalLoginResult(
-    string AccessToken,
+    string Token,
     Guid UserId,
     string Email,
     string? FullName,
     IReadOnlyList<string> Roles,
-    IReadOnlyList<string> Permissions);
+    IReadOnlyList<string> Permissions,
+    bool Requires2fa = false,
+    string? ChallengeToken = null);

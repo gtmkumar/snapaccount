@@ -3,16 +3,18 @@
  * Clean profile with premium menu styling
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Colors } from '../../constants/colors';
 import { useAuthStore } from '../../store/authStore';
 import { FirebaseAuth } from '../../lib/firebase';
+import { deleteAccount } from '../../lib/api';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
 type NavProp = NativeStackNavigationProp<MoreStackParamList, 'Profile'>;
@@ -28,19 +30,49 @@ function normalizePhone(phone: string | null | undefined): string {
 
 export function ProfileScreen({ navigation }: Props) {
   const { user, currentOrganization, signOut } = useAuthStore();
+  const { t } = useTranslation();
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const handleSignOut = () => {
     Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
+      t('mobile.profile.signOut.title'),
+      t('mobile.profile.signOut.body'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('mobile.common.cancel'), style: 'cancel' },
         {
-          text: 'Sign Out',
+          text: t('mobile.profile.signOut.confirm'),
           style: 'destructive',
           onPress: async () => {
             await FirebaseAuth.signOut();
             signOut();
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      t('mobile.profile.deleteAccount.confirmTitle'),
+      t('mobile.profile.deleteAccount.confirmBody'),
+      [
+        { text: t('mobile.common.cancel'), style: 'cancel' },
+        {
+          text: t('mobile.profile.deleteAccount.confirmCta'),
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingAccount(true);
+            try {
+              await deleteAccount();
+              await FirebaseAuth.signOut();
+              signOut();
+            } catch {
+              setDeletingAccount(false);
+              Alert.alert(
+                t('mobile.profile.deleteAccount.errorTitle'),
+                t('mobile.profile.deleteAccount.errorBody'),
+              );
+            }
           },
         },
       ],
@@ -101,18 +133,23 @@ export function ProfileScreen({ navigation }: Props) {
         {/* Menu items */}
         <Card shadow="sm" padding="none" style={styles.menuCard}>
           {([
-            { label: 'Edit Business Details', icon: 'business-outline', color: Colors.brand[500] },
-            { label: 'Manage Devices', icon: 'phone-portrait-outline', color: Colors.info[500] },
-            { label: 'Language Settings', icon: 'language-outline', color: Colors.accent[500] },
-            { label: 'Notification Preferences', icon: 'notifications-outline', color: Colors.warning[500] },
-            { label: 'Subscription & Billing', icon: 'card-outline', color: Colors.success[500] },
-            { label: 'Help & Support', icon: 'help-circle-outline', color: Colors.neutral[500] },
-            { label: 'About SnapAccount', icon: 'information-circle-outline', color: Colors.neutral[500] },
-          ] as { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string }[]).map((item, idx, arr) => (
+            { label: t('mobile.profile.menu.editBusiness'), icon: 'business-outline', color: Colors.brand[500] },
+            { label: t('mobile.profile.menu.identityDocuments'), icon: 'document-attach-outline', color: Colors.accent[600], route: 'IdentityDocuments' },
+            { label: t('mobile.profile.menu.manageDevices'), icon: 'phone-portrait-outline', color: Colors.info[500], route: 'Devices' },
+            { label: t('mobile.profile.menu.language'), icon: 'language-outline', color: Colors.accent[500], route: 'NotificationPreferences' },
+            { label: t('mobile.profile.menu.notifications'), icon: 'notifications-outline', color: Colors.warning[500], route: 'NotificationPreferences' },
+            { label: t('mobile.profile.menu.billing'), icon: 'card-outline', color: Colors.success[500] },
+            { label: t('mobile.profile.menu.help'), icon: 'help-circle-outline', color: Colors.neutral[500] },
+            { label: t('mobile.profile.menu.about'), icon: 'information-circle-outline', color: Colors.neutral[500] },
+          ] as { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string; route?: keyof MoreStackParamList }[]).map((item, idx, arr) => (
             <Pressable
               key={item.label}
               style={[styles.menuItem, idx === arr.length - 1 && { borderBottomWidth: 0 }]}
-              onPress={() => Alert.alert('Coming Soon', `${item.label} coming soon.`)}
+              onPress={() =>
+                item.route
+                  ? navigation.navigate(item.route as 'Devices')
+                  : Alert.alert(t('mobile.common.ok'), `${item.label}`)
+              }
             >
               <View style={[styles.menuItemIconWrap, { backgroundColor: item.color + '12' }]}>
                 <Ionicons name={item.icon} size={18} color={item.color} />
@@ -128,11 +165,32 @@ export function ProfileScreen({ navigation }: Props) {
           <View style={[styles.menuItemIconWrap, { backgroundColor: Colors.error[50] }]}>
             <Ionicons name="log-out-outline" size={18} color={Colors.error[500]} />
           </View>
-          <Text style={styles.signOutLabel}>Sign Out</Text>
+          <Text style={styles.signOutLabel}>{t('mobile.profile.signOut.label')}</Text>
           <Ionicons name="chevron-forward" size={16} color={Colors.neutral[300]} />
         </Pressable>
 
-        <Text style={styles.version}>SnapAccount v1.0.0</Text>
+        {/* Delete account — DPDP Act 2023 Right to Erasure */}
+        <Pressable
+          style={[styles.signOutRow, styles.deleteAccountRow]}
+          onPress={handleDeleteAccount}
+          disabled={deletingAccount}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.profile.deleteAccount.accessibilityLabel')}
+        >
+          <View style={[styles.menuItemIconWrap, { backgroundColor: Colors.error[100] }]}>
+            <Ionicons name="trash-outline" size={18} color={Colors.error[700]} />
+          </View>
+          <Text style={[styles.signOutLabel, styles.deleteAccountLabel]}>
+            {deletingAccount
+              ? t('mobile.profile.deleteAccount.deleting')
+              : t('mobile.profile.deleteAccount.label')}
+          </Text>
+          {!deletingAccount && (
+            <Ionicons name="chevron-forward" size={16} color={Colors.neutral[300]} />
+          )}
+        </Pressable>
+
+        <Text style={styles.version}>{t('mobile.profile.version')}</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -172,7 +230,10 @@ const styles = StyleSheet.create({
   menuItemLabel: { flex: 1, fontSize: 15, color: Colors.neutral[800], letterSpacing: -0.1 },
 
   // Sign out
-  signOutRow: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: Colors.surface.default, borderRadius: 18, gap: 12, shadowColor: '#0F172A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+  signOutRow: { flexDirection: 'row', alignItems: 'center', padding: 16, minHeight: 44, backgroundColor: Colors.surface.default, borderRadius: 18, gap: 12, shadowColor: '#0F172A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   signOutLabel: { flex: 1, fontSize: 15, color: Colors.error[500], fontWeight: '600' },
+  // Delete account row — more prominent danger styling per DPDP Act 2023 UX guidance
+  deleteAccountRow: { borderWidth: 1, borderColor: Colors.error[200], backgroundColor: Colors.error[50] },
+  deleteAccountLabel: { color: Colors.error[700] },
   version: { fontSize: 12, color: Colors.neutral[400], textAlign: 'center', paddingVertical: 4 },
 });

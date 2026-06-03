@@ -85,16 +85,45 @@ const DEV_MOCK_USER: AdminUser = {
   uid: 'dev-user-001', email: 'dev@snapaccount.in', displayName: 'Dev Admin', photoURL: null, role: DEV_ROLE,
 }
 
+// Shape returned by POST /auth/local/login
+interface LocalLoginResponse {
+  token: string | null
+  userId: string
+  email: string | null
+  fullName: string | null
+  roles: string[]
+  permissions: string[]
+  requires2fa: boolean
+  challengeToken: string | null
+}
+
+// Shape returned by POST /auth/2fa/challenge
+interface ChallengeResponse {
+  token: string
+  userId: string
+}
+
+// Additional auth state for the 2FA challenge step
+interface TwoFaChallengeState {
+  pending: boolean          // true while waiting for the user to enter their TOTP code
+  challengeToken: string    // opaque token from the login response
+}
+
 export function useAuth(): AuthState & {
   signInWithGoogle: () => Promise<void>
   signInWithEmailPassword: (email: string, password: string) => Promise<void>
+  submit2FaChallenge: (code: string) => Promise<void>
   signOut: () => Promise<void>
+  twoFaChallenge: TwoFaChallengeState | null
 } {
   const [state, setState] = useState<AuthState>({
     user: DEV_BYPASS ? DEV_MOCK_USER : LOCAL_AUTH ? readStoredUser() : null,
     loading: !DEV_BYPASS && !LOCAL_AUTH,
     error: null,
   })
+  // Separate piece of state so the login page can render a second step without
+  // needing to store it in localStorage or pass it through the router.
+  const [twoFaChallenge, setTwoFaChallenge] = useState<TwoFaChallengeState | null>(null)
 
   useEffect(() => {
     if (DEV_BYPASS || LOCAL_AUTH) return // skip Firebase listener in dev/local modes
@@ -143,16 +172,20 @@ export function useAuth(): AuthState & {
 
   const signInWithEmailPassword = async (email: string, password: string): Promise<void> => {
     setState(prev => ({ ...prev, loading: true, error: null }))
+    setTwoFaChallenge(null)
     try {
-      const res = await api.post('/auth/local/login', { email, password })
-      const data = res.data as {
-        accessToken: string
-        userId: string
-        email: string | null
-        fullName: string | null
-        roles: string[]
+      const res = await api.post<LocalLoginResponse>('/auth/local/login', { email, password })
+      const data = res.data
+
+      // 2FA required — store the challenge token and surface a second step to the UI.
+      if (data.requires2fa) {
+        setState(prev => ({ ...prev, loading: false, error: null }))
+        setTwoFaChallenge({ pending: true, challengeToken: data.challengeToken ?? '' })
+        return
       }
-      setToken(data.accessToken)
+
+      // Normal path — token is returned directly.
+      setToken(data.token ?? '')
       const user: AdminUser = {
         uid: data.userId,
         email: data.email,
@@ -169,6 +202,38 @@ export function useAuth(): AuthState & {
     }
   }
 
+  const submit2FaChallenge = async (code: string): Promise<void> => {
+    if (!twoFaChallenge) return
+    setState(prev => ({ ...prev, loading: true, error: null }))
+    try {
+      const res = await api.post<ChallengeResponse>('/auth/2fa/challenge', {
+        challengeToken: twoFaChallenge.challengeToken,
+        code,
+      })
+      const data = res.data
+      setToken(data.token)
+      // The challenge response carries userId but not the full profile — re-use
+      // what we already know about the user from the first step (stored in twoFaChallenge
+      // context).  userId is present; the rest fall back to empty until the app fetches
+      // /auth/me.  For now build a minimal user so AuthGuard lets the app through.
+      const storedUser = readStoredUser()
+      const user: AdminUser = storedUser ?? {
+        uid: data.userId,
+        email: null,
+        displayName: null,
+        photoURL: null,
+        role: 'SUPER_ADMIN',
+      }
+      localStorage.setItem(USER_KEY, JSON.stringify({ ...user, uid: data.userId }))
+      setTwoFaChallenge(null)
+      setState({ user: { ...user, uid: data.userId }, loading: false, error: null })
+    } catch (err) {
+      const apiError = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      const message = apiError ?? (err instanceof Error ? err.message : 'Invalid code. Please try again.')
+      setState(prev => ({ ...prev, loading: false, error: message }))
+    }
+  }
+
   const signOut = async (): Promise<void> => {
     if (LOCAL_AUTH || DEV_BYPASS) {
       clearSession()
@@ -177,5 +242,5 @@ export function useAuth(): AuthState & {
     await firebaseSignOut(auth).catch(() => undefined)
   }
 
-  return { ...state, signInWithGoogle, signInWithEmailPassword, signOut }
+  return { ...state, signInWithGoogle, signInWithEmailPassword, submit2FaChallenge, signOut, twoFaChallenge }
 }

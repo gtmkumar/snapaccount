@@ -30,6 +30,7 @@ public record PlatformOrgDto(
     string? BusinessType,
     bool IsGstRegistered,
     bool IsActive,
+    bool GovernmentVerificationEnabled,
     int MemberCount,
     DateTime CreatedAt);
 
@@ -69,6 +70,7 @@ public sealed class ListPlatformOrganizationsQueryHandler(IAuthDbContext db)
                 o.BusinessType,
                 o.IsGstRegistered,
                 o.IsActive,
+                o.GovernmentVerificationEnabled,
                 o.Members.Count(m => m.IsActive && m.DeletedAt == null),
                 o.CreatedAt))
             .ToListAsync(cancellationToken);

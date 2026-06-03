@@ -16,11 +16,19 @@
     "transformIgnorePatterns": [
       "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|i18next|react-i18next)"
     ],
+    "setupFiles": [
+      "<rootDir>/src/__mocks__/setup.js"
+    ],
     "setupFilesAfterEnv": [
       "@testing-library/jest-native/extend-expect"
     ],
     "moduleNameMapper": {
       "^react-native/Libraries/BatchedBridge/NativeModules$": "<rootDir>/src/__mocks__/nativeModules.js",
+      "^react-native/Libraries/NativeModules/specs/NativeSourceCode$": "<rootDir>/src/__mocks__/nativeSourceCode.js",
+      "^react-native/src/private/specs_DEPRECATED/modules/NativeSourceCode$": "<rootDir>/src/__mocks__/nativeSourceCode.js",
+      "^expo/virtual/streams$": "<rootDir>/src/__mocks__/expoVirtualStreams.js",
+      "^expo/src/winter$": "<rootDir>/src/__mocks__/expoWinter.js",
+      "^expo/src/winter/(.*)$": "<rootDir>/src/__mocks__/expoWinter.js",
       "^expo/src/async-require/messageSocket$": "<rootDir>/src/__mocks__/expoMessageSocket.js",
       "^@expo/vector-icons$": "<rootDir>/src/__mocks__/vectorIcons.js",
       "^@expo/vector-icons/(.*)$": "<rootDir>/src/__mocks__/vectorIcons.js",
@@ -54,10 +62,13 @@
     "@tanstack/react-query": "^5.17.0",
     "axios": "^1.6.5",
     "expo": "~56.0.0",
+    "expo-apple-authentication": "~56.0.4",
     "expo-asset": "~56.0.15",
+    "expo-auth-session": "~56.0.13",
     "expo-background-fetch": "~56.0.16",
     "expo-camera": "~56.0.7",
     "expo-constants": "~56.0.16",
+    "expo-crypto": "~56.0.4",
     "expo-device": "~56.0.4",
     "expo-font": "~56.0.5",
     "expo-haptics": "~56.0.3",
@@ -73,6 +84,7 @@
     "expo-status-bar": "~56.0.4",
     "expo-store-review": "~56.0.3",
     "expo-task-manager": "~56.0.16",
+    "expo-web-browser": "~56.0.5",
     "i18next": "^26.0.8",
     "nativewind": "^4.0.1",
     "react": "19.2.3",
@@ -93,6 +105,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "@react-native/jest-preset": "^0.85.3",
     "@testing-library/jest-native": "^5.4.3",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "29.5.14",

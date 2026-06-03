@@ -186,8 +186,71 @@ export async function updateWhatsAppConfig(config: Partial<WhatsAppConfig>): Pro
   await api.patch('/auth/config/whatsapp', config)
 }
 
-// ── User preferences (theme, etc.) ───────────────────────────────────────────
+// ── User preferences (theme, language, notifications) ────────────────────────
 
-export async function updateUserPreferences(prefs: { theme?: string; locale?: string }): Promise<void> {
+export const UserPreferencesSchema = z.object({
+  preferredLanguage: z.string().optional(),
+  theme: z.enum(['LIGHT', 'DARK', 'SYSTEM']).optional(),
+  pushNotificationsEnabled: z.boolean().optional(),
+  smsNotificationsEnabled: z.boolean().optional(),
+  emailNotificationsEnabled: z.boolean().optional(),
+  whatsappNotificationsEnabled: z.boolean().optional(),
+})
+export type UserPreferences = z.infer<typeof UserPreferencesSchema>
+
+export async function getUserPreferences(): Promise<UserPreferences> {
+  const res = await api.get('/auth/me/preferences')
+  return UserPreferencesSchema.parse(res.data)
+}
+
+export async function updateUserPreferences(prefs: Partial<UserPreferences>): Promise<void> {
   await api.patch('/auth/me/preferences', prefs)
+}
+
+// ── 2FA / TOTP ────────────────────────────────────────────────────────────────
+
+export const TwoFaStatusSchema = z.object({
+  enabled: z.boolean(),
+  confirmedAt: z.string().nullable().optional(),
+})
+export type TwoFaStatus = z.infer<typeof TwoFaStatusSchema>
+
+export const TwoFaEnrollResponseSchema = z.object({
+  otpauthUri: z.string(),
+  base32Secret: z.string(),
+})
+export type TwoFaEnrollResponse = z.infer<typeof TwoFaEnrollResponseSchema>
+
+export const TwoFaConfirmResponseSchema = z.object({
+  recoveryCodes: z.array(z.string()),
+})
+export type TwoFaConfirmResponse = z.infer<typeof TwoFaConfirmResponseSchema>
+
+export async function get2FaStatus(): Promise<TwoFaStatus> {
+  const res = await api.get('/auth/me/2fa/status')
+  return TwoFaStatusSchema.parse(res.data)
+}
+
+export async function enroll2Fa(): Promise<TwoFaEnrollResponse> {
+  const res = await api.post('/auth/me/2fa/enroll')
+  return TwoFaEnrollResponseSchema.parse(res.data)
+}
+
+export async function confirm2Fa(code: string): Promise<TwoFaConfirmResponse> {
+  const res = await api.post('/auth/me/2fa/confirm', { code })
+  return TwoFaConfirmResponseSchema.parse(res.data)
+}
+
+export async function disable2Fa(code: string): Promise<void> {
+  await api.post('/auth/me/2fa/disable', { code })
+}
+
+// ── Password reset ────────────────────────────────────────────────────────────
+
+export async function forgotPassword(email: string): Promise<void> {
+  await api.post('/auth/password/forgot', { email })
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await api.post('/auth/password/reset', { token, newPassword })
 }

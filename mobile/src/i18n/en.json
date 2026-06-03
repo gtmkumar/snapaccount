@@ -934,6 +934,165 @@
         "footer": "Choose System to follow your phone's theme.",
         "changed": "Theme changed to {{mode}}"
       }
+    },
+    "profile": {
+      "version": "SnapAccount v1.0.0",
+      "menu": {
+        "editBusiness": "Edit Business Details",
+        "manageDevices": "Manage Devices",
+        "language": "Language Settings",
+        "notifications": "Notification Preferences",
+        "billing": "Subscription & Billing",
+        "help": "Help & Support",
+        "about": "About SnapAccount",
+        "identityDocuments": "Identity Documents"
+      },
+      "signOut": {
+        "label": "Sign Out",
+        "title": "Sign Out",
+        "body": "Are you sure you want to sign out?",
+        "confirm": "Sign Out"
+      },
+      "deleteAccount": {
+        "label": "Delete My Account",
+        "deleting": "Deleting account…",
+        "accessibilityLabel": "Delete my account permanently",
+        "confirmTitle": "Permanently delete account?",
+        "confirmBody": "Under the Digital Personal Data Protection Act 2023 (DPDP), you have the right to erasure. All your personal data — documents, tax filings, and financial records — will be permanently deleted and cannot be recovered. This action is irreversible.",
+        "confirmCta": "Delete My Account",
+        "errorTitle": "Could not delete account",
+        "errorBody": "Something went wrong. Please try again or contact support if the issue persists."
+      }
+    },
+    "auth": {
+      "common": {
+        "verified": "Verified",
+        "failed": "Verification failed",
+        "verifying": "Verifying…",
+        "sending": "Sending…",
+        "loadError": "Could not load. Pull to refresh or try again."
+      },
+      "preferences": {
+        "title": "Notification Preferences",
+        "subtitle": "Choose how we keep you updated",
+        "language": "Language",
+        "channels": "Channels",
+        "push": "Push notifications",
+        "pushDesc": "Alerts on this device",
+        "sms": "SMS",
+        "smsDesc": "Text messages to your mobile",
+        "email": "Email",
+        "emailDesc": "Updates to your email inbox",
+        "whatsapp": "WhatsApp",
+        "whatsappDesc": "Messages on WhatsApp",
+        "save": "Save preferences",
+        "saved": "Preferences saved",
+        "saveError": "Could not save preferences. Please try again."
+      },
+      "devices": {
+        "title": "Logged-in devices",
+        "subtitle": "Devices currently signed in to your account",
+        "empty": "No active devices found.",
+        "thisDevice": "This device",
+        "lastActive": "Last active {{when}}",
+        "boundAt": "Signed in {{when}}",
+        "active": "Active",
+        "inactive": "Inactive",
+        "revoke": "Revoke",
+        "revoking": "Revoking…",
+        "revokeTitle": "Revoke this device?",
+        "revokeBody": "This device will be signed out and will need to log in again.",
+        "revokeConfirm": "Revoke",
+        "revokeError": "Could not revoke device. Please try again."
+      },
+      "kyc": {
+        "panVerified": "PAN verified",
+        "panFailed": "PAN verification failed. Check the details and try again.",
+        "panError": "Could not verify PAN. Please try again.",
+        "aadhaarOtpError": "Could not send Aadhaar OTP. Please try again.",
+        "aadhaarVerified": "Aadhaar verified",
+        "aadhaarFailed": "Invalid Aadhaar OTP. Please try again.",
+        "aadhaarError": "Could not verify Aadhaar OTP. Please try again."
+      },
+      "twoFactor": {
+        "title": "Two-factor authentication",
+        "subtitle": "Enter the 6-digit code from your authenticator app",
+        "verify": "Verify & continue",
+        "verifying": "Verifying…",
+        "invalid": "Invalid code. Please try again.",
+        "error": "Could not verify the code. Please try again.",
+        "missingToken": "Your sign-in session expired. Please log in again."
+      },
+      "social": {
+        "googleError": "Google sign-in failed. Please try again.",
+        "appleError": "Apple sign-in failed. Please try again.",
+        "cancelled": "Sign-in cancelled.",
+        "notConfigured": "Social sign-in requires Firebase configuration. Please use OTP or password sign-in."
+      }
+    },
+    "documents": {
+      "title": "Identity Documents",
+      "banner": {
+        "save": "Your organization stores these documents for your records. Verification is not required.",
+        "verify": "Your organization requires government verification. Verify each document with an OTP."
+      },
+      "footnote": "Document numbers are stored securely and used only for tax and compliance purposes.",
+      "status": {
+        "saved": "Saved",
+        "pending": "Pending",
+        "verified": "Verified",
+        "failed": "Failed"
+      },
+      "kind": {
+        "PAN": {
+          "label": "PAN Card",
+          "hint": "Permanent Account Number (ABCDE1234F)"
+        },
+        "AADHAAR": {
+          "label": "Aadhaar",
+          "hint": "12-digit Aadhaar number"
+        },
+        "GSTIN": {
+          "label": "GSTIN",
+          "hint": "15-character GST identification number"
+        },
+        "TAN": {
+          "label": "TAN",
+          "hint": "Tax Deduction Account Number (AAAA99999A)"
+        }
+      },
+      "actions": {
+        "save": "Save",
+        "update": "Update",
+        "verify": "Verify",
+        "reVerify": "Re-verify",
+        "verifyLater": "Verify later"
+      },
+      "otp": {
+        "prompt": "Enter the 6-digit OTP sent for verification.",
+        "confirm": "Confirm OTP"
+      },
+      "validation": {
+        "gstinLength": "GSTIN must be 15 characters",
+        "gstinFormat": "Invalid GSTIN format (e.g. 27AABCU9603R1ZM)",
+        "gstinValid": "GSTIN format valid",
+        "gstinHint": "Enter your 15-character GSTIN",
+        "tanLength": "TAN must be 10 characters",
+        "tanFormat": "Invalid TAN format (e.g. AAAA99999A)",
+        "tanValid": "TAN format valid",
+        "tanHint": "Enter your 10-character TAN",
+        "aadhaarLength": "Aadhaar must be 12 digits",
+        "aadhaarFormat": "Invalid Aadhaar number",
+        "aadhaarValid": "Aadhaar format valid",
+        "aadhaarHint": "Enter your 12-digit Aadhaar number"
+      },
+      "errors": {
+        "load": "Could not load your documents. Please try again.",
+        "save": "Could not save the document. Please try again.",
+        "otpSend": "Could not send the verification OTP. Please try again.",
+        "otpConfirm": "Could not verify the OTP. Please try again.",
+        "otpRejected": "Incorrect OTP. Please try again."
+      }
     }
   }
 }

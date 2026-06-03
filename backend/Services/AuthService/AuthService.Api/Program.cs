@@ -71,6 +71,16 @@ try
             opt.QueueLimit = 0;
         });
 
+        // Password reset: 5 req/10 min per IP (mirrors OTP rate to prevent abuse)
+        options.AddSlidingWindowLimiter("password-reset", opt =>
+        {
+            opt.PermitLimit = 5;
+            opt.Window = TimeSpan.FromMinutes(10);
+            opt.SegmentsPerWindow = 2;
+            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            opt.QueueLimit = 0;
+        });
+
         // M1-R-INFO-001: Public invite-token lookup — fixed window 20 req/min per IP.
         // Prevents token enumeration on the public GET /auth/invite/{token} endpoint.
         options.AddFixedWindowLimiter("invite-token-lookup", opt =>
