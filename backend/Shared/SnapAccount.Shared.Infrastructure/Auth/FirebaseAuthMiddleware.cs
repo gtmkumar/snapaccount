@@ -30,6 +30,11 @@ public sealed class FirebaseAuthMiddleware(
             ["userId"] = "11111111-1111-1111-1111-111111111111",
             ["organizationId"] = "00000000-0000-0000-0000-000000000000",
             ["roles"] = new[] { "SUPER_ADMIN", "OPERATIONS_MANAGER" },
+            // Wildcard "*" grants all permissions — without it, every [RequiresPermission]
+            // endpoint (e.g. admin.dashboard.read) is denied under DEV_AUTH_BYPASS because
+            // CurrentUser.HasPermission finds no "permissions" claim. Mirrors the real
+            // SUPER_ADMIN session token, which resolves to ["*"].
+            ["permissions"] = new[] { "*" },
             ["phone_number"] = "+919000000001",
             ["email"] = "superadmin@snapaccount.local",
             ["firebase_uid"] = "dev-superadmin-uid",

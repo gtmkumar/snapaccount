@@ -159,7 +159,7 @@ public sealed class Loans : EndpointGroupBase
         groupBuilder.MapGet("/admin/dashboard-stats", static async (ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetDashboardStatsQuery(), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
         })
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetLoanAdminDashboardStats")
@@ -193,7 +193,7 @@ public sealed class Loans : EndpointGroupBase
         [AsParameters] ListParams p, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new ListApplicationsQuery(p.Status, p.Page, p.PageSize), ct);
-        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
     }
 
     private static async Task<IResult> GetApplication(
@@ -307,7 +307,7 @@ public sealed class Loans : EndpointGroupBase
         bool includeInactive, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new GetPartnerBanksQuery(includeInactive), ct);
-        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
     }
 
     private static async Task<IResult> CreatePartnerBank(

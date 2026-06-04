@@ -29,6 +29,7 @@ import {
   signInWithGoogle,
   signInWithApple,
   SocialSignInCancelled,
+  SocialSignInUnavailable,
   type SocialSessionResult,
 } from '../../lib/socialAuth';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
@@ -115,7 +116,12 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
       const result = await signInWithApple();
       await completeSocialSession(result);
     } catch (err: unknown) {
-      if (err instanceof SocialSignInCancelled) return;
+      if (err instanceof SocialSignInCancelled) return; // user backed out — no-op
+      // Apple Sign-In not available (no entitlement / no Apple ID / unsupported device).
+      if (err instanceof SocialSignInUnavailable) {
+        Alert.alert('', t('mobile.auth.social.appleUnavailable'));
+        return;
+      }
       Alert.alert('', getApiError(err).message || t('mobile.auth.social.appleError'));
     } finally {
       setSocialLoading(null);

@@ -17,10 +17,9 @@ public sealed class LoanApplicationConfiguration : IEntityTypeConfiguration<Loan
         builder.Property(x => x.RequestedAmount).HasColumnType("numeric(18,2)").IsRequired();
         builder.Property(x => x.TenureMonths).IsRequired();
         builder.Property(x => x.Purpose).HasMaxLength(1000);
-        builder.Property(x => x.Status)
-            .HasConversion<string>()
-            .HasMaxLength(30)
-            .IsRequired();
+        // Native PG enum loan.application_status_v2 — mapped via MapEnum in DependencyInjection.
+        // No string conversion: Npgsql handles the enum natively (UPPER_SNAKE labels).
+        builder.Property(x => x.Status).IsRequired();
         builder.Property(x => x.BankReferenceNo).HasMaxLength(100);
         builder.Property(x => x.DisbursedAmount).HasColumnType("numeric(18,2)");
         builder.Property(x => x.AnonymizationReason).HasMaxLength(100);
