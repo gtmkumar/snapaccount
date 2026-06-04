@@ -7,8 +7,14 @@ namespace ChatService.Domain.Entities;
 /// A user participating in a <see cref="ChatThread"/>.
 /// Canonical table: chat.thread_participants (migration 029).
 /// Soft-deleted on DPDP user erasure — never hard-deleted (DB triggers block it).
+///
+/// Derives from <see cref="BaseEntity"/> (NOT <see cref="BaseAuditableEntity"/>):
+/// the canonical table has a composite PK (thread_id, user_id) and NO surrogate id /
+/// created_at / updated_at / created_by / updated_by columns, so the audit-column
+/// auto-mapping in BaseDbContext must not apply here. Only <see cref="DeletedAt"/>
+/// exists (deleted_at) and is declared explicitly.
 /// </summary>
-public class ThreadParticipant : BaseAuditableEntity
+public class ThreadParticipant : BaseEntity
 {
     /// <summary>Parent thread.</summary>
     public Guid ThreadId { get; private set; }
@@ -18,6 +24,9 @@ public class ThreadParticipant : BaseAuditableEntity
 
     /// <summary>Role within this thread context.</summary>
     public ParticipantRole Role { get; private set; }
+
+    /// <summary>Soft-delete timestamp (deleted_at). Non-null = logically removed.</summary>
+    public DateTime? DeletedAt { get; private set; }
 
     /// <summary>Navigation back to the parent thread (for IDOR checks).</summary>
     public ChatThread Thread { get; private set; } = null!;

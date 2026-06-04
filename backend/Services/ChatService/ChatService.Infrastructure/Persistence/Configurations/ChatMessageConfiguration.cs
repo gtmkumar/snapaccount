@@ -33,11 +33,12 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
             .HasColumnName("client_message_id")
             .HasMaxLength(128);
 
-        // body_tsvector is managed by DB trigger — EF maps it read-only
-        builder.Property(m => m.BodyTsvector)
-            .HasColumnName("body_tsvector")
-            .HasColumnType("tsvector")
-            .ValueGeneratedOnAddOrUpdate();
+        // body_tsvector is a Postgres `tsvector GENERATED ALWAYS ... STORED` column
+        // (migration 029). Npgsql cannot map a CLR `string` to `tsvector`, and the
+        // application never reads it (full-text search runs as raw SQL against the
+        // GIN index). Exclude it from the EF model entirely so reads/writes of
+        // ChatMessage never reference the column.
+        builder.Ignore(m => m.BodyTsvector);
 
         builder.Property(m => m.AnonymizedAt)
             .HasColumnName("anonymized_at");

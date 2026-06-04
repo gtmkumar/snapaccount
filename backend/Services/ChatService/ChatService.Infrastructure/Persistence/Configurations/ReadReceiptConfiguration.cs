@@ -11,30 +11,33 @@ public class ReadReceiptConfiguration : IEntityTypeConfiguration<ReadReceipt>
     {
         builder.ToTable("read_receipts");
 
-        builder.HasKey(r => r.Id);
+        // Canonical chat.read_receipts (migration 029) is a per-(thread,user)
+        // "last-read pointer": composite PK (thread_id, user_id), columns
+        // last_read_message_id / last_read_at / updated_at. It has NO surrogate id,
+        // created_at, created_by, updated_by or deleted_at columns.
+        // Mirror the real shape so reads stop 500-ing.
+        builder.HasKey(r => new { r.ThreadId, r.UserId });
+
+        // ReadReceipt derives from BaseEntity, so it carries only Id (no audit
+        // columns). The canonical table has no id column — exclude it.
+        builder.Ignore(r => r.Id);
 
         builder.Property(r => r.ThreadId)
             .HasColumnName("thread_id")
             .IsRequired();
 
         builder.Property(r => r.MessageId)
-            .HasColumnName("message_id")
-            .IsRequired();
+            .HasColumnName("last_read_message_id");
 
         builder.Property(r => r.UserId)
             .HasColumnName("user_id")
             .IsRequired();
 
         builder.Property(r => r.ReadAt)
-            .HasColumnName("read_at")
+            .HasColumnName("last_read_at")
             .IsRequired();
 
-        // Unique: a user reads a given message only once
-        builder.HasIndex(r => new { r.MessageId, r.UserId })
-            .IsUnique()
-            .HasDatabaseName("uq_read_receipts_message_user");
-
-        builder.HasIndex(r => new { r.ThreadId, r.UserId })
-            .HasDatabaseName("ix_read_receipts_thread_user");
+        builder.HasIndex(r => r.UserId)
+            .HasDatabaseName("ix_read_receipts_user_id");
     }
 }

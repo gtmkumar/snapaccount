@@ -46,7 +46,15 @@ public static class DependencyInjection
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
             options.UseNpgsql(
                 connectionString,
-                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", "loan"));
+                npgsql =>
+                {
+                    npgsql.MigrationsHistoryTable("__ef_migrations_history", "loan");
+                    // loan.applications.status is a native PG enum (application_status_v2) with
+                    // UPPER_SNAKE labels — map it so Npgsql sends the enum type (a plain string
+                    // parameter fails with "operator does not exist: application_status_v2 = text").
+                    npgsql.MapEnum<Domain.Entities.LoanApplicationStatus>(
+                        "application_status_v2", "loan", new UpperSnakeCaseNameTranslator());
+                });
             options.ConfigureWarnings(w =>
                 w.Ignore(RelationalEventId.PendingModelChangesWarning));
         });
