@@ -17,6 +17,7 @@ using GstService.Application.Invoices.Queries.ListReturnInvoices;
 using GstService.Application.Admin.Queries.GetUserReturns;
 using GstService.Application.Dashboard.Queries.GetActivity;
 using GstService.Application.Dashboard.Queries.GetDashboardStats;
+using GstService.Application.Dashboard.Queries.GetNoticesDueSummary;
 using GstService.Application.Dashboard.Queries.GetWorkloadByUser;
 using GstService.Application.ItcReconciliation.Commands.ReconcileItc;
 using GstService.Application.ItcReconciliation.Queries.GetItcMismatches;
@@ -97,6 +98,18 @@ public sealed class Gst : EndpointGroupBase
         groupBuilder.MapGet("/notices", ListNotices)
             .RequireAuthorization().RequireRateLimiting("standard");
 
+        // GET /gst/notices/due-summary — overdue / due-soon counts for the admin dashboard
+        // NoticesDueWidget. SUPER_ADMIN only. Declared before the {id:guid} route for clarity
+        // (the guid constraint already prevents "due-summary" from matching that route).
+        groupBuilder.MapGet("/notices/due-summary", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetNoticesDueSummaryQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetGstNoticesDueSummary")
+            .WithSummary("Overdue / due-soon GST notice counts for the admin dashboard widget.");
+
         groupBuilder.MapGet("/notices/{id:guid}", GetNotice)
             .RequireAuthorization().RequireRateLimiting("standard");
 
@@ -127,7 +140,7 @@ public sealed class Gst : EndpointGroupBase
         groupBuilder.MapGet("/admin/dashboard-stats", static async (ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetDashboardStatsQuery(), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
         })
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetGstAdminDashboardStats")
@@ -161,7 +174,7 @@ public sealed class Gst : EndpointGroupBase
             var result = await sender.Send(new GetFilingQueueQuery(status, limit ?? 50), ct);
             return result.IsSuccess
                 ? Results.Ok(result.Value)
-                : Results.Problem(result.Error.Message);
+                : result.Error.ToHttpResult();
         })
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetGstAdminFilingQueue")
@@ -171,7 +184,7 @@ public sealed class Gst : EndpointGroupBase
         groupBuilder.MapGet("/admin/workload-by-user", static async (ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetWorkloadByUserQuery(), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
         })
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetGstAdminWorkloadByUser")

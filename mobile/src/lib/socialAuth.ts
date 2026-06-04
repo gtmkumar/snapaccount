@@ -73,6 +73,20 @@ export class SocialSignInCancelled extends Error {
 }
 
 /**
+ * Thrown when a provider sign-in cannot proceed for an *expected* reason the user
+ * can do nothing about right now — e.g. Apple Sign-In is unavailable on this device
+ * (simulator without the applesignin entitlement, no Apple ID signed in, capability
+ * not provisioned). Callers should surface a friendly, informative message rather
+ * than a generic "unexpected error".
+ */
+export class SocialSignInUnavailable extends Error {
+  constructor() {
+    super('unavailable');
+    this.name = 'SocialSignInUnavailable';
+  }
+}
+
+/**
  * True only when the Firebase web config AND the Google OAuth client IDs are present.
  * Local dev (DEV_AUTH_BYPASS, no Firebase project) returns false → UI degrades gracefully.
  */
@@ -98,8 +112,9 @@ async function exchangeFirebaseToken(
   idToken: string,
   provider: 'google' | 'apple',
 ): Promise<SocialSessionResult> {
+  // Backend contract: POST /auth/social/firebase { firebaseIdToken, provider }.
   const res = await apiClient.post<SocialSessionResult>('/auth/social/firebase', {
-    idToken,
+    firebaseIdToken: idToken,
     provider,
   });
   return res.data;
@@ -170,6 +185,14 @@ export async function signInWithApple(): Promise<SocialSessionResult> {
     throw new Error('firebase-not-configured');
   }
 
+  // Apple Sign-In requires a supported device with the applesignin entitlement and an
+  // Apple ID signed in. On a simulator without those, or when the capability isn't
+  // provisioned, this returns false — surface a friendly "unavailable" instead of
+  // letting signInAsync throw a raw native error that becomes a generic alert.
+  if (!(await isAppleAvailable())) {
+    throw new SocialSignInUnavailable();
+  }
+
   let credential: AppleAuthentication.AppleAuthenticationCredential;
   try {
     credential = await AppleAuthentication.signInAsync({
@@ -179,16 +202,19 @@ export async function signInWithApple(): Promise<SocialSessionResult> {
       ],
     });
   } catch (err: unknown) {
-    // The user cancelling the native Apple sheet throws ERR_REQUEST_CANCELED.
-    if (
-      err &&
-      typeof err === 'object' &&
-      'code' in err &&
-      (err as { code?: string }).code === 'ERR_REQUEST_CANCELED'
-    ) {
+    // The user cancelling the native Apple sheet throws ERR_REQUEST_CANCELED
+    // (some platforms/versions report ERR_CANCELED) — treat as a silent no-op.
+    const code =
+      err && typeof err === 'object' && 'code' in err
+        ? (err as { code?: string }).code
+        : undefined;
+    if (code === 'ERR_REQUEST_CANCELED' || code === 'ERR_CANCELED') {
       throw new SocialSignInCancelled();
     }
-    throw err;
+    // Any other Apple native failure (unknown/not-handled/unavailable/missing
+    // entitlement) is an expected, non-actionable condition — present it as
+    // "unavailable" rather than a raw "An unexpected error occurred".
+    throw new SocialSignInUnavailable();
   }
 
   const identityToken = credential.identityToken;

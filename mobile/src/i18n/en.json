@@ -1026,6 +1026,7 @@
       "social": {
         "googleError": "Google sign-in failed. Please try again.",
         "appleError": "Apple sign-in failed. Please try again.",
+        "appleUnavailable": "Apple Sign-In isn't available on this device. Please use OTP, password, or Google sign-in.",
         "cancelled": "Sign-in cancelled.",
         "notConfigured": "Social sign-in requires Firebase configuration. Please use OTP or password sign-in."
       }

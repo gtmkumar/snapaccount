@@ -155,7 +155,7 @@ public sealed class Chat : EndpointGroupBase
         g.MapGet("/admin/workload-by-user", static async (ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetWorkloadByUserQuery(), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
         })
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetChatAdminWorkloadByUser")

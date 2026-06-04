@@ -15,11 +15,11 @@ public class ChatThreadConfiguration : IEntityTypeConfiguration<ChatThread>
         builder.HasKey(t => t.Id);
 
         builder.Property(t => t.OrganizationId)
-            .HasColumnName("organization_id")
+            .HasColumnName("org_id")
             .IsRequired();
 
         builder.Property(t => t.InitiatedByUserId)
-            .HasColumnName("initiated_by_user_id")
+            .HasColumnName("user_id")
             .IsRequired();
 
         builder.Property(t => t.Category)
@@ -36,17 +36,20 @@ public class ChatThreadConfiguration : IEntityTypeConfiguration<ChatThread>
 
         builder.Property(t => t.Subject)
             .HasColumnName("subject")
-            .HasMaxLength(200);
+            .HasMaxLength(500);
 
         builder.Property(t => t.AssignedToUserId)
-            .HasColumnName("assigned_to_user_id");
+            .HasColumnName("assigned_ca_id");
 
         builder.Property(t => t.ResolvedAt)
             .HasColumnName("resolved_at");
 
         builder.Property(t => t.ResolvedByUserId)
-            .HasColumnName("resolved_by_user_id");
+            .HasColumnName("resolved_by");
 
+        // escalated_at is NOT part of the original canonical schema (migration 029).
+        // Added non-destructively in migration 054_chat_threads_escalated_at.sql so the
+        // domain's Escalate() flow can persist the timestamp without renaming columns.
         builder.Property(t => t.EscalatedAt)
             .HasColumnName("escalated_at");
 
@@ -55,14 +58,12 @@ public class ChatThreadConfiguration : IEntityTypeConfiguration<ChatThread>
             .HasForeignKey(m => m.ThreadId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasMany(t => t.Participants)
-            .WithOne()
-            .HasForeignKey(p => p.ThreadId)
-            .OnDelete(DeleteBehavior.Restrict);
+        // The ChatThread.Participants <-> ThreadParticipant.Thread relationship is
+        // configured in ThreadParticipantConfiguration (both ends, single FK on ThreadId).
 
         builder.HasIndex(t => t.OrganizationId).HasDatabaseName("ix_threads_org_id");
         builder.HasIndex(t => new { t.OrganizationId, t.Status }).HasDatabaseName("ix_threads_org_status");
-        builder.HasIndex(t => t.InitiatedByUserId).HasDatabaseName("ix_threads_initiated_by");
+        builder.HasIndex(t => t.InitiatedByUserId).HasDatabaseName("ix_threads_user_id");
         builder.HasIndex(t => t.UpdatedAt).HasDatabaseName("ix_threads_updated_at");
 
         // Global query filter: exclude soft-deleted

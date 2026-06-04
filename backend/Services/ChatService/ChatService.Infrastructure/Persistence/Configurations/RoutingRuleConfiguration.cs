@@ -14,8 +14,7 @@ public class RoutingRuleConfiguration : IEntityTypeConfiguration<RoutingRule>
         builder.HasKey(r => r.Id);
 
         builder.Property(r => r.Keyword)
-            .HasColumnName("keyword")
-            .HasMaxLength(100)
+            .HasColumnName("keyword_pattern")
             .IsRequired();
 
         builder.Property(r => r.Category)
