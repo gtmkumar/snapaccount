@@ -89,7 +89,9 @@ public sealed class GetThreadInboxQueryHandler(
                 UnreadCount = t.Messages
                     .Where(m => m.DeletedAt == null && m.SenderUserId != currentUser.UserId)
                     .Count(m => !db.ReadReceipts
-                        .Any(r => r.MessageId == m.Id && r.UserId == currentUser.UserId)),
+                        .Any(r => r.ThreadId == t.Id
+                                  && r.UserId == currentUser.UserId
+                                  && r.ReadAt >= m.CreatedAt)),
                 LastMessageBody = t.Messages
                     .Where(m => m.DeletedAt == null)
                     .OrderByDescending(m => m.CreatedAt)

@@ -33,12 +33,16 @@ public sealed class GetUnreadCountQueryHandler(
             .Select(p => p.ThreadId)
             .ToListAsync(cancellationToken);
 
+        // A message is unread when the user's per-thread last-read pointer
+        // (chat.read_receipts) has not advanced to or past the message's sent time.
         var unreadMessages = await db.Messages
             .Where(m => accessibleThreadIds.Contains(m.ThreadId)
                         && m.SenderUserId != userId
                         && m.DeletedAt == null
                         && !db.ReadReceipts
-                            .Any(r => r.MessageId == m.Id && r.UserId == userId))
+                            .Any(r => r.ThreadId == m.ThreadId
+                                      && r.UserId == userId
+                                      && r.ReadAt >= m.CreatedAt))
             .GroupBy(m => m.ThreadId)
             .Select(g => new { ThreadId = g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);

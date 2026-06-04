@@ -1,3 +1,4 @@
+using ChatService.Domain.Enums;
 using ChatService.Domain.Events;
 using SnapAccount.Shared.Domain;
 
@@ -16,6 +17,13 @@ public class ChatMessage : BaseAuditableEntity
 
     /// <summary>User who sent the message. Nullable post-DPDP-erasure (anonymized).</summary>
     public Guid? SenderUserId { get; private set; }
+
+    /// <summary>
+    /// Role of the sender, persisted to the NOT NULL <c>sender_role</c> column
+    /// (CHECK 'USER','CA','ADMIN','SYSTEM','AI'). Derived from the sender's
+    /// <see cref="ParticipantRole"/> when the message is created.
+    /// </summary>
+    public MessageSenderRole SenderRole { get; private set; } = MessageSenderRole.User;
 
     /// <summary>Message body (plain text / markdown).</summary>
     public string Body { get; private set; } = string.Empty;
@@ -58,6 +66,7 @@ public class ChatMessage : BaseAuditableEntity
         Guid threadId,
         Guid senderUserId,
         string body,
+        MessageSenderRole senderRole = MessageSenderRole.User,
         string? attachmentsJson = null,
         string? clientMessageId = null)
     {
@@ -65,6 +74,7 @@ public class ChatMessage : BaseAuditableEntity
         {
             ThreadId = threadId,
             SenderUserId = senderUserId,
+            SenderRole = senderRole,
             Body = body,
             AttachmentsJson = attachmentsJson,
             ClientMessageId = clientMessageId

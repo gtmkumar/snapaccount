@@ -29,13 +29,27 @@ public class ReadReceipt : BaseEntity
 
     private ReadReceipt() { }
 
-    /// <summary>Creates a read receipt.</summary>
-    public static ReadReceipt Create(Guid threadId, Guid messageId, Guid userId)
+    /// <summary>
+    /// Creates the per-(thread,user) last-read pointer. <paramref name="messageId"/> is the
+    /// newest message considered read; <paramref name="readAt"/> is that message's sent time
+    /// (NOT "now"), so unread-count math compares message sent times against this pointer.
+    /// </summary>
+    public static ReadReceipt Create(Guid threadId, Guid messageId, Guid userId, DateTime readAt)
         => new()
         {
             ThreadId = threadId,
             MessageId = messageId,
             UserId = userId,
-            ReadAt = DateTime.UtcNow
+            ReadAt = readAt
         };
+
+    /// <summary>
+    /// Advances the pointer to a newer message. Caller must only advance forward
+    /// (<paramref name="readAt"/> &gt; current <see cref="ReadAt"/>) so the pointer never regresses.
+    /// </summary>
+    public void MarkReadUpTo(Guid messageId, DateTime readAt)
+    {
+        MessageId = messageId;
+        ReadAt = readAt;
+    }
 }
