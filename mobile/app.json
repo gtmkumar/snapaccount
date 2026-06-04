@@ -74,14 +74,18 @@
       "apiBaseUrl": "http://localhost:5101",
       "documentsBaseUrl": "http://localhost:5102",
       "firebase": {
-        "apiKey": "",
-        "authDomain": "",
-        "projectId": ""
+        "apiKey": "AIzaSyBQ1xgWAWRIXPFKwcM3yR6GZEfW99G53L4",
+        "authDomain": "snap-account.firebaseapp.com",
+        "projectId": "snap-account",
+        "storageBucket": "snap-account.firebasestorage.app",
+        "messagingSenderId": "754356628614",
+        "appId": "1:754356628614:web:0884cef123784cb9a0f507",
+        "measurementId": "G-155RG9L0PJ"
       },
       "googleAuth": {
         "iosClientId": "",
         "androidClientId": "",
-        "webClientId": ""
+        "webClientId": "754356628614-hu7lqvm3uq7lp1chirpsq5ncpd6286tf.apps.googleusercontent.com"
       }
     }
   }

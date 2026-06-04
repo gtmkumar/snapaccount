@@ -52,9 +52,11 @@ public sealed class RefreshTokenCommandHandler(
         if (user is null || !user.IsActive)
             return Error.NotFound("User", refreshToken.UserId);
 
+        // Pass userId so the session token re-resolves the user's current RBAC claims on rotation.
         var customTokenResult = await firebaseAuthService.CreateCustomTokenAsync(
             user.FirebaseUid ?? user.Id.ToString(),
-            ct: cancellationToken);
+            new Dictionary<string, object> { ["userId"] = user.Id.ToString() },
+            cancellationToken);
 
         if (customTokenResult.IsFailure)
             return customTokenResult.Error;

@@ -809,5 +809,6 @@ file record AssignableRoleDto(
 file record ErrorResponseDto(string Error, string Code);
 
 file record LocalLoginDto(
-    [property: System.Text.Json.Serialization.JsonPropertyName("accessToken")]
+    // /auth/local/login returns the session JWT under "token" (matches admin/mobile client contract).
+    [property: System.Text.Json.Serialization.JsonPropertyName("token")]
     string AccessToken);

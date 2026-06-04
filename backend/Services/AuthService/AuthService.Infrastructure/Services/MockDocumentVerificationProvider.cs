@@ -20,6 +20,9 @@ namespace AuthService.Infrastructure.Services;
 public sealed class MockDocumentVerificationProvider(ILogger<MockDocumentVerificationProvider> logger)
     : IDocumentVerificationProvider, IKycProvider
 {
+    /// <inheritdoc />
+    public string ProviderName => "mock";
+
     // ── IDocumentVerificationProvider ────────────────────────────────────────
 
     /// <inheritdoc />
