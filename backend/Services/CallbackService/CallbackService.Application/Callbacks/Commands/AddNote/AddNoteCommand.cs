@@ -1,4 +1,5 @@
 using CallbackService.Application.Common.Interfaces;
+using CallbackService.Domain.Entities;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
@@ -40,7 +41,14 @@ public sealed class AddNoteCommandHandler(ICallbackDbContext dbContext, ICurrent
         if (currentUser.OrganizationId.HasValue && callback.OrganizationId != currentUser.OrganizationId)
             return Result.Failure(Error.NotFound("Callback", request.CallbackId));
 
-        callback.AddNote(request.AuthorId, request.Content, request.IsInternal);
+        // Add the note via the DbSet (Added state) rather than through the loaded
+        // aggregate's navigation collection. CallNote : BaseEntity sets Id =
+        // Guid.NewGuid() at construction, so adding it to an already-tracked parent's
+        // collection makes EF's DetectChanges treat it as Modified (key is set) and
+        // emit an UPDATE that affects 0 rows → DbUpdateConcurrencyException. Explicit
+        // Add forces an INSERT.
+        var note = CallNote.Create(callback.Id, request.AuthorId, request.Content, request.IsInternal);
+        dbContext.CallNotes.Add(note);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

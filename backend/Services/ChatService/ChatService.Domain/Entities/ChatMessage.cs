@@ -76,7 +76,9 @@ public class ChatMessage : BaseAuditableEntity
             SenderUserId = senderUserId,
             SenderRole = senderRole,
             Body = body,
-            AttachmentsJson = attachmentsJson,
+            // attachments_jsonb is NOT NULL (DB default '[]'); persist an empty array
+            // rather than NULL when the message carries no attachments.
+            AttachmentsJson = attachmentsJson ?? "[]",
             ClientMessageId = clientMessageId
         };
 
