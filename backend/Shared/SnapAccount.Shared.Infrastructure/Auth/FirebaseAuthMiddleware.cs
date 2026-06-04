@@ -1,3 +1,4 @@
+using FirebaseAdmin;
 using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -64,19 +65,11 @@ public sealed class FirebaseAuthMiddleware(
         string.Equals(configuration["DEV_AUTH_BYPASS"], "true", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_BYPASS"), "true", StringComparison.OrdinalIgnoreCase);
 
-    // LOCAL_AUTH: validate locally-issued HS256 JWTs (username/password dev login) instead
-    // of Firebase ID tokens. NEVER enabled in staging/production.
-    private bool LocalAuthEnabled =>
-        string.Equals(configuration["LOCAL_AUTH"], "true", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(Environment.GetEnvironmentVariable("LOCAL_AUTH"), "true", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>Shared dev signing secret for LOCAL_AUTH JWTs. Issuer and validators must agree.</summary>
+    /// <summary>
+    /// Shared dev signing secret — the insecure fallback when no session secret is configured.
+    /// Issuer and validators agree on the secret via <see cref="SessionTokenSecret.Resolve"/>.
+    /// </summary>
     public const string DefaultLocalSecret = "snapaccount-local-dev-secret-change-me-32++chars";
-
-    private string LocalAuthSecret =>
-        configuration["LOCAL_AUTH:SECRET"]
-        ?? Environment.GetEnvironmentVariable("LOCAL_AUTH__SECRET")
-        ?? DefaultLocalSecret;
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -106,57 +99,54 @@ public sealed class FirebaseAuthMiddleware(
                 return;
             }
 
-            // ── Local auth: validate a locally-issued JWT. NEVER enabled in staging/prod ──
-            if (LocalAuthEnabled)
+            // ── SnapAccount session JWT (HS256) — the unified production + local session token ──
+            // AuthService mints these for every login flow (OTP / password / 2FA / social / refresh);
+            // they carry userId / organizationId / roles / permissions and are validated here across
+            // all services. This path also covers LOCAL_AUTH dev logins (same codec + secret).
+            var sessionPayload = LocalJwt.Validate(idToken, SessionTokenSecret.Resolve(configuration));
+            if (sessionPayload is { } sp)
             {
-                var payload = LocalJwt.Validate(idToken, LocalAuthSecret);
-                if (payload is { } p)
-                {
-                    var claims = new Dictionary<string, object>(StringComparer.Ordinal);
-                    foreach (var prop in p.EnumerateObject())
-                        claims[prop.Name] = prop.Value;
+                var claims = new Dictionary<string, object>(StringComparer.Ordinal);
+                foreach (var prop in sp.EnumerateObject())
+                    claims[prop.Name] = prop.Value;
 
-                    var uid = p.TryGetProperty("firebase_uid", out var fuid) ? fuid.ToString()
-                        : p.TryGetProperty("userId", out var uidEl) ? uidEl.ToString()
-                        : Guid.Empty.ToString();
+                var uid = sp.TryGetProperty("firebase_uid", out var fuid) ? fuid.ToString()
+                    : sp.TryGetProperty("userId", out var uidEl) ? uidEl.ToString()
+                    : Guid.Empty.ToString();
 
-                    context.Items["FirebaseUid"] = uid;
-                    context.Items["FirebaseClaims"] = claims;
-                    context.User = new System.Security.Claims.ClaimsPrincipal(
-                        new System.Security.Claims.ClaimsIdentity(
-                            [
-                                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, uid),
-                                new System.Security.Claims.Claim("userId", uid),
-                            ],
-                            authenticationType: "LocalAuth"));
-                }
-                else
-                {
-                    logger.LogWarning("LOCAL_AUTH: invalid/expired local token for {Path}.", context.Request.Path);
-                }
-
-                // In local mode Firebase is not configured — never attempt Firebase verification.
+                context.Items["FirebaseUid"] = uid;
+                context.Items["FirebaseClaims"] = claims;
+                context.User = new System.Security.Claims.ClaimsPrincipal(
+                    new System.Security.Claims.ClaimsIdentity(
+                        [
+                            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, uid!),
+                            new System.Security.Claims.Claim("userId", uid!),
+                        ],
+                        authenticationType: "SessionJwt"));
                 await next(context);
                 return;
             }
 
-            try
+            // ── Firebase ID token (fallback for legacy/native Firebase clients) ──
+            // Only attempted when a Firebase app is initialised (real GCP creds present). Wrapped
+            // broadly so a malformed bearer can never surface as a 500 — an unverifiable token simply
+            // leaves the request unauthenticated for the endpoint's RequireAuthorization() to reject.
+            if (FirebaseApp.DefaultInstance is not null)
             {
-                var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
-
-                // Store decoded token claims in HttpContext.Items for the CurrentUser service
-                context.Items["FirebaseDecodedToken"] = decodedToken;
-                context.Items["FirebaseUid"] = decodedToken.Uid;
-                context.Items["FirebaseClaims"] = decodedToken.Claims;
-            }
-            catch (FirebaseAuthException ex)
-            {
-                // SEC-022: Log warning with path context when token is present but invalid.
-                // Do not short-circuit — let the endpoint's RequireAuthorization() handle rejection.
-                logger.LogWarning(
-                    "Invalid Firebase token received for {Path}. Token will not be set in context.",
-                    context.Request.Path);
-                _ = ex; // token verification failed — user not authenticated
+                try
+                {
+                    var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
+                    context.Items["FirebaseDecodedToken"] = decodedToken;
+                    context.Items["FirebaseUid"] = decodedToken.Uid;
+                    context.Items["FirebaseClaims"] = decodedToken.Claims;
+                }
+                catch (Exception ex)
+                {
+                    // SEC-022: log with path context; never short-circuit, never 500.
+                    logger.LogWarning(
+                        "Unverifiable bearer token for {Path} ({Reason}). Request left unauthenticated.",
+                        context.Request.Path, ex.GetType().Name);
+                }
             }
         }
 

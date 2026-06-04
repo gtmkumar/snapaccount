@@ -106,7 +106,7 @@ public sealed class SendDocumentOtpCommandHandler(
             Kind            = kind,
             ReferenceNumber = storedRef,
             Status          = KycStatus.Pending,
-            Provider        = "mock",
+            Provider        = verificationProvider.ProviderName,
             ProviderRef     = otpResult.TransactionId
         };
         db.KycVerifications.Add(record);

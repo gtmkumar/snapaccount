@@ -42,10 +42,8 @@ public sealed class LocalAuthService(
     private static Guid DevOrgId => LocalAuthDevSeed.DevOrgId;
     private static IReadOnlyList<string> ManagerPermissions => LocalAuthDevSeed.ManagerPermissions;
 
-    private string Secret =>
-        configuration["LOCAL_AUTH:SECRET"]
-        ?? Environment.GetEnvironmentVariable("LOCAL_AUTH__SECRET")
-        ?? FirebaseAuthMiddleware.DefaultLocalSecret;
+    // Same resolver the validating middleware uses, so LOCAL_AUTH logins validate identically.
+    private string Secret => SessionTokenSecret.Resolve(configuration);
 
     public async Task<LocalLoginResult?> LoginAsync(string email, string password, CancellationToken ct)
     {

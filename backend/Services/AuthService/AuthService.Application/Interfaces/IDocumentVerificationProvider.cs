@@ -25,6 +25,12 @@ namespace AuthService.Application.Interfaces;
 public interface IDocumentVerificationProvider
 {
     /// <summary>
+    /// Stable provider identifier persisted on each <c>kyc_verification</c> row (audit trail).
+    /// e.g. "mock", "sandbox".
+    /// </summary>
+    string ProviderName { get; }
+
+    /// <summary>
     /// Initiates OTP dispatch for the given document kind + number.
     /// Mock implementation logs a dev OTP and returns a stable transaction id.
     /// </summary>

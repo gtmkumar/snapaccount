@@ -1,11 +1,13 @@
 using AuthService.Application.Common.Interfaces;
 using AuthService.Application.Interfaces;
 using AuthService.Infrastructure.Auth;
+using AuthService.Infrastructure.Configuration;
 using AuthService.Infrastructure.Messaging;
 using AuthService.Infrastructure.Persistence;
 using AuthService.Infrastructure.Persistence.Interceptors;
 using AuthService.Infrastructure.Repositories;
 using AuthService.Infrastructure.Services;
+using AuthService.Infrastructure.Services.Kyc;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Microsoft.EntityFrameworkCore;
@@ -126,19 +128,32 @@ public static class DependencyInjection
         // Password reset URL builder — reads App:BaseUrl from config.
         services.AddSingleton<IPasswordResetUrlBuilder, PasswordResetUrlBuilder>();
 
-        // Document verification provider — selected by KYC_PROVIDER env var (default: "mock").
-        // MockDocumentVerificationProvider implements BOTH IDocumentVerificationProvider and
-        // IKycProvider so the legacy /auth/me/kyc/* endpoints continue to work without changes.
-        var kycProvider = configuration["KYC_PROVIDER"]
-            ?? Environment.GetEnvironmentVariable("KYC_PROVIDER")
-            ?? "mock";
-        if (string.Equals(kycProvider, "mock", StringComparison.OrdinalIgnoreCase))
+        // Document verification provider — selected by KYC_PROVIDER env var / Kyc:Provider (default: "mock").
+        // Each provider implements BOTH IDocumentVerificationProvider (the four-kind document flow) and
+        // IKycProvider (legacy /auth/me/kyc/* endpoints) so handlers never change between providers.
+        var kycOptions = KycProviderOptions.FromConfiguration(configuration);
+        if (string.Equals(kycOptions.Provider, "sandbox", StringComparison.OrdinalIgnoreCase))
         {
+            // Real Sandbox (Quicko) KYC API adapter — genuine Aadhaar OKYC OTP + direct PAN/GSTIN/TAN lookups.
+            services.AddSingleton(kycOptions);
+            services.AddHttpClient(SandboxKycProvider.HttpClientName, client =>
+            {
+                client.BaseAddress = new Uri(kycOptions.BaseUrl);
+                client.Timeout = TimeSpan.FromSeconds(kycOptions.TimeoutSeconds);
+            });
+            services.AddSingleton<SandboxAccessTokenProvider>();
+            services.AddScoped<KycVerdictTokenCodec>();
+            services.AddScoped<SandboxKycProvider>();
+            services.AddScoped<IKycProvider>(sp => sp.GetRequiredService<SandboxKycProvider>());
+            services.AddScoped<IDocumentVerificationProvider>(sp => sp.GetRequiredService<SandboxKycProvider>());
+        }
+        else
+        {
+            // Default: mock provider for local dev / tests (logs a dev OTP, passes format-valid inputs).
             services.AddScoped<MockDocumentVerificationProvider>();
             services.AddScoped<IKycProvider>(sp => sp.GetRequiredService<MockDocumentVerificationProvider>());
             services.AddScoped<IDocumentVerificationProvider>(sp => sp.GetRequiredService<MockDocumentVerificationProvider>());
         }
-        // else: register real provider adapters here
 
         // Lightweight provider connection tester ("Test with Sample Query").
         services.AddHttpClient<IAiProviderTester, HttpAiProviderTester>();

@@ -1,5 +1,8 @@
+using AuthService.Application.Common.Helpers;
+using AuthService.Application.Common.Interfaces;
 using AuthService.Application.Interfaces;
 using FirebaseAdmin.Auth;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SnapAccount.Shared.Domain;
@@ -10,16 +13,21 @@ namespace AuthService.Infrastructure.Services;
 /// <summary>
 /// Firebase Auth service using FirebaseAdmin SDK.
 /// NOT Microsoft.Identity.Web.
+///
+/// Note: <see cref="CreateCustomTokenAsync"/> issues a SnapAccount <b>session JWT</b> (HS256) —
+/// NOT a Firebase custom token. A custom token cannot be used as a bearer (the shared
+/// FirebaseAuthMiddleware validates session JWTs / ID tokens, not custom tokens), so every login
+/// flow returns a session JWT carrying the user's resolved RBAC claims.
 /// </summary>
 public sealed class FirebaseAuthService(
     ILogger<FirebaseAuthService> logger,
-    IConfiguration configuration) : IFirebaseAuthService
+    IConfiguration configuration,
+    IAuthDbContext db) : IFirebaseAuthService
 {
-    // LOCAL_AUTH / DEV_AUTH_BYPASS dev mode: Firebase is not configured locally, so
-    // CreateCustomTokenAsync mints a locally-signed HS256 JWT (the same kind LOCAL_AUTH
-    // login issues) that the shared FirebaseAuthMiddleware accepts across all services.
-    // This lets the mobile phone-OTP flow work end-to-end without Firebase. NEVER in prod.
-    private static readonly TimeSpan DevTokenLifetime = TimeSpan.FromHours(12);
+    private const string SuperAdminRole = "SUPER_ADMIN";
+
+    // Session-token lifetime. The opaque refresh token (30 days) is used to obtain a fresh one.
+    private static readonly TimeSpan SessionTokenLifetime = TimeSpan.FromHours(12);
 
     private bool DevAuthEnabled =>
         string.Equals(configuration["LOCAL_AUTH"], "true", StringComparison.OrdinalIgnoreCase) ||
@@ -27,10 +35,9 @@ public sealed class FirebaseAuthService(
         string.Equals(configuration["DEV_AUTH_BYPASS"], "true", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_BYPASS"), "true", StringComparison.OrdinalIgnoreCase);
 
-    private string LocalAuthSecret =>
-        configuration["LOCAL_AUTH:SECRET"]
-        ?? Environment.GetEnvironmentVariable("LOCAL_AUTH__SECRET")
-        ?? FirebaseAuthMiddleware.DefaultLocalSecret;
+    /// <summary>The session-JWT signing secret — shared with the validating middleware.</summary>
+    private string SessionSecret => SessionTokenSecret.Resolve(configuration);
+
     public async Task<Result<string>> VerifyIdTokenAsync(string idToken, CancellationToken ct = default)
     {
         try
@@ -42,6 +49,12 @@ public sealed class FirebaseAuthService(
         {
             logger.LogWarning("Firebase token verification failed: {Message}", ex.Message);
             return Error.Unauthorized("Firebase.TokenInvalid", "The provided Firebase ID token is invalid or expired.");
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentException)
+        {
+            // Malformed token (invalid base64url JWT) throws before FirebaseAuthException — 401, not 500.
+            logger.LogWarning("Malformed Firebase token: {Message}", ex.Message);
+            return Error.Unauthorized("Firebase.TokenInvalid", "The provided Firebase ID token is malformed.");
         }
     }
 
@@ -69,56 +82,100 @@ public sealed class FirebaseAuthService(
             logger.LogWarning("Firebase token verification failed during social sign-in: {Message}", ex.Message);
             return Error.Unauthorized("Firebase.TokenInvalid", "The provided Firebase ID token is invalid or expired.");
         }
+        catch (Exception ex) when (ex is FormatException or ArgumentException)
+        {
+            // A structurally malformed token (e.g. not valid base64url JWT segments) throws from the
+            // JWT decoder BEFORE FirebaseAuthException — treat it as unauthorized, never a 500.
+            logger.LogWarning("Malformed Firebase token during social sign-in: {Message}", ex.Message);
+            return Error.Unauthorized("Firebase.TokenInvalid", "The provided Firebase ID token is malformed.");
+        }
     }
 
+    /// <summary>
+    /// Issues a SnapAccount <b>session JWT</b> (HS256) for the user identified by the
+    /// <c>userId</c> claim. This is the bearer the shared middleware validates across all services
+    /// — NOT a Firebase custom token (which cannot be used as a bearer). Carries
+    /// userId / organizationId / roles / permissions so RBAC needs no per-request DB lookup.
+    /// </summary>
     public async Task<Result<string>> CreateCustomTokenAsync(
         string uid,
         IDictionary<string, object>? claims = null,
         CancellationToken ct = default)
     {
-        // ── Local dev: mint a LOCAL_AUTH HS256 JWT instead of a Firebase custom token ──
-        // Firebase Admin is not initialised without GCP creds, so the real path would throw.
-        // The token carries the caller's userId so ICurrentUser resolves the freshly
-        // registered phone-OTP user across AuthService + DocumentService + …
+        var userIdStr = claims is not null && claims.TryGetValue("userId", out var uidVal) ? uidVal?.ToString() : null;
+        var phone     = claims is not null && claims.TryGetValue("phoneNumber", out var phoneVal) ? phoneVal?.ToString() : null;
+        var email     = claims is not null && claims.TryGetValue("email", out var emailVal) ? emailVal?.ToString() : null;
+
+        // ── Local dev: wildcard-permission token so the mobile customer can exercise every flow ──
+        // (Firebase Admin is not configured locally; org may not exist yet at signup.)
         if (DevAuthEnabled)
         {
-            var userId = claims is not null && claims.TryGetValue("userId", out var uidVal)
-                ? uidVal?.ToString()
-                : null;
-            var phone = claims is not null && claims.TryGetValue("phoneNumber", out var phoneVal)
-                ? phoneVal?.ToString()
-                : null;
-
             var jwtClaims = new Dictionary<string, object?>
             {
-                ["userId"]         = userId,
-                // No org yet at signup time; empty GUID satisfies handlers that require a
-                // non-null OrganizationId (e.g. document OCR) without scoping to a real org.
+                ["userId"]         = userIdStr,
                 ["organizationId"] = Guid.Empty.ToString(),
                 ["roles"]          = new[] { "BUSINESS_OWNER" },
-                // Dev-only wildcard so the mobile customer can exercise document/GST/loan
-                // flows without modelling the full BUSINESS_OWNER permission set locally.
                 ["permissions"]    = new[] { "*" },
                 ["phone_number"]   = phone,
+                ["email"]          = email,
                 ["firebase_uid"]   = uid,
             };
-
             logger.LogWarning(
-                "LOCAL_AUTH/DEV_AUTH_BYPASS: issuing a local HS256 token for uid {Uid} (NEVER in production).",
+                "LOCAL_AUTH/DEV_AUTH_BYPASS: issuing a wildcard local session token for uid {Uid} (NEVER in production).",
                 uid);
-            return LocalJwt.Issue(jwtClaims, LocalAuthSecret, DevTokenLifetime);
+            return LocalJwt.Issue(jwtClaims, SessionSecret, SessionTokenLifetime);
         }
 
-        try
+        // ── Production: mint a session JWT carrying the user's resolved RBAC claims ──
+        if (!Guid.TryParse(userIdStr, out var userId))
+            return Error.Validation("Session.MissingUser", "Cannot issue a session token without a userId claim.");
+
+        var sessionClaims = await BuildSessionClaimsAsync(userId, uid, email, phone, ct);
+        return LocalJwt.Issue(sessionClaims, SessionSecret, SessionTokenLifetime);
+    }
+
+    /// <summary>
+    /// Resolves the user's roles (platform + org), active organization, and effective permissions
+    /// for embedding in a session JWT. SUPER_ADMIN gets the <c>*</c> wildcard.
+    /// </summary>
+    private async Task<Dictionary<string, object?>> BuildSessionClaimsAsync(
+        Guid userId, string firebaseUid, string? emailHint, string? phoneHint, CancellationToken ct)
+    {
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+
+        var platformRoles = await db.UserRoles
+            .Where(ur => ur.UserId == userId && ur.IsActive && ur.DeletedAt == null)
+            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (_, r) => r.Name)
+            .Distinct().ToListAsync(ct);
+
+        var orgRoleNames = await db.OrganizationMembers
+            .Where(m => m.UserId == userId && m.IsActive && m.DeletedAt == null)
+            .Join(db.Roles, m => m.RoleId, r => r.Id, (_, r) => r.Name)
+            .Distinct().ToListAsync(ct);
+
+        var allRoles = platformRoles.Union(orgRoleNames, StringComparer.OrdinalIgnoreCase).ToList();
+
+        var activeOrgId = await db.OrganizationMembers
+            .Where(m => m.UserId == userId && m.IsActive && m.DeletedAt == null)
+            .OrderByDescending(m => m.CreatedAt)
+            .Select(m => (Guid?)m.OrganizationId)
+            .FirstOrDefaultAsync(ct);
+
+        IReadOnlyList<string> permissions = platformRoles.Contains(SuperAdminRole, StringComparer.OrdinalIgnoreCase)
+            ? ["*"]
+            : (await EffectivePermissionResolver.ResolveAsync(db, userId, activeOrgId, ct)).OrderBy(p => p).ToList();
+
+        return new Dictionary<string, object?>
         {
-            var token = await FirebaseAuth.DefaultInstance.CreateCustomTokenAsync(uid, claims, ct);
-            return token;
-        }
-        catch (FirebaseAuthException ex)
-        {
-            logger.LogError(ex, "Failed to create custom token for uid {Uid}", uid);
-            return Error.Validation("Firebase.CustomTokenFailed", "Failed to create authentication token.");
-        }
+            ["userId"]         = userId.ToString(),
+            ["organizationId"] = activeOrgId?.ToString(),
+            ["roles"]          = allRoles,
+            ["permissions"]    = permissions,
+            ["email"]          = emailHint ?? user?.Email,
+            ["name"]           = user?.FullName,
+            ["phone_number"]   = phoneHint ?? user?.PhoneNumber,
+            ["firebase_uid"]   = firebaseUid,
+        };
     }
 
     public async Task<Result> SetCustomClaimsAsync(
