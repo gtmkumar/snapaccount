@@ -1,6 +1,8 @@
 using ChatService.Domain.Entities;
+using ChatService.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using SnapAccount.Shared.Infrastructure.Persistence;
 
 namespace ChatService.Infrastructure.Persistence.Configurations;
 
@@ -27,9 +29,12 @@ public class ThreadParticipantConfiguration : IEntityTypeConfiguration<ThreadPar
             .HasColumnName("user_id")
             .IsRequired();
 
+        // Role CHECK is UPPER_SNAKE ('USER','AGENT','CA','LOAN_OFFICER','BOT') — see
+        // migration 056. Default HasConversion<string>() would persist "LoanOfficer" and
+        // violate the CHECK on every participant insert.
         builder.Property(p => p.Role)
             .HasColumnName("role")
-            .HasConversion<string>()
+            .HasConversion(new UpperSnakeEnumConverter<ParticipantRole>())
             .HasMaxLength(20)
             .IsRequired();
 

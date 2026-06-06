@@ -29,6 +29,7 @@
     <ProjectReference Include="..\..\..\backend\Services\CallbackService\CallbackService.Application\CallbackService.Application.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Application\SnapAccount.Shared.Application.csproj" />
+    <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Infrastructure\SnapAccount.Shared.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

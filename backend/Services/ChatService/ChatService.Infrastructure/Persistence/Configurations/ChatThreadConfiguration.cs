@@ -2,6 +2,7 @@ using ChatService.Domain.Entities;
 using ChatService.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using SnapAccount.Shared.Infrastructure.Persistence;
 
 namespace ChatService.Infrastructure.Persistence.Configurations;
 
@@ -22,15 +23,20 @@ public class ChatThreadConfiguration : IEntityTypeConfiguration<ChatThread>
             .HasColumnName("user_id")
             .IsRequired();
 
+        // Category enum members are already the exact CHECK vocabulary
+        // (GST/ITR/DOC/LOAN/BILLING/GENERAL), so the default string conversion is correct.
         builder.Property(t => t.Category)
             .HasColumnName("category")
             .HasConversion<string>()
             .HasMaxLength(20)
             .IsRequired();
 
+        // Status CHECK is UPPER_SNAKE ('OPEN','PENDING_USER','RESOLVED','ESCALATED','REOPENED')
+        // — see migration 056. Default HasConversion<string>() would persist "PendingUser"
+        // and violate the CHECK on every write.
         builder.Property(t => t.Status)
             .HasColumnName("status")
-            .HasConversion<string>()
+            .HasConversion(new UpperSnakeEnumConverter<ThreadStatus>())
             .HasMaxLength(20)
             .IsRequired();
 

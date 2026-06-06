@@ -42,35 +42,45 @@ public sealed class MarkReadCommandHandler(
         if (!threadExists)
             return Error.NotFound("ChatThread", request.ThreadId);
 
-        // Find messages not yet read by this user
-        var alreadyReadIds = await db.ReadReceipts
-            .Where(r => r.ThreadId == request.ThreadId && r.UserId == currentUser.UserId)
-            .Select(r => r.MessageId)
-            .ToListAsync(cancellationToken);
-
-        var query = db.Messages
-            .Where(m => m.ThreadId == request.ThreadId
-                        && m.SenderUserId != currentUser.UserId
-                        && m.DeletedAt == null
-                        && !alreadyReadIds.Contains(m.Id));
+        // chat.read_receipts is a per-(thread,user) "last-read pointer" (composite PK
+        // thread_id+user_id), NOT one row per message. The previous implementation added
+        // one receipt per unread message, which collided on the composite PK from the
+        // second message onward (and again on every later MarkRead). Instead we resolve a
+        // single target — the newest message to mark read — and upsert the pointer to it.
+        var targetQuery = db.Messages
+            .Where(m => m.ThreadId == request.ThreadId && m.DeletedAt == null);
 
         if (request.UpToMessageId.HasValue)
+            targetQuery = targetQuery.Where(m => m.Id == request.UpToMessageId);
+
+        var target = await targetQuery
+            .OrderByDescending(m => m.CreatedAt)
+            .Select(m => new { m.Id, m.CreatedAt })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        // Empty thread → nothing to read. A non-null UpToMessageId that resolves to
+        // nothing means the message isn't in this thread → 404.
+        if (target is null)
+            return request.UpToMessageId.HasValue
+                ? Error.NotFound("ChatMessage", request.UpToMessageId.Value)
+                : Result.Success();
+
+        var receipt = await db.ReadReceipts
+            .FirstOrDefaultAsync(r => r.ThreadId == request.ThreadId
+                                      && r.UserId == currentUser.UserId, cancellationToken);
+
+        if (receipt is null)
         {
-            var upTo = await db.Messages
-                .Where(m => m.Id == request.UpToMessageId && m.DeletedAt == null)
-                .Select(m => m.CreatedAt)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            query = query.Where(m => m.CreatedAt <= upTo);
-        }
-
-        var unreadMessages = await query.Select(m => m.Id).ToListAsync(cancellationToken);
-
-        foreach (var msgId in unreadMessages)
-            db.ReadReceipts.Add(ReadReceipt.Create(request.ThreadId, msgId, currentUser.UserId));
-
-        if (unreadMessages.Count > 0)
+            db.ReadReceipts.Add(
+                ReadReceipt.Create(request.ThreadId, target.Id, currentUser.UserId, target.CreatedAt));
             await db.SaveChangesAsync(cancellationToken);
+        }
+        else if (target.CreatedAt > receipt.ReadAt)
+        {
+            // Advance the pointer forward only — never regress it.
+            receipt.MarkReadUpTo(target.Id, target.CreatedAt);
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         return Result.Success();
     }

@@ -594,6 +594,8 @@ public sealed class NotificationTestCurrentUser : SnapAccount.Shared.Application
     public Guid UserId => Guid.NewGuid();
     public Guid? OrganizationId => null;
     public IReadOnlyList<string> Roles => [];
+    // "*" grants all permissions; empty list grants none — mirrors HasPermission below.
+    public IReadOnlyList<string> Permissions => GrantAllPermissions ? ["*"] : [];
     public bool IsAuthenticated => true;
     public string? FirebaseUid => null;
     public string? PhoneNumber => null;

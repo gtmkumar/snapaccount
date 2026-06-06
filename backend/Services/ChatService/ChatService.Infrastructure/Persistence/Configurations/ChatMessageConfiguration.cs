@@ -1,6 +1,8 @@
 using ChatService.Domain.Entities;
+using ChatService.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using SnapAccount.Shared.Infrastructure.Persistence;
 
 namespace ChatService.Infrastructure.Persistence.Configurations;
 
@@ -19,6 +21,14 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
 
         builder.Property(m => m.SenderUserId)
             .HasColumnName("sender_user_id");
+
+        // sender_role is NOT NULL with CHECK ('USER','CA','ADMIN','SYSTEM','AI'). It was
+        // previously unmapped, so every INSERT omitted the column and 500'd on the NOT NULL.
+        builder.Property(m => m.SenderRole)
+            .HasColumnName("sender_role")
+            .HasConversion(new UpperSnakeEnumConverter<MessageSenderRole>())
+            .HasMaxLength(20)
+            .IsRequired();
 
         builder.Property(m => m.Body)
             .HasColumnName("body")

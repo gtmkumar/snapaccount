@@ -477,6 +477,8 @@ public sealed class TestCurrentUser : SnapAccount.Shared.Application.ICurrentUse
     public Guid UserId => CurrentUserId ?? Guid.NewGuid();
     public Guid? OrganizationId => CurrentOrgId;
     public IReadOnlyList<string> Roles => [];
+    // SEC-026/028: grant all permissions ("*") so the permission gate does not block IDOR tests
+    public IReadOnlyList<string> Permissions => ["*"];
     public bool IsAuthenticated => true;
     public string? FirebaseUid => null;
     public string? PhoneNumber => null;

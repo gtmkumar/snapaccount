@@ -87,10 +87,21 @@ public sealed class SendMessageCommandHandler(
         var participant = thread.Participants.First(p => p.UserId == currentUser.UserId);
         var isAgent = participant.Role != ParticipantRole.User;
 
+        // Map the participant role to the sender_role CHECK vocabulary
+        // ('USER','CA','ADMIN','SYSTEM','AI'). Staff roles (Agent, LoanOfficer) → ADMIN.
+        var senderRole = participant.Role switch
+        {
+            ParticipantRole.User => MessageSenderRole.User,
+            ParticipantRole.CA => MessageSenderRole.CA,
+            ParticipantRole.Bot => MessageSenderRole.AI,
+            _ => MessageSenderRole.Admin,
+        };
+
         var message = ChatMessage.Create(
             request.ThreadId,
             currentUser.UserId,
             request.Body,
+            senderRole,
             request.AttachmentsJson,
             request.ClientMessageId);
 

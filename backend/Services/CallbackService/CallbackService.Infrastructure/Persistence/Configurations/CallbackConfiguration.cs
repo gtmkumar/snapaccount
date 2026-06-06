@@ -1,6 +1,8 @@
 using CallbackService.Domain.Entities;
+using CallbackService.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using SnapAccount.Shared.Infrastructure.Persistence;
 
 namespace CallbackService.Infrastructure.Persistence.Configurations;
 
@@ -34,9 +36,17 @@ public sealed class CallbackConfiguration : IEntityTypeConfiguration<Callback>
         // strings (the column type is character varying, not integer). Without the
         // string conversion EF emits integer comparisons against a varchar column,
         // which is exactly what made the dashboard count queries 500.
-        builder.Property(c => c.Status).HasColumnName("status").HasConversion<string>().IsRequired();
-        builder.Property(c => c.Category).HasColumnName("category").HasConversion<string>().IsRequired();
-        builder.Property(c => c.Priority).HasColumnName("priority").HasConversion<string>().IsRequired();
+        //
+        // The CHECK vocabulary is UPPER_SNAKE_CASE ('PENDING','ASSIGNED', …); the default
+        // HasConversion<string>() persists the PascalCase member name ("Pending"), which
+        // the CHECK rejects on every insert/update. UpperSnakeEnumConverter emits the
+        // exact CHECK vocabulary (aligned by migration 056_chat_callback_write_alignment).
+        builder.Property(c => c.Status).HasColumnName("status")
+            .HasConversion(new UpperSnakeEnumConverter<CallbackStatus>()).HasMaxLength(30).IsRequired();
+        builder.Property(c => c.Category).HasColumnName("category")
+            .HasConversion(new UpperSnakeEnumConverter<CallbackCategory>()).HasMaxLength(20).IsRequired();
+        builder.Property(c => c.Priority).HasColumnName("priority")
+            .HasConversion(new UpperSnakeEnumConverter<CallbackPriority>()).HasMaxLength(10).IsRequired();
 
         // assigned_to is the canonical column (was incorrectly mapped to assigned_agent_id).
         builder.Property(c => c.AssignedAgentId).HasColumnName("assigned_to");
