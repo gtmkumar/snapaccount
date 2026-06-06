@@ -20,7 +20,12 @@ public record GetCurrentUserResponse(
     string? PanNumber,
     string? AadhaarLast4,
     string KycStatus,
-    DateTime? LastLoginAt);
+    DateTime? LastLoginAt,
+    // Persona discriminator (BUSINESS_OWNER | EMPLOYEE | STAFF). Null when the user
+    // has no profile yet (brand-new account that hasn't completed onboarding) — the
+    // mobile client uses this both to drive persona-specific navigation and to decide
+    // whether a returning user still needs to pick a persona.
+    string? UserType = null);
 
 /// <summary>
 /// Loads the user aggregate via the repository (for PAN decryption context),
@@ -72,6 +77,7 @@ public sealed class GetCurrentUserQueryHandler(
             plaintextPan,
             user.Profile?.AadhaarLast4,
             user.Profile?.KycStatus ?? "PENDING",
-            user.LastLoginAt);
+            user.LastLoginAt,
+            user.Profile?.UserType);
     }
 }

@@ -12,6 +12,7 @@
  *   { type: 'chat_message_received', threadId: '…' }  → ChatDetail
  *   { type: 'loan_disbursed', loanId: '…' }           → LoanStatus
  *   { type: 'loan_approved', loanId: '…' }            → LoanStatus
+ *   { type: 'org_invite', token: '…' }                → AcceptInvite
  *   (default)                                         → App root
  */
 
@@ -44,7 +45,7 @@ export function wireNotificationRouter(
 
     if (!data) return;
 
-    const { type, id, threadId, loanId } = data as Record<string, string>;
+    const { type, id, threadId, loanId, token } = data as Record<string, string>;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nav = navigationRef.navigate as (...args: any[]) => void;
@@ -84,6 +85,15 @@ export function wireNotificationRouter(
       case 'loan_approved':
         if (loanId && isValidUuid(loanId)) {
           nav('LoanStatus', { loanId });
+        }
+        break;
+
+      // Phase 2: org-invite push — route to the AcceptInvite flow with the token.
+      // The token is a one-time opaque secret (not a UUID), so it is forwarded
+      // as-is; the AcceptInvite screen validates it server-side before any action.
+      case 'org_invite':
+        if (token) {
+          nav('AcceptInvite', { token });
         }
         break;
 

@@ -203,9 +203,24 @@ function NavItemDialog({
     queryFn: () => listPermissions(),
     staleTime: 5 * 60_000,
   })
-  const allPerms = useMemo(() => catalog.flatMap(m => m.permissions), [catalog])
-  const filteredPerms = allPerms.filter(p =>
-    !permSearch || p.name.toLowerCase().includes(permSearch.toLowerCase()))
+  // Group the catalog by module so the picker is scannable; filter by name or
+  // description and drop modules that have no matches.
+  const filteredModules = useMemo(() => {
+    const q = permSearch.trim().toLowerCase()
+    return catalog
+      .map(m => ({
+        ...m,
+        permissions: m.permissions.filter(p =>
+          !q || p.name.toLowerCase().includes(q) || (p.description?.toLowerCase().includes(q) ?? false)),
+      }))
+      .filter(m => m.permissions.length > 0)
+  }, [catalog, permSearch])
+
+  const togglePerm = (id: string) => setPermIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
 
   // Top-level items (excluding self) are eligible parents.
   const parentOptions = allItems.filter(i => !i.parentId && i.id !== item?.id)
@@ -295,26 +310,55 @@ function NavItemDialog({
           {t('nav.mgmt.field.active', 'Visible in sidebar')}
         </label>
 
-        {/* Permission picker */}
+        {/* Visibility picker — which permission(s) reveal this item to a user.
+            NOTE: these checkboxes configure THIS menu item's gate, not the
+            current admin's own permissions. */}
         <div>
-          <label className="block text-sm font-medium mb-1.5">
-            {t('nav.mgmt.field.perms', 'Required permissions')}
-            <span className="text-[var(--text-tertiary)] font-normal ml-1">{t('nav.mgmt.permsHint', '(none = visible to all; otherwise any one grants access)')}</span>
+          <label className="block text-sm font-medium mb-1">
+            {t('nav.mgmt.field.perms', 'Who can see this item')}
           </label>
+          <p className="text-xs text-[var(--text-tertiary)] mb-2">
+            {t('nav.mgmt.permsHint', 'Pick the permission(s) a user must hold for this item to appear in their sidebar. Leave everything unchecked to show it to all users.')}
+          </p>
+
+          {permIds.size === 0 ? (
+            <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300">
+              {t('nav.mgmt.publicHint', 'Public — visible to all users (no permission required).')}
+            </div>
+          ) : (
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs text-[var(--text-secondary)]">
+                {t('nav.mgmt.permSelected', '{{n}} permission(s) selected — any one grants access').replace('{{n}}', String(permIds.size))}
+              </span>
+              <button type="button" onClick={() => setPermIds(new Set())}
+                className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] underline">
+                {t('nav.mgmt.clearPerms', 'Clear all')}
+              </button>
+            </div>
+          )}
+
           <div className="relative mb-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
             <input value={permSearch} onChange={e => setPermSearch(e.target.value)} placeholder={t('nav.mgmt.permSearch', 'Search permissions…')} className={cn(field, 'pl-9')} />
           </div>
-          <div className="max-h-48 overflow-y-auto rounded-lg border border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)]">
-            {filteredPerms.slice(0, 100).map(p => (
-              <label key={p.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--surface-sunken)] cursor-pointer">
-                <input type="checkbox" checked={permIds.has(p.id)} onChange={() => setPermIds(prev => {
-                  const next = new Set(prev)
-                  if (next.has(p.id)) next.delete(p.id); else next.add(p.id)
-                  return next
-                })} />
-                <code className="text-xs font-mono text-[var(--text-secondary)]">{p.name}</code>
-              </label>
+          <div className="max-h-56 overflow-y-auto rounded-lg border border-[var(--border-subtle)]">
+            {filteredModules.length === 0 ? (
+              <p className="px-3 py-3 text-xs text-[var(--text-tertiary)]">{t('nav.mgmt.noPermMatch', 'No permissions match your search.')}</p>
+            ) : filteredModules.map(m => (
+              <div key={m.module}>
+                <div className="sticky top-0 z-10 bg-[var(--surface-sunken)] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] border-b border-[var(--border-subtle)]">
+                  {m.displayName}
+                </div>
+                {m.permissions.map(p => (
+                  <label key={p.id} className="flex items-start gap-2 px-3 py-1.5 hover:bg-[var(--surface-sunken)] cursor-pointer border-b border-[var(--border-subtle)] last:border-0">
+                    <input type="checkbox" className="mt-0.5" checked={permIds.has(p.id)} onChange={() => togglePerm(p.id)} />
+                    <span className="min-w-0">
+                      <code className="block truncate text-xs font-mono text-[var(--text-secondary)]">{p.name}</code>
+                      {p.description && <span className="block truncate text-[11px] text-[var(--text-tertiary)]">{p.description}</span>}
+                    </span>
+                  </label>
+                ))}
+              </div>
             ))}
           </div>
         </div>

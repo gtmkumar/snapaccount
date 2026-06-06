@@ -1,6 +1,7 @@
 /**
  * Auth Navigator
- * Stack: Splash → PhoneEntry → OTPVerify → BusinessProfileWizard → LanguageSelection → PermissionRequests
+ * Stack: Splash → PhoneEntry → OTPVerify → PersonaSelection →
+ *        (BusinessProfileWizard | IndividualProfileWizard) → LanguageSelection → PermissionRequests
  */
 
 import React from 'react';
@@ -10,9 +11,12 @@ import { PhoneEntryScreen } from '../screens/auth/PhoneEntryScreen';
 import { PasswordAuthScreen } from '../screens/auth/PasswordAuthScreen';
 import { OTPVerifyScreen } from '../screens/auth/OTPVerifyScreen';
 import { TwoFactorChallengeScreen } from '../screens/auth/TwoFactorChallengeScreen';
+import { PersonaSelectionScreen } from '../screens/auth/PersonaSelectionScreen';
 import { BusinessProfileWizardScreen } from '../screens/auth/BusinessProfileWizardScreen';
+import { IndividualProfileWizardScreen } from '../screens/auth/IndividualProfileWizardScreen';
 import { LanguageSelectionScreen } from '../screens/auth/LanguageSelectionScreen';
 import { PermissionRequestsScreen } from '../screens/auth/PermissionRequestsScreen';
+import { AcceptInviteScreen } from '../screens/auth/AcceptInviteScreen';
 
 export type AuthStackParamList = {
   Splash: undefined;
@@ -25,9 +29,13 @@ export type AuthStackParamList = {
     challengeToken: string;
     phone?: string;
   };
+  PersonaSelection: undefined;
   BusinessProfileWizard: undefined;
+  IndividualProfileWizard: undefined;
   LanguageSelection: undefined;
   PermissionRequests: undefined;
+  /** Invitee org-join — reached via deep link snapaccount://invite/{token} or manual entry. */
+  AcceptInvite: { token?: string } | undefined;
   App: undefined;
 };
 
@@ -46,9 +54,12 @@ export function AuthNavigator() {
       <Stack.Screen name="PasswordAuth" component={PasswordAuthScreen} />
       <Stack.Screen name="OTPVerify" component={OTPVerifyScreen} />
       <Stack.Screen name="TwoFactorChallenge" component={TwoFactorChallengeScreen} />
+      <Stack.Screen name="PersonaSelection" component={PersonaSelectionScreen} />
       <Stack.Screen name="BusinessProfileWizard" component={BusinessProfileWizardScreen} />
+      <Stack.Screen name="IndividualProfileWizard" component={IndividualProfileWizardScreen} />
       <Stack.Screen name="LanguageSelection" component={LanguageSelectionScreen} />
       <Stack.Screen name="PermissionRequests" component={PermissionRequestsScreen} />
+      <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
     </Stack.Navigator>
   );
 }

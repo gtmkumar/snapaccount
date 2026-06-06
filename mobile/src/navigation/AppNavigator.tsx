@@ -1,6 +1,15 @@
 /**
  * App Navigator (Bottom Tab Navigator)
- * 5 tabs: Home, Documents, GST/ITR, Loan, More
+ *
+ * The tab set is persona-conditional (see docs/design/user-hierarchy-gap-analysis.md):
+ *   Business Owner (userType = business_owner / default):
+ *     Home · Documents · GST · Loans · More
+ *   Salaried Individual (userType = employee):
+ *     Taxes (ITR) · Documents · Support · More
+ *
+ * A salaried individual never sees the GST/Loan/financial-dashboard tabs that are
+ * meaningless to them; their primary job (ITR) is promoted to the first tab instead
+ * of being buried under More.
  */
 
 import React from 'react';
@@ -8,12 +17,15 @@ import { StyleSheet, Text, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/colors';
+import { useAuthStore } from '../store/authStore';
 
 // Stack navigators
 import { HomeStack } from './HomeStack';
 import { DocumentStack } from './DocumentStack';
 import { GstStack } from './GstStack';
 import { LoanStack } from './LoanStack';
+import { ItrStack } from './ItrStack';
+import { ChatStack } from './ChatStack';
 import { MoreStack } from './MoreStack';
 
 export type AppTabParamList = {
@@ -21,6 +33,8 @@ export type AppTabParamList = {
   DocumentsTab: undefined;
   GstTab: undefined;
   LoanTab: undefined;
+  ItrTab: undefined;
+  SupportTab: undefined;
   MoreTab: undefined;
 };
 
@@ -57,6 +71,44 @@ function TabIcon({ iconName, iconNameFocused, label, focused, badge }: TabIconPr
 }
 
 export function AppNavigator() {
+  // Salaried individuals (UserType=employee) get the ITR-centric tab set; everyone
+  // else (business owners, and any pre-persona/default account) gets the SME set.
+  const isIndividual = useAuthStore((s) => s.user?.userType === 'employee');
+
+  const documentsTab = (
+    <Tab.Screen
+      name="DocumentsTab"
+      component={DocumentStack}
+      options={{
+        tabBarIcon: ({ focused }) => (
+          <TabIcon
+            iconName="folder-outline"
+            iconNameFocused="folder"
+            label="Documents"
+            focused={focused}
+          />
+        ),
+      }}
+    />
+  );
+
+  const moreTab = (
+    <Tab.Screen
+      name="MoreTab"
+      component={MoreStack}
+      options={{
+        tabBarIcon: ({ focused }) => (
+          <TabIcon
+            iconName="menu-outline"
+            iconNameFocused="menu"
+            label="More"
+            focused={focused}
+          />
+        ),
+      }}
+    />
+  );
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -65,76 +117,87 @@ export function AppNavigator() {
         tabBarShowLabel: false,
       }}
     >
-      <Tab.Screen
-        name="HomeTab"
-        component={HomeStack}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon
-              iconName="home-outline"
-              iconNameFocused="home"
-              label="Home"
-              focused={focused}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="DocumentsTab"
-        component={DocumentStack}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon
-              iconName="folder-outline"
-              iconNameFocused="folder"
-              label="Documents"
-              focused={focused}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="GstTab"
-        component={GstStack}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon
-              iconName="bar-chart-outline"
-              iconNameFocused="bar-chart"
-              label="GST/ITR"
-              focused={focused}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="LoanTab"
-        component={LoanStack}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon
-              iconName="business-outline"
-              iconNameFocused="business"
-              label="Loans"
-              focused={focused}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="MoreTab"
-        component={MoreStack}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon
-              iconName="menu-outline"
-              iconNameFocused="menu"
-              label="More"
-              focused={focused}
-            />
-          ),
-        }}
-      />
+      {isIndividual ? (
+        <>
+          <Tab.Screen
+            name="ItrTab"
+            component={ItrStack}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <TabIcon
+                  iconName="document-text-outline"
+                  iconNameFocused="document-text"
+                  label="Taxes"
+                  focused={focused}
+                />
+              ),
+            }}
+          />
+          {documentsTab}
+          <Tab.Screen
+            name="SupportTab"
+            component={ChatStack}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <TabIcon
+                  iconName="chatbubble-ellipses-outline"
+                  iconNameFocused="chatbubble-ellipses"
+                  label="Support"
+                  focused={focused}
+                />
+              ),
+            }}
+          />
+          {moreTab}
+        </>
+      ) : (
+        <>
+          <Tab.Screen
+            name="HomeTab"
+            component={HomeStack}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <TabIcon
+                  iconName="home-outline"
+                  iconNameFocused="home"
+                  label="Home"
+                  focused={focused}
+                />
+              ),
+            }}
+          />
+          {documentsTab}
+          <Tab.Screen
+            name="GstTab"
+            component={GstStack}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <TabIcon
+                  iconName="bar-chart-outline"
+                  iconNameFocused="bar-chart"
+                  label="GST"
+                  focused={focused}
+                />
+              ),
+            }}
+          />
+          <Tab.Screen
+            name="LoanTab"
+            component={LoanStack}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <TabIcon
+                  iconName="business-outline"
+                  iconNameFocused="business"
+                  label="Loans"
+                  focused={focused}
+                />
+              ),
+            }}
+          />
+          {moreTab}
+        </>
+      )}
     </Tab.Navigator>
   );
 }

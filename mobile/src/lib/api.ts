@@ -227,4 +227,63 @@ export async function deleteAccount(): Promise<void> {
   await apiClient.delete('/auth/account');
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Manual access-token refresh (Phase 2 org-invite)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Force-refresh the backend session access token using the stored refreshToken.
+ *
+ * The 401 interceptor above refreshes lazily on demand, but some flows must
+ * proactively re-mint the access token even when the current one is still valid —
+ * e.g. right after accepting an org invite, when the OLD access token does not yet
+ * carry the new organizationId / RBAC permission claims. This mirrors the
+ * interceptor's refresh logic and rotates the store tokens on success.
+ *
+ * Returns true if the token was refreshed; false if there was no refreshToken or
+ * the refresh failed (caller can decide whether to continue with stale claims).
+ */
+export async function refreshAccessToken(): Promise<boolean> {
+  const { refreshToken } = useAuthStore.getState();
+  if (!refreshToken) return false;
+  try {
+    const res = await apiClient.post<{
+      accessToken: string;
+      newRefreshToken: string;
+      expiresAt: string;
+    }>(REFRESH_URL, { token: refreshToken });
+    useAuthStore.getState().rotateTokens(res.data.accessToken, res.data.newRefreshToken);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Organization shape as returned by GET /auth/organizations. */
+export interface ServerOrganization {
+  id: string;
+  name: string;
+  gstin?: string | null;
+  panNumber?: string | null;
+  businessType?: string | null;
+  address?: string | null;
+  state?: string | null;
+  pinCode?: string | null;
+  industry?: string | null;
+  annualTurnover?: number | null;
+}
+
+/**
+ * GET /auth/organizations — the organizations the authenticated user belongs to.
+ * Returns [] on any failure so callers can fall back to existing store state.
+ */
+export async function fetchOrganizations(): Promise<ServerOrganization[]> {
+  try {
+    const res = await apiClient.get<ServerOrganization[]>('/auth/organizations');
+    return res.data ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export default apiClient;

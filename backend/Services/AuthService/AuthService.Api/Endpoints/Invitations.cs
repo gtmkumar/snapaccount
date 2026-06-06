@@ -73,7 +73,16 @@ public sealed class Invitations : EndpointGroupBase
             new CreateInvitationCommand(req.Email, req.Phone, req.Role, req.CustomMessage), ct);
         return result.IsSuccess
             ? Results.Created($"/auth/team/invites/{result.Value.InviteId}",
-                new { inviteId = result.Value.InviteId.ToString(), expiresAt = result.Value.ExpiresAt })
+                // The raw token is returned ONCE so the caller can build a shareable invite
+                // link (e.g. mobile owner shares snapaccount://invite/{token}). It is never
+                // stored in plaintext server-side (only its SHA-256 hash is persisted) and
+                // must never be logged. Returning it here mirrors this endpoint's contract.
+                new
+                {
+                    inviteId = result.Value.InviteId.ToString(),
+                    token = result.Value.RawToken,
+                    expiresAt = result.Value.ExpiresAt
+                })
             : MapError(result.Error);
     }
 

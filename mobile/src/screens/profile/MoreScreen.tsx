@@ -7,6 +7,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../../components/ui/Card';
 import { Colors } from '../../constants/colors';
@@ -26,6 +27,8 @@ function normalizePhone(phone: string | null | undefined): string {
 
 export function MoreScreen({ navigation }: Props) {
   const { user } = useAuthStore();
+  const { t } = useTranslation();
+  const isOwner = user?.userType === 'business_owner';
 
   const menuItems: {
     label: string;
@@ -36,6 +39,16 @@ export function MoreScreen({ navigation }: Props) {
   }[] = [
     { label: 'Expert Chat', icon: 'chatbubble-ellipses-outline', route: 'Chat', color: Colors.brand[500], desc: 'Chat with CA experts' },
     { label: 'ITR Filing', icon: 'document-text-outline', route: 'ITRDashboard', color: Colors.itr, desc: 'File income tax return' },
+    // Phase 2: business owners can manage their team (members + invites).
+    ...(isOwner
+      ? [{
+          label: t('mobile.team.menuLabel'),
+          icon: 'people-outline' as React.ComponentProps<typeof Ionicons>['name'],
+          route: 'Team' as keyof MoreStackParamList,
+          color: Colors.brand[600],
+          desc: t('mobile.team.menuDesc'),
+        }]
+      : []),
     { label: 'Notifications', icon: 'notifications-outline', route: 'NotificationCenter', color: Colors.accent[500], desc: 'Alerts & updates' },
     { label: 'Profile & Settings', icon: 'person-circle-outline', route: 'Profile', color: Colors.neutral[600], desc: 'Account settings' },
   ];
@@ -84,6 +97,18 @@ export function MoreScreen({ navigation }: Props) {
             </Pressable>
           ))}
         </View>
+
+        {/* Phase 2: anyone can join an org they've been invited to via a code/link. */}
+        <Pressable
+          style={styles.joinRow}
+          onPress={() => (navigation.navigate as (route: string) => void)('AcceptInvite')}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.auth.invite.joinEntry')}
+        >
+          <Ionicons name="link-outline" size={18} color={Colors.brand[500]} />
+          <Text style={styles.joinRowText}>{t('mobile.auth.invite.joinEntry')}</Text>
+          <Ionicons name="chevron-forward" size={18} color={Colors.neutral[400]} />
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -117,4 +142,14 @@ const styles = StyleSheet.create({
   gridIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   gridLabel: { fontSize: 15, fontWeight: '700', color: Colors.neutral[900], marginBottom: 4, letterSpacing: -0.2 },
   gridDesc: { fontSize: 12, color: Colors.neutral[500] },
+  joinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.surface.default,
+    borderRadius: 16,
+    padding: 16,
+    minHeight: 56,
+  },
+  joinRowText: { flex: 1, fontSize: 15, fontWeight: '600', color: Colors.neutral[800] },
 });

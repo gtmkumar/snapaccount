@@ -180,7 +180,8 @@
       "ok": "ठीक है",
       "retry": "पुनः प्रयास",
       "save": "सहेजें",
-      "close": "बंद करें"
+      "close": "बंद करें",
+      "error": "Error"
     },
     "gst": {
       "notices": {
@@ -1029,6 +1030,36 @@
         "appleUnavailable": "इस डिवाइस पर Apple Sign-In उपलब्ध नहीं है। कृपया ओटीपी, पासवर्ड या Google साइन-इन का उपयोग करें।",
         "cancelled": "साइन-इन रद्द किया गया।",
         "notConfigured": "सोशल साइन-इन के लिए Firebase कॉन्फ़िगरेशन आवश्यक है। कृपया ओटीपी या पासवर्ड का उपयोग करें।"
+      },
+      "invite": {
+        "title": "Join organization",
+        "joinEntry": "Have an invite code? Join an organization",
+        "manualTitle": "Join an organization",
+        "manualSubtitle": "Enter the invite code or link you received.",
+        "codeLabel": "Invite code or link",
+        "codePlaceholder": "Paste your invite code",
+        "validateCta": "Continue",
+        "validating": "Checking invite…",
+        "invitedHeading": "You have been invited",
+        "orgLabel": "Organization",
+        "roleLabel": "Role",
+        "emailLabel": "Invited email",
+        "acceptCta": "Accept & join",
+        "declineCta": "Not now",
+        "signInRequired": "Sign in with the account this invite was sent to, then accept.",
+        "signInCta": "Sign in to accept",
+        "successTitle": "Welcome aboard!",
+        "successBody": "You have joined {{org}}.",
+        "errors": {
+          "identityMismatch": "This invite was sent to a different account. Sign in with the invited email or phone number to accept.",
+          "alreadyMember": "You are already a member of this organization.",
+          "alreadyAccepted": "This invite has already been accepted.",
+          "expired": "This invite has expired. Ask the owner to send a new one.",
+          "revoked": "This invite has been revoked.",
+          "invalid": "This invite link is no longer valid.",
+          "notFound": "We could not find this invite. Check the code and try again.",
+          "generic": "Something went wrong. Please try again."
+        }
       }
     },
     "documents": {
@@ -1093,6 +1124,59 @@
         "otpSend": "सत्यापन OTP नहीं भेजा जा सका। कृपया पुनः प्रयास करें।",
         "otpConfirm": "OTP सत्यापित नहीं हो सका। कृपया पुनः प्रयास करें।",
         "otpRejected": "गलत OTP। कृपया पुनः प्रयास करें।"
+      }
+    },
+    "team": {
+      "title": "Team",
+      "menuLabel": "Team",
+      "menuDesc": "Manage members & invites",
+      "inviteCta": "Invite team member",
+      "ownerOnlyTitle": "Owners only",
+      "ownerOnlyBody": "Only the business owner can manage the team.",
+      "roles": {
+        "ORG_MEMBER": "Team Member",
+        "CA": "Chartered Accountant",
+        "MANAGER": "Manager"
+      },
+      "status": {
+        "active": "Active",
+        "suspended": "Suspended"
+      },
+      "members": {
+        "section": "Members",
+        "empty": "No team members yet. Invite someone to get started.",
+        "error": "Could not load members. Pull to refresh."
+      },
+      "invites": {
+        "section": "Pending invites",
+        "empty": "No pending invites.",
+        "statusPending": "Pending",
+        "resend": "Resend",
+        "revoke": "Revoke",
+        "resentTitle": "Invite resent",
+        "resentBody": "The invite validity has been extended.",
+        "revokeConfirmTitle": "Revoke invite?",
+        "revokeConfirmBody": "This will cancel the invite for {{email}}."
+      },
+      "invite": {
+        "title": "Invite team member",
+        "sentTitle": "Invite created",
+        "sentBody": "Share the invite link or code below with your team member. The link works only once.",
+        "emailLabel": "Email",
+        "emailPlaceholder": "name@example.com",
+        "emailError": "Enter a valid email address",
+        "phoneLabel": "Phone (optional)",
+        "phonePlaceholder": "+91 98765 43210",
+        "phoneHint": "Recommended so phone-login users can accept",
+        "roleLabel": "Role",
+        "messageLabel": "Message (optional)",
+        "messagePlaceholder": "Add a short note to the invite…",
+        "submitCta": "Send invite",
+        "linkLabel": "Invite link",
+        "codeLabel": "Invite code",
+        "onceWarning": "This code is shown only once — copy or share it now.",
+        "shareCta": "Share invite",
+        "shareMessage": "You have been invited to join an organization on SnapAccount. Tap to accept: {{link}}"
       }
     }
   }

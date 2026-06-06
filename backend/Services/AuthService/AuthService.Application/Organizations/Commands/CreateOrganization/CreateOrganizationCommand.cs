@@ -1,7 +1,9 @@
+using AuthService.Application.Common.Interfaces;
 using AuthService.Application.Interfaces;
 using AuthService.Domain.Entities;
 using AuthService.Domain.Events;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Domain;
 
@@ -61,9 +63,13 @@ public sealed class CreateOrganizationCommandValidator : AbstractValidator<Creat
 /// </summary>
 public sealed class CreateOrganizationCommandHandler(
     IOrganizationRepository organizationRepository,
+    IAuthDbContext db,
     ICurrentUser currentUser)
     : ICommandHandler<CreateOrganizationCommand, CreateOrganizationResponse>
 {
+    /// <summary>System role granted to the creator so they can administer their org (invite, roles, etc.).</summary>
+    private const string OrgAdminRole = "ORG_ADMIN";
+
     /// <inheritdoc />
     public async Task<Result<CreateOrganizationResponse>> Handle(
         CreateOrganizationCommand request,
@@ -85,6 +91,23 @@ public sealed class CreateOrganizationCommandHandler(
 
         org.AddDomainEvent(new OrganizationCreatedEvent(org.Id, currentUser.UserId, request.BusinessName));
         await organizationRepository.AddAsync(org, cancellationToken);
+
+        // Phase 2 (org invite/join): the creator must also be a member of their own org
+        // with the ORG_ADMIN role. Without this, BuildSessionClaimsAsync resolves no
+        // active membership → the next token carries no organizationId and none of the
+        // org.* permissions, so the owner could never invite a team member or manage
+        // members. The ORG_ADMIN system role (migration 036 / dev seed) grants all org.*
+        // plus service-module permissions, scoped to this org via the membership row.
+        var orgAdminRole = await db.Roles.FirstOrDefaultAsync(
+            r => r.Name == OrgAdminRole && r.IsSystemRole && r.OrganizationId == null && r.DeletedAt == null,
+            cancellationToken);
+
+        if (orgAdminRole is not null)
+        {
+            db.OrganizationMembers.Add(
+                OrganizationMember.Create(org.Id, currentUser.UserId, orgAdminRole.Id));
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         return new CreateOrganizationResponse(org.Id);
     }
