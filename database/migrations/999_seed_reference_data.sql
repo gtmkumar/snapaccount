@@ -18,7 +18,12 @@ VALUES
     -- Platform super-admin is seeded canonically as SUPER_ADMIN by migration 036
     -- (legacy SYSTEM_ADMIN retired in migration 041 — see two-families role decision).
     (gen_random_uuid(), 'PARTNER_BANK_REP',     'Partner Bank Representative', 'Views loan applications, updates status', TRUE, TRUE)
-ON CONFLICT (name) DO NOTHING;
+-- Migration 035 replaced auth.role's plain UNIQUE(name) with partial unique indexes;
+-- a bare ON CONFLICT (name) no longer matches any constraint (fails under
+-- ON_ERROR_STOP on a clean full-sequence apply). These are system roles
+-- (organization_id IS NULL), so target the system-role partial index — matching
+-- the form used by migrations 036 and 059.
+ON CONFLICT (name) WHERE organization_id IS NULL AND deleted_at IS NULL DO NOTHING;
 
 -- =============================================================================
 -- 2. GST Tax Rates (Temporal — valid_from = 2017-07-01, the date GST launched in India)

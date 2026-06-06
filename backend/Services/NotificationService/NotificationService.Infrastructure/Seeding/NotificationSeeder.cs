@@ -21,39 +21,27 @@ public sealed class NotificationSeeder(
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        try
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NotificationServiceDbContext>();
+
+        // Seed event catalogue
+        foreach (var entry in NotificationEventCatalog.All)
         {
-            using var scope = scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<NotificationServiceDbContext>();
-
-            await db.Database.MigrateAsync(cancellationToken);
-
-            // Seed event catalogue
-            foreach (var entry in NotificationEventCatalog.All)
+            var exists = await db.NotificationEvents
+                .AnyAsync(e => e.EventCode == entry.EventCode, cancellationToken);
+            if (!exists)
             {
-                var exists = await db.NotificationEvents
-                    .AnyAsync(e => e.EventCode == entry.EventCode, cancellationToken);
-                if (!exists)
-                {
-                    db.NotificationEvents.Add(NotificationEvent.Create(
-                        entry.EventCode, entry.EventName, entry.Category, entry.DefaultChannels));
-                }
+                db.NotificationEvents.Add(NotificationEvent.Create(
+                    entry.EventCode, entry.EventName, entry.Category, entry.DefaultChannels));
             }
-
-            await db.SaveChangesAsync(cancellationToken);
-
-            // Seed default templates
-            await SeedTemplatesAsync(db, cancellationToken);
-
-            logger.LogInformation("NotificationSeeder: seeded {Count} event types.", NotificationEventCatalog.All.Count);
         }
-        catch (Exception ex)
-        {
-            // Seeder is fire-and-forget at startup. Most common failure: EF's PascalCase
-            // entity names don't match the snake_case migrations (no IEntityTypeConfiguration
-            // registered). Logging + continuing is safer than killing the host.
-            logger.LogWarning(ex, "NotificationSeeder skipped — service continues without seed data.");
-        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        // Seed default templates
+        await SeedTemplatesAsync(db, cancellationToken);
+
+        logger.LogInformation("NotificationSeeder: seeded {Count} event types.", NotificationEventCatalog.All.Count);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

@@ -28,14 +28,17 @@
 -- ──────────────────────────────────────────────────────────────────────────
 -- LOANS — partner banks, products, and an application
 -- ──────────────────────────────────────────────────────────────────────────
-INSERT INTO loan.partner_banks (id, bank_code, bank_name, contact_email, contact_phone,
-                                api_endpoint, hmac_key_secret_id, is_active,
+-- Schema (migration 028): column is `name` (not bank_name); `adapter_type` (enum
+-- loan.partner_bank_adapter_type) is required; contact_phone/api_endpoint/
+-- hmac_key_secret_id columns do not exist — credentials live in api_config_*/webhook_secret_ref.
+INSERT INTO loan.partner_banks (id, bank_code, name, contact_email,
+                                adapter_type, webhook_secret_ref, is_active,
                                 created_at, updated_at)
 VALUES
-    ('51111111-1111-1111-1111-111111111111', 'HDFC',  'HDFC Bank',   'partners@hdfc.dev', '+911100000001',
-     'https://hdfc.dev/api',  'hdfc-hmac',  TRUE, NOW(), NOW()),
-    ('51111111-1111-1111-1111-111111111112', 'ICICI', 'ICICI Bank',  'partners@icici.dev','+911100000002',
-     'https://icici.dev/api', 'icici-hmac', TRUE, NOW(), NOW())
+    ('51111111-1111-1111-1111-111111111111', 'HDFC',  'HDFC Bank',   'partners@hdfc.dev',
+     'REST'::loan.partner_bank_adapter_type,  'hdfc-hmac',  TRUE, NOW(), NOW()),
+    ('51111111-1111-1111-1111-111111111112', 'ICICI', 'ICICI Bank',  'partners@icici.dev',
+     'REST'::loan.partner_bank_adapter_type, 'icici-hmac', TRUE, NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO loan.loan_products (id, bank_id, product_code, product_name, description,
@@ -68,11 +71,13 @@ ON CONFLICT (id) DO NOTHING;
 -- ──────────────────────────────────────────────────────────────────────────
 -- GST — invoices and ITC records (the page that shows "ITC Mismatch" needs both)
 -- ──────────────────────────────────────────────────────────────────────────
-INSERT INTO gst.gst_invoices (id, organization_id, invoice_number, invoice_date,
-                              supplier_gstin, supplier_name, buyer_gstin,
-                              taxable_value, igst_amount, cgst_amount, sgst_amount, cess_amount,
-                              total_amount, invoice_type, place_of_supply,
-                              created_at, updated_at)
+-- Schema (migration 019): table is gst.gst_invoice (singular). Total column is
+-- total_invoice_value (not total_amount); there is no place_of_supply column here.
+INSERT INTO gst.gst_invoice (id, organization_id, invoice_number, invoice_date,
+                             supplier_gstin, supplier_name, buyer_gstin,
+                             taxable_value, igst_amount, cgst_amount, sgst_amount, cess_amount,
+                             total_invoice_value, invoice_type,
+                             created_at, updated_at)
 VALUES
     ('61111111-1111-1111-1111-111111111111',
      '44444444-4444-4444-4444-444444444444',
@@ -80,7 +85,7 @@ VALUES
      '27ABCDE1234F1Z5', 'Mumbai Steel Suppliers',
      '29AAAAA0000A1Z5',
      100000.00, 0.00, 9000.00, 9000.00, 0.00, 118000.00,
-     'B2B', '29',
+     'B2B',
      NOW(), NOW()),
     ('61111111-1111-1111-1111-111111111112',
      '44444444-4444-4444-4444-444444444444',
@@ -88,14 +93,15 @@ VALUES
      '27ABCDE1234F1Z5', 'Mumbai Steel Suppliers',
      '29AAAAA0000A1Z5',
       50000.00, 9000.00, 0.00, 0.00, 0.00,  59000.00,
-     'B2B', '27',
+     'B2B',
      NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO gst.itc_records (id, organization_id, supplier_gstin, supplier_name,
-                             invoice_number, invoice_date,
-                             igst_credit, cgst_credit, sgst_credit, cess_credit,
-                             is_eligible, source, created_at, updated_at)
+-- Schema (migration 019): table is gst.itc_record (singular).
+INSERT INTO gst.itc_record (id, organization_id, supplier_gstin, supplier_name,
+                            invoice_number, invoice_date,
+                            igst_credit, cgst_credit, sgst_credit, cess_credit,
+                            is_eligible, source, created_at, updated_at)
 VALUES
     ('62222222-2222-2222-2222-222222222221',
      '44444444-4444-4444-4444-444444444444',
@@ -113,15 +119,18 @@ ON CONFLICT (id) DO NOTHING;
 -- ──────────────────────────────────────────────────────────────────────────
 -- ITR — assessee, filing, grievance
 -- ──────────────────────────────────────────────────────────────────────────
-INSERT INTO itr.assessee_profiles (id, user_id, organization_id, pan_cipher, pan_last4,
-                                   full_name, assessee_type,
+-- Schema (migration 024): assessee_profiles is keyed per assessment year (`ay`
+-- NOT NULL) and is user-scoped (no organization_id). PAN stored in `pan` (no
+-- pan_cipher); no full_name/assessee_type columns.
+INSERT INTO itr.assessee_profiles (id, user_id, ay, pan, pan_last4,
+                                   residential_status,
                                    created_at, updated_at)
 VALUES
     ('71111111-1111-1111-1111-111111111111',
      '33333333-3333-3333-3333-333333333333',
-     '44444444-4444-4444-4444-444444444444',
-     'DEV_CIPHER_PLACEHOLDER', '7890',
-     'Acme Owner (Dev)', 'INDIVIDUAL',
+     'AY2025-26',
+     'AABCU9603R', '7890',
+     'RESIDENT',
      NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
 
@@ -134,7 +143,8 @@ VALUES
      '71111111-1111-1111-1111-111111111111',
      'AY2025-26', 'ITR-3', 'NEW',
      1200000, 150000, 1050000, 78000, 65000,
-     0, 'COMPUTED', NOW(), NOW())
+     -- filings_status_check (migration 024) has no 'COMPUTED'; computed-and-awaiting-review maps to UNDER_CA_REVIEW.
+     0, 'UNDER_CA_REVIEW', NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO itr.grievances (id, filing_id, assessee_id, raised_by_user_id,
@@ -172,17 +182,20 @@ ON CONFLICT (id) DO NOTHING;
 -- SUBSCRIPTIONS — an active subscription so the billing UI has data
 -- (assumes plans seeded by 999_seed_reference_data.sql)
 -- ──────────────────────────────────────────────────────────────────────────
-INSERT INTO subscription.subscriptions (id, organization_id, plan_id, status,
-                                        current_period_start, current_period_end,
-                                        razorpay_customer_id, created_at, updated_at)
+-- Schema (migration 010): table is subscription.subscription (singular); user_id
+-- is required; current_period_start/end are DATE. Plan code column is `code`.
+INSERT INTO subscription.subscription (id, organization_id, user_id, plan_id, status,
+                                       current_period_start, current_period_end,
+                                       razorpay_customer_id, created_at, updated_at)
 SELECT 'c1111111-1111-1111-1111-111111111111',
        '44444444-4444-4444-4444-444444444444',
+       '33333333-3333-3333-3333-333333333333',
        p.id, 'ACTIVE',
-       date_trunc('month', NOW()),
-       date_trunc('month', NOW()) + INTERVAL '1 month',
+       date_trunc('month', NOW())::date,
+       (date_trunc('month', NOW()) + INTERVAL '1 month')::date,
        'cust_dev_acme', NOW(), NOW()
 FROM subscription.subscription_plan p
-WHERE p.plan_code IS NOT NULL
+WHERE p.code IS NOT NULL
 ORDER BY p.created_at LIMIT 1
 ON CONFLICT (id) DO NOTHING;
 
@@ -194,11 +207,11 @@ BEGIN
     RAISE NOTICE '✓ loan.partner_banks   : % rows', (SELECT COUNT(*) FROM loan.partner_banks);
     RAISE NOTICE '✓ loan.loan_products   : % rows', (SELECT COUNT(*) FROM loan.loan_products);
     RAISE NOTICE '✓ loan.applications    : % rows', (SELECT COUNT(*) FROM loan.applications);
-    RAISE NOTICE '✓ gst.gst_invoices     : % rows', (SELECT COUNT(*) FROM gst.gst_invoices);
-    RAISE NOTICE '✓ gst.itc_records      : % rows', (SELECT COUNT(*) FROM gst.itc_records);
+    RAISE NOTICE '✓ gst.gst_invoice      : % rows', (SELECT COUNT(*) FROM gst.gst_invoice);
+    RAISE NOTICE '✓ gst.itc_record       : % rows', (SELECT COUNT(*) FROM gst.itc_record);
     RAISE NOTICE '✓ itr.assessee_profiles: % rows', (SELECT COUNT(*) FROM itr.assessee_profiles);
     RAISE NOTICE '✓ itr.filings          : % rows', (SELECT COUNT(*) FROM itr.filings);
     RAISE NOTICE '✓ itr.grievances       : % rows', (SELECT COUNT(*) FROM itr.grievances);
     RAISE NOTICE '✓ callback.callbacks   : % rows', (SELECT COUNT(*) FROM callback.callbacks);
-    RAISE NOTICE '✓ subscription.subscriptions: % rows', (SELECT COUNT(*) FROM subscription.subscriptions);
+    RAISE NOTICE '✓ subscription.subscription : % rows', (SELECT COUNT(*) FROM subscription.subscription);
 END $$;

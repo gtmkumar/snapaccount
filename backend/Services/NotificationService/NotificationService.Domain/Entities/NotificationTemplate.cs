@@ -9,6 +9,17 @@ namespace NotificationService.Domain.Entities;
 /// </summary>
 public class NotificationTemplate : BaseAuditableEntity
 {
+    /// <summary>
+    /// Unique template code (maps to the <c>code</c> column, NOT NULL UNIQUE in SQL).
+    /// Derived deterministically from (event_code, channel, locale) so the seeder can
+    /// produce one stable, unique row per combination.
+    /// </summary>
+    public string Code { get; private set; } = string.Empty;
+
+    /// <summary>Human-readable template name (maps to the <c>name</c> column, NOT NULL in SQL).</summary>
+    public string Name { get; private set; } = string.Empty;
+
+    /// <summary>Maps to the SQL <c>event_type</c> column (the event this template serves).</summary>
     public string EventCode { get; private set; } = string.Empty;
 
     /// <summary>Push, Sms, Email, InApp.</summary>
@@ -51,6 +62,12 @@ public class NotificationTemplate : BaseAuditableEntity
         string? senderName = null)
         => new()
         {
+            // code is NOT NULL UNIQUE in SQL. Derive a stable, unique code per
+            // (event_code, channel, locale) so the seeder's rows never collide.
+            Code = $"{eventCode}__{channel.ToString().ToUpperInvariant()}__{locale.ToLowerInvariant()}",
+            // name is NOT NULL in SQL. Default to a readable composite; the admin panel
+            // can override it later without affecting dispatch.
+            Name = $"{eventCode} ({channel}/{locale})",
             EventCode = eventCode,
             Channel = channel,
             Locale = locale,
