@@ -1,0 +1,104 @@
+# SnapAccount — Database Migration Sequence Test (PR gate)
+#
+# Catches broken SQL migrations BEFORE they merge. Spins up a clean Postgres 17
+# (with pgvector — required by 011_ai_schema.sql) and applies EVERY file in
+# database/migrations/*.sql, in numeric order, with `psql -v ON_ERROR_STOP=1`.
+# The job fails on the first migration error.
+#
+# Why: four migration bugs once shipped to main because nothing exercised the
+# full migration sequence on a fresh database. This gate does exactly that —
+# pure psql, no app build, fast.
+#
+# Ordering note: `sort -V` yields 000_init → 001 → … → 059 → 999_seed last.
+# 000_init.sql enables all extensions and creates every service schema, so the
+# sequence is self-contained — database/init/ scripts are NOT needed here.
+
+name: DB Migrate Test
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - "database/migrations/**"
+      - "scripts/db/apply-migrations.sh"
+      - ".github/workflows/db-migrate-test.yml"
+  push:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: db-migrate-test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  migrate-sequence:
+    name: Apply migrations on fresh Postgres
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # pgvector image — required: 011_ai_schema.sql uses VECTOR(768) + hnsw.
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          # Create the `snapaccount` DB up front: 000_init.sql runs
+          # `ALTER DATABASE snapaccount ...`, so the DB must be named snapaccount.
+          POSTGRES_DB: snapaccount
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: snapaccount
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" >/dev/null 2>&1; then
+              echo "Postgres is ready."
+              exit 0
+            fi
+            echo "Waiting for Postgres ($i/30)..."
+            sleep 2
+          done
+          echo "Postgres did not become ready in time." >&2
+          exit 1
+
+      - name: Apply all migrations in numeric order (fail on first error)
+        run: bash scripts/db/apply-migrations.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### DB Migration Sequence Test"
+            echo "- **Image:** pgvector/pgvector:pg17"
+            echo "- **Database:** snapaccount (fresh)"
+            echo "- **Order:** database/migrations/*.sql via \`sort -V\` (000 → 059 → 999)"
+            echo "- **Mode:** psql -v ON_ERROR_STOP=1 (fail fast)"
+            echo "- **Result:** ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
