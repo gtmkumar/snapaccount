@@ -110,10 +110,25 @@ public sealed class FirebaseAuthService(
         // (Firebase Admin is not configured locally; org may not exist yet at signup.)
         if (DevAuthEnabled)
         {
+            // Resolve the user's active org membership the same way production does, so a
+            // dev token issued/refreshed AFTER org creation carries the real organizationId.
+            // Without this the org context stays empty and org-scoped calls (e.g. team
+            // invite) fail OrgContextGuard even though perms are wildcard. Empty if the
+            // user has no membership yet (fresh signup before the org exists).
+            Guid? devOrgId = null;
+            if (Guid.TryParse(userIdStr, out var devUserId))
+            {
+                devOrgId = await db.OrganizationMembers
+                    .Where(m => m.UserId == devUserId && m.IsActive && m.DeletedAt == null)
+                    .OrderByDescending(m => m.CreatedAt)
+                    .Select(m => (Guid?)m.OrganizationId)
+                    .FirstOrDefaultAsync(ct);
+            }
+
             var jwtClaims = new Dictionary<string, object?>
             {
                 ["userId"]         = userIdStr,
-                ["organizationId"] = Guid.Empty.ToString(),
+                ["organizationId"] = (devOrgId ?? Guid.Empty).ToString(),
                 ["roles"]          = new[] { "BUSINESS_OWNER" },
                 ["permissions"]    = new[] { "*" },
                 ["phone_number"]   = phone,

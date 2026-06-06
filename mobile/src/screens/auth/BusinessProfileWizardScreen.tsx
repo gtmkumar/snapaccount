@@ -27,7 +27,7 @@ import { PanInput } from '../../components/shared/PanInput';
 import { Colors } from '../../constants/colors';
 import { isValidPAN, isValidGSTIN, isValidAadhaar } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
-import apiClient, { getApiError } from '../../lib/api';
+import apiClient, { getApiError, refreshAccessToken } from '../../lib/api';
 import { saveDocument, type DocumentKind } from '../../api/documents';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
@@ -222,6 +222,13 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
       //    Documents screen.
       await persistDocuments();
 
+      // Refresh the session token so it carries the new organizationId + org.*
+      // permissions. The backend adds the creator as an ORG_ADMIN member when the
+      // org is created, but the JWT issued at OTP/login (before the org existed)
+      // has no org context — without this refresh the owner's first org-scoped
+      // call (e.g. POST /auth/team/invite) is rejected by OrgContextGuard (409).
+      await refreshAccessToken();
+
       // Onboarding complete — enter the app (RootNavigator swaps to AppNavigator).
       markAuthenticated();
     } catch (err: unknown) {
@@ -328,14 +335,6 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                   </Text>
                 </View>
               </View>
-
-              <Button
-                label="Continue"
-                onPress={handleStep1Submit}
-                loading={loading}
-                fullWidth
-                size="lg"
-              />
             </View>
           )}
 
@@ -362,20 +361,6 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                   />
                 )}
               />
-
-              <Button
-                label="Continue"
-                onPress={handleStep2Submit}
-                fullWidth
-                size="lg"
-              />
-              <Button
-                label="Skip for now"
-                variant="ghost"
-                onPress={() => { setCurrentStep(3); }}
-                fullWidth
-                size="lg"
-              />
             </View>
           )}
 
@@ -399,14 +384,6 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                   </Text>
                 </View>
               </View>
-
-              <Button
-                label="Skip for now"
-                variant="ghost"
-                onPress={() => setCurrentStep(4)}
-                fullWidth
-                size="lg"
-              />
             </View>
           )}
 
@@ -502,17 +479,31 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                   />
                 )}
               />
-
-              <Button
-                label="Complete Setup"
-                onPress={handleStep4Submit}
-                loading={loading}
-                fullWidth
-                size="lg"
-              />
             </View>
           )}
         </ScrollView>
+
+        {/* Primary actions pinned in a footer so they stay above the keyboard
+            (KeyboardAvoidingView lifts this sibling). Previously each step's
+            button sat at the bottom of the ScrollView and was hidden behind the
+            keyboard while typing, leaving no visible way to continue/submit. */}
+        <View style={styles.footer}>
+          {currentStep === 1 && (
+            <Button label="Continue" onPress={handleStep1Submit} loading={loading} fullWidth size="lg" />
+          )}
+          {currentStep === 2 && (
+            <>
+              <Button label="Continue" onPress={handleStep2Submit} fullWidth size="lg" />
+              <Button label="Skip for now" variant="ghost" onPress={() => setCurrentStep(3)} fullWidth size="lg" />
+            </>
+          )}
+          {currentStep === 3 && (
+            <Button label="Skip for now" variant="ghost" onPress={() => setCurrentStep(4)} fullWidth size="lg" />
+          )}
+          {currentStep === 4 && (
+            <Button label="Complete Setup" onPress={handleStep4Submit} loading={loading} fullWidth size="lg" />
+          )}
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -583,7 +574,16 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: 24,
-    paddingBottom: 40,
+    paddingBottom: 16,
+  },
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 24,
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.neutral[100],
+    backgroundColor: Colors.bg.base,
   },
   stepContent: {
     gap: 4,
