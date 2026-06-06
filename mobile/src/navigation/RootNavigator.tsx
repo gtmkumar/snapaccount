@@ -21,36 +21,39 @@ configureForegroundNotificationHandler();
  * Deep-link config for the org-invite flow (Phase 2).
  *
  * `snapaccount://invite/{token}` → AcceptInvite (with the token route param).
- * The same screen name is registered in BOTH navigators:
- *   - unauthenticated: AcceptInvite lives at the top of the Auth stack.
- *   - authenticated:   AcceptInvite lives inside MoreTab → MoreStack.
- * Providing both nestings lets React Navigation resolve the path against whichever
- * navigator is currently mounted.
+ * AcceptInvite is registered in BOTH navigators (Auth stack when logged out,
+ * MoreTab → MoreStack when logged in), but the `invite/:token` PATTERN must map to
+ * exactly ONE screen in the linking config — declaring it twice makes React
+ * Navigation throw "conflicting screens that map to the same pattern". Because
+ * RootNavigator mounts only one of the two navigators at a time (keyed on
+ * isAuthenticated), we build the config to match whichever navigator is active so
+ * the pattern is present exactly once.
  */
 type RootLinkParamList = {
   AcceptInvite: { token?: string } | undefined;
   MoreTab: undefined;
 };
 
-const linking: LinkingOptions<RootLinkParamList> = {
-  prefixes: ['snapaccount://'],
-  config: {
-    screens: {
-      // Auth stack (unauthenticated)
-      AcceptInvite: 'invite/:token',
-      // App tab navigator (authenticated) — AcceptInvite nested under MoreTab/MoreStack
-      MoreTab: {
-        screens: {
-          AcceptInvite: 'invite/:token',
-        },
-      },
+function buildLinking(isAuthenticated: boolean): LinkingOptions<RootLinkParamList> {
+  return {
+    prefixes: ['snapaccount://'],
+    config: {
+      screens: isAuthenticated
+        ? // App tab navigator — AcceptInvite nested under MoreTab/MoreStack
+          { MoreTab: { screens: { AcceptInvite: 'invite/:token' } } }
+        : // Auth stack — AcceptInvite at the top level
+          { AcceptInvite: 'invite/:token' },
     },
-  },
-};
+  };
+}
 
 export function RootNavigator() {
   const { isAuthenticated, isLoading, setLoading } = useAuthStore();
   const navigationRef = useRef<NavigationContainerRef<Record<string, object | undefined>>>(null);
+  // Build the linking config for the currently-mounted navigator so the
+  // `invite/:token` pattern is declared exactly once (see buildLinking above).
+  // Cheap object literal — no useMemo needed (avoids a hook that complicates HMR).
+  const linking = buildLinking(isAuthenticated);
 
   // Wire push deep-link router once nav is ready
   const handleNavigationReady = () => {

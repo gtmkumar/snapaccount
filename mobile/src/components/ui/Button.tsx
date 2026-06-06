@@ -46,44 +46,57 @@ export function Button({
 }: ButtonProps) {
   const isDisabled = disabled || loading;
 
+  // The visual styles (background, border, shadow) live on a plain inner View,
+  // NOT on the Pressable. Under the New Architecture (RN 0.85 / Fabric) a
+  // Pressable with a function `style` does not reliably apply `backgroundColor`,
+  // which made enabled primary buttons render with no fill (white-on-white, i.e.
+  // "invisible"). A plain View applies backgroundColor reliably. The Pressable
+  // now only handles touch + width; the inner View carries the look and the
+  // pressed state.
   return (
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
-      style={({ pressed }) => [
-        styles.base,
-        styles[`size_${size}`],
-        styles[`variant_${variant}`],
-        isDisabled && styles[`variant_${variant}_disabled`],
-        pressed && !isDisabled && styles[`variant_${variant}_pressed`],
-        fullWidth && styles.fullWidth,
-        style,
-      ]}
+      style={fullWidth ? styles.fullWidth : undefined}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       {...rest}
     >
-      {loading ? (
-        <ActivityIndicator
-          size="small"
-          color={variant === 'primary' || variant === 'danger' ? Colors.neutral[0] : Colors.brand[500]}
-        />
-      ) : (
-        <View style={styles.content}>
-          {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
-          <Text
-            style={[
-              styles.label,
-              styles[`label_${size}`],
-              styles[`label_${variant}`],
-              isDisabled && styles[`label_${variant}_disabled`],
-            ]}
-            numberOfLines={1}
-          >
-            {label}
-          </Text>
-          {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
+      {({ pressed }) => (
+        <View
+          style={[
+            styles.base,
+            styles[`size_${size}`],
+            styles[`variant_${variant}`],
+            isDisabled && styles[`variant_${variant}_disabled`],
+            pressed && !isDisabled && styles[`variant_${variant}_pressed`],
+            fullWidth && styles.fullWidth,
+            style,
+          ]}
+        >
+          {loading ? (
+            <ActivityIndicator
+              size="small"
+              color={variant === 'primary' || variant === 'danger' ? Colors.neutral[0] : Colors.brand[500]}
+            />
+          ) : (
+            <View style={styles.content}>
+              {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
+              <Text
+                style={[
+                  styles.label,
+                  styles[`label_${size}`],
+                  styles[`label_${variant}`],
+                  isDisabled && styles[`label_${variant}_disabled`],
+                ]}
+                numberOfLines={1}
+              >
+                {label}
+              </Text>
+              {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
+            </View>
+          )}
         </View>
       )}
     </Pressable>

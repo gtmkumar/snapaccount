@@ -181,7 +181,13 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
               </Text>
             </View>
           </View>
+        </ScrollView>
 
+        {/* Primary action pinned in a footer so it stays above the keyboard
+            (KeyboardAvoidingView lifts this sibling). Previously the button lived
+            at the bottom of the ScrollView and was hidden behind the keyboard,
+            leaving no visible way to submit. */}
+        <View style={styles.footer}>
           <Button
             label="Complete Setup"
             onPress={handleSubmit}
@@ -189,7 +195,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
             fullWidth
             size="lg"
           />
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -210,7 +216,15 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: 24,
-    paddingBottom: 40,
+    paddingBottom: 16,
+  },
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: Colors.neutral[100],
+    backgroundColor: Colors.bg.base,
   },
   stepTitle: {
     fontSize: 24,

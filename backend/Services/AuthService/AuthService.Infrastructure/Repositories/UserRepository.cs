@@ -76,6 +76,17 @@ public sealed class UserRepository(AuthDbContext dbContext) : IUserRepository
             dbContext.UserPreferences.Add(user.Preference);
         }
 
+        // Same for a first-time UserProfile (new-user onboarding via PUT /auth/profile,
+        // e.g. the mobile persona wizards). When no profile row existed before this
+        // request, the freshly-set reference navigation stays Detached after
+        // Users.Update() marks the root Modified — EF would then emit a 0-row UPDATE and
+        // throw DbUpdateConcurrencyException. Escalate it to Added so EF issues an INSERT.
+        if (user.Profile is not null &&
+            dbContext.Entry(user.Profile).State == EntityState.Detached)
+        {
+            dbContext.UserProfiles.Add(user.Profile);
+        }
+
         dbContext.Users.Update(user);
         await dbContext.SaveChangesAsync(ct);
     }
