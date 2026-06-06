@@ -231,7 +231,7 @@ public sealed class Auth : EndpointGroupBase
         var result = await sender.Send(new UpdateUserProfileCommand(
             req.FullName, req.Email, req.PanNumber, req.AadhaarLast4,
             req.DateOfBirth, req.Gender, req.AddressLine1, req.AddressLine2,
-            req.City, req.State, req.Pincode));
+            req.City, req.State, req.Pincode, req.UserType));
         return result.IsSuccess
             ? Results.NoContent()
             : Results.BadRequest(new { error = result.Error.Message });
@@ -354,7 +354,7 @@ internal record RefreshTokenRequest(string Token);
 internal record UpdateUserProfileRequest(
     string? FullName, string? Email, string? PanNumber, string? AadhaarLast4,
     DateOnly? DateOfBirth, string? Gender, string? AddressLine1, string? AddressLine2,
-    string? City, string? State, string? Pincode);
+    string? City, string? State, string? Pincode, string? UserType = null);
 internal record CreateOrganizationRequest(
     string BusinessName, string? Gstin, string? PanNumber,
     string? BusinessType, string? IndustryType, decimal? AnnualTurnoverInr);

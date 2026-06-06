@@ -26,6 +26,7 @@ import { Button } from '../../components/ui/Button';
 import { OTPInput } from '../../components/forms/OTPInput';
 import { Colors } from '../../constants/colors';
 import { useAuthStore } from '../../store/authStore';
+import { fetchServerUserType } from '../../lib/onboarding';
 import { complete2faChallenge } from '../../api/auth';
 import { getApiError } from '../../lib/api';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
@@ -40,7 +41,7 @@ interface Props {
 
 export function TwoFactorChallengeScreen({ navigation, route }: Props) {
   const { challengeToken, phone } = route.params;
-  const { setAuthenticated, setOrganizations } = useAuthStore();
+  const { setAuthenticated, setOrganizations, updateProfile } = useAuthStore();
   const { t } = useTranslation();
 
   const [code, setCode] = useState('');
@@ -64,13 +65,18 @@ export function TwoFactorChallengeScreen({ navigation, route }: Props) {
           id: result.userId,
           firebaseUid: '',
           phone: phone ?? '',
-          userType: 'business_owner' as const,
+          // 2FA only ever gates a RETURNING user — hydrate the real persona below.
+          userType: null,
           profileComplete: true,
           aadhaarVerified: false,
           createdAt: new Date().toISOString(),
         };
 
         setAuthenticated(result.token, profile, result.refreshToken ?? null);
+
+        // Hydrate the real persona so navigation matches their type.
+        const serverType = await fetchServerUserType();
+        if (serverType) updateProfile({ userType: serverType });
 
         // Enrich organizations, then let RootNavigator swap to the app.
         try {
@@ -100,7 +106,7 @@ export function TwoFactorChallengeScreen({ navigation, route }: Props) {
         setLoading(false);
       }
     },
-    [challengeToken, phone, t, setAuthenticated, setOrganizations],
+    [challengeToken, phone, t, setAuthenticated, setOrganizations, updateProfile],
   );
 
   return (

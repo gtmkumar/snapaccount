@@ -23,12 +23,13 @@ import { Colors } from '../../constants/colors';
 import apiClient, { getApiError } from '../../lib/api';
 import { isValidPhone } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
+import { fetchServerUserType } from '../../lib/onboarding';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
 type NavProp = NativeStackNavigationProp<AuthStackParamList, 'PasswordAuth'>;
 
 export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
-  const { setAuthenticated, setSession, setOrganizations } = useAuthStore();
+  const { setAuthenticated, setSession, setOrganizations, updateProfile } = useAuthStore();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [phone, setPhone] = useState('');
@@ -83,7 +84,9 @@ export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
         id: userId,
         firebaseUid: '',
         phone,
-        userType: isNewUser ? null : ('business_owner' as const),
+        // Persona is chosen on PersonaSelection (new) or hydrated from the server
+        // (returning) — never hard-coded to business_owner here.
+        userType: null,
         profileComplete: !isNewUser,
         aadhaarVerified: false,
         name: isRegister ? fullName.trim() : undefined,
@@ -91,13 +94,19 @@ export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
       };
 
       if (isNewUser) {
-        // Keep the token for onboarding calls; stay in Auth stack until the wizard completes.
+        // Keep the token for onboarding calls; stay in Auth stack until the user
+        // picks a persona and completes the matching wizard.
         setSession(token, profile, refreshToken ?? null);
-        navigation.replace('BusinessProfileWizard');
+        navigation.replace('PersonaSelection');
         return;
       }
 
       setAuthenticated(token, profile, refreshToken ?? null);
+      // Returning user — hydrate the real persona so navigation matches their type.
+      {
+        const serverType = await fetchServerUserType();
+        if (serverType) updateProfile({ userType: serverType });
+      }
       try {
         const orgsRes = await apiClient.get<
           Array<{ id: string; businessName?: string; name?: string; gstin?: string }>

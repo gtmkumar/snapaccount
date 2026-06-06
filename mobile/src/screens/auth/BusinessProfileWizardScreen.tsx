@@ -182,6 +182,7 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
           addressLine1: data.addressLine1,
           state: data.state,
           pincode: data.pinCode,
+          userType: 'BUSINESS_OWNER',
         });
       } catch {
         // Profile row may not exist yet for a brand-new user; org creation below is

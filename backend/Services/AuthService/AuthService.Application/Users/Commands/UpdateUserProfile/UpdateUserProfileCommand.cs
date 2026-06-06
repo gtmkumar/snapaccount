@@ -9,6 +9,12 @@ namespace AuthService.Application.Users.Commands.UpdateUserProfile;
 /// <summary>Updates the authenticated user's profile fields.</summary>
 /// <param name="PanNumber">PAN in XXXXX9999X format. SEC-013: stored AES-256 encrypted.</param>
 /// <param name="AadhaarLast4">Last 4 digits of Aadhaar (for display only — full Aadhaar never stored).</param>
+/// <param name="UserType">
+/// Optional persona to stamp on the profile (BUSINESS_OWNER | EMPLOYEE). Lets the
+/// mobile Individual/Salaried onboarding record EMPLOYEE without creating an
+/// organization. Null = keep the existing/default type. STAFF is never settable
+/// here — staff are provisioned through the admin surface, not self-service.
+/// </param>
 public record UpdateUserProfileCommand(
     string? FullName,
     string? Email,
@@ -20,7 +26,8 @@ public record UpdateUserProfileCommand(
     string? AddressLine2,
     string? City,
     string? State,
-    string? Pincode) : ICommand;
+    string? Pincode,
+    string? UserType = null) : ICommand;
 
 /// <summary>
 /// FluentValidation validator for <see cref="UpdateUserProfileCommand"/>.
@@ -39,6 +46,13 @@ public sealed class UpdateUserProfileCommandValidator : AbstractValidator<Update
             RuleFor(x => x.AadhaarLast4!)
                 .Length(4).WithMessage("Aadhaar last 4 must be exactly 4 digits.")
                 .Matches(@"^\d{4}$").WithMessage("Aadhaar last 4 must be numeric."));
+
+        // Self-service onboarding may only set the two customer personas. STAFF is
+        // intentionally excluded — staff roles are assigned via the admin surface.
+        When(x => !string.IsNullOrEmpty(x.UserType), () =>
+            RuleFor(x => x.UserType!)
+                .Must(t => t is "BUSINESS_OWNER" or "EMPLOYEE")
+                .WithMessage("UserType must be BUSINESS_OWNER or EMPLOYEE."));
     }
 }
 
@@ -78,6 +92,8 @@ public sealed class UpdateUserProfileCommandHandler(
             profile.City = request.City;
             profile.State = request.State;
             profile.Pincode = request.Pincode;
+            if (!string.IsNullOrEmpty(request.UserType))
+                profile.SetUserType(request.UserType);
             user.SetProfile(profile);
         }
         else
@@ -91,6 +107,8 @@ public sealed class UpdateUserProfileCommandHandler(
             user.Profile.City = request.City;
             user.Profile.State = request.State;
             user.Profile.Pincode = request.Pincode;
+            if (!string.IsNullOrEmpty(request.UserType))
+                user.Profile.SetUserType(request.UserType);
         }
 
         user.FullName = request.FullName;

@@ -24,6 +24,7 @@ import apiClient, { getApiError } from '../../lib/api';
 import { isValidPhone } from '../../lib/utils';
 import { useAuthMethods } from '../../hooks/useAuthMethods';
 import { useAuthStore } from '../../store/authStore';
+import { fetchServerUserType } from '../../lib/onboarding';
 import {
   isFirebaseConfigured,
   signInWithGoogle,
@@ -62,30 +63,42 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
       id: result.userId,
       firebaseUid: '',
       phone: '',
-      userType: 'business_owner' as const,
-      profileComplete: true,
+      // Resolved from the server below — social sign-in carries no persona itself.
+      userType: null,
+      profileComplete: false,
       aadhaarVerified: false,
       createdAt: new Date().toISOString(),
     };
-    setAuthenticated(result.token, profile, result.refreshToken ?? null);
-    try {
-      const orgsRes = await apiClient.get<
-        { id: string; businessName?: string; name?: string; gstin?: string }[]
-      >('/auth/organizations');
-      const orgs = (orgsRes.data ?? []).map((o) => ({
-        id: o.id,
-        name: o.businessName ?? o.name ?? 'My Business',
-        gstin: o.gstin,
-      }));
-      if (orgs.length === 0) {
-        // No org yet → finish onboarding in the wizard.
-        setSession(result.token, profile, result.refreshToken ?? null);
-        navigation.replace('BusinessProfileWizard');
-        return;
+
+    // The server profile's user_type is the source of truth for new-vs-returning
+    // here: a returning salaried individual legitimately has NO organization, so
+    // "no org" can't be used to detect a new user. Token must be set first so the
+    // /auth/me call is authenticated.
+    setSession(result.token, profile, result.refreshToken ?? null);
+    const serverType = await fetchServerUserType();
+
+    if (!serverType) {
+      // No persona yet → brand-new user → pick a persona, then onboard.
+      navigation.replace('PersonaSelection');
+      return;
+    }
+
+    // Returning user — enter the app with their real persona.
+    setAuthenticated(result.token, { ...profile, userType: serverType, profileComplete: true }, result.refreshToken ?? null);
+    if (serverType === 'business_owner') {
+      try {
+        const orgsRes = await apiClient.get<
+          { id: string; businessName?: string; name?: string; gstin?: string }[]
+        >('/auth/organizations');
+        const orgs = (orgsRes.data ?? []).map((o) => ({
+          id: o.id,
+          name: o.businessName ?? o.name ?? 'My Business',
+          gstin: o.gstin,
+        }));
+        if (orgs.length > 0) setOrganizations(orgs);
+      } catch {
+        // Non-fatal — organizations can be fetched later.
       }
-      setOrganizations(orgs);
-    } catch {
-      // Non-fatal — organizations can be fetched later.
     }
   };
 

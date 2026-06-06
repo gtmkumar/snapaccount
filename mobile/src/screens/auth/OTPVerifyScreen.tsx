@@ -23,6 +23,7 @@ import { OTPInput, OTPResendTimer } from '../../components/forms/OTPInput';
 import { Colors } from '../../constants/colors';
 import { formatPhoneDisplay } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
+import { fetchServerUserType } from '../../lib/onboarding';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 import apiClient, { getApiError } from '../../lib/api';
 
@@ -36,7 +37,7 @@ interface OTPVerifyScreenProps {
 
 export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
   const { phone } = route.params;
-  const { setAuthenticated, setSession, setOrganizations } = useAuthStore();
+  const { setAuthenticated, setSession, setOrganizations, updateProfile } = useAuthStore();
 
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -76,7 +77,9 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
           id: userId,
           firebaseUid: '',
           phone,
-          userType: isNewUser ? null : ('business_owner' as const),
+          // Persona is resolved from the server for returning users (below) and
+          // chosen on PersonaSelection for new users — never hard-coded here.
+          userType: null,
           profileComplete: !isNewUser,
           aadhaarVerified: false,
           createdAt: new Date().toISOString(),
@@ -84,13 +87,17 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
 
         if (isNewUser) {
           // Keep the token for authenticated onboarding calls, but stay in the
-          // Auth stack until the business profile is completed.
+          // Auth stack until the user picks a persona and completes onboarding.
           setSession(firebaseCustomToken, profile, refreshToken ?? null);
-          navigation.replace('BusinessProfileWizard');
+          navigation.replace('PersonaSelection');
           return;
         }
 
         setAuthenticated(firebaseCustomToken, profile, refreshToken ?? null);
+
+        // Returning user — hydrate the real persona so navigation matches their type.
+        const serverType = await fetchServerUserType();
+        if (serverType) updateProfile({ userType: serverType });
 
         // Returning user — enrich profile + organizations, then enter the app.
         try {
@@ -122,7 +129,7 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
         }
       }
     },
-    [phone, navigation, setAuthenticated, setSession, setOrganizations],
+    [phone, navigation, setAuthenticated, setSession, setOrganizations, updateProfile],
   );
 
   const handleOTPComplete = useCallback(

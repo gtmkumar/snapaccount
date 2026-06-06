@@ -10,6 +10,8 @@ import { ChatStack } from './ChatStack';
 import { ITRDashboardScreen } from '../screens/itr/ITRDashboardScreen';
 import { RequestCallbackModalScreen } from '../screens/callbacks/RequestCallbackModalScreen';
 import { CallbackStatusScreen } from '../screens/callbacks/CallbackStatusScreen';
+import { TeamScreen } from '../screens/team/TeamScreen';
+import { AcceptInviteScreen } from '../screens/auth/AcceptInviteScreen';
 import type { CtaCategory, LinkedEntity } from '../components/callbacks/RequestCallbackCta';
 
 export type MoreStackParamList = {
@@ -34,6 +36,10 @@ export type MoreStackParamList = {
     prefillReason?: string;
   };
   CallbackStatus: { callbackId: string };
+  /** Owner-only team management (members + invites). Phase 2 org invite/join. */
+  Team: undefined;
+  /** Invitee org-join — reachable when already authenticated (deep link / manual). */
+  AcceptInvite: { token?: string } | undefined;
 };
 
 const Stack = createNativeStackNavigator<MoreStackParamList>();
@@ -59,6 +65,8 @@ export function MoreStack() {
         options={{ presentation: 'formSheet' }}
       />
       <Stack.Screen name="CallbackStatus" component={CallbackStatusScreen} />
+      <Stack.Screen name="Team" component={TeamScreen} />
+      <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
     </Stack.Navigator>
   );
 }

@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import type { NavigationContainerRef } from '@react-navigation/native';
+import type { LinkingOptions, NavigationContainerRef } from '@react-navigation/native';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { AuthNavigator } from './AuthNavigator';
 import { AppNavigator } from './AppNavigator';
@@ -16,6 +16,37 @@ import { wireNotificationRouter } from '../notifications/notificationRouter';
 
 // Configure foreground notification display at module level
 configureForegroundNotificationHandler();
+
+/**
+ * Deep-link config for the org-invite flow (Phase 2).
+ *
+ * `snapaccount://invite/{token}` → AcceptInvite (with the token route param).
+ * The same screen name is registered in BOTH navigators:
+ *   - unauthenticated: AcceptInvite lives at the top of the Auth stack.
+ *   - authenticated:   AcceptInvite lives inside MoreTab → MoreStack.
+ * Providing both nestings lets React Navigation resolve the path against whichever
+ * navigator is currently mounted.
+ */
+type RootLinkParamList = {
+  AcceptInvite: { token?: string } | undefined;
+  MoreTab: undefined;
+};
+
+const linking: LinkingOptions<RootLinkParamList> = {
+  prefixes: ['snapaccount://'],
+  config: {
+    screens: {
+      // Auth stack (unauthenticated)
+      AcceptInvite: 'invite/:token',
+      // App tab navigator (authenticated) — AcceptInvite nested under MoreTab/MoreStack
+      MoreTab: {
+        screens: {
+          AcceptInvite: 'invite/:token',
+        },
+      },
+    },
+  },
+};
 
 export function RootNavigator() {
   const { isAuthenticated, isLoading, setLoading } = useAuthStore();
@@ -58,7 +89,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer ref={navigationRef} onReady={handleNavigationReady}>
+    <NavigationContainer ref={navigationRef} linking={linking} onReady={handleNavigationReady}>
       {isAuthenticated ? <AppNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );
