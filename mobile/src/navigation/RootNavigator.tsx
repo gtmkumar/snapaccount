@@ -52,7 +52,8 @@ export function RootNavigator() {
   const navigationRef = useRef<NavigationContainerRef<Record<string, object | undefined>>>(null);
   // Build the linking config for the currently-mounted navigator so the
   // `invite/:token` pattern is declared exactly once (see buildLinking above).
-  const linking = React.useMemo(() => buildLinking(isAuthenticated), [isAuthenticated]);
+  // Cheap object literal — no useMemo needed (avoids a hook that complicates HMR).
+  const linking = buildLinking(isAuthenticated);
 
   // Wire push deep-link router once nav is ready
   const handleNavigationReady = () => {
