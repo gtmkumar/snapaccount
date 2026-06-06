@@ -201,7 +201,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100] },
   backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900], letterSpacing: -0.2 },
-  scrollContent: { padding: 16, gap: 16 },
+  // paddingBottom clears the bottom tab bar so the last items (Sign Out / Delete
+  // account) are reachable — without it the ScrollView ends behind the tab bar.
+  scrollContent: { padding: 16, gap: 16, paddingBottom: 120 },
 
   // Avatar section
   avatarSection: { alignItems: 'center', paddingVertical: 20 },
