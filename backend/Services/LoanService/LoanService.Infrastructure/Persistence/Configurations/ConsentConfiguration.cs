@@ -18,6 +18,13 @@ public sealed class ConsentConfiguration : IEntityTypeConfiguration<Consent>
             .HasMaxLength(30)
             .IsRequired();
         builder.Property(x => x.ConsentTextVersion).HasMaxLength(50).IsRequired();
+
+        // GAP-040 / P6-HANDOFF-25: locale of consent text shown (e.g. "en", "hi").
+        // Default "en" ensures backward compat with existing rows that pre-date this column.
+        builder.Property(x => x.ConsentLocale)
+            .HasMaxLength(10)
+            .HasDefaultValue("en")
+            .IsRequired();
         builder.Property(x => x.SignedAt).IsRequired();
         builder.Property(x => x.IpAddress).HasMaxLength(45);
         builder.Property(x => x.UserAgent).HasMaxLength(512);

@@ -429,6 +429,33 @@
         "responseSuccessBody": "Your response has been recorded.",
         "errorTitle": "Failed to submit",
         "errorBody": "Could not submit your response. Please try again."
+      },
+      "dashboard": {
+        "title": "ITR Filing",
+        "action": {
+          "startFiling": "Start Filing",
+          "docChecklist": "Doc Checklist",
+          "compareRegime": "Compare Regime"
+        },
+        "returnsTitle": "Your ITR Returns",
+        "empty": {
+          "title": "No ITR returns yet",
+          "body": "Start your ITR filing for {{fy}}. Upload Form 16 and other documents to get started."
+        },
+        "regime": {
+          "new": "New Tax Regime",
+          "old": "Old Tax Regime"
+        },
+        "features": {
+          "title": "ITR Filing Features",
+          "items": [
+            "Smart document checklist based on your profile",
+            "Old vs New regime comparison with AI recommendation",
+            "E-verification via Aadhaar OTP or net banking",
+            "Refund tracking timeline",
+            "Notice handling (143(1), 143(2), 139(9))"
+          ]
+        }
       }
     },
     "loan": {
@@ -963,7 +990,8 @@
         "confirmCta": "Delete My Account",
         "errorTitle": "Could not delete account",
         "errorBody": "Something went wrong. Please try again or contact support if the issue persists."
-      }
+      },
+      "title": "Profile"
     },
     "auth": {
       "common": {
@@ -1178,6 +1206,27 @@
         "shareCta": "Share invite",
         "shareMessage": "You have been invited to join an organization on SnapAccount. Tap to accept: {{link}}"
       }
+    },
+    "tabs": {
+      "home": "Home",
+      "documents": "Documents",
+      "gst": "GST",
+      "loans": "Loans",
+      "taxes": "Taxes",
+      "support": "Support",
+      "more": "More"
+    },
+    "more": {
+      "title": "More",
+      "defaultUserName": "SnapAccount User",
+      "expertChat": "Expert Chat",
+      "expertChatDesc": "Chat with CA experts",
+      "itrFiling": "ITR Filing",
+      "itrFilingDesc": "File income tax return",
+      "notifications": "Notifications",
+      "notificationsDesc": "Alerts & updates",
+      "profileSettings": "Profile & Settings",
+      "profileSettingsDesc": "Account settings"
     }
   }
 }

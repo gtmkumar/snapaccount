@@ -13,6 +13,10 @@ namespace LoanService.Application.LoanApplications.Commands.RecordConsent;
 /// Records a user's digital consent for a loan application.
 /// P6-HANDOFF-26: HMAC-SHA256 signature computed server-side using Secret Manager key.
 /// Signature payload: {user_id}|{app_id}|{consent_text_version}|{signed_at_iso8601}
+///
+/// GAP-040 / P6-HANDOFF-25: <see cref="ConsentLocale"/> records the exact locale of the
+/// consent text served to the user via GET /loans/consents/catalog, so the DPDP audit trail
+/// ties back to the precise language version the user reviewed (RBI + DPDP legal artifact).
 /// </summary>
 [RequiresPermission("loan.application.consent")]
 public record RecordConsentCommand(
@@ -20,7 +24,8 @@ public record RecordConsentCommand(
     ConsentType ConsentType,
     string ConsentTextVersion,
     string? IpAddress,
-    string? UserAgent) : ICommand<RecordConsentResponse>;
+    string? UserAgent,
+    string ConsentLocale = "en") : ICommand<RecordConsentResponse>;
 
 /// <summary>Response after recording consent.</summary>
 public record RecordConsentResponse(Guid ConsentId, DateTime SignedAt);
@@ -35,6 +40,11 @@ public sealed class RecordConsentCommandValidator : AbstractValidator<RecordCons
         RuleFor(x => x.ConsentTextVersion).NotEmpty().MaximumLength(50);
         RuleFor(x => x.IpAddress).MaximumLength(45);  // IPv6 max length
         RuleFor(x => x.UserAgent).MaximumLength(512);
+        // GAP-040: locale must be a non-empty BCP-47 tag (e.g. "en", "hi", "ta", "bn")
+        RuleFor(x => x.ConsentLocale)
+            .NotEmpty()
+            .MaximumLength(10)
+            .WithMessage("ConsentLocale must be a BCP-47 language tag (e.g. \"en\", \"hi\").");
     }
 }
 
@@ -71,6 +81,8 @@ public sealed class RecordConsentCommandHandler(
             ApplicationId = request.ApplicationId,
             ConsentType = request.ConsentType,
             ConsentTextVersion = request.ConsentTextVersion,
+            // GAP-040: record the locale served so DPDP audit trail is unambiguous.
+            ConsentLocale = string.IsNullOrWhiteSpace(request.ConsentLocale) ? "en" : request.ConsentLocale.Trim().ToLowerInvariant(),
             SignedAt = signedAt,
             IpAddress = request.IpAddress,
             UserAgent = request.UserAgent,

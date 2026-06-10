@@ -15,3 +15,4 @@
 - [Tasks #17/#18/#19 — 2FA/PwReset/KYC](project_tasks_17_18_19.md) — TOTP enroll/confirm/disable/challenge; password forgot/reset; KYC PAN+Aadhaar mock. 347 tests pass.
 - [Task #22 — Social Firebase Sign-In](project_task22_social_firebase.md) — POST /auth/social/firebase (Google/Apple); FirebaseTokenClaims DTO; IFirebaseAuthService extended; 367 tests pass.
 - [Task #24 — Gov Verification + Documents (Part A+B)](project_task24_gov_verification_documents.md) — Org toggle, 5 new endpoints, TanNumber VO, MockDocumentVerificationProvider (dual interface). 444 tests pass.
+- [Phase 7 Wave 1 — GAP fixes B1-B6](project_phase7_wave1.md) — Firebase revoke retry, RLS error log, JWT secret fail-fast, /auth/token/refresh-context, Callback KPI MV, consent locale. 575+35+90 tests green.

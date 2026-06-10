@@ -98,6 +98,9 @@ try
     // Auto-discover and register all EndpointGroupBase subclasses in this assembly
     app.MapEndpoints(Assembly.GetExecutingAssembly());
 
+    // GAP-005: Fail-fast in non-Development when SESSION_JWT_SECRET is absent.
+    SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);
+
     app.Run();
 }
 catch (Exception ex) { Log.Fatal(ex, "AiService failed to start."); }

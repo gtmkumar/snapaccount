@@ -107,6 +107,9 @@ public static class DependencyInjection
         services.AddScoped<IOtpService, OtpService>();
         services.AddScoped<IFirebaseAuthService, FirebaseAuthService>();
 
+        // GAP-003 / NEW-002: Firebase revoke retry scheduler — Hangfire-backed, observable in dashboard.
+        services.AddScoped<IFirebaseRevokeRetryScheduler, HangfireFirebaseRevokeRetryScheduler>();
+
         // SEC-013: PAN encryption service — AES-256 key from GCP Secret Manager
         services.AddSingleton<IPanEncryptionService, AesPanEncryptionService>();
 

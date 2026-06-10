@@ -497,3 +497,65 @@ export async function getNoticesDueSummary() {
   const res = await api.get('/gst/notices/due-summary')
   return NoticesDueWidgetDataSchema.parse(res.data)
 }
+
+// ---------------------------------------------------------------------------
+// Phase 7 Wave 1: ITC Reconciliation (GAP-011)
+// Endpoints:
+//   GET  /gst/itc-mismatches?organizationId=&status=   → GetItcMismatchesQuery
+//   POST /gst/itc-reconciliation                       → ReconcileItcCommand
+// ---------------------------------------------------------------------------
+
+/**
+ * ItcMismatchDto shape from GetItcMismatchesQuery handler:
+ *   Id, MismatchType, ClaimedAmount, AvailableAmount, DifferenceAmount, Status
+ */
+export const ItcMismatchSchema = z.object({
+  id: z.string().uuid(),
+  mismatchType: z.enum(['AMOUNT_MISMATCH', 'MISSING_IN_2B', 'EXCESS_CLAIM']),
+  claimedAmount: z.number(),
+  availableAmount: z.number(),
+  differenceAmount: z.number(),
+  status: z.enum(['OPEN', 'RESOLVED', 'IGNORED']),
+})
+
+export type ItcMismatch = z.infer<typeof ItcMismatchSchema>
+
+export const ItcMismatchListSchema = z.array(ItcMismatchSchema)
+
+export interface GetItcMismatchesParams {
+  organizationId: string
+  status?: string
+}
+
+/** GET /gst/itc-mismatches — returns all mismatches for an org, filtered by status. */
+export async function getItcMismatches(params: GetItcMismatchesParams): Promise<ItcMismatch[]> {
+  const res = await api.get('/gst/itc-mismatches', { params })
+  return ItcMismatchListSchema.parse(res.data)
+}
+
+/**
+ * ReconcileItcResponse shape from ReconcileItcCommand:
+ *   OrganizationId, FinancialYear, PeriodMonth, MismatchesDetected, TotalDifferenceAmount
+ */
+export const ReconcileItcResponseSchema = z.object({
+  organizationId: z.string().uuid(),
+  financialYear: z.string(),
+  periodMonth: z.number(),
+  mismatchesDetected: z.number(),
+  totalDifferenceAmount: z.number(),
+})
+
+export type ReconcileItcResponse = z.infer<typeof ReconcileItcResponseSchema>
+
+export interface ReconcileItcRequest {
+  organizationId: string
+  financialYear: string
+  periodMonth: number
+  reconciliationType?: 'GSTR_2A' | 'GSTR_2B'
+}
+
+/** POST /gst/itc-reconciliation — runs ITC reconciliation for an org+period. */
+export async function reconcileItc(body: ReconcileItcRequest): Promise<ReconcileItcResponse> {
+  const res = await api.post('/gst/itc-reconciliation', body)
+  return ReconcileItcResponseSchema.parse(res.data)
+}

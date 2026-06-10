@@ -1,12 +1,16 @@
+/**
+ * DocumentQueuePage — unit tests (Phase 7 rewrite)
+ *
+ * All tests mock the `documentApi` module — no inline mock data in the page.
+ * The RBAC helper mock from the original tests is preserved so permission-gating
+ * tests continue to work.
+ */
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router'
 
-// Action-level RBAC: the Review/Assign/Export actions are gated by the <Can>
-// component, which calls usePermission().hasServerPermission(). Mock it with a
-// controllable permission set so we can exercise both the permitted operator
-// case (buttons visible) and the stripped-user case (buttons hidden).
+// ── RBAC mock ───────────────────────────────────────────────────────────────
 const { perms } = vi.hoisted(() => ({
   perms: { loaded: true, granted: new Set<string>(['document.read', 'document.update']) },
 }))
@@ -21,53 +25,78 @@ vi.mock('@/hooks/usePermission', () => ({
   }),
 }))
 
-// We import the page lazily to avoid issues with dynamic imports in tests
-// The page uses useNavigate so it must be wrapped in MemoryRouter.
+// ── API mock — module-level (no inline data in page) ────────────────────────
+import * as documentApi from '@/lib/documentApi'
+
 import DocumentQueuePage from '@/pages/documents/DocumentQueuePage'
 
-/**
- * Tests for DocumentQueuePage.
- * Covers:
- * - Table rendering with mock data
- * - Status filter interaction
- * - SLA overdue items display a red/error indicator
- */
+// ── Fixtures ────────────────────────────────────────────────────────────────
+const recentUpload = new Date(Date.now() - 2 * 3600000).toISOString()
+const overdueUpload = new Date(Date.now() - 30 * 3600000).toISOString() // > 24h ago
 
-// ──────────────────────────────────────────────────────────────
-// Test wrapper — provides QueryClient + Router context
-// ──────────────────────────────────────────────────────────────
+const mockDocPage: documentApi.DocumentsPage = {
+  items: [
+    {
+      id: 'aaaaaaaa-0000-0000-0000-000000000001',
+      fileName: 'invoice_sharma.pdf',
+      status: 'OCR_COMPLETE',
+      vendorName: 'Sharma Trading Co.',
+      amount: 45000,
+      documentDate: '2026-03-31',
+      uploadedAt: recentUpload,
+    },
+    {
+      id: 'aaaaaaaa-0000-0000-0000-000000000002',
+      fileName: 'bank_statement_march.pdf',
+      status: 'UPLOADED',
+      vendorName: null,
+      amount: null,
+      documentDate: null,
+      uploadedAt: overdueUpload,
+    },
+    {
+      id: 'aaaaaaaa-0000-0000-0000-000000000003',
+      fileName: 'expense_receipt.jpg',
+      status: 'IN_REVIEW',
+      vendorName: 'Patel Textiles',
+      amount: 12500,
+      documentDate: '2026-03-28',
+      uploadedAt: recentUpload,
+    },
+  ],
+  totalCount: 3,
+  page: 1,
+  pageSize: 20,
+  totalPages: 1,
+  hasNextPage: false,
+  hasPreviousPage: false,
+}
 
-function createTestQueryClient() {
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
-      queries: {
-        retry: false,
-        staleTime: 0,
-      },
+      queries: { retry: false, gcTime: 0 },
     },
   })
 }
 
 function renderPage() {
-  const queryClient = createTestQueryClient()
   return render(
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={makeQueryClient()}>
       <MemoryRouter>
         <DocumentQueuePage />
       </MemoryRouter>
-    </QueryClientProvider>
+    </QueryClientProvider>,
   )
 }
 
-// ──────────────────────────────────────────────────────────────
-// Tests
-// ──────────────────────────────────────────────────────────────
-
-describe('DocumentQueuePage', () => {
+// ── Tests ────────────────────────────────────────────────────────────────────
+describe('DocumentQueuePage (real API)', () => {
   beforeEach(() => {
-    // Default: a genuine data-entry operator with the document permissions.
     perms.loaded = true
     perms.granted = new Set<string>(['document.read', 'document.update'])
+    vi.spyOn(documentApi, 'listDocuments').mockResolvedValue(mockDocPage)
   })
 
   it('renders the page heading', () => {
@@ -75,162 +104,134 @@ describe('DocumentQueuePage', () => {
     expect(screen.getByText('Document Queue')).toBeInTheDocument()
   })
 
-  it('renders the document queue table with columns', async () => {
+  it('calls listDocuments API on mount', async () => {
     renderPage()
-
-    // Wait for data to load (simulated 300ms delay in mock)
     await waitFor(() => {
-      expect(screen.getByRole('grid')).toBeInTheDocument()
-    })
-
-    // Check column headers exist
-    expect(screen.getByText(/Document ID/i)).toBeInTheDocument()
-    expect(screen.getByText(/User/i)).toBeInTheDocument()
-    expect(screen.getAllByText(/Status/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/SLA/i)).toBeInTheDocument()
-  })
-
-  it('renders mock document rows after data loads', async () => {
-    renderPage()
-
-    await waitFor(() => {
-      // Mock data contains "Rajesh Kumar" — verify it renders
-      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+      expect(documentApi.listDocuments).toHaveBeenCalledTimes(1)
     })
   })
 
-  it('shows all three statuses from mock data', async () => {
+  it('renders document rows from the API response', async () => {
     renderPage()
-
     await waitFor(() => {
-      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+      expect(screen.getByText('Sharma Trading Co.')).toBeInTheDocument()
     })
-
-    // Mock data has UPLOADED, OCR_COMPLETE, and IN_REVIEW rows
-    const statusBadges = screen.getAllByText(/OCR Complete|In Review|Uploaded/)
-    expect(statusBadges.length).toBeGreaterThan(0)
+    expect(screen.getByText('invoice_sharma.pdf')).toBeInTheDocument()
+    expect(screen.getByText('Patel Textiles')).toBeInTheDocument()
   })
 
-  it('renders SLA overdue indicator for breached SLA items', async () => {
+  it('renders OCR_COMPLETE, UPLOADED and IN_REVIEW status badges', async () => {
     renderPage()
-
     await waitFor(() => {
-      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+      expect(screen.getByText('Sharma Trading Co.')).toBeInTheDocument()
     })
-
-    // Mock data has one SLA-breached item (Arjun Verma)
-    const overdueBadge = screen.getByText('Overdue')
-    expect(overdueBadge).toBeInTheDocument()
-
-    // Overdue badge uses error variant — contains bg-error-50 class (design system uses -50 shade)
-    expect(overdueBadge.className).toContain('bg-error-50')
+    const statuses = screen.getAllByText(/OCR Complete|Uploaded|In Review/)
+    expect(statuses.length).toBeGreaterThan(0)
   })
 
-  it('shows SLA breach alert banner when there are overdue items', async () => {
+  it('shows SLA overdue badge for documents uploaded > 24h ago', async () => {
     renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('Sharma Trading Co.')).toBeInTheDocument()
+    })
+    // overdueUpload is 30h ago so SLA chip should show "Overdue"
+    expect(screen.getByText('Overdue')).toBeInTheDocument()
+  })
 
+  it('shows SLA breach alert banner when overdue documents exist', async () => {
+    renderPage()
     await waitFor(() => {
       expect(screen.getByText('SLA Breaches Detected')).toBeInTheDocument()
     })
-
-    // Alert banner is rendered as role="alert"
     expect(screen.getByRole('alert')).toBeInTheDocument()
   })
 
-  it('filter by status select exists and can be changed', async () => {
+  it('shows total count in subtitle from API response', async () => {
     renderPage()
-
     await waitFor(() => {
-      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+      expect(screen.getByText(/3 documents pending review/)).toBeInTheDocument()
     })
+  })
 
-    const statusSelect = screen.getByLabelText('Filter by status')
+  it('status filter select exists and can be changed', async () => {
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('Sharma Trading Co.')).toBeInTheDocument()
+    })
+    const statusSelect = screen.getByRole('combobox', { name: /status/i })
     expect(statusSelect).toBeInTheDocument()
-
     fireEvent.change(statusSelect, { target: { value: 'UPLOADED' } })
     expect((statusSelect as HTMLSelectElement).value).toBe('UPLOADED')
   })
 
-  it('category filter select exists and responds to changes', async () => {
+  it('OCR confidence filter select exists', async () => {
     renderPage()
-
     await waitFor(() => {
-      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+      expect(screen.getByText('Sharma Trading Co.')).toBeInTheDocument()
     })
-
-    const categorySelect = screen.getByLabelText('Filter by category')
-    expect(categorySelect).toBeInTheDocument()
-
-    fireEvent.change(categorySelect, { target: { value: 'sales-bill' } })
-    expect((categorySelect as HTMLSelectElement).value).toBe('sales-bill')
+    const ocrSelect = screen.getByRole('combobox', { name: /OCR Confidence/i })
+    expect(ocrSelect).toBeInTheDocument()
   })
 
-  it('renders Review and Assign action buttons for each row', async () => {
+  it('renders Review buttons for each row when user has document.read', async () => {
     renderPage()
-
     await waitFor(() => {
-      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+      expect(screen.getByText('Sharma Trading Co.')).toBeInTheDocument()
     })
-
-    // Multiple "Review" buttons — one per row
     const reviewButtons = screen.getAllByRole('button', { name: 'Review' })
     expect(reviewButtons.length).toBeGreaterThan(0)
   })
 
-  it('renders Export button in page header', async () => {
+  it('renders Assign buttons when user has document.update', async () => {
     renderPage()
-
-    expect(screen.getByRole('button', { name: /Export/i })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Sharma Trading Co.')).toBeInTheDocument()
+    })
+    const assignButtons = screen.getAllByRole('button', { name: 'Assign' })
+    expect(assignButtons.length).toBeGreaterThan(0)
   })
 
-  it('hides Review/Assign/Export when the user lacks document permissions', async () => {
-    // Stripped user: only menu.documents.view (no document.read / document.update).
+  it('hides Review/Assign/Export buttons when user has no document permissions', async () => {
     perms.granted = new Set<string>()
     renderPage()
-
     await waitFor(() => {
-      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+      expect(screen.getByText('Sharma Trading Co.')).toBeInTheDocument()
     })
-
     expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Assign' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Export/i })).not.toBeInTheDocument()
   })
 
-  it('shows Review but hides Assign for a read-only user', async () => {
+  it('shows Review but hides Assign for read-only user', async () => {
     perms.granted = new Set<string>(['document.read'])
     renderPage()
-
     await waitFor(() => {
-      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+      expect(screen.getByText('Sharma Trading Co.')).toBeInTheDocument()
     })
-
     expect(screen.getAllByRole('button', { name: 'Review' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'Assign' })).not.toBeInTheDocument()
   })
 
-  it('renders OCR confidence percentage for each document', async () => {
+  it('shows an error banner and retry when listDocuments rejects', async () => {
+    vi.spyOn(documentApi, 'listDocuments').mockRejectedValue(new Error('Network error'))
     renderPage()
-
     await waitFor(() => {
-      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+      expect(screen.getByText('Failed to load document queue')).toBeInTheDocument()
     })
-
-    // First mock doc has 92% confidence
-    expect(screen.getByText('92%')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
   })
 
-  it('unassigned documents show warning-coloured "Unassigned" label', async () => {
+  it('re-calls listDocuments with status param when filter changes', async () => {
     renderPage()
-
     await waitFor(() => {
-      expect(screen.getByText('Rajesh Kumar')).toBeInTheDocument()
+      expect(documentApi.listDocuments).toHaveBeenCalledTimes(1)
     })
-
-    // Multiple unassigned rows in mock data
-    const unassigned = screen.getAllByText('Unassigned')
-    expect(unassigned.length).toBeGreaterThan(0)
-    // Unassigned text has text-warning-600 class
-    expect(unassigned[0].className).toContain('text-warning-600')
+    const statusSelect = screen.getByRole('combobox', { name: /status/i })
+    fireEvent.change(statusSelect, { target: { value: 'UPLOADED' } })
+    await waitFor(() => {
+      expect(documentApi.listDocuments).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'UPLOADED' }),
+      )
+    })
   })
 })

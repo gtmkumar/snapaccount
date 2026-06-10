@@ -37,8 +37,8 @@ export function MoreScreen({ navigation }: Props) {
     color: string;
     desc: string;
   }[] = [
-    { label: 'Expert Chat', icon: 'chatbubble-ellipses-outline', route: 'Chat', color: Colors.brand[500], desc: 'Chat with CA experts' },
-    { label: 'ITR Filing', icon: 'document-text-outline', route: 'ITRDashboard', color: Colors.itr, desc: 'File income tax return' },
+    { label: t('mobile.more.expertChat'), icon: 'chatbubble-ellipses-outline', route: 'Chat', color: Colors.brand[500], desc: t('mobile.more.expertChatDesc') },
+    { label: t('mobile.more.itrFiling'), icon: 'document-text-outline', route: 'ITRDashboard', color: Colors.itr, desc: t('mobile.more.itrFilingDesc') },
     // Phase 2: business owners can manage their team (members + invites).
     ...(isOwner
       ? [{
@@ -49,14 +49,14 @@ export function MoreScreen({ navigation }: Props) {
           desc: t('mobile.team.menuDesc'),
         }]
       : []),
-    { label: 'Notifications', icon: 'notifications-outline', route: 'NotificationCenter', color: Colors.accent[500], desc: 'Alerts & updates' },
-    { label: 'Profile & Settings', icon: 'person-circle-outline', route: 'Profile', color: Colors.neutral[600], desc: 'Account settings' },
+    { label: t('mobile.more.notifications'), icon: 'notifications-outline', route: 'NotificationCenter', color: Colors.accent[500], desc: t('mobile.more.notificationsDesc') },
+    { label: t('mobile.more.profileSettings'), icon: 'person-circle-outline', route: 'Profile', color: Colors.neutral[600], desc: t('mobile.more.profileSettingsDesc') },
   ];
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>More</Text>
+        <Text style={styles.headerTitle}>{t('mobile.more.title')}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -69,7 +69,7 @@ export function MoreScreen({ navigation }: Props) {
               </Text>
             </View>
             <View style={styles.userInfo}>
-              <Text style={styles.userName}>{user?.name ?? 'SnapAccount User'}</Text>
+              <Text style={styles.userName}>{user?.name ?? t('mobile.more.defaultUserName')}</Text>
               <Text style={styles.userPhone}>{normalizePhone(user?.phone)}</Text>
             </View>
             <Pressable

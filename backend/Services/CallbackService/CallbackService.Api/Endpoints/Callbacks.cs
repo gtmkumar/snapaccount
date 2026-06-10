@@ -1,5 +1,6 @@
 using CallbackService.Application.Callbacks.Commands.AddNote;
 using CallbackService.Application.Dashboard.Queries.GetDashboardStats;
+using CallbackService.Application.Dashboard.Queries.GetKpiSnapshot;
 using CallbackService.Application.Dashboard.Queries.GetWorkloadByUser;
 using CallbackService.Application.Callbacks.Commands.AssignCallback;
 using CallbackService.Application.Callbacks.Commands.CancelCallback;
@@ -235,17 +236,30 @@ public sealed class Callbacks : EndpointGroupBase
         return result.IsSuccess ? Results.Created() : Results.BadRequest(new { error = result.Error.Message });
     }
 
-    private static IResult GetKpiSnapshot(ICurrentUser currentUser)
+    // GET /callbacks/kpi [Authorize] — GAP-012: real query over callback.kpi_daily_snapshot MV
+    private static async Task<IResult> GetKpiSnapshot(
+        ICurrentUser currentUser,
+        ISender sender,
+        int daysBack = 30,
+        CancellationToken ct = default)
     {
-        // P6-HANDOFF-04: callback.kpi_daily_snapshot is a MV with no RLS.
-        // Full KPI query implementation requires direct SQL against the MV.
-        // Returning a placeholder — full implementation requires db-engineer MV confirmation.
         if (!currentUser.IsAuthenticated) return Results.Unauthorized();
-        return Results.Ok(new
-        {
-            message = "KPI snapshot endpoint live. MV query pending db-engineer confirmation of kpi_daily_snapshot schema.",
-            organizationId = currentUser.OrganizationId
-        });
+
+        // P6-HANDOFF-04: OrganizationId ALWAYS comes from the caller's JWT claims —
+        // never from a query parameter — so cross-org reads (IDOR) are impossible.
+        var orgId = currentUser.OrganizationId;
+        if (!orgId.HasValue || orgId == Guid.Empty)
+            return Results.Problem(
+                "Organisation context missing from session. " +
+                "Complete business onboarding and call POST /auth/token/refresh-context first.",
+                statusCode: 422);
+
+        var clampedDays = Math.Clamp(daysBack, 1, 90);
+        var result = await sender.Send(new GetKpiSnapshotQuery(orgId.Value, clampedDays), ct);
+
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.ToHttpResult();
     }
 }
 

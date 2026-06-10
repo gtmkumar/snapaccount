@@ -16,6 +16,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Colors } from '../constants/colors';
 import { useAuthStore } from '../store/authStore';
 
@@ -74,6 +75,7 @@ export function AppNavigator() {
   // Salaried individuals (UserType=employee) get the ITR-centric tab set; everyone
   // else (business owners, and any pre-persona/default account) gets the SME set.
   const isIndividual = useAuthStore((s) => s.user?.userType === 'employee');
+  const { t } = useTranslation();
 
   const documentsTab = (
     <Tab.Screen
@@ -84,7 +86,7 @@ export function AppNavigator() {
           <TabIcon
             iconName="folder-outline"
             iconNameFocused="folder"
-            label="Documents"
+            label={t('mobile.tabs.documents')}
             focused={focused}
           />
         ),
@@ -101,7 +103,7 @@ export function AppNavigator() {
           <TabIcon
             iconName="menu-outline"
             iconNameFocused="menu"
-            label="More"
+            label={t('mobile.tabs.more')}
             focused={focused}
           />
         ),
@@ -127,7 +129,7 @@ export function AppNavigator() {
                 <TabIcon
                   iconName="document-text-outline"
                   iconNameFocused="document-text"
-                  label="Taxes"
+                  label={t('mobile.tabs.taxes')}
                   focused={focused}
                 />
               ),
@@ -142,7 +144,7 @@ export function AppNavigator() {
                 <TabIcon
                   iconName="chatbubble-ellipses-outline"
                   iconNameFocused="chatbubble-ellipses"
-                  label="Support"
+                  label={t('mobile.tabs.support')}
                   focused={focused}
                 />
               ),
@@ -160,7 +162,7 @@ export function AppNavigator() {
                 <TabIcon
                   iconName="home-outline"
                   iconNameFocused="home"
-                  label="Home"
+                  label={t('mobile.tabs.home')}
                   focused={focused}
                 />
               ),
@@ -175,7 +177,7 @@ export function AppNavigator() {
                 <TabIcon
                   iconName="bar-chart-outline"
                   iconNameFocused="bar-chart"
-                  label="GST"
+                  label={t('mobile.tabs.gst')}
                   focused={focused}
                 />
               ),
@@ -189,7 +191,7 @@ export function AppNavigator() {
                 <TabIcon
                   iconName="business-outline"
                   iconNameFocused="business"
-                  label="Loans"
+                  label={t('mobile.tabs.loans')}
                   focused={focused}
                 />
               ),

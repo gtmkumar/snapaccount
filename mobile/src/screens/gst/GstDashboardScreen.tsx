@@ -5,9 +5,7 @@
 
 import React from 'react';
 import {
-  Alert,
   Platform,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -15,7 +13,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery } from '@tanstack/react-query';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -83,13 +80,7 @@ export function GstDashboardScreen({ navigation }: Props) {
             <Text style={styles.gstinValue}>{summary.gstin}</Text>
           )}
         </View>
-        <Pressable
-          style={styles.headerBtn}
-          accessibilityLabel="Deadline calendar"
-          onPress={() => Alert.alert('Coming Soon', 'Calendar view coming soon.')}
-        >
-          <Ionicons name="calendar-outline" size={20} color={Colors.neutral[600]} />
-        </Pressable>
+        {/* Calendar view not yet implemented — hidden until a dedicated screen exists */}
       </View>
 
       <ScrollView
@@ -180,13 +171,11 @@ export function GstDashboardScreen({ navigation }: Props) {
             <ReturnCard
               key={ret.id}
               ret={ret}
-              onPress={() => {
-                if (ret.type === 'GSTR-3B') {
-                  navigation.navigate('Gstr3b', { returnId: ret.id, period: ret.period });
-                } else {
-                  Alert.alert('Coming Soon', 'GSTR-1 filing will be available soon.');
-                }
-              }}
+              onPress={
+                ret.type === 'GSTR-3B'
+                  ? () => navigation.navigate('Gstr3b', { returnId: ret.id, period: ret.period })
+                  : undefined
+              }
             />
           ))
         )}
@@ -209,13 +198,13 @@ function SummaryCard({ label, amount, iconName, iconColor, bg }: {
   );
 }
 
-function ReturnCard({ ret, onPress }: { ret: GstReturn; onPress: () => void }) {
+function ReturnCard({ ret, onPress }: { ret: GstReturn; onPress?: () => void }) {
   const days = daysUntil(ret.dueDate);
   const isOverdue = days < 0;
   const isUrgent = days >= 0 && days <= 7;
 
   return (
-    <Card shadow="sm" style={styles.returnCard} clickable onPress={onPress}>
+    <Card shadow="sm" style={styles.returnCard} clickable={!!onPress} onPress={onPress}>
       <View style={styles.returnCardHeader}>
         <View style={styles.returnTypeRow}>
           <View style={styles.returnTypeBadge}>
@@ -259,13 +248,15 @@ function ReturnCard({ ret, onPress }: { ret: GstReturn; onPress: () => void }) {
         </View>
       )}
 
-      <Button
-        label={ret.type === 'GSTR-3B' ? 'Review & File' : 'View Return'}
-        onPress={onPress}
-        size="sm"
-        variant={ret.type === 'GSTR-3B' ? 'primary' : 'secondary'}
-        fullWidth
-      />
+      {onPress && (
+        <Button
+          label={ret.type === 'GSTR-3B' ? 'Review & File' : 'View Return'}
+          onPress={onPress}
+          size="sm"
+          variant="primary"
+          fullWidth
+        />
+      )}
     </Card>
   );
 }

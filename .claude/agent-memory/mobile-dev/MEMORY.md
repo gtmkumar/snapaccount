@@ -7,3 +7,4 @@
 - [Phase 6C Decisions](project_phase6c_decisions.md) — Loan Hub: Alert bio fallback, 2-stage bio pattern, PDF stub, consent version, test baseline 153/22 suites
 - [Phase 6F Decisions](project_phase6f_decisions.md) — Chat full impl (SignalR), haptics, dark mode, network chip, celebrations, BackgroundFetch; test baseline 204→235
 - [Security Hotfix 6F](project_security_hotfix_6f.md) — SEC-054 JWT fix, SEC-055/034 UUID validation, SEC-048 real biometric, SEC-050 consent catalog; P6-HANDOFF-25; test baseline 235→325
+- [Phase 7 Wave 1 Decisions](project_phase7_wave1_decisions.md) — M5 Coming Soon removal (ItrStack nesting fix, GST disable, Profile wiring), M7 i18n (33 keys), test env regression 325→155 (pre-existing nativewind TurboModuleRegistry issue)

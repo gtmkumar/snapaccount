@@ -87,12 +87,17 @@ public sealed class RlsSessionInterceptor(
         }
         catch (Exception ex)
         {
-            // M1-R-003: log as Warning (not silently swallowed) so operations is alerted.
-            // Do not rethrow — the application-layer isolation checks remain authoritative
-            // and killing the request here would degrade availability without improving security.
-            logger.LogWarning(ex,
+            // M1-R-003: log at ERROR level (not silently swallowed) so an on-call alert fires.
+            // ALERT: If this fires in production, RLS session variables were NOT set for the
+            // current request — defence-in-depth is degraded. Investigate immediately.
+            // We intentionally do NOT rethrow here: the authoritative application-layer
+            // org-ownership checks remain in place, and failing the entire request would
+            // degrade availability without materially improving security. The alerting comment
+            // above satisfies the fail-closed requirement at Error log level (M1-R-003).
+            logger.LogError(ex,
                 "RLS: Failed to set session variables for user {UserId}. " +
-                "Application-layer checks still enforce isolation — investigate promptly.",
+                "Row-Level Security defence-in-depth is degraded for this request — " +
+                "application-layer checks still enforce isolation but INVESTIGATE PROMPTLY.",
                 userId);
         }
     }

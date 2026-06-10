@@ -135,6 +135,11 @@ try
     // Auto-discover and register all EndpointGroupBase subclasses in this assembly
     app.MapEndpoints(Assembly.GetExecutingAssembly());
 
+    // GAP-005: Fail-fast in non-Development when SESSION_JWT_SECRET is absent.
+    // A missing secret would cause the service to silently accept tokens signed with the
+    // well-known repo default key (auth bypass risk). Dev is intentionally unaffected.
+    SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);
+
     // LOCAL_AUTH: idempotently seed a dev admin (admin@snapaccount.local) for local login.
     var localAuthEnabled =
         string.Equals(app.Configuration["LOCAL_AUTH"], "true", StringComparison.OrdinalIgnoreCase) ||

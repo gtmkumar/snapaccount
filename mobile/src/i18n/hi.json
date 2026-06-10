@@ -429,6 +429,33 @@
         "responseSuccessBody": "आपका जवाब दर्ज कर लिया गया है।",
         "errorTitle": "सबमिट करने में विफल",
         "errorBody": "आपका जवाब सबमिट नहीं हो सका। कृपया पुनः प्रयास करें।"
+      },
+      "dashboard": {
+        "title": "ITR दाखिल करें",
+        "action": {
+          "startFiling": "दाखिल शुरू करें",
+          "docChecklist": "दस्तावेज़ सूची",
+          "compareRegime": "व्यवस्था तुलना"
+        },
+        "returnsTitle": "आपके ITR रिटर्न",
+        "empty": {
+          "title": "अभी तक कोई ITR रिटर्न नहीं",
+          "body": "{{fy}} के लिए अपना ITR दाखिल करना शुरू करें। Form 16 और अन्य दस्तावेज़ अपलोड करें।"
+        },
+        "regime": {
+          "new": "नई कर व्यवस्था",
+          "old": "पुरानी कर व्यवस्था"
+        },
+        "features": {
+          "title": "ITR दाखिल करने की सुविधाएं",
+          "items": [
+            "आपकी प्रोफ़ाइल के आधार पर स्मार्ट दस्तावेज़ सूची",
+            "AI अनुशंसा के साथ पुरानी बनाम नई व्यवस्था तुलना",
+            "आधार OTP या नेट बैंकिंग से ई-सत्यापन",
+            "रिफंड ट्रैकिंग टाइमलाइन",
+            "नोटिस प्रबंधन (143(1), 143(2), 139(9))"
+          ]
+        }
       }
     },
     "loan": {
@@ -963,7 +990,8 @@
         "confirmCta": "मेरा खाता हटाएं",
         "errorTitle": "खाता हटाया नहीं जा सका",
         "errorBody": "कुछ गड़बड़ हो गई। कृपया पुनः प्रयास करें या सहायता से संपर्क करें।"
-      }
+      },
+      "title": "प्रोफ़ाइल"
     },
     "auth": {
       "common": {
@@ -1178,6 +1206,27 @@
         "shareCta": "Share invite",
         "shareMessage": "You have been invited to join an organization on SnapAccount. Tap to accept: {{link}}"
       }
+    },
+    "tabs": {
+      "home": "होम",
+      "documents": "दस्तावेज़",
+      "gst": "जीएसटी",
+      "loans": "ऋण",
+      "taxes": "कर",
+      "support": "सहायता",
+      "more": "अधिक"
+    },
+    "more": {
+      "title": "अधिक",
+      "defaultUserName": "SnapAccount उपयोगकर्ता",
+      "expertChat": "विशेषज्ञ चैट",
+      "expertChatDesc": "CA विशेषज्ञों से चैट करें",
+      "itrFiling": "ITR दाखिल करें",
+      "itrFilingDesc": "आयकर रिटर्न दाखिल करें",
+      "notifications": "सूचनाएं",
+      "notificationsDesc": "अलर्ट और अपडेट",
+      "profileSettings": "प्रोफ़ाइल और सेटिंग",
+      "profileSettingsDesc": "खाता सेटिंग"
     }
   }
 }

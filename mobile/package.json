@@ -45,7 +45,11 @@
       "^expo-store-review$": "<rootDir>/src/__mocks__/expoStoreReview.ts",
       "^expo-screen-capture$": "<rootDir>/src/__mocks__/expoScreenCapture.ts",
       "^expo-constants$": "<rootDir>/src/__mocks__/expoConstants.ts",
-      "^expo-local-authentication$": "<rootDir>/src/__mocks__/expoLocalAuthentication.ts"
+      "^expo-local-authentication$": "<rootDir>/src/__mocks__/expoLocalAuthentication.ts",
+      "^react-native-safe-area-context$": "<rootDir>/src/__mocks__/reactNativeSafeAreaContext.js",
+      "^react-native/src/private/featureflags/specs/NativeReactNativeFeatureFlags$": "<rootDir>/src/__mocks__/nativeFeatureFlags.js",
+      "^react-native/src/private/featureflags/ReactNativeFeatureFlagsBase$": "<rootDir>/src/__mocks__/nativeFeatureFlags.js",
+      "^react-native/src/private/featureflags/ReactNativeFeatureFlags$": "<rootDir>/src/__mocks__/nativeFeatureFlags.js"
     }
   },
   "dependencies": {

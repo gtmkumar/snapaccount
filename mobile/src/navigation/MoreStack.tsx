@@ -7,7 +7,7 @@ import { IdentityDocumentsScreen } from '../screens/profile/IdentityDocumentsScr
 import { NotificationPreferencesScreen } from '../screens/profile/NotificationPreferencesScreen';
 import { NotificationCenterScreen } from '../screens/notifications/NotificationCenterScreen';
 import { ChatStack } from './ChatStack';
-import { ITRDashboardScreen } from '../screens/itr/ITRDashboardScreen';
+import { ItrStack } from './ItrStack';
 import { RequestCallbackModalScreen } from '../screens/callbacks/RequestCallbackModalScreen';
 import { CallbackStatusScreen } from '../screens/callbacks/CallbackStatusScreen';
 import { TeamScreen } from '../screens/team/TeamScreen';
@@ -57,8 +57,8 @@ export function MoreStack() {
       <Stack.Screen name="Chat" component={ChatStack} />
       {/* ChatList kept for any existing navigate('ChatList') call sites */}
       <Stack.Screen name="ChatList" component={ChatStack} />
-      {/* ITRDashboard — entry point into ItrStack (full phase 6D stack via ItrStack.tsx) */}
-      <Stack.Screen name="ITRDashboard" component={ITRDashboardScreen} />
+      {/* ITRDashboard — mounts the full ItrStack so all ITR routes are accessible */}
+      <Stack.Screen name="ITRDashboard" component={ItrStack} />
       <Stack.Screen
         name="RequestCallbackModal"
         component={RequestCallbackModalScreen}

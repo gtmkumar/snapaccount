@@ -15,5 +15,11 @@ public interface ICallbackDbContext
     /// <summary>SEC-030: callback.assignments_log audit rows.</summary>
     DbSet<AssignmentLog> AssignmentLogs { get; }
 
+    /// <summary>
+    /// GAP-012: read-only projection of <c>callback.kpi_daily_snapshot</c> Materialized View.
+    /// Never used in Add/Update/Delete — keyless entity.
+    /// </summary>
+    DbSet<KpiDailySnapshot> KpiSnapshots { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

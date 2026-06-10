@@ -9,7 +9,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Colors } from '../../constants/colors';
 import { useAuthStore } from '../../store/authStore';
@@ -86,7 +85,7 @@ export function ProfileScreen({ navigation }: Props) {
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
         </Pressable>
-        <Text style={styles.title}>Profile</Text>
+        <Text style={styles.title}>{t('mobile.profile.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -98,7 +97,7 @@ export function ProfileScreen({ navigation }: Props) {
               {(user?.name ?? user?.phone ?? 'U').charAt(0).toUpperCase()}
             </Text>
           </View>
-          <Text style={styles.userName}>{user?.name ?? 'SnapAccount User'}</Text>
+          <Text style={styles.userName}>{user?.name ?? t('mobile.more.defaultUserName')}</Text>
           <Text style={styles.userPhone}>{normalizePhone(user?.phone)}</Text>
           {user?.userType && (
             <View style={styles.userTypePill}>
@@ -133,23 +132,29 @@ export function ProfileScreen({ navigation }: Props) {
         {/* Menu items */}
         <Card shadow="sm" padding="none" style={styles.menuCard}>
           {([
-            { label: t('mobile.profile.menu.editBusiness'), icon: 'business-outline', color: Colors.brand[500] },
+            // Edit Business — hidden until a business edit mode is implemented
             { label: t('mobile.profile.menu.identityDocuments'), icon: 'document-attach-outline', color: Colors.accent[600], route: 'IdentityDocuments' },
             { label: t('mobile.profile.menu.manageDevices'), icon: 'phone-portrait-outline', color: Colors.info[500], route: 'Devices' },
             { label: t('mobile.profile.menu.language'), icon: 'language-outline', color: Colors.accent[500], route: 'NotificationPreferences' },
             { label: t('mobile.profile.menu.notifications'), icon: 'notifications-outline', color: Colors.warning[500], route: 'NotificationPreferences' },
-            { label: t('mobile.profile.menu.billing'), icon: 'card-outline', color: Colors.success[500] },
-            { label: t('mobile.profile.menu.help'), icon: 'help-circle-outline', color: Colors.neutral[500] },
+            // Billing — disabled until Subscription screen (M6) lands; tap is a no-op
+            { label: t('mobile.profile.menu.billing'), icon: 'card-outline', color: Colors.success[500], disabled: true },
+            // Help — routes to the Chat/CA support flow
+            { label: t('mobile.profile.menu.help'), icon: 'help-circle-outline', color: Colors.neutral[500], route: 'Chat' },
             { label: t('mobile.profile.menu.about'), icon: 'information-circle-outline', color: Colors.neutral[500] },
-          ] as { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string; route?: keyof MoreStackParamList }[]).map((item, idx, arr) => (
+          ] as { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string; route?: keyof MoreStackParamList; disabled?: boolean }[]).map((item, idx, arr) => (
             <Pressable
               key={item.label}
-              style={[styles.menuItem, idx === arr.length - 1 && { borderBottomWidth: 0 }]}
-              onPress={() =>
-                item.route
-                  ? navigation.navigate(item.route as 'Devices')
-                  : Alert.alert(t('mobile.common.ok'), `${item.label}`)
-              }
+              style={[
+                styles.menuItem,
+                idx === arr.length - 1 && { borderBottomWidth: 0 },
+                item.disabled && styles.menuItemDisabled,
+              ]}
+              disabled={item.disabled}
+              onPress={() => {
+                if (item.disabled || !item.route) return;
+                navigation.navigate(item.route as 'Devices');
+              }}
             >
               <View style={[styles.menuItemIconWrap, { backgroundColor: item.color + '12' }]}>
                 <Ionicons name={item.icon} size={18} color={item.color} />
@@ -228,6 +233,7 @@ const styles = StyleSheet.create({
   // Menu
   menuCard: { overflow: 'hidden', borderRadius: 18 },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100], gap: 12 },
+  menuItemDisabled: { opacity: 0.4 },
   menuItemIconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   menuItemLabel: { flex: 1, fontSize: 15, color: Colors.neutral[800], letterSpacing: -0.1 },
 

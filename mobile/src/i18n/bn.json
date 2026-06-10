@@ -429,6 +429,33 @@
         "responseSuccessBody": "আপনার উত্তর নথিভুক্ত করা হয়েছে।",
         "errorTitle": "জমা ব্যর্থ",
         "errorBody": "আপনার উত্তর জমা করা যায়নি। আবার চেষ্টা করুন।"
+      },
+      "dashboard": {
+        "title": "ITR দাখিল",
+        "action": {
+          "startFiling": "দাখিল শুরু করুন",
+          "docChecklist": "নথি তালিকা",
+          "compareRegime": "রেজিম তুলনা"
+        },
+        "returnsTitle": "আপনার ITR রিটার্ন",
+        "empty": {
+          "title": "এখনো কোনো ITR রিটার্ন নেই",
+          "body": "{{fy}}-এর জন্য আপনার ITR দাখিল শুরু করুন। Form 16 এবং অন্যান্য নথি আপলোড করুন।"
+        },
+        "regime": {
+          "new": "নতুন কর ব্যবস্থা",
+          "old": "পুরনো কর ব্যবস্থা"
+        },
+        "features": {
+          "title": "ITR দাখিলের সুবিধাসমূহ",
+          "items": [
+            "আপনার প্রোফাইলের উপর ভিত্তি করে স্মার্ট নথি তালিকা",
+            "AI সুপারিশসহ পুরনো বনাম নতুন রেজিম তুলনা",
+            "আধার OTP বা নেট ব্যাংকিংয়ের মাধ্যমে ই-যাচাই",
+            "রিফান্ড ট্র্যাকিং টাইমলাইন",
+            "নোটিশ পরিচালনা (143(1), 143(2), 139(9))"
+          ]
+        }
       }
     },
     "loan": {
@@ -963,7 +990,8 @@
         "confirmCta": "আমার অ্যাকাউন্ট মুছুন",
         "errorTitle": "অ্যাকাউন্ট মুছতে পারেনি",
         "errorBody": "কিছু একটা ভুল হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন বা সহায়তায় যোগাযোগ করুন।"
-      }
+      },
+      "title": "প্রোফাইল"
     },
     "auth": {
       "common": {
@@ -1178,6 +1206,27 @@
         "shareCta": "Share invite",
         "shareMessage": "You have been invited to join an organization on SnapAccount. Tap to accept: {{link}}"
       }
+    },
+    "tabs": {
+      "home": "হোম",
+      "documents": "নথিপত্র",
+      "gst": "জিএসটি",
+      "loans": "ঋণ",
+      "taxes": "কর",
+      "support": "সহায়তা",
+      "more": "আরো"
+    },
+    "more": {
+      "title": "আরো",
+      "defaultUserName": "SnapAccount ব্যবহারকারী",
+      "expertChat": "বিশেষজ্ঞ চ্যাট",
+      "expertChatDesc": "CA বিশেষজ্ঞদের সাথে চ্যাট করুন",
+      "itrFiling": "ITR দাখিল",
+      "itrFilingDesc": "আয়কর রিটার্ন দাখিল করুন",
+      "notifications": "বিজ্ঞপ্তি",
+      "notificationsDesc": "সতর্কতা এবং আপডেট",
+      "profileSettings": "প্রোফাইল ও সেটিংস",
+      "profileSettingsDesc": "অ্যাকাউন্ট সেটিংস"
     }
   }
 }

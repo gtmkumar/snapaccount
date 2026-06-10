@@ -227,7 +227,7 @@ public sealed class Loans : EndpointGroupBase
         var ip = http.Connection.RemoteIpAddress?.ToString();
         var ua = http.Request.Headers.UserAgent.ToString();
         var result = await sender.Send(
-            new RecordConsentCommand(id, req.ConsentType, req.ConsentTextVersion, ip, ua), ct);
+            new RecordConsentCommand(id, req.ConsentType, req.ConsentTextVersion, ip, ua, req.ConsentLocale), ct);
         return result.IsSuccess
             ? Results.Created($"/loans/applications/{id}/consents/{result.Value.ConsentId}", result.Value)
             : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
@@ -390,10 +390,18 @@ internal record UpdateApplicationRequest(decimal? RequestedAmount, int? TenureMo
 /// <summary>Request body for attaching a document.</summary>
 internal record AttachDocumentRequest(Guid DocumentId, LoanService.Domain.Entities.ApplicationDocumentType DocumentType);
 
-/// <summary>Request body for recording consent.</summary>
+/// <summary>
+/// Request body for recording consent.
+/// <para>
+/// <c>ConsentLocale</c> — BCP-47 locale tag (e.g. "en", "hi") identifying the language of the
+/// consent text that was displayed to the user. Obtained from the <c>locale</c> field returned by
+/// GET /loans/consents/catalog. Defaults to "en". Required for DPDP / RBI audit trail (GAP-040).
+/// </para>
+/// </summary>
 internal record RecordConsentRequest(
     LoanService.Domain.Entities.ConsentType ConsentType,
-    string ConsentTextVersion);
+    string ConsentTextVersion,
+    string ConsentLocale = "en");
 
 /// <summary>Request body for assigning to bank.</summary>
 internal record AssignToBankRequest(Guid BankId, Guid PackageId);

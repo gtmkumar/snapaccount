@@ -1,4 +1,5 @@
 using AuthService.Application.Admin.Queries.GetAuditEvents;
+using AuthService.Application.Auth.Commands.RefreshContext;
 using AuthService.Application.Common.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -69,6 +70,20 @@ public sealed class Auth : EndpointGroupBase
         });
 
         groupBuilder.MapPost("/token/refresh", RefreshToken);
+
+        // POST /auth/token/refresh-context [Authorize]
+        // GAP-007 / BUG-5: Re-issues the session JWT with current RBAC + org claims after
+        // the onboarding wizard creates the organisation. Mobile calls this immediately after
+        // POST /auth/organizations so subsequent calls carry the new OrganizationId claim.
+        groupBuilder.MapPost("/token/refresh-context", RefreshContext)
+            .RequireAuthorization()
+            .WithName("RefreshContextToken")
+            .WithSummary("Re-issue session JWT with current org/RBAC claims after org creation")
+            .WithDescription(
+                "GAP-007/BUG-5: Called by mobile immediately after onboarding org creation. " +
+                "Returns a fresh access token whose OrganizationId claim reflects the newly created org. " +
+                "Does NOT rotate the opaque refresh token. Rate-limited: standard 100 req/min.")
+            .RequireRateLimiting("standard");
 
         // LOCAL_AUTH dev login (username/password against local DB). Anonymous.
         // Returns 404 when LOCAL_AUTH is disabled (ILocalAuthService not registered).
@@ -206,6 +221,18 @@ public sealed class Auth : EndpointGroupBase
         return result.IsSuccess
             ? Results.Ok(result.Value)
             : Results.Unauthorized();
+    }
+
+    // POST /auth/token/refresh-context [Authorize]
+    // GAP-007 / BUG-5: Re-issue session JWT with current org claims (no refresh token rotation).
+    private static async Task<IResult> RefreshContext(ISender sender)
+    {
+        var result = await sender.Send(new RefreshContextCommand());
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.Type == ErrorType.Unauthorized
+                ? Results.Unauthorized()
+                : Results.Problem(result.Error.Message);
     }
 
     // GET /auth/me [Authorize]

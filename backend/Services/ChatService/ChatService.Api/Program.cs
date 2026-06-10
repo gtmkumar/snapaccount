@@ -112,6 +112,9 @@ try
     var routingEngine = app.Services.GetRequiredService<RoutingRuleEngine>();
     await routingEngine.RefreshAsync();
 
+    // GAP-005: Fail-fast in non-Development when SESSION_JWT_SECRET is absent.
+    SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);
+
     app.Run();
 }
 catch (Exception ex) { Log.Fatal(ex, "ChatService failed to start."); }

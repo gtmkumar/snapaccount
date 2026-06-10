@@ -15,14 +15,17 @@ public record RequestAccountDeletionCommand : ICommand;
 /// <summary>
 /// Handles account deletion.
 /// Marks the user for erasure, revokes all local refresh tokens, and attempts to revoke
-/// Firebase refresh tokens. Firebase revocation is non-fatal — if Firebase is temporarily
-/// unavailable, the 1-hour Firebase ID token TTL is the acceptable exposure window.
+/// Firebase refresh tokens. Firebase revocation is best-effort (GAP-003 / NEW-002):
+/// if Firebase is temporarily unreachable, local erasure still completes and a Hangfire
+/// retry job is enqueued to revoke the tokens asynchronously. The 1-hour Firebase ID
+/// token TTL is the acceptable exposure window while the retry runs.
 /// </summary>
 public sealed class RequestAccountDeletionCommandHandler(
     IUserRepository userRepository,
     IRefreshTokenRepository refreshTokenRepository,
     IFirebaseAuthService firebaseAuthService,
     ICurrentUser currentUser,
+    IFirebaseRevokeRetryScheduler revokeRetryScheduler,
     ILogger<RequestAccountDeletionCommandHandler> logger)
     : ICommandHandler<RequestAccountDeletionCommand>
 {
@@ -43,25 +46,64 @@ public sealed class RequestAccountDeletionCommandHandler(
         await refreshTokenRepository.RevokeAllForUserAsync(
             user.Id, "Account deletion requested", cancellationToken);
 
-        // SEC-008: Revoke Firebase refresh tokens. Non-fatal — deletion must complete
-        // regardless to honour DPDP Act 2023. 1-hour token TTL is the fallback window.
+        // SEC-008 / GAP-003: Revoke Firebase refresh tokens — BEST EFFORT.
+        // Deletion must complete regardless to honour DPDP Act 2023 Right-to-Erasure.
+        // If the revoke fails (Result.Failure or exception), a Hangfire retry job is
+        // enqueued with exponential back-off so the revoke eventually succeeds.
         if (!string.IsNullOrEmpty(user.FirebaseUid))
         {
-            try
-            {
-                await firebaseAuthService.RevokeRefreshTokensAsync(
-                    user.FirebaseUid, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex,
-                    "Failed to revoke Firebase refresh tokens for user {UserId}. " +
-                    "Firebase tokens will expire naturally within 1 hour. Deletion continues.",
-                    currentUser.UserId);
-            }
+            await RevokeFirebaseTokensBestEffortAsync(user.FirebaseUid, user.Id, cancellationToken);
         }
 
         await userRepository.UpdateAsync(user, cancellationToken);
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Attempts to revoke Firebase refresh tokens; on any failure logs at Error level,
+    /// enqueues a Hangfire retry (observable in the Hangfire dashboard), and continues.
+    /// The retry uses the <see cref="FirebaseTokenRevokeJob"/> so the job class and uid
+    /// are both recorded in the Hangfire storage for auditability.
+    /// </summary>
+    private async Task RevokeFirebaseTokensBestEffortAsync(
+        string firebaseUid, Guid userId, CancellationToken cancellationToken)
+    {
+        bool revokeSucceeded = false;
+        try
+        {
+            var revokeResult = await firebaseAuthService.RevokeRefreshTokensAsync(
+                firebaseUid, cancellationToken);
+
+            if (revokeResult.IsSuccess)
+            {
+                revokeSucceeded = true;
+                logger.LogInformation(
+                    "Firebase refresh tokens revoked for user {UserId}.", userId);
+            }
+            else
+            {
+                logger.LogError(
+                    "Firebase revoke returned failure for user {UserId}: {Error}. " +
+                    "Enqueueing Hangfire retry — tokens expire naturally within 1 hour.",
+                    userId, revokeResult.Error.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Firebase revoke threw for user {UserId}. " +
+                "Enqueueing Hangfire retry — tokens expire naturally within 1 hour.",
+                userId);
+        }
+
+        if (!revokeSucceeded)
+        {
+            // Enqueue a persistent, retryable job (observable in dashboard).
+            revokeRetryScheduler.ScheduleRevoke(firebaseUid, userId);
+
+            logger.LogWarning(
+                "Firebase token revoke retry enqueued for uid {FirebaseUid} (user {UserId}).",
+                firebaseUid, userId);
+        }
     }
 }

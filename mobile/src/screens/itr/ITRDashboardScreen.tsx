@@ -1,22 +1,28 @@
 /**
  * ITR Dashboard Screen — Redesign 2026
+ *
+ * Entry point for all ITR filing flows. Displayed as the first screen of
+ * ItrStack, which is nested inside MoreStack under the "ITRDashboard" route.
+ * Quick-action buttons navigate directly into the implemented ItrStack routes.
  */
 
 import React from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../components/ui/Card';
 import { StatusBadge } from '../../components/ui/Badge';
 import { Colors } from '../../constants/colors';
 import apiClient from '../../lib/api';
-import type { MoreStackParamList } from '../../navigation/MoreStack';
+import type { ItrStackParamList } from '../../navigation/ItrStack';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { RequestCallbackCta } from '../../components/callbacks/RequestCallbackCta';
+import { useAuthStore } from '../../store/authStore';
 
-type NavProp = NativeStackNavigationProp<MoreStackParamList, 'ITRDashboard'>;
+type NavProp = NativeStackNavigationProp<ItrStackParamList, 'ItrDashboard'>;
 interface Props { navigation: NavProp }
 
 interface ITRReturn {
@@ -38,6 +44,8 @@ function getCurrentFY(): string {
 
 export function ITRDashboardScreen({ navigation }: Props) {
   useSensitiveScreen();
+  const { t } = useTranslation();
+  const user = useAuthStore((s) => s.user);
 
   const currentFY = getCurrentFY();
   const { data: returns = [], isLoading } = useQuery({
@@ -49,13 +57,29 @@ export function ITRDashboardScreen({ navigation }: Props) {
     placeholderData: [],
   });
 
+  const handleStartFiling = () => {
+    navigation.navigate('EmployeeProfileWizard', { userId: user?.id ?? '' });
+  };
+
+  const handleDocChecklist = () => {
+    navigation.navigate('DocChecklist', { assesseeId: user?.id ?? '' });
+  };
+
+  const handleCompareRegime = () => {
+    if (returns.length > 0) {
+      navigation.navigate('RegimeComparison', { filingId: returns[0].id });
+    } else {
+      navigation.navigate('EmployeeProfileWizard', { userId: user?.id ?? '' });
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
         </Pressable>
-        <Text style={styles.title}>ITR Filing</Text>
+        <Text style={styles.title}>{t('mobile.itr.dashboard.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -64,35 +88,41 @@ export function ITRDashboardScreen({ navigation }: Props) {
         <View style={styles.actionsRow}>
           <Pressable
             style={styles.actionBtn}
-            onPress={() => Alert.alert('Coming Soon', 'ITR filing will be available soon.')}
+            onPress={handleStartFiling}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.itr.dashboard.action.startFiling')}
           >
             <View style={styles.actionIconWrap}>
               <Ionicons name="clipboard-outline" size={24} color={Colors.itr} />
             </View>
-            <Text style={styles.actionLabel}>Start Filing</Text>
+            <Text style={styles.actionLabel}>{t('mobile.itr.dashboard.action.startFiling')}</Text>
           </Pressable>
           <Pressable
             style={styles.actionBtn}
-            onPress={() => Alert.alert('Coming Soon', 'Document checklist coming soon.')}
+            onPress={handleDocChecklist}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.itr.dashboard.action.docChecklist')}
           >
             <View style={styles.actionIconWrap}>
               <Ionicons name="document-outline" size={24} color={Colors.itr} />
             </View>
-            <Text style={styles.actionLabel}>Doc Checklist</Text>
+            <Text style={styles.actionLabel}>{t('mobile.itr.dashboard.action.docChecklist')}</Text>
           </Pressable>
           <Pressable
             style={styles.actionBtn}
-            onPress={() => Alert.alert('Coming Soon', 'Old vs New regime comparison coming soon.')}
+            onPress={handleCompareRegime}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.itr.dashboard.action.compareRegime')}
           >
             <View style={styles.actionIconWrap}>
               <Ionicons name="scale-outline" size={24} color={Colors.itr} />
             </View>
-            <Text style={styles.actionLabel}>Compare Regime</Text>
+            <Text style={styles.actionLabel}>{t('mobile.itr.dashboard.action.compareRegime')}</Text>
           </Pressable>
         </View>
 
         {/* Returns list */}
-        <Text style={styles.sectionTitle}>Your ITR Returns</Text>
+        <Text style={styles.sectionTitle}>{t('mobile.itr.dashboard.returnsTitle')}</Text>
 
         {isLoading ? (
           <View style={styles.skeleton} />
@@ -102,9 +132,9 @@ export function ITRDashboardScreen({ navigation }: Props) {
               <View style={styles.emptyIconWrap}>
                 <Ionicons name="document-text-outline" size={36} color={Colors.itr} />
               </View>
-              <Text style={styles.emptyTitle}>No ITR returns yet</Text>
+              <Text style={styles.emptyTitle}>{t('mobile.itr.dashboard.empty.title')}</Text>
               <Text style={styles.emptyText}>
-                Start your ITR filing for {currentFY}. Upload Form 16 and other documents to get started.
+                {t('mobile.itr.dashboard.empty.body', { fy: currentFY })}
               </Text>
             </View>
           </Card>
@@ -118,7 +148,9 @@ export function ITRDashboardScreen({ navigation }: Props) {
               {ret.regime && (
                 <View style={styles.regimePill}>
                   <Text style={styles.returnRegime}>
-                    {ret.regime === 'new' ? 'New Tax Regime' : 'Old Tax Regime'}
+                    {ret.regime === 'new'
+                      ? t('mobile.itr.dashboard.regime.new')
+                      : t('mobile.itr.dashboard.regime.old')}
                   </Text>
                 </View>
               )}
@@ -140,14 +172,8 @@ export function ITRDashboardScreen({ navigation }: Props) {
 
         {/* Info banner */}
         <Card shadow="sm" style={styles.infoBanner}>
-          <Text style={styles.infoTitle}>ITR Filing Features</Text>
-          {[
-            'Smart document checklist based on your profile',
-            'Old vs New regime comparison with AI recommendation',
-            'E-verification via Aadhaar OTP or net banking',
-            'Refund tracking timeline',
-            'Notice handling (143(1), 143(2), 139(9))',
-          ].map((item, i) => (
+          <Text style={styles.infoTitle}>{t('mobile.itr.dashboard.features.title')}</Text>
+          {(t('mobile.itr.dashboard.features.items', { returnObjects: true }) as string[]).map((item, i) => (
             <View key={i} style={styles.infoItemRow}>
               <Ionicons name="checkmark-circle" size={14} color={Colors.itr} />
               <Text style={styles.infoItem}>{item}</Text>
