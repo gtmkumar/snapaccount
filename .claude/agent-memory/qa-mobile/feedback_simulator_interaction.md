@@ -114,3 +114,55 @@ Window position changes whenever Simulator window is moved/resized.
 
 **Why:** cliclick fails silently, coordinate math is futile without knowing current window size.
 **How to apply:** Do NOT use cliclick for Simulator touch. Use menu-based interactions only.
+
+---
+
+## Updated 2026-06-06: iOS Simulator MCP + idb patterns (native build via `expo run:ios`)
+
+**Simulator: iPhone 17 Pro, iOS 26.5, UDID 17BF04F0-A5F0-4C76-80FA-05FB8204FE4C**
+
+**Hardware keyboard conflict with software keyboard:**
+- When "Connect Hardware Keyboard" is active in Simulator (I/O > Keyboard menu), `mcp__ios-simulator__ui_type` sends keystrokes via the hardware path — this WORKS if the field is truly focused.
+- Fields that are NOT in error state may not receive focus from `ui_tap` alone in a bottom sheet / modal context.
+- Fields IN ERROR STATE (red border, "Required" hint) reliably receive focus when tapped at exact AX TextField center coordinates.
+
+**Reliable technique for typing into any Input field (hardware keyboard mode):**
+1. Trigger validation errors: tap the submit button with empty required fields to put them in error state.
+2. Get AX coordinates: call `ui_describe_all` and find the TextField's AXFrame `{y, x, width, height}`.
+3. Tap at TextField center: `x_center = x + width/2`, `y_center = y + height/2`.
+4. Immediately call `ui_type` — the field should now be focused and receive keystrokes.
+5. For chaining: keep keyboard visible by tapping the next field (also at AX center) before keyboard dismisses.
+
+**Autocomplete/suggestion bar conflict:**
+- If the QWERTY keyboard shows a suggestion bar at the top, tapping within that bar area accidentally selects suggestions.
+- For email fields: only type up to the `@` and check — the `@` sometimes causes the suggestion bar to interfere. Type in chunks if needed.
+- The `@` character in `keyboardType="email-address"` shows an `@` key in the bottom row; `ui_type` handles it correctly.
+
+**Opening keyboard for email fields in bottom sheet modals:**
+- Standard tap → ui_type fails when field has no error state.
+- Workaround: (1) submit form empty to get "Enter a valid email address" error, (2) tap field at AX center → keyboard doesn't appear visually BUT field may be focused, (3) use `osascript -e '... keystroke "v" using command down'` (Cmd+V paste) to force keyboard appearance, then (4) `ui_type` works.
+
+**Critical: AX coordinates reflect scroll-offset-adjusted positions.**
+- After scrolling the form, call `ui_describe_all` again — AXFrame y values change with scroll.
+- Do NOT reuse y coordinates from a previous `ui_describe_all` call after any scroll action.
+
+**Swipe while keyboard is open (to reveal off-screen fields):**
+- Swipe from y=350 to y=200 (upward) with duration=0.4 scrolls the form content without dismissing the keyboard, IF the swipe stays in the ScrollView content area (above the keyboard).
+- Swipe that goes too far down will dismiss keyboard and scroll back.
+
+**AppleScript Cmd+V paste to trigger keyboard:**
+```bash
+xcrun simctl pbcopy <UDID> "<text>"
+idb ui tap --udid <UDID> <x> <y>
+sleep 0.3
+osascript -e 'tell application "Simulator" to activate
+delay 0.2
+tell application "System Events"
+  keystroke "v" using command down
+end tell'
+```
+This causes the keyboard to appear (confirm via `ui_describe_all` — keyboard keys appear in the AX tree).
+After the keyboard appears, `ui_type` successfully injects text.
+
+**BUG-5 root cause (for future reference):**
+POST /auth/team/invite returns 409 "Org.InvalidContext" immediately after business onboarding because the session JWT does not carry OrganizationId — the org was created AFTER the JWT was issued at OTP login. The GET /auth/team/invites works because it resolves orgId from DB (not JWT). The fix is to refresh/reissue the session JWT inside `markAuthenticated()` or at the end of BusinessProfileWizardScreen onSuccess. See `OrgContextGuard.cs` line 44.

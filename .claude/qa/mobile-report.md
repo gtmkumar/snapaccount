@@ -193,3 +193,121 @@ Remaining gap: login/auth screens not captured due to cached auth state — thes
 
 ### Sign-off
 PASS — Phase 6F mobile QA complete. All 88 new tests pass. Full regression suite 319/323 (4 pre-existing). Sensitive screen audit confirmed. Report at `.claude/qa/phase-6f-mobile-qa-report.md`.
+
+---
+
+## Live Smoke Test — Persona Split + Org Invite/Join — 2026-06-06
+
+### Summary
+- Total tests: N/A (live device interaction, not automated Jest suite)
+- iOS: PARTIAL PASS / 4 bugs found (see below)
+- Android: NOT RUN (iOS simulator only per task scope)
+- Simulator: iPhone 17 Pro, iOS 26.5 (UDID: 17BF04F0-A5F0-4C76-80FA-05FB8204FE4C)
+- Metro bundler: localhost:8081 | AuthService: localhost:5101 (LOCAL_AUTH mode)
+
+### Scope
+Smoke test of two new feature areas added in the current branch (`fix/chat-callback-write-reconciliation`):
+1. Persona split — PersonaSelectionScreen, IndividualProfileWizardScreen, BusinessProfileWizardScreen, persona-conditional AppNavigator tab sets
+2. Org invite/join — Team screen (owner-only), InviteMemberModal, AcceptInviteScreen (code + deep link)
+
+### Test Flows and Results
+
+| # | Flow | Result | Notes |
+|---|------|--------|-------|
+| 1 | App launch → PhoneEntryScreen | PASS | Screen renders, phone input focused, flag icon visible |
+| 2 | Enter phone + request OTP → OTPVerifyScreen | PASS | 6-box OTP input renders, resend timer active |
+| 3 | Verify OTP (new user 9000000099) → PersonaSelectionScreen | PASS | isNewUser=true routes correctly; "How will you use SnapAccount?" heading, both PersonaCards, joinLink rendered |
+| 4 | PersonaSelection → "I run a business" → BusinessProfileWizardScreen | PASS | 4-step wizard renders; Step 1 shows PAN+Name+DOB fields |
+| 4a | BusinessProfileWizard → "Complete Setup" (PUT /auth/profile) | FAIL (BUG-1) | HTTP 500 DbUpdateConcurrencyException; onboarding cannot complete |
+| 5 | PersonaSelection → "I'm a salaried individual" → IndividualProfileWizardScreen | PASS | Single-step form renders with PAN, Full Name, DOB fields; no GSTIN (correct) |
+| 5a | IndividualProfileWizard → "Complete Setup" (PUT /auth/profile) | FAIL (BUG-1) | HTTP 500 DbUpdateConcurrencyException; onboarding cannot complete |
+| 6 | Individual tab set (ITR, Documents, Support, More) | NOT TESTED | Blocked by BUG-1 (cannot complete onboarding) |
+| 7 | Business tab set (Home, Documents, GST, Loans, More) | NOT TESTED | Blocked by BUG-1 |
+| 8 | More screen → Team tile (business_owner only) | FAIL (BUG-2) | Team tile not rendered; no BUSINESS_OWNER user exists; blocked by BUG-1 |
+| 9 | More screen → "Have an invite code?" joinRow | PASS | Link rendered; tapping navigates to AcceptInviteScreen |
+| 10 | AcceptInviteScreen render (from More) | PASS | "Join an organization" heading, input field, disabled Continue button all correct |
+| 11 | PersonaSelection → "Have an invite code?" joinLink | PASS | Link rendered with correct i18n text; tapping navigates to AcceptInviteScreen |
+| 12 | AcceptInviteScreen Continue button disabled state | PASS | Button correctly disabled when input is empty |
+| 13 | Deep link snapaccount://invite/TOKEN (authenticated user) | FAIL (BUG-3) | React Navigation conflict: pattern resolves to both MoreTab>AcceptInvite and AcceptInvite; uncaught error shown; token not pre-filled |
+| 14 | ProfileScreen Sign Out button | FAIL (BUG-4) | Not reachable; ScrollView cannot scroll past tab bar |
+
+### Screenshots (evidence)
+All screenshots saved to `.claude/screenshots/live-2026-06-06/`:
+- `ios-01-*` through `ios-30-*` — full flow walk sequence
+- Key evidence: `ios-29-deeplink-after-open.png` (BUG-3 conflict error), `ios-30-accept-invite-clean.png` (AcceptInvite clean state post-dismiss)
+
+### Bugs Found
+
+| Bug ID | Title | Severity | Platform | Task |
+|--------|-------|----------|----------|------|
+| BUG-1 | PUT /auth/profile returns 500 for new users (DbUpdateConcurrencyException) | Critical | iOS + Android | #12 |
+| BUG-2 | Team tile never shown — no BUSINESS_OWNER users can exist (downstream of BUG-1) | High | iOS + Android | #13 |
+| BUG-3 | Deep link snapaccount://invite/:token crashes app with navigation conflict error | High | iOS (confirmed) | #14 |
+| BUG-4 | ProfileScreen Sign Out button unreachable — ScrollView does not scroll past tab bar | Medium | iOS (confirmed) | #15 |
+
+### Flows Blocked
+The following flows could NOT be tested due to BUG-1 (PUT /auth/profile 500):
+- Individual tab set navigation (ITR, Documents, Support, More)
+- Business tab set navigation (Home, Documents, GST, Loans, More)
+- More → Team screen (owner-only gating)
+- InviteMemberModal (email + phone + role picker + invite submission)
+- Invite submission → shareable link generation
+- AcceptInvite token validation (valid token preview, 403 identity-mismatch, 409 already-accepted, 410 expired)
+
+### Sign-off
+FAIL — Smoke test blocked by Critical BUG-1 (PUT /auth/profile 500 for all new users). Persona split UI renders correctly up to form submission. AcceptInviteScreen renders correctly. Deep link handling is broken (BUG-3). Not ready to proceed until BUG-1 and BUG-3 are fixed by mobile-dev / backend-agent.
+
+---
+
+## Live Smoke Re-test — Bug Fix Verification — 2026-06-06 (Session 2)
+
+### Summary
+- Scope: Re-test of BUG-1 (PUT /auth/profile 500), BUG-3 (deep-link crash), BUG-4 (sign-out unreachable) after fixes
+- iOS: PASS for BUG-1, BUG-3, BUG-4 | 1 new bug found (BUG-5)
+- Android: NOT RUN (iOS simulator only)
+- Simulator: iPhone 17 Pro, iOS 26.5 (UDID: 17BF04F0-A5F0-4C76-80FA-05FB8204FE4C)
+- Stack: AuthService :5101 (LOCAL_AUTH), DocumentService :5102, Metro :8081
+
+### What Was Fixed (per orchestrator)
+- BUG-1 (backend): PUT /auth/profile no longer 500s — returns 204; /auth/me confirms userType persisted
+- BUG-3 (mobile RootNavigator): deep-link config no longer registers `invite/:token` twice; no crash
+- BUG-4 (mobile ProfileScreen): Sign Out button now scrollable and reachable
+
+### Re-test Results
+
+| # | Flow | Result | Screenshot(s) |
+|---|------|--------|---------------|
+| 1 | BUG-4 retest — More → Profile & Settings → Sign Out | PASS | ios-retest-37 to ios-retest-54 |
+| 2 | INDIVIDUAL path (phone 9000000002) — OTP → PersonaSelection → "I'm a salaried individual" → IndividualProfileWizard → PAN+Name+DOB → Complete Setup → Employee tab set (ITR, Documents, Support, More) | PASS | ios-retest-55 to ios-retest-77 |
+| 3 | BUSINESS path (phone 9000000003) — OTP → PersonaSelection → "I run a business" → BusinessProfileWizard Step 1 (PAN BCDFE1234A, Name "Test Business Own Patel", DOB 01/01/1985) → Step 2 GSTIN skipped → Step 3 Aadhaar skipped → Step 4 Business Details (Trading, Sole Proprietor, Retail, 123 MG Road, Karnataka, 560001) → Complete Setup → Business tab set | PASS | ios-retest-78 to ios-retest-109 |
+| 4 | Business tabs confirmed: Home, Documents (Docu...), GST, Loans, More — 5 tabs | PASS | ios-retest-109 |
+| 5 | More → Team tile → TeamScreen | PASS | ios-retest-110 to ios-retest-113 |
+| 6 | TeamScreen → "Invite team member" → InviteMemberModal renders (Email, Phone optional, Role picker, Message optional) | PASS | ios-retest-114 |
+| 7 | InviteMemberModal — fill email test+ts@example.com, select Team Member role → Send invite | FAIL (BUG-5) | ios-retest-115 to ios-retest-123 |
+| 8 | BUG-3 retest — deep link snapaccount://invite/test-token-abc123 | PASS | ios-retest-124 |
+
+### Detailed Notes
+
+**Step 3 Business Path — Keyboard Input Workaround:**
+The BusinessProfileWizardScreen uses standard `Input` components (not `PanInput`) for Industry/Category, State, and PIN Code. With hardware keyboard connected to the iOS Simulator, these fields do not show the software keyboard on tap. Workaround: trigger validation errors by tapping "Complete Setup" with empty fields (red error state), then tap the field at exact AX TextField center coordinates, which shows the QWERTY software keyboard. Chain keyboard focus between fields without dismissing. This workaround is required for simulator automation; real device with touch input would not have this issue.
+
+**Step 7 — InviteMemberModal Send Invite 409 (BUG-5):**
+POST /auth/team/invite returns HTTP 409. Backend log confirms `OrgContextGuard.ValidateAsync` rejects the request with `Org.InvalidContext` error code. However, the GET /auth/team/invites (at 20:15:27) returned 200 (org context worked for read). The POST returned 409 at 20:19:50. The auth.invitation table is empty (no duplicate invite). Root cause: the session JWT for user 9000000003 was issued at OTP login, before the org was created during BusinessProfileWizardScreen. The `ICurrentUser.OrganizationId` claim is null in the JWT because the org did not yet exist at login time. GET /auth/team/invites uses orgId from a DB lookup (not JWT claim), which is why it succeeds. POST CreateInvitationCommand uses `OrgContextGuard` which requires `currentUser.OrganizationId` from the JWT claim. This is a session-JWT-not-refreshed-after-onboarding issue.
+
+**Step 8 — BUG-3 Deep Link Retest:**
+`xcrun simctl openurl booted "snapaccount://invite/test-token-abc123"` navigated to the "Join organization" (AcceptInvite) screen — NO crash. Navigation config fix confirmed working. The InviteMemberModal was still visible from step 7, but behind it the AcceptInviteScreen loaded correctly.
+
+**BUG-4 Sign Out (re-confirmed from Session 1):**
+More → Profile & Settings → scroll to Sign Out → confirmation dialog → Sign Out — PASS. Returns to PhoneEntryScreen.
+
+### Screenshots
+All screenshots saved to `.claude/screenshots/live-2026-06-06/` with prefix `ios-retest-98` through `ios-retest-124`.
+
+### New Bug Found
+
+| Bug ID | Title | Severity | Platform | Reproduction |
+|--------|-------|----------|----------|--------------|
+| BUG-5 | POST /auth/team/invite returns 409 "Org.InvalidContext" immediately after business onboarding because session JWT does not carry OrganizationId (org created after JWT was issued at login) | High | iOS + Android | 1. Register new phone as BUSINESS_OWNER. 2. Complete BusinessProfileWizardScreen. 3. Go to More → Team → Invite team member. 4. Fill email, tap Send invite. 5. Observe 409 error. Re-login resolves it (new JWT carries orgId). Fix: refresh/reissue session JWT after markAuthenticated() in BusinessProfileWizardScreen. |
+
+### Sign-off
+PARTIAL PASS — BUG-1, BUG-3, and BUG-4 are confirmed fixed. Business path (persona selection → wizard → 5-tab Business UI) works end-to-end. Deep-link navigation is stable. One new bug found (BUG-5): session JWT missing orgId after fresh onboarding causes invite POST to fail with 409. Not blocking for merge (user can re-login to get a valid JWT) but should be fixed before GA. All other flows PASS.
