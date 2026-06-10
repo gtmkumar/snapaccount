@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
 import { type ColumnDef } from '@tanstack/react-table'
+import { t } from '@/i18n'
 import { Search, Filter, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { DataTable } from '@/components/ui/DataTable'
@@ -26,7 +26,6 @@ function SlaChip({ uploadedAt }: { uploadedAt: string }) {
   const diffMs = slaExpiry.getTime() - now.getTime()
   const diffHours = diffMs / (1000 * 60 * 60)
   const diffMins = Math.floor(diffMs / (1000 * 60))
-  const { t } = useTranslation()
 
   if (diffMs < 0) {
     return <Badge variant="error" dot>{t('docQueue.sla.overdue')}</Badge>
@@ -56,7 +55,6 @@ function OcrDot({ confidence }: { confidence: number | null }) {
 
 function buildColumns(
   navigate: ReturnType<typeof useNavigate>,
-  t: (key: string, opts?: Record<string, unknown>) => string,
 ): ColumnDef<DocumentListItem>[] {
   return [
     {
@@ -128,7 +126,6 @@ function buildColumns(
 
 export default function DocumentQueuePage() {
   const navigate = useNavigate()
-  const { t } = useTranslation()
   const [globalFilter, setGlobalFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [ocrFilter, setOcrFilter] = useState('all')
@@ -164,7 +161,7 @@ export default function DocumentQueuePage() {
   const totalCount = data?.totalCount ?? 0
   const totalPages = data?.totalPages ?? 1
 
-  const columns = useMemo(() => buildColumns(navigate, t), [navigate, t])
+  const columns = useMemo(() => buildColumns(navigate), [navigate])
 
   return (
     <div className="space-y-5">

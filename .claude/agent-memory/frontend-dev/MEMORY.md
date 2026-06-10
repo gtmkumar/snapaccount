@@ -11,3 +11,5 @@
 - [SEC-045 PayloadViewer OAuth hotfix](project_sec045_fix.md) — Bearer ***{last6} masking; 4 new tests; 34 pre-existing lint warnings also fixed
 - [Auth/RBAC Module 1 Completion](project_rbac_module1.md) — roles matrix, orgs list/detail, invite acceptance, permission-gated nav; 699 tests, 0 lint errors
 - [Task #20 Auth Features](project_task20_auth_features.md) — user prefs, devices, forgot/reset password, 2FA TOTP; qrcode.react QRCodeSVG; Badge uses variant not color; 864 tests
+- [i18n pattern — @/i18n not react-i18next](feedback_i18n_pattern.md) — use custom t() from @/i18n; react-i18next not initialized in tests; status enums need .toLowerCase() for key lookup
+- [Test QueryClient staleTime:Infinity](feedback_test_queryclient.md) — React 19 double-mount causes 2 fetches; staleTime:Infinity prevents; prefer toHaveBeenCalled() over CalledTimes(1)

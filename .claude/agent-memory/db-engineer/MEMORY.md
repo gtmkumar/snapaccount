@@ -1,3 +1,2 @@
-# DB Engineer Memory Index
-
-- [Auth/RBAC module conventions](project_auth_rbac_module.md) — partial unique indexes on auth.role, dot-notation perm names, RLS session vars (migrations 035-036)
+- [Migration conventions](migration_conventions.md) — numbering, idempotency, EF-alignment pattern, and how to replay/verify the chain locally
+- [Service EF↔SQL mapping quirks](ef_sql_mapping_quirks.md) — services with no EF migrations, BaseAuditableEntity column expectations, enum handling

@@ -15,8 +15,8 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { t } from '@/i18n'
 import {
   ArrowLeft,
   ZoomIn,
@@ -62,7 +62,6 @@ interface EditableField extends OcrField {
 export default function DocumentReviewPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const [zoom, setZoom] = useState(100)

@@ -44,7 +44,7 @@ const mockMismatches: gstApi.ItcMismatch[] = [
 function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
+      queries: { retry: false, gcTime: 0, staleTime: Infinity },
       mutations: { retry: false },
     },
   })
@@ -81,7 +81,7 @@ describe('ItcMismatchPage (real API)', () => {
   it('calls getItcMismatches on mount', async () => {
     renderPage()
     await waitFor(() => {
-      expect(gstApi.getItcMismatches).toHaveBeenCalledTimes(1)
+      expect(gstApi.getItcMismatches).toHaveBeenCalled()
     })
   })
 
@@ -109,9 +109,9 @@ describe('ItcMismatchPage (real API)', () => {
       expect(screen.getByText('Total Mismatches')).toBeInTheDocument()
       expect(screen.getByText('Total Amount')).toBeInTheDocument()
       expect(screen.getByText('Critical (>10%)')).toBeInTheDocument()
+      // 3 total items rendered — must be inside waitFor so it waits for data to load
+      expect(screen.getByText('3')).toBeInTheDocument()
     })
-    // 3 total items rendered
-    expect(screen.getByText('3')).toBeInTheDocument()
   })
 
   it('renders Run Reconciliation button', () => {
@@ -160,10 +160,18 @@ describe('ItcMismatchPage (real API)', () => {
     })
     const causeSelect = screen.getByRole('combobox', { name: /Mismatch Cause/i })
     fireEvent.change(causeSelect, { target: { value: 'AMOUNT_MISMATCH' } })
-    // After filtering, only AMOUNT_MISMATCH rows should be visible
+    // After filtering, only AMOUNT_MISMATCH rows should be visible.
+    // The dropdown still contains option elements with the same text, so we
+    // explicitly exclude <option> nodes (which are never table row badges).
     await waitFor(() => {
-      expect(screen.queryByText('Missing in 2B')).not.toBeInTheDocument()
-      expect(screen.queryByText('Excess Claim')).not.toBeInTheDocument()
+      const missingIn2bNonOption = screen
+        .queryAllByText('Missing in 2B')
+        .filter((el) => el.tagName.toLowerCase() !== 'option')
+      const excessClaimNonOption = screen
+        .queryAllByText('Excess Claim')
+        .filter((el) => el.tagName.toLowerCase() !== 'option')
+      expect(missingIn2bNonOption).toHaveLength(0)
+      expect(excessClaimNonOption).toHaveLength(0)
     })
   })
 

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
 import { type ColumnDef } from '@tanstack/react-table'
+import { t } from '@/i18n'
 import { toast } from 'sonner'
 import { RefreshCw, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -36,7 +36,6 @@ const DEFAULT_ORG_ID = '' // In production this comes from the current user's or
 // ---------------------------------------------------------------------------
 
 function CauseBadge({ mismatchType }: { mismatchType: ItcMismatch['mismatchType'] }) {
-  const { t } = useTranslation()
   const variantMap: Record<ItcMismatch['mismatchType'], 'warning' | 'error' | 'info'> = {
     AMOUNT_MISMATCH: 'warning',
     MISSING_IN_2B: 'error',
@@ -50,7 +49,6 @@ function CauseBadge({ mismatchType }: { mismatchType: ItcMismatch['mismatchType'
 }
 
 function StatusBadgeItc({ status }: { status: ItcMismatch['status'] }) {
-  const { t } = useTranslation()
   const variantMap: Record<ItcMismatch['status'], 'success' | 'error' | 'neutral'> = {
     RESOLVED: 'success',
     OPEN: 'error',
@@ -58,7 +56,7 @@ function StatusBadgeItc({ status }: { status: ItcMismatch['status'] }) {
   }
   return (
     <Badge variant={variantMap[status]} dot>
-      {t(`itcMismatch.status.${status}`)}
+      {t(`itcMismatch.status.${status.toLowerCase()}`)}
     </Badge>
   )
 }
@@ -67,9 +65,7 @@ function StatusBadgeItc({ status }: { status: ItcMismatch['status'] }) {
 // Table columns
 // ---------------------------------------------------------------------------
 
-function buildColumns(
-  t: (key: string, opts?: Record<string, unknown>) => string,
-): ColumnDef<ItcMismatch>[] {
+function buildColumns(): ColumnDef<ItcMismatch>[] {
   return [
     {
       accessorKey: 'mismatchType',
@@ -145,7 +141,6 @@ function ReconcileModal({
   onSubmit: (form: ReconcileForm) => void
   isPending: boolean
 }) {
-  const { t } = useTranslation()
   const currentYear = new Date().getFullYear()
   const [form, setForm] = useState<ReconcileForm>({
     organizationId: DEFAULT_ORG_ID,
@@ -241,7 +236,6 @@ function ReconcileModal({
 // ---------------------------------------------------------------------------
 
 export default function ItcMismatchPage() {
-  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState<string>('OPEN')
   const [causeFilter, setCauseFilter] = useState<string>('')
@@ -285,7 +279,7 @@ export default function ItcMismatchPage() {
     return pct > 10
   }).length
 
-  const columns = useMemo(() => buildColumns(t), [t])
+  const columns = useMemo(() => buildColumns(), [])
 
   return (
     <>

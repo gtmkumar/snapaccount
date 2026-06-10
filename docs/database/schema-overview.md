@@ -888,3 +888,58 @@ All six are `is_system_role = TRUE`, `organization_id = NULL`. `CA` reuses the r
 
 - **backend-agent:** New columns `auth.role.organization_id` (NULL=system) + `auth.role.created_by_user_id`. New table `auth.invitation` (token-based; store **SHA-256** of the token in `token_hash`, never plaintext; `status` ∈ PENDING/ACCEPTED/REVOKED/EXPIRED). Permission names are dot-notation matching `[RequiresPermission]`; the catalog and 6 baseline roles are seeded. Set `app.is_platform_admin='true'` in the DB session for SUPER_ADMIN so RLS allows cross-org reads. Enforce the constrained-delegation rule in the application layer — RLS does not enforce it.
 - **security-reviewer:** Invite-token entropy/expiry/replay (`token_hash` UNIQUE + `expires_at` + `status`), org tenant isolation via RLS on `auth.role`/`auth.invitation`, and privilege-escalation-via-delegation are the focus areas.
+
+---
+
+## Phase 7 Wave 1 Addendum — EF ↔ SQL reconciliation (additive, 2026-06-10)
+
+> Migrations: `060_notification_ef_alignment.sql` (notification — pre-existing), `061_loan_consent_locale_and_catalog_alignment.sql` (loan — NEW).
+> Status: ADDITIVE. No renames, no drops. Full chain (`000`…`061` + `999`) replays clean on an empty PostgreSQL 18 database; all migrations idempotent.
+> Driver: backend-agent Wave 1 merged EF entities/configurations with no backing SQL. NotificationService, CallbackService, and LoanService have **no EF migrations** — the SQL files in `database/migrations/` are canonical, so the entity configs are mapped onto existing columns and any genuinely-missing columns are added here.
+
+### DB1 — NotificationService reconciliation (GAP-070)
+
+**Outcome: already reconciled by `060_notification_ef_alignment.sql` — no new migration required.** All seven entity configurations map cleanly onto existing columns (008 + 017 + 060). Verified column-by-column against a fresh replay:
+
+| EF entity → table | Notable EF→column mappings | Parity |
+|---|---|---|
+| `NotificationEvent` → `notification.notification_event` | `EventCode→event_code`, `DefaultChannels→default_channels` (table added by 060) | ✓ |
+| `NotificationLogEntry` → `notification.notification_log` | `Locale→language`, `ErrorMessage→failure_reason`, `CostInr→cost_inr`, dispatch cols (`user_id`, `event_code`, `channel`, `rendered_body`, `dedupe_key`) added by 060 | ✓ |
+| `DlqItem` → `notification.dlq_items` | `EventCode→event_type`, `LastErrorMessage→failure_reason`, `ExhaustedAt→last_failed_at`, `OriginalPayload→original_payload`, `IsResolved→is_resolved`, `Locale→locale` (last three added by 060) | ✓ |
+| `NotificationTemplate` → `notification.notification_template` | `EventCode→event_type`, `Locale→language`, `Body→body_template`, `SenderName→sender_id`, `IsCurrent→is_current` | ✓ |
+| `NotificationPreference` → `notification.notification_preference` | `EventCode→event_type`, `DoNotDisturb→dnd_enabled` | ✓ |
+| `InboxNotification` → `notification.notification` (partitioned) | read model: `id`, `user_id`, `channel`, `event_type`, `title`, `body`, `is_read`, `status` | ✓ |
+| `PushToken` → `notification.device_push_token` | `Token→push_token`, platform upper-case converter | ✓ |
+
+Seed note: the C# `DbSeeder` writes the event catalogue into `notification.notification_event` (created by 060) and templates into `notification.notification_template`. Because the chain now provides every column the seeder touches, the PR #19 try/catch band-aid (GAP-070) can be removed by backend-agent.
+
+### HANDOFF-2 — CallbackService `assignments_log` + KPI snapshot (GAP-012 / SEC-030)
+
+**Outcome: both objects already exist in `018_callback_schema.sql` and match the EF configurations exactly — no new migration required.**
+
+| Object | Status | EF parity |
+|---|---|---|
+| `callback.assignments_log` (table) | Existed in 018 | `AssignmentLog`: `id`, `callback_id`, `from_user_id`, `to_user_id`, `assigned_by`, `reason` (text), `assigned_at` + audit cols (`created_at`, `updated_at`, `deleted_at`, `created_by`, `updated_by`). All present; indexes `(callback_id, assigned_at)`, `(to_user_id)`, `(assigned_by)` match `HasIndex(...)`. ✓ |
+| `callback.kpi_daily_snapshot` (**MATERIALIZED VIEW**) | Existed in 018 | Keyless `KpiDailySnapshot` (`ToView`) columns `org_id`, `snapshot_date`, `count_pending/scheduled/in_progress/completed/cancelled/escalated/sla_breached`, `avg_ttr_minutes`, `avg_csat`, `total_requested` match the MV projection exactly (bigint→`long`, numeric→`double?`, date→`DateOnly`, uuid→`Guid`). ✓ |
+
+**MV refresh strategy:** `callback.kpi_daily_snapshot` is a materialized view with a unique index `uq_kpi_daily_snapshot_org_date (org_id, snapshot_date)`, which enables non-blocking concurrent refresh:
+
+```sql
+REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot;
+```
+
+Schedule this from a Cloud Scheduler → CallbackService endpoint (or a Hangfire recurring job) — recommended cadence every 15–30 min, plus an on-demand refresh after bulk status transitions. Postgres MVs cannot enforce RLS, so `GetKpiSnapshotQuery` mandatorily filters `WHERE org_id = <caller-claim>` (P6-HANDOFF-04 IDOR control) — the org id is taken from the caller's identity, never from request input. **Owner of the scheduled refresh job: devops-engineer** (Cloud Scheduler vs Hangfire decision still open).
+
+### HANDOFF-1 — LoanService consent locale + catalog (GAP-040 / P6-HANDOFF-25)
+
+Migration **`061_loan_consent_locale_and_catalog_alignment.sql`** (NEW). Three column deltas + locale seeds:
+
+| Change | Table | Detail |
+|---|---|---|
+| ADD `consent_locale VARCHAR(10) NOT NULL DEFAULT 'en'` | `loan.consents` | Backs `Consent.ConsentLocale`. BCP-47 locale of the consent text the user actually reviewed — ties the DPDP audit trail to the exact language version. Matches `loan.consent_catalog.locale`. |
+| ADD `deleted_at TIMESTAMPTZ NULL` | `loan.consents` | `Consent : BaseAuditableEntity`; `BaseDbContext` applies a **global** `deleted_at IS NULL` query filter and binds `deleted_at` in every INSERT/SELECT. 027 deliberately omitted it, which broke EF reads/writes. The existing `trg_consents_no_delete` trigger still blocks hard DELETE; soft-delete via `UPDATE deleted_at` (what the ORM emits) is allowed, so the DPDP "never hard-delete" intent is preserved (verified: hard DELETE raises, soft-delete UPDATE succeeds). |
+| ADD `updated_by UUID NULL` | `loan.consent_catalog` | `ConsentCatalogEntry : BaseAuditableEntity` → EF maps `UpdatedBy → updated_by`. 032 created `last_modified_by` instead. `last_modified_by` is retained and marked `-- DEPRECATED` (Phase-7); `updated_by` is the live audit column. |
+
+**Seed data (consent catalog v1.4):** `032` seeded the three current consent types (`CREDIT_BUREAU`, `DATA_SHARE_WITH_BANK`, `DISBURSEMENT_MANDATE`) for locale `en`. `061` adds the **`hi`** and **`bn`** variants — **6 new rows**, catalog now 9 rows (3 types × 3 locales), unique on `(consent_type, text_version, locale)`, inserted with `ON CONFLICT DO NOTHING`. ⚠ The `hi`/`bn` bodies are **placeholder-but-plausible translations tagged `[PLACEHOLDER TRANSLATION — LEGAL REVIEW REQUIRED]`** — legal/compliance must replace them before production (RBI Digital Lending + DPDP legal artifact).
+
+> Note (for backend-agent, observational — not changed here): `loan.consents.consent_type` and `loan.application_documents.*` use PostgreSQL `ENUM` types (`loan.consent_type`, etc.). EF must map the CLR `ConsentType` enum to the `CREDIT_BUREAU`/`DATA_SHARE_WITH_BANK`/`DISBURSEMENT_MANDATE` labels (the repo's `UpperSnakeCaseNameTranslator` handles this). Out of db-engineer scope; flagged for parity awareness only.
