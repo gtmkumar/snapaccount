@@ -29,7 +29,8 @@ public sealed class RecordConsentLocaleTests
             ConsentType: ConsentType.CreditBureau,
             ConsentTextVersion: "v1.0",
             IpAddress: "1.2.3.4",
-            UserAgent: "TestApp/1.0");
+            UserAgent: "TestApp/1.0",
+            KfsId: Guid.NewGuid());
 
         cmd.ConsentLocale.Should().Be("en",
             "English is the default locale when the client does not specify one");
@@ -52,6 +53,7 @@ public sealed class RecordConsentLocaleTests
             ConsentTextVersion: "v1.0",
             IpAddress: null,
             UserAgent: null,
+            KfsId: Guid.NewGuid(),
             ConsentLocale: locale);
 
         var result = _validator.Validate(cmd);
@@ -69,6 +71,7 @@ public sealed class RecordConsentLocaleTests
             ConsentTextVersion: "v1.0",
             IpAddress: null,
             UserAgent: null,
+            KfsId: Guid.NewGuid(),
             ConsentLocale: locale);
 
         var result = _validator.Validate(cmd);
@@ -85,6 +88,7 @@ public sealed class RecordConsentLocaleTests
             ConsentTextVersion: "v1.0",
             IpAddress: null,
             UserAgent: null,
+            KfsId: Guid.NewGuid(),
             ConsentLocale: "en-IN-very-long-tag-exceeds-ten-characters");  // > 10 chars
 
         var result = _validator.Validate(cmd);
@@ -138,6 +142,7 @@ public sealed class RecordConsentLocaleTests
             ConsentTextVersion: "v2.1.0-hi",
             IpAddress: null,
             UserAgent: null,
+            KfsId: Guid.NewGuid(),
             ConsentLocale: "hi");
 
         var result = _validator.Validate(cmd);

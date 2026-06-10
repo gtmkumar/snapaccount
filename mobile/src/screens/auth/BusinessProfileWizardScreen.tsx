@@ -27,7 +27,7 @@ import { PanInput } from '../../components/shared/PanInput';
 import { Colors } from '../../constants/colors';
 import { isValidPAN, isValidGSTIN, isValidAadhaar } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
-import apiClient, { getApiError, refreshAccessToken } from '../../lib/api';
+import apiClient, { getApiError, refreshContextAndSwap } from '../../lib/api';
 import { saveDocument, type DocumentKind } from '../../api/documents';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
@@ -222,12 +222,14 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
       //    Documents screen.
       await persistDocuments();
 
-      // Refresh the session token so it carries the new organizationId + org.*
-      // permissions. The backend adds the creator as an ORG_ADMIN member when the
-      // org is created, but the JWT issued at OTP/login (before the org existed)
-      // has no org context — without this refresh the owner's first org-scoped
-      // call (e.g. POST /auth/team/invite) is rejected by OrgContextGuard (409).
-      await refreshAccessToken();
+      // GAP-007 / BUG-5: Swap the session JWT for one that carries the new
+      // OrganizationId + org.* RBAC permissions. The backend adds the creator
+      // as ORG_ADMIN when the org is created, but the JWT issued at OTP/login
+      // (before the org existed) has no org context — without this swap the
+      // owner's first org-scoped call (e.g. POST /auth/team/invite) is rejected
+      // with 409 Org.InvalidContext. refreshContextAndSwap() is non-fatal:
+      // failure is logged but never blocks onboarding completion.
+      await refreshContextAndSwap();
 
       // Onboarding complete — enter the app (RootNavigator swaps to AppNavigator).
       markAuthenticated();

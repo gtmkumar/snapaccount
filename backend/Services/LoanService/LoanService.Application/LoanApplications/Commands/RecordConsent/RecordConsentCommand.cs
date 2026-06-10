@@ -17,6 +17,10 @@ namespace LoanService.Application.LoanApplications.Commands.RecordConsent;
 /// GAP-040 / P6-HANDOFF-25: <see cref="ConsentLocale"/> records the exact locale of the
 /// consent text served to the user via GET /loans/consents/catalog, so the DPDP audit trail
 /// ties back to the precise language version the user reviewed (RBI + DPDP legal artifact).
+///
+/// GAP-021 / RBI DL Guidelines: <see cref="KfsId"/> is REQUIRED. The handler validates that
+/// the referenced KFS was previously served for this application and marks it acknowledged.
+/// Consent submissions without a valid KFS reference are rejected.
 /// </summary>
 [RequiresPermission("loan.application.consent")]
 public record RecordConsentCommand(
@@ -25,6 +29,8 @@ public record RecordConsentCommand(
     string ConsentTextVersion,
     string? IpAddress,
     string? UserAgent,
+    /// <summary>GAP-021: ID of the Key Facts Statement acknowledged by the borrower.</summary>
+    Guid KfsId,
     string ConsentLocale = "en") : ICommand<RecordConsentResponse>;
 
 /// <summary>Response after recording consent.</summary>
@@ -40,6 +46,10 @@ public sealed class RecordConsentCommandValidator : AbstractValidator<RecordCons
         RuleFor(x => x.ConsentTextVersion).NotEmpty().MaximumLength(50);
         RuleFor(x => x.IpAddress).MaximumLength(45);  // IPv6 max length
         RuleFor(x => x.UserAgent).MaximumLength(512);
+        // GAP-021: KFS id must be supplied
+        RuleFor(x => x.KfsId)
+            .NotEmpty()
+            .WithMessage("KfsId is required. Obtain it from GET /loans/applications/{id}/kfs before consenting.");
         // GAP-040: locale must be a non-empty BCP-47 tag (e.g. "en", "hi", "ta", "bn")
         RuleFor(x => x.ConsentLocale)
             .NotEmpty()
@@ -70,11 +80,29 @@ public sealed class RecordConsentCommandHandler(
         if (application == null)
             return Error.NotFound("LoanApplication", request.ApplicationId);
 
+        // GAP-021 / RBI DL Guidelines: validate that the referenced KFS was generated
+        // for this application and has not already been used for a different consent.
+        var kfs = await db.KeyFactsStatements
+            .Where(k => k.Id == request.KfsId
+                        && k.ApplicationId == request.ApplicationId
+                        && k.DeletedAt == null)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (kfs is null)
+            return Result<RecordConsentResponse>.Failure(Error.Validation(
+                "Consent.KfsNotFound",
+                "The Key Facts Statement (KfsId) was not found for this application. " +
+                "Generate a KFS via POST /loans/applications/{id}/kfs before submitting consent."));
+
         var signedAt = DateTime.UtcNow;
 
         // P6-HANDOFF-26: compute HMAC-SHA256 server-side
         var hmacKey = await hmacKeyProvider.GetKeyAsync(cancellationToken);
         var signature = ConsentSignature.Compute(userId, request.ApplicationId, request.ConsentTextVersion, signedAt, hmacKey);
+
+        // Mark KFS as acknowledged (immutable — only set once).
+        if (kfs.AcknowledgedAt is null)
+            kfs.RecordAcknowledgement();
 
         var consent = new Consent
         {

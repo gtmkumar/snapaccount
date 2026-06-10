@@ -23,7 +23,15 @@ All four Wave 1 dispatches accepted after independent orchestrator verification 
 - notification_event seeder try/catch band-aid (PR #19) can be removed now that 060 is verified → backend (Wave 2/3).
 - Mobile Jest infra debt (nativewind/TurboModuleRegistry, 23 pre-existing failing suites) → qa-mobile (Wave 4).
 
-**Next gate:** Dispatch Wave 2 (compliance & money: backend B7–B12, mobile M2–M4, ui-ux U1–U2, devops D3–D5) on team-lead approval.
+### Phase 7 Wave 2 — DISPATCHED (2026-06-10 20:55 IST, team-lead pre-approved autonomous continuation)
+
+Batch 1 (parallel, disjoint file ownership):
+- **backend-agent** → B7 (DPDP consent/privacy APIs), B8 (RBI KFS + cooling-off), B9 (Razorpay + usage metering), B10 (notification seeder band-aid removal), B11 (14-item security bundle), B12 (permission catalog is_active/roleCount). DDL handoff section required for db-engineer.
+- **ui-ux-agent** → U1 (Key Facts Statement screen spec), U2 (Privacy Center spec). Unblocks mobile M3.
+- **devops-engineer** → D3 (Secret Manager slots + HSN/SAC runbook + Bucket Lock prep), D4 (CI migration-replay + healthz smoke jobs), D5 (Cloud Scheduler job matrix incl. KPI MV refresh).
+- **mobile-dev** → M2 only (consume /auth/token/refresh-context after onboarding; BUG-5 closure). M3/M4 held as batch 2 pending B7/B8 + U1/U2; M1 blocked on TL-2.
+
+Batch 2 (queued): mobile M3 (KFS screen + Privacy Center) + M4 (biometric step-up, partial pending M1/TL-2); db-engineer DDL from backend B7/B8/B9/B12 handoff.
 
 **Last Updated:** 2026-06-10 — **Comprehensive post-Phase-6 review complete.** Full gap analysis at `.claude/orchestrator/gap-analysis-2026-06-10.md` (50+ gaps: requirements vs implementation, security, DPDP Rules 2025 / RBI Digital Lending compliance, industry benchmarks). Per-agent Phase 7 task files at `.claude/orchestrator/phase-7-tasks/`. Team-lead action items TL-1..TL-10 listed in `phase-7-tasks/README.md` (CI billing, Firebase key rotation, GSTN/DLT/DNS paperwork, DPO appointment).
 

@@ -24,6 +24,10 @@ public sealed class LoanApplicationConfiguration : IEntityTypeConfiguration<Loan
         builder.Property(x => x.DisbursedAmount).HasColumnType("numeric(18,2)");
         builder.Property(x => x.AnonymizationReason).HasMaxLength(100);
 
+        // GAP-021: RBI cooling-off window metadata
+        builder.Property(x => x.CoolingOffEndsAt).HasColumnName("cooling_off_ends_at");
+        builder.Property(x => x.CoolingOffDays).HasColumnName("cooling_off_days");
+
         // Indexes
         builder.HasIndex(x => x.OrgId);
         builder.HasIndex(x => x.Status);

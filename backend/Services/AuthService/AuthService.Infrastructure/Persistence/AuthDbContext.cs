@@ -93,6 +93,21 @@ public class AuthDbContext(DbContextOptions<AuthDbContext> options)
     public DbSet<KycVerification> KycVerifications => Set<KycVerification>();
 
     /// <inheritdoc />
+    public DbSet<UserConsent> UserConsents => Set<UserConsent>();
+
+    /// <inheritdoc />
+    public DbSet<DataExportRequest> DataExportRequests => Set<DataExportRequest>();
+
+    /// <inheritdoc />
+    public DbSet<DataCorrectionRequest> DataCorrectionRequests => Set<DataCorrectionRequest>();
+
+    /// <inheritdoc />
+    public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
+
+    /// <inheritdoc />
+    public DbSet<PlatformConfig> PlatformConfigs => Set<PlatformConfig>();
+
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("auth");

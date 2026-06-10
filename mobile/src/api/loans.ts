@@ -166,12 +166,82 @@ export interface RecordConsentRequest {
    */
   consentVersion: string;
   consentType: ConsentType;
+  /**
+   * GAP-021: KFS id the borrower acknowledged before this consent.
+   * Backend rejects consent without a served+acknowledged KFS id (RBI requirement).
+   */
+  kfsId: string;
+  /** BCP-47 locale of consent text shown to user (en/hi/bn). Default "en". */
+  consentLocale?: string;
 }
 
 export interface RecordConsentResponse {
   consentId: string;
   /** Last 8 hex chars of HMAC-SHA256 signature computed server-side */
   signatureHex: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types — Key Facts Statement (KFS) — GAP-021 / B8
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface KfsFee {
+  name: string;
+  amount: number;
+  type: 'one_time' | 'recurring' | string;
+}
+
+export interface KfsInstalment {
+  emiNumber: number;
+  dueDate: string;
+  principal: number;
+  interest: number;
+  total: number;
+  balance: number;
+}
+
+/** Shape returned by GET /loans/applications/{id}/kfs — backend KfsDto. */
+export interface KfsDto {
+  kfsId: string;
+  applicationId: string;
+  annualPercentageRate: number;
+  loanAmount: number;
+  tenureMonths: number;
+  monthlyEmi: number;
+  /** Raw JSON string from backend — parse before use. */
+  feesJson: string;
+  /** Raw JSON string from backend — parse before use. */
+  repaymentScheduleJson: string;
+  lenderName: string;
+  /** Plain-text grievance officer contact (phone/email may be embedded). */
+  grievanceOfficerContact: string;
+  coolingOffDays: number;
+  hmacSignature: string;
+  generatedAt: string;
+  acknowledgedAt?: string | null;
+}
+
+/** KfsDto with fees and schedule already parsed from JSON. */
+export interface KfsParsed extends Omit<KfsDto, 'feesJson' | 'repaymentScheduleJson'> {
+  fees: KfsFee[];
+  repaymentSchedule: KfsInstalment[];
+  verified: boolean;
+  signatureLast8: string;
+}
+
+/** Response from POST /loans/applications/{id}/kfs (generate). */
+export interface GenerateKfsResponse {
+  kfsId: string;
+  annualPercentageRate: number;
+  loanAmount: number;
+  tenureMonths: number;
+  monthlyEmi: number;
+  fees: KfsFee[];
+  repaymentSchedule: KfsInstalment[];
+  lenderName: string;
+  grievanceOfficerContact: string;
+  coolingOffDays: number;
+  generatedAt: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -398,16 +468,69 @@ export async function listLoanDocuments(
  * IMPORTANT: consentVersion must be the exact text_version string that the user
  * reviewed on-screen (captured from the consent document header). Backend computes
  * HMAC-SHA256 from server key — never compute this on client.
+ *
+ * GAP-021: kfsId is REQUIRED — the borrower must acknowledge a KFS before consent.
+ * Backend endpoint: POST /loans/applications/{id}/consents (plural).
  */
 export async function recordLoanConsent(
   applicationId: string,
   data: RecordConsentRequest,
 ): Promise<RecordConsentResponse> {
   const res = await apiClient.post<RecordConsentResponse>(
-    `/loans/applications/${applicationId}/consent`,
-    data,
+    `/loans/applications/${applicationId}/consents`,
+    {
+      consentType: data.consentType,
+      consentTextVersion: data.consentVersion,
+      kfsId: data.kfsId,
+      consentLocale: data.consentLocale ?? 'en',
+    },
   );
   return res.data;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KFS endpoints — GAP-021 / B8
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Generate (or regenerate) a Key Facts Statement for a loan application.
+ * Requires loan.kfs.generate permission.
+ * POST /loans/applications/{id}/kfs
+ */
+export async function generateKfs(
+  applicationId: string,
+): Promise<GenerateKfsResponse> {
+  const res = await apiClient.post<GenerateKfsResponse>(
+    `/loans/applications/${applicationId}/kfs`,
+  );
+  return res.data;
+}
+
+/**
+ * Retrieve the most recent KFS for a loan application.
+ * Returns null (404 mapped) if no KFS has been generated yet.
+ * GET /loans/applications/{id}/kfs
+ */
+export async function getKfs(applicationId: string): Promise<KfsParsed | null> {
+  try {
+    const res = await apiClient.get<KfsDto>(`/loans/applications/${applicationId}/kfs`);
+    const dto = res.data;
+
+    let fees: KfsFee[] = [];
+    let repaymentSchedule: KfsInstalment[] = [];
+    try { fees = JSON.parse(dto.feesJson) as KfsFee[]; } catch { /* malformed */ }
+    try { repaymentSchedule = JSON.parse(dto.repaymentScheduleJson) as KfsInstalment[]; } catch { /* malformed */ }
+
+    const verified = Boolean(dto.hmacSignature && dto.hmacSignature.length > 0);
+    const signatureLast8 = verified ? dto.hmacSignature.slice(-8) : '';
+
+    const { feesJson: _fj, repaymentScheduleJson: _rj, ...rest } = dto;
+    return { ...rest, fees, repaymentSchedule, verified, signatureLast8 };
+  } catch (err: unknown) {
+    const e = err as { response?: { status?: number } };
+    if (e?.response?.status === 404) return null;
+    throw err;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -943,3 +943,48 @@ Migration **`061_loan_consent_locale_and_catalog_alignment.sql`** (NEW). Three c
 **Seed data (consent catalog v1.4):** `032` seeded the three current consent types (`CREDIT_BUREAU`, `DATA_SHARE_WITH_BANK`, `DISBURSEMENT_MANDATE`) for locale `en`. `061` adds the **`hi`** and **`bn`** variants — **6 new rows**, catalog now 9 rows (3 types × 3 locales), unique on `(consent_type, text_version, locale)`, inserted with `ON CONFLICT DO NOTHING`. ⚠ The `hi`/`bn` bodies are **placeholder-but-plausible translations tagged `[PLACEHOLDER TRANSLATION — LEGAL REVIEW REQUIRED]`** — legal/compliance must replace them before production (RBI Digital Lending + DPDP legal artifact).
 
 > Note (for backend-agent, observational — not changed here): `loan.consents.consent_type` and `loan.application_documents.*` use PostgreSQL `ENUM` types (`loan.consent_type`, etc.). EF must map the CLR `ConsentType` enum to the `CREDIT_BUREAU`/`DATA_SHARE_WITH_BANK`/`DISBURSEMENT_MANDATE` labels (the repo's `UpperSnakeCaseNameTranslator` handles this). Out of db-engineer scope; flagged for parity awareness only.
+
+---
+
+## Phase 7 Wave 2 Addendum — DPDP self-service, RBI KFS, Razorpay/usage (additive, 2026-06-10)
+
+> Migrations: `062_auth_dpdp_consent_export_correction_and_platform_config.sql` (auth — NEW), `063_loan_key_facts_statement_and_cooling_off.sql` (loan — NEW), `064_subscription_razorpay_config_and_usage_records.sql` (subscription — NEW).
+> Status: ADDITIVE. No renames, no drops. Full chain (`000`…`064` + `999`) replays clean on an empty **PostgreSQL 17** database; all three new migrations are idempotent (verified by a second back-to-back apply with `ON_ERROR_STOP=1`).
+> Driver: backend-agent Wave 2 (B7/B8/B9/B11/B12) merged EF entities/configurations with **no backing SQL**. AuthService, LoanService and SubscriptionService have **no EF migrations** — the SQL files here are canonical. Every new table backs a `BaseAuditableEntity`, so `BaseDbContext` applies the global `deleted_at IS NULL` query filter and binds `created_by`/`updated_by` (uuid, via a string↔Guid value converter) on every write; therefore **all five audit columns** (`created_at`, `updated_at`, `deleted_at`, `created_by`, `updated_by`) are present on every table.
+
+### DB-B11/B12 — AuthService DPDP self-service + SEC-056 ghost-route config (`062`)
+
+Five NEW tables in the `auth` schema:
+
+| EF entity → table | Key columns (EF → SQL) | Indexes (exact EF names) | RLS / triggers |
+|---|---|---|---|
+| `UserConsent` → `auth.user_consent` | `user_id`, `purpose` VARCHAR(200), `purpose_description` VARCHAR(1000), `notice_version` VARCHAR(50), `status` VARCHAR(20), `action_at`, `ip_address` VARCHAR(45), `user_agent` VARCHAR(500), `locale` VARCHAR(20), `withdrawn_at` | `ix_user_consent_user_id`, `ix_user_consent_user_purpose_time (user_id, purpose, action_at)` | RLS user-isolation (`user_id = app.current_user_id`). **APPEND-ONLY**: `trg_user_consent_no_delete` blocks hard DELETE; soft-delete (`UPDATE deleted_at`) allowed (mirrors `loan.consents`). FK→`auth.user` **without** cascade (audit retention). |
+| `DataExportRequest` → `auth.data_export_request` | `user_id`, `status` VARCHAR(20), `gcs_object_path` VARCHAR(500), `download_url` VARCHAR(2000), `download_url_expires_at`, `error_message` VARCHAR(1000), `hangfire_job_id` VARCHAR(100) | `ix_data_export_request_user_id`, `ix_data_export_request_user_status` | RLS user-isolation. FK→`auth.user` `ON DELETE CASCADE`. `updated_at` trigger. |
+| `DataCorrectionRequest` → `auth.data_correction_request` | `user_id`, `data_category` VARCHAR(100), `description` VARCHAR(2000), `status` VARCHAR(30), `reviewer_note` VARCHAR(2000), `reviewed_by_user_id`, `resolved_at` | `ix_data_correction_request_user_id`, `ix_data_correction_request_user_status` | RLS user-isolation. FK `user_id`→`auth.user` CASCADE; FK `reviewed_by_user_id`→`auth.user` `ON DELETE SET NULL`. |
+| `FeatureFlag` → `auth.feature_flag` | `flag_key` VARCHAR(100), `is_enabled` BOOL DEFAULT FALSE, `description` VARCHAR(500). `created_by`/`updated_by` are **inherited** (not in the config) and auto-mapped by `BaseDbContext` → present as uuid. | `ix_feature_flag_flag_key` UNIQUE | **No RLS** (global admin registry; gated by RBAC). `updated_at` trigger. |
+| `PlatformConfig` → `auth.platform_config` | `config_key` VARCHAR(100), `config_value` **JSONB** (EF `ConfigValueJson → config_value`). `created_by`/`updated_by` inherited. | `ix_platform_config_config_key` UNIQUE | **No RLS** (global admin store; gated by RBAC). `updated_at` trigger. |
+
+### DB-B7/B8 — LoanService RBI Key Facts Statement + cooling-off (`063`)
+
+| Object | Detail |
+|---|---|
+| NEW `loan.key_facts_statement` (`KeyFactsStatement`) | `application_id`→`loan.applications(id)` (non-unique; versioning allowed), `annual_percentage_rate` NUMERIC(10,4), `loan_amount` NUMERIC(18,2), `tenure_months` INT, `monthly_emi` NUMERIC(18,2), `fees_json`/`repayment_schedule_json` JSONB, `lender_name` VARCHAR(200), `grievance_officer_contact` VARCHAR(1000), `cooling_off_days` INT, `hmac_signature` VARCHAR(500), `generated_at`, `acknowledged_at`. Index `ix_key_facts_statement_application_id`. RLS org-scoped via parent application (mirrors `loan.consents`). |
+| KFS **immutability** trigger | `trg_kfs_immutable_signed_fields` (BEFORE UPDATE) raises if any **signed** field changes (`application_id`, APR, `loan_amount`, `tenure_months`, `monthly_emi`, fees/schedule JSON, `lender_name`, `grievance_officer_contact`, `cooling_off_days`, `hmac_signature`, `generated_at`). **Allows** `acknowledged_at`, audit cols, and `deleted_at` — required because `RecordConsent` calls `RecordAcknowledgement()` (a single legitimate UPDATE). A blanket no-UPDATE trigger would have broken acknowledgement; verified: signed-field UPDATE raises, `acknowledged_at`/soft-delete UPDATE succeed. |
+| ALTER `loan.applications` | ADD `cooling_off_ends_at TIMESTAMPTZ NULL`, `cooling_off_days INT NULL` (GAP-021 RBI cooling-off window). Table is `loan.applications` (the Phase 6C v2 table) — the handoff's `loan.loan_applications` name was **incorrect**; verified against `LoanApplicationConfiguration.ToTable("applications")`. |
+| `kfs_id` on `loan.consents`? | **Not added.** The handoff asked to check; `RecordConsentCommand` takes a `KfsId` but only uses it to look up + acknowledge the KFS — the `Consent` entity/config has **no `KfsId` property**, so nothing is persisted on `loan.consents`. (Confirmed against `ConsentConfiguration.cs` + `RecordConsentCommandHandler.cs`.) |
+
+### DB-B9 — SubscriptionService Razorpay config + usage metering (`064`)
+
+| EF entity → table | Key columns | Indexes | RLS / notes |
+|---|---|---|---|
+| `RazorpayConfig` → `subscription.razorpay_config` | `key_id` VARCHAR(100), `encrypted_key_secret` VARCHAR(1000), `encrypted_webhook_secret` VARCHAR(1000) NULL, `test_mode` BOOL DEFAULT TRUE, `is_enabled` BOOL DEFAULT FALSE. AES-256-GCM secrets encrypted by the app. | (PK only) | **No RLS** (single-row global integration config; RBAC-gated). `updated_at` trigger. |
+| `UsageRecord` → `subscription.usage_records` (**plural**) | `org_id`, `feature_code` VARCHAR(100), `units` INT DEFAULT 1, `period_start`, `period_end`, `correlation_id` VARCHAR(200) | `ix_usage_records_org_feature_period (org_id, feature_code, period_start)`, `ix_usage_records_org_id` | RLS org-isolation (mirrors `010` org policies). **Distinct** from the pre-existing **singular** `subscription.usage_record` (a per-period rollup from `010`). |
+
+**Partitioning note:** `subscription.usage_records` is an append-only per-event metering ledger and is expected to grow large. It is kept as a single table for now to match the EF model. A future migration may RANGE-partition it by `period_start` (monthly) for retention/pruning — a transparent, additive optimisation that does not change the EF mapping.
+
+### Verification summary (Wave 2)
+
+- **Full-chain replay:** `000`…`064` + `999` applied in order with `ON_ERROR_STOP=1` on a fresh `pgvector/pgvector:pg17` (PostgreSQL 17.9) database — **all 66 files OK**.
+- **Idempotency:** `062`/`063`/`064` re-applied a second time back-to-back — **all OK** (every object guarded by `IF NOT EXISTS` / `CREATE OR REPLACE` / `DROP ... IF EXISTS` + `CREATE`).
+- **EF↔SQL parity:** every column verified column-by-column against `information_schema` (name, type, precision/scale, length, nullability) — exact match for all 8 new tables + the 2 added `loan.applications` columns. All EF `HasDatabaseName` index names present. Trigger/RLS behaviour functionally tested (consent hard-delete blocked + soft-delete allowed; KFS signed-field UPDATE blocked + acknowledgement/soft-delete allowed).
+- **Deviations from handoff:** (1) table is `loan.applications`, not `loan.loan_applications`; (2) no `kfs_id` column on `loan.consents` (entity has no such property); (3) `loan.key_facts_statement` uses a signed-field-only immutability trigger rather than a blanket no-UPDATE trigger, to permit borrower acknowledgement.

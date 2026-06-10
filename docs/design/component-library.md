@@ -1522,3 +1522,22 @@ UI assistance only; server is authoritative (403 on escalation → toast + rever
 | Invite EXPIRED | warning | clock |
 All pairs WCAG AA ≥ 4.5:1 text / ≥ 3:1 UI; icon + text always, never color-only.
 
+## Phase 7 Additions (2026-06-10)
+> Wave 2 — DPDP Privacy Center + RBI Key Facts Statement. Appended; do NOT replace prior entries. All new components are compositions of existing primitives + tokens — no new tokens introduced.
+
+### New composite components (detailed specs in linked docs)
+> Full layout/state/interaction specs live in the screen docs; this section is the index + prop contract.
+
+#### Key Facts Statement (KFS) — `docs/design/mobile/loans/key-facts-statement-screen.md`
+- **`KfsTrustBanner`** — `AlertBanner` (§4.2) `info` variant, sticky under header; lock icon + "digitally signed, cannot be edited". Tap → signature explainer sheet. Props: `bankName`, `productName`, `onExplain`.
+- **`AprHeroBlock`** — wraps `AmountDisplay` (§6.1) in `percent` mode at `typography.fontSize.4xl` / `fontWeight.bold`; the single largest numeric on screen. Props: `apr`, `nominalRate`, `interestType`. `accessibilityRole="text"` with a combined label.
+- **`KfsAcknowledgeFooter`** — sticky bottom; mirrors `ConsentSignatureBlock` (loan-consent). `Checkbox` (§1.10) + `SecondaryButton` (Download PDF) + `PrimaryButton` (Continue). Both gates (scroll-to-bottom AND checked) required to enable Continue. Props: `enabled`, `onAcknowledgeChange`, `onContinue`, `onDownload`.
+- Reuses: `SummaryList`/`TaxBreakdownTable`/`AccordionSection`/`CalloutCard`/`ScrollHintBanner` (no changes).
+
+#### Privacy Center — `docs/design/mobile/privacy/privacy-center.md`
+- **`PrivacyNavCard`** — `Card` (§2.1) + leading 24pt icon + title + optional `StatusBadge`/count chip + trailing chevron; ≥64pt tall. Variants: `default`, `destructive` (error tint, account deletion). `accessibilityRole="button"`.
+- **`ConsentPurposeCard`** — `Card` with title + `StatusBadge` (Granted/Withdrawn), body description (server-supplied, localized, versioned), meta line (granted date · version), footer action `Withdraw`/`Re-grant`. Withdraw = `error`-text ghost button.
+- **`ExportJobCard`** — async-job state machine card (`none | requested/processing | ready | expired | failed`) wrapping `ProgressBar` (§4.3) + `PrimaryButton`/`SecondaryButton` + tinted status; `accessibilityLiveRegion="polite"` on status change.
+- **`DpoContactBlock`** — `Card` with labeled rows (name/email/phone/address/hours) + `Email`/`Call` actions in ≥44pt hit areas + SLA line. DPDP Rules 2025 published India-based contact (admin-configurable, never hardcoded).
+- Reuses: `FilterTabs` (mobile), `Select`, `TextInput`, `FileUpload`, `EmptyState`, `ErrorState`, `Toast`, `Dialog`-style confirm (default focus on Cancel for destructive withdraw).
+

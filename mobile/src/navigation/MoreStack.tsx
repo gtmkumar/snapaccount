@@ -12,6 +12,13 @@ import { RequestCallbackModalScreen } from '../screens/callbacks/RequestCallback
 import { CallbackStatusScreen } from '../screens/callbacks/CallbackStatusScreen';
 import { TeamScreen } from '../screens/team/TeamScreen';
 import { AcceptInviteScreen } from '../screens/auth/AcceptInviteScreen';
+// Phase 7 Wave 2: Privacy Center screens (GAP-020 / M3b)
+import { PrivacyCenterScreen } from '../screens/profile/PrivacyCenterScreen';
+import { MyConsentsScreen } from '../screens/profile/MyConsentsScreen';
+import { DataExportScreen } from '../screens/profile/DataExportScreen';
+import { CorrectionRequestScreen } from '../screens/profile/CorrectionRequestScreen';
+import { MyCorrectionsScreen } from '../screens/profile/MyCorrectionsScreen';
+import { DpoContactScreen } from '../screens/profile/DpoContactScreen';
 import type { CtaCategory, LinkedEntity } from '../components/callbacks/RequestCallbackCta';
 
 export type MoreStackParamList = {
@@ -40,6 +47,13 @@ export type MoreStackParamList = {
   Team: undefined;
   /** Invitee org-join — reachable when already authenticated (deep link / manual). */
   AcceptInvite: { token?: string } | undefined;
+  // Phase 7 Wave 2: Privacy Center (DPDP Act 2023 / GAP-020)
+  PrivacyCenter: undefined;
+  MyConsents: undefined;
+  DataExport: undefined;
+  CorrectionRequest: undefined;
+  MyCorrections: undefined;
+  DpoContact: undefined;
 };
 
 const Stack = createNativeStackNavigator<MoreStackParamList>();
@@ -67,6 +81,13 @@ export function MoreStack() {
       <Stack.Screen name="CallbackStatus" component={CallbackStatusScreen} />
       <Stack.Screen name="Team" component={TeamScreen} />
       <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
+      {/* Phase 7 Wave 2: Privacy Center (DPDP Act 2023 / GAP-020) */}
+      <Stack.Screen name="PrivacyCenter" component={PrivacyCenterScreen} />
+      <Stack.Screen name="MyConsents" component={MyConsentsScreen} />
+      <Stack.Screen name="DataExport" component={DataExportScreen} />
+      <Stack.Screen name="CorrectionRequest" component={CorrectionRequestScreen} />
+      <Stack.Screen name="MyCorrections" component={MyCorrectionsScreen} />
+      <Stack.Screen name="DpoContact" component={DpoContactScreen} />
     </Stack.Navigator>
   );
 }

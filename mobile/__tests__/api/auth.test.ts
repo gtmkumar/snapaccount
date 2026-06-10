@@ -25,6 +25,7 @@ import {
   sendAadhaarOtp,
   verifyAadhaarOtp,
   complete2faChallenge,
+  refreshContext,
 } from '../../src/api/auth';
 
 const mockGet = apiClient.get as jest.Mock;
@@ -116,5 +117,30 @@ describe('2FA challenge', () => {
     });
     expect(res.token).toBe('tok');
     expect(res.userId).toBe('u1');
+  });
+});
+
+// GAP-007 / BUG-5
+describe('refreshContext', () => {
+  it('POSTs to /auth/token/refresh-context with no body', async () => {
+    mockPost.mockResolvedValue({
+      data: { accessToken: 'new-org-token', expiresAt: '2026-06-10T22:00:00Z' },
+    });
+    await refreshContext();
+    expect(mockPost).toHaveBeenCalledWith('/auth/token/refresh-context');
+  });
+
+  it('returns accessToken and expiresAt from the response', async () => {
+    mockPost.mockResolvedValue({
+      data: { accessToken: 'tok-abc', expiresAt: '2026-06-10T22:00:00Z' },
+    });
+    const result = await refreshContext();
+    expect(result.accessToken).toBe('tok-abc');
+    expect(result.expiresAt).toBe('2026-06-10T22:00:00Z');
+  });
+
+  it('propagates HTTP errors to the caller (caller decides on fallback)', async () => {
+    mockPost.mockRejectedValue(new Error('401 Unauthorized'));
+    await expect(refreshContext()).rejects.toThrow('401 Unauthorized');
   });
 });

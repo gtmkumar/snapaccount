@@ -50,6 +50,10 @@ public sealed class DeleteReferenceDataCommandHandler(IAuthDbContext db)
     /// <summary>
     /// Counts how many user/profile rows reference this entry's code.
     /// Checks the column(s) relevant to the entry's category.
+    ///
+    /// I1.4A-001: Unknown/new categories throw <see cref="InvalidOperationException"/>
+    /// rather than silently returning 0 (default-deny — prevents in-use entries
+    /// from being deleted when a new category is added without wiring its check).
     /// </summary>
     private async Task<int> CountUsagesAsync(
         ReferenceDataEntity entry,
@@ -72,7 +76,11 @@ public sealed class DeleteReferenceDataCommandHandler(IAuthDbContext db)
             "LANGUAGE" => await db.Users
                 .CountAsync(u => u.PreferredLanguage == entry.Code && u.DeletedAt == null, ct),
 
-            _ => 0,
+            // I1.4A-001: Default-deny — require developers to explicitly wire in-use
+            // checks for any new category rather than silently allowing deletions.
+            var unknown => throw new InvalidOperationException(
+                $"ReferenceData category '{unknown}' does not have an in-use check registered. " +
+                "Add a CountAsync branch to CountUsagesAsync before allowing deletion of this category."),
         };
     }
 }

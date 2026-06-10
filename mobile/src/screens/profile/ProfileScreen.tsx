@@ -14,6 +14,7 @@ import { Colors } from '../../constants/colors';
 import { useAuthStore } from '../../store/authStore';
 import { FirebaseAuth } from '../../lib/firebase';
 import { deleteAccount } from '../../lib/api';
+import { useBiometricGate } from '../../hooks/useBiometricGate';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
 type NavProp = NativeStackNavigationProp<MoreStackParamList, 'Profile'>;
@@ -30,6 +31,7 @@ function normalizePhone(phone: string | null | undefined): string {
 export function ProfileScreen({ navigation }: Props) {
   const { user, currentOrganization, signOut } = useAuthStore();
   const { t } = useTranslation();
+  const { trigger: triggerBiometric } = useBiometricGate();
   const [deletingAccount, setDeletingAccount] = useState(false);
 
   const handleSignOut = () => {
@@ -50,7 +52,13 @@ export function ProfileScreen({ navigation }: Props) {
     );
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
+    // GAP-063 / M4: Biometric step-up before account deletion (destructive action).
+    const passed = await triggerBiometric({
+      promptMessage: t('mobile.biometric.prompt'),
+    });
+    if (!passed) return;
+
     Alert.alert(
       t('mobile.profile.deleteAccount.confirmTitle'),
       t('mobile.profile.deleteAccount.confirmBody'),

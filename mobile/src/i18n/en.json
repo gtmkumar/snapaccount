@@ -1226,7 +1226,240 @@
       "notifications": "Notifications",
       "notificationsDesc": "Alerts & updates",
       "profileSettings": "Profile & Settings",
-      "profileSettingsDesc": "Account settings"
+      "profileSettingsDesc": "Account settings",
+      "privacyData": "Privacy & Data",
+      "privacyDataDesc": "Manage consents & your rights"
+    },
+    "kfs": {
+      "title": "Key Facts Statement",
+      "verified": { "chip": "Verified" },
+      "trust": {
+        "banner": "Issued & digitally signed by SnapAccount · cannot be edited",
+        "explainer": {
+          "title": "About this statement",
+          "body": "This statement was prepared and digitally signed by SnapAccount. Its contents cannot be changed."
+        }
+      },
+      "apr": {
+        "label": "Annual Percentage Rate (APR)",
+        "suffix": "p.a.",
+        "caption": "Inclusive of interest + all fees. This is the true cost.",
+        "nominal": "Nominal interest rate: {{rate}}% p.a. ({{type}})"
+      },
+      "snapshot": {
+        "sanctioned": "Sanctioned amount",
+        "tenure": "Tenure",
+        "emi": "Instalment (EMI)",
+        "totalInterest": "Total interest",
+        "totalFees": "Total of all fees",
+        "totalPayable": "Total amount payable"
+      },
+      "fees": {
+        "title": "All fees & charges",
+        "total": "Total fees & charges",
+        "thirdPartyTag": "third-party"
+      },
+      "net": {
+        "label": "Amount credited to your account"
+      },
+      "schedule": {
+        "toggle": "Full repayment schedule ({{count}} instalments)",
+        "col": {
+          "no": "#",
+          "dueDate": "Due date",
+          "emi": "EMI",
+          "principal": "Principal",
+          "interest": "Interest",
+          "balance": "Balance"
+        }
+      },
+      "coolingOff": {
+        "title": "Cooling-off period: {{days}} days",
+        "body": "You may exit within {{days}} days of disbursal by repaying the principal + proportionate APR, with no prepayment penalty."
+      },
+      "grievance": {
+        "title": "Grievance Redressal Officer",
+        "call": "Call",
+        "emailCta": "Email",
+        "escalation": "If unresolved in 30 days, escalate to RBI CMS (cms.rbi.org.in)"
+      },
+      "meta": {
+        "id": "KFS id: {{id}}",
+        "issued": "Issued {{dateTime}}",
+        "signature": "Signature (SHA-256, last 8): {{last8}} · Verified"
+      },
+      "scrollHint": "Please read to the end to continue",
+      "ack": {
+        "checkbox": "I have read and understood the Key Facts Statement."
+      },
+      "cta": {
+        "downloadPdf": "Download PDF",
+        "continue": "Continue to consent",
+        "disabledHint": "Read to the end and tick the acknowledgement to continue.",
+        "retry": "Retry"
+      },
+      "state": {
+        "preparing": {
+          "title": "Preparing your Key Facts Statement",
+          "body": "This usually takes a few moments. Please wait."
+        }
+      },
+      "error": {
+        "integrity": {
+          "title": "Verification failed",
+          "body": "We couldn't verify this statement. For your safety we can't continue. Please contact support."
+        },
+        "malformed": "This statement is incomplete. Please contact support.",
+        "offline": "You're offline. Connect to view your Key Facts Statement.",
+        "ackFailed": "Could not record your acknowledgement. Please retry.",
+        "download": "Could not download PDF. Please try again."
+      }
+    },
+    "privacy": {
+      "center": {
+        "title": "Privacy & Data",
+        "intro": {
+          "title": "Your data, your control.",
+          "body": "Manage consents, export or correct your data, and reach our Data Protection Officer. Protected under the DPDP Act 2023."
+        },
+        "nav": {
+          "consents": "My consents",
+          "consentsCount": "{{active}} active · {{withdrawn}} withdrawn",
+          "export": "Download my data",
+          "correction": "Request a correction",
+          "correctionPending": "{{count}} pending",
+          "deletion": "Delete my account",
+          "deletionContext": "Permanently erase your account and personal data, subject to legal retention (e.g. 7-year financial records)."
+        },
+        "footer": {
+          "policy": "Privacy Policy",
+          "rights": "DPDP Rights"
+        }
+      },
+      "consents": {
+        "title": "My consents",
+        "filter": {
+          "active": "Active",
+          "withdrawn": "Withdrawn",
+          "all": "All"
+        },
+        "status": {
+          "granted": "Granted",
+          "withdrawn": "Withdrawn"
+        },
+        "grantedOn": "Granted {{date}} · Version {{version}}",
+        "withdrawnOn": "Withdrawn {{date}}",
+        "cta": {
+          "withdraw": "Withdraw consent",
+          "regrant": "Re-grant"
+        },
+        "confirm": {
+          "title": "Withdraw consent for {{purpose}}?",
+          "loanLinkedNote": "Withdrawal stops future processing. For applications already in progress, please contact support.",
+          "note": "Withdrawal takes effect immediately and is recorded for audit. This does not delete data already lawfully processed.",
+          "cancel": "Cancel",
+          "confirm": "Withdraw"
+        },
+        "toast": {
+          "withdrawn": "Consent withdrawn."
+        },
+        "error": {
+          "withdraw": "Could not withdraw consent. Please try again.",
+          "load": "Could not load consents. Please retry."
+        },
+        "empty": "No consents on record yet."
+      },
+      "export": {
+        "title": "Download my data",
+        "explainer": {
+          "title": "Get a copy of your SnapAccount data",
+          "body": "Your export includes profile & business details, documents, GST filings, ITR records, loan applications, chat history, and notifications. Large files are delivered as a secure, time-limited download."
+        },
+        "cta": {
+          "request": "Request my data export",
+          "download": "Download",
+          "requestAgain": "Request again",
+          "retry": "Retry"
+        },
+        "status": {
+          "processing": "Preparing your export… We'll notify you when it's ready.",
+          "ready": "Your data export is ready.",
+          "expired": "This export has expired.",
+          "failed": "Export failed. Please try again."
+        },
+        "availableUntil": "Available until {{date}}",
+        "error": {
+          "offline": "Connect to internet to request your data export.",
+          "generic": "Could not process your request. Please try again."
+        }
+      },
+      "correction": {
+        "title": "Request a correction",
+        "field": {
+          "label": "Which information?",
+          "description": "Describe the correction needed",
+          "descriptionPlaceholder": "Describe what needs to be corrected and the correct value…",
+          "options": {
+            "name": "Name",
+            "businessName": "Business name",
+            "gstin": "GSTIN",
+            "panDisplay": "PAN",
+            "phone": "Phone",
+            "email": "Email",
+            "address": "Address",
+            "other": "Other"
+          }
+        },
+        "info": {
+          "reverify": "Some fields (PAN, GSTIN) may need re-verification after correction."
+        },
+        "cta": {
+          "submit": "Submit request",
+          "cancel": "Cancel"
+        },
+        "toast": {
+          "submitted": "Correction request submitted."
+        },
+        "list": {
+          "title": "My correction requests",
+          "newCta": "New"
+        },
+        "status": {
+          "submitted": "Submitted",
+          "underReview": "Under review",
+          "approved": "Approved",
+          "rejected": "Rejected"
+        },
+        "rejectedReason": "Reason: {{reason}}",
+        "empty": "No correction requests yet.",
+        "error": {
+          "submit": "Could not submit your request. Please try again.",
+          "load": "Could not load correction requests."
+        }
+      },
+      "deletion": {
+        "nav": "Delete my account"
+      },
+      "dpo": {
+        "title": "Data Protection Officer",
+        "sla": "We acknowledge requests within {{ackDays}} business days and resolve within {{slaDays}} days.",
+        "escalation": "Unsatisfied? You may complain to the Data Protection Board of India.",
+        "cta": {
+          "call": "Call",
+          "email": "Email",
+          "learnMore": "Learn more"
+        }
+      }
+    },
+    "biometric": {
+      "prompt": "Confirm your identity",
+      "fallback": {
+        "title": "Confirm action",
+        "body": "Your device doesn't support biometrics. Tap Confirm to proceed.",
+        "confirm": "Confirm",
+        "cancel": "Cancel"
+      },
+      "error": "Authentication failed. Please try again."
     }
   }
 }

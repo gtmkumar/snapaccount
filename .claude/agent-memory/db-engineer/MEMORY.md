@@ -1,2 +1,2 @@
-- [Migration conventions](migration_conventions.md) — numbering, idempotency, EF-alignment pattern, and how to replay/verify the chain locally
-- [Service EF↔SQL mapping quirks](ef_sql_mapping_quirks.md) — services with no EF migrations, BaseAuditableEntity column expectations, enum handling
+- [Migration & EF Parity Conventions](conventions_migrations_ef_parity.md) — flat numbered SQL files are canonical (no EF migrations for auth/loan/subscription/notification/callback); how to match EF configs.
+- [Schema RLS & Trigger Patterns](patterns_rls_triggers.md) — RLS isolation snippets, no-delete / immutability triggers, audit-column rules.

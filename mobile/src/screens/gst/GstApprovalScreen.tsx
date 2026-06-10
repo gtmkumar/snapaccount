@@ -28,6 +28,7 @@ import { Colors } from '../../constants/colors';
 import apiClient from '../../lib/api';
 import type { GstStackParamList } from '../../navigation/GstStack';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
+import { useBiometricGate } from '../../hooks/useBiometricGate';
 
 const RATING_PROMPT_KEY = '@snapaccount/gst_rating_prompted';
 
@@ -68,6 +69,7 @@ export function GstApprovalScreen({ navigation, route }: Props) {
   // SEC-015: Prevent screenshots on GST approval screen (authorisation with tax figures)
   useSensitiveScreen();
 
+  const { trigger: triggerBiometric } = useBiometricGate();
   const { returnId, returnType } = route.params;
   const [checked, setChecked] = useState<Record<string, boolean>>(
     Object.fromEntries(CHECKLIST.map((item) => [item.id, false])),
@@ -84,6 +86,9 @@ export function GstApprovalScreen({ navigation, route }: Props) {
 
   const handleApprove = async () => {
     if (!allChecked) return;
+    // GAP-063 / M4: Biometric step-up before GST approval submission.
+    const passed = await triggerBiometric({ promptMessage: 'Verify to approve GST return' });
+    if (!passed) return;
     setSubmitting(true);
     try {
       await apiClient.post(`/gst/returns/${returnId}/approve`);

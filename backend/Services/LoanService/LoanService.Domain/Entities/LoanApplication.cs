@@ -54,6 +54,21 @@ public class LoanApplication : BaseAuditableEntity
     /// <summary>DPDP anonymisation reason (e.g. 'DPDP_USER_ERASURE').</summary>
     public string? AnonymizationReason { get; set; }
 
+    // ── GAP-021: RBI Digital Lending Guidelines — Cooling-off window ──────────
+
+    /// <summary>
+    /// UTC end of the cooling-off window after disbursement.
+    /// Populated by <see cref="RecordDisbursement"/> based on the KFS <c>CoolingOffDays</c>.
+    /// NULL until disbursed.
+    /// </summary>
+    public DateTime? CoolingOffEndsAt { get; set; }
+
+    /// <summary>
+    /// Number of cooling-off days granted (copied from the acknowledged KFS).
+    /// NULL until disbursed.
+    /// </summary>
+    public int? CoolingOffDays { get; set; }
+
     // Navigation
     public LoanProduct? LoanProduct { get; set; }
     public PartnerBank? AssignedBank { get; set; }

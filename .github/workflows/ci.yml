@@ -236,7 +236,369 @@ jobs:
           retention-days: 7
 
   # ─────────────────────────────────────────────
-  # Job 4: Docker build smoke test (no push)
+  # Job 4: Full migration-replay on fresh postgres:17 + pgvector  (GAP-071 / D4)
+  #
+  # Applies every SQL migration file in numeric order (000 → 061 + 999) plus the
+  # dev seed (200_dev_business_data.sql if it exists) to a brand-new PostgreSQL
+  # container with ON_ERROR_STOP=1.  Any SQL error fails the job immediately.
+  #
+  # Why separate from the EF dry-run in Job 3?
+  #   Job 3 generates EF-managed migration scripts per service.  This job applies
+  #   the raw SQL files in database/migrations/ — the authoritative source for the
+  #   shared-schema pattern (one DB, schema-per-service, plain SQL migrations).
+  #   These are different artefacts and can diverge; this job catches that.
+  #
+  # Note: depends on billing being restored (GAP-002 / TL-1).  The job is authored
+  # now and will activate automatically when GitHub Actions billing is enabled.
+  # ─────────────────────────────────────────────
+  migration-replay:
+    name: Migration Replay (000→061 + 999)
+    runs-on: ubuntu-latest
+    # Run independently of dotnet-build-test — failures in either are distinct issues.
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: snapaccount
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d snapaccount"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable pgvector extension
+        run: |
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;" \
+            -v ON_ERROR_STOP=1
+
+      - name: Apply migrations 000→061 in numeric order
+        # Sort by the numeric prefix (e.g. 000_, 001_, ..., 061_) then apply each.
+        # ON_ERROR_STOP=1 causes psql to exit with a non-zero code on any SQL error,
+        # which fails this CI step immediately.
+        run: |
+          set -euo pipefail
+          MIGRATION_DIR="database/migrations"
+          echo "Migration directory: ${MIGRATION_DIR}"
+
+          # Find all numeric migration files (NOT 200_dev* or 999_seed*),
+          # sort numerically, apply in order.
+          MIGRATION_FILES=$(
+            ls "${MIGRATION_DIR}"/*.sql \
+              | grep -v '200_' \
+              | grep -v '999_' \
+              | sort -t_ -k1,1n
+          )
+
+          echo "Will apply:"
+          echo "${MIGRATION_FILES}"
+
+          for f in ${MIGRATION_FILES}; do
+            echo "────────────────────────────────────────"
+            echo "Applying: $(basename ${f})"
+            PGPASSWORD=migration_test psql \
+              -h localhost -p 5432 -U postgres -d snapaccount \
+              -v ON_ERROR_STOP=1 \
+              -f "${f}"
+            echo "  ✓ $(basename ${f})"
+          done
+
+      - name: Apply seed reference data (999_seed_reference_data.sql)
+        run: |
+          set -euo pipefail
+          SEED_FILE="database/migrations/999_seed_reference_data.sql"
+          echo "Applying seed: ${SEED_FILE}"
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -v ON_ERROR_STOP=1 \
+            -f "${SEED_FILE}"
+          echo "  ✓ Seed data applied"
+
+      - name: Apply dev seed if present (200_dev_business_data.sql)
+        # The dev seed may have column-name drift (GAP-072); we apply it to catch drift
+        # but do NOT fail the job — the seed is best-effort in CI.
+        # When GAP-072 is resolved, change `|| true` to strict error handling.
+        run: |
+          set -euo pipefail
+          DEV_SEED="database/migrations/200_dev_business_data.sql"
+          if [ -f "${DEV_SEED}" ]; then
+            echo "Applying dev seed: ${DEV_SEED}"
+            PGPASSWORD=migration_test psql \
+              -h localhost -p 5432 -U postgres -d snapaccount \
+              -v ON_ERROR_STOP=1 \
+              -f "${DEV_SEED}" || {
+                echo "::warning::Dev seed (200_dev_business_data.sql) failed — GAP-072 (column drift). Fix in db-engineer scope."
+              }
+          else
+            echo "Dev seed not found at ${DEV_SEED} — skipping (not a failure)"
+          fi
+
+      - name: Verify schema integrity
+        # Quick sanity check — confirm expected tables exist in key schemas.
+        run: |
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -c "
+              SELECT table_schema, COUNT(*) as table_count
+              FROM information_schema.tables
+              WHERE table_schema IN (
+                'auth','document','accounting','gst','loan','itr',
+                'chat','notification','report','subscription','ai','callback'
+              )
+              AND table_type = 'BASE TABLE'
+              GROUP BY table_schema
+              ORDER BY table_schema;
+            " \
+            -v ON_ERROR_STOP=1
+
+          echo "Migration replay completed successfully."
+
+      - name: Verify callback.kpi_daily_snapshot MV exists (P6-HANDOFF-07)
+        # Confirms the materialized view provisioned in Wave 1 (migration 061) is present.
+        # This MV is required for the callback KPI scheduler job (D5).
+        run: |
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -c "
+              SELECT matviewname, matviewowner
+              FROM pg_matviews
+              WHERE schemaname = 'callback' AND matviewname = 'kpi_daily_snapshot';
+            " \
+            -v ON_ERROR_STOP=1 | tee /tmp/mv_check.txt
+
+          if ! grep -q "kpi_daily_snapshot" /tmp/mv_check.txt; then
+            echo "::error::callback.kpi_daily_snapshot materialized view not found!"
+            echo "  Check migration 061_loan_consent_locale_and_catalog_alignment.sql"
+            exit 1
+          fi
+          echo "  ✓ callback.kpi_daily_snapshot exists"
+
+  # ─────────────────────────────────────────────
+  # Job 5: Aspire health-check smoke test  (GAP-071 / D4)
+  #
+  # Design rationale:
+  #   Booting the full .NET Aspire AppHost in GitHub Actions CI is impractical:
+  #     (a) Aspire AppHost requires the Aspire workload (dotnet workload install aspire)
+  #         which adds ~5 min to cold-start and is not cached by default.
+  #     (b) 12 simultaneous .NET services + Redis require ~8 GB RAM — exceeds
+  #         ubuntu-latest (7 GB) without upgrade to ubuntu-latest-8-core (costs money).
+  #     (c) Firebase/GCP credentials are absent in CI, causing service startup failures
+  #         that mask the actual healthz check.
+  #     (d) Aspire runs services on dynamic ports; the stable port assignment
+  #         (5101–5112) only applies when WithDevLoopDefaults is active with a local
+  #         user-secrets DB connection string.
+  #
+  #   PRACTICAL VARIANT IMPLEMENTED:
+  #     Each service is started individually with DEV_AUTH_BYPASS=true,
+  #     ASPNETCORE_ENVIRONMENT=Testing, and a test-only PostgreSQL connection.
+  #     A single /healthz curl verifies the service starts up and responds.
+  #     Services are started in parallel (matrix job), so total CI time is bounded
+  #     by the slowest service rather than the sum.
+  #
+  #   TRADEOFF vs. full AppHost boot:
+  #     - Does NOT test inter-service communication (service discovery, Pub/Sub subscriptions).
+  #     - Does NOT test Redis-backed features (SignalR backplane, distributed cache).
+  #     - DOES test: service startup succeeds, DB migrations applied, DI wired correctly,
+  #       no missing required configuration at startup, /healthz returns 200.
+  #
+  #   Full Aspire integration smoke test is tracked as a separate enhancement item
+  #   for when the team has self-hosted runners with ≥16 GB RAM.
+  # ─────────────────────────────────────────────
+  aspire-healthz-smoke:
+    name: Service HealthZ Smoke (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    needs: migration-replay   # healthz tests run against a freshly migrated schema
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: snapaccount
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: healthz_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d snapaccount"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    strategy:
+      fail-fast: false   # report ALL failing services, not just the first
+      matrix:
+        include:
+          - service: AuthService
+            project: backend/Services/AuthService/AuthService.Api
+            port: 5101
+          - service: DocumentService
+            project: backend/Services/DocumentService/DocumentService.Api
+            port: 5102
+          - service: AccountingService
+            project: backend/Services/AccountingService/AccountingService.Api
+            port: 5103
+          - service: GstService
+            project: backend/Services/GstService/GstService.Api
+            port: 5104
+          - service: LoanService
+            project: backend/Services/LoanService/LoanService.Api
+            port: 5105
+          - service: ItrService
+            project: backend/Services/ItrService/ItrService.Api
+            port: 5106
+          - service: ChatService
+            project: backend/Services/ChatService/ChatService.Api
+            port: 5107
+          - service: NotificationService
+            project: backend/Services/NotificationService/NotificationService.Api
+            port: 5108
+          - service: ReportService
+            project: backend/Services/ReportService/ReportService.Api
+            port: 5109
+          - service: SubscriptionService
+            project: backend/Services/SubscriptionService/SubscriptionService.Api
+            port: 5110
+          - service: AiService
+            project: backend/Services/AiService/AiService.Api
+            port: 5111
+          - service: CallbackService
+            project: backend/Services/CallbackService/CallbackService.Api
+            port: 5112
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore .NET packages
+        run: dotnet restore backend/
+        working-directory: ${{ github.workspace }}
+
+      - name: Build ${{ matrix.service }}
+        run: |
+          dotnet build "${{ matrix.project }}" \
+            --no-restore -c Release \
+            --verbosity minimal
+
+      - name: Apply migrations to CI PostgreSQL
+        # Each matrix job runs its own postgres service container.
+        # We replay migrations here so the service under test has a valid schema.
+        # (Migration replay job above uses a separate container — matrix jobs
+        #  each get their own ephemeral container.)
+        run: |
+          set -euo pipefail
+          PGPASSWORD=healthz_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;" \
+            -v ON_ERROR_STOP=1
+
+          for f in $(ls database/migrations/*.sql | grep -v '200_' | sort -t_ -k1,1n); do
+            PGPASSWORD=healthz_test psql \
+              -h localhost -p 5432 -U postgres -d snapaccount \
+              -v ON_ERROR_STOP=1 -f "${f}" -q
+          done
+
+          PGPASSWORD=healthz_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -v ON_ERROR_STOP=1 -f database/migrations/999_seed_reference_data.sql -q
+
+          echo "Schema ready for ${{ matrix.service }}"
+
+      - name: Start ${{ matrix.service }} (background)
+        # DEV_AUTH_BYPASS skips Firebase token validation (no Firebase creds in CI).
+        # GCP_ENABLED=false prevents Google PubSub / Secret Manager calls at startup.
+        # ASPNETCORE_ENVIRONMENT=Testing keeps hosted background services idle.
+        run: |
+          dotnet run \
+            --project "${{ matrix.project }}" \
+            --no-build -c Release \
+            --urls "http://localhost:${{ matrix.port }}" \
+            &
+          echo "SERVICE_PID=$!" >> "${GITHUB_ENV}"
+        env:
+          ASPNETCORE_ENVIRONMENT: Testing
+          DEV_AUTH_BYPASS: "true"
+          ConnectionStrings__DefaultConnection: >-
+            Host=localhost;Port=5432;Database=snapaccount;
+            Username=postgres;Password=healthz_test
+          ConnectionStrings__snapaccount: >-
+            Host=localhost;Port=5432;Database=snapaccount;
+            Username=postgres;Password=healthz_test
+          DB_PASSWORD: "healthz_test"
+          REDIS_CONNECTION_STRING: "localhost:6379,abortConnect=false"
+          ConnectionStrings__Redis: "localhost:6379"
+          GCP_PROJECT_ID: "ci-placeholder"
+          # Disable GCP-backed hosted services so they don't fail on missing creds
+          GcpEnabled: "false"
+          GOOGLE_APPLICATION_CREDENTIALS: "/dev/null"
+          PanEncryption__Key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+          SESSION_JWT_SECRET: "ci-placeholder-jwt-secret-minimum-32-characters-long"
+          HostOptions__BackgroundServiceExceptionBehavior: "Ignore"
+
+      - name: Wait for /healthz (up to 60 seconds)
+        run: |
+          set -e
+          PORT="${{ matrix.port }}"
+          TIMEOUT=60
+          INTERVAL=3
+          ELAPSED=0
+
+          echo "Waiting for http://localhost:${PORT}/healthz ..."
+          until curl --silent --fail --max-time 5 "http://localhost:${PORT}/healthz" > /tmp/healthz_resp.txt 2>&1; do
+            ELAPSED=$((ELAPSED + INTERVAL))
+            if [ "${ELAPSED}" -ge "${TIMEOUT}" ]; then
+              echo "::error::${{ matrix.service }} healthz did not respond within ${TIMEOUT}s"
+              echo "Last response:"
+              cat /tmp/healthz_resp.txt || true
+              exit 1
+            fi
+            echo "  ${ELAPSED}s elapsed — retrying..."
+            sleep "${INTERVAL}"
+          done
+
+          HTTP_CODE=$(curl --silent --output /dev/null --write-out "%{http_code}" \
+            "http://localhost:${PORT}/healthz")
+
+          echo "healthz HTTP ${HTTP_CODE}"
+          if [ "${HTTP_CODE}" != "200" ]; then
+            echo "::error::${{ matrix.service }} /healthz returned HTTP ${HTTP_CODE} (expected 200)"
+            cat /tmp/healthz_resp.txt || true
+            exit 1
+          fi
+
+          echo "✓ ${{ matrix.service }} /healthz → 200 OK"
+          cat /tmp/healthz_resp.txt
+
+      - name: Stop service
+        if: always()
+        run: kill "${SERVICE_PID}" 2>/dev/null || true
+
+  # ─────────────────────────────────────────────
+  # Job 6: Docker build smoke test (no push)
   # ─────────────────────────────────────────────
   docker-smoke-test:
     name: Docker Build Smoke Test

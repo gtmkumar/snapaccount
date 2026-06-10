@@ -17,6 +17,8 @@ import { LoanConsentScreen } from '../screens/loans/LoanConsentScreen';
 import { LoanApplicationScreen } from '../screens/loans/LoanApplicationScreen';
 import { LoanPackagePreviewScreen } from '../screens/loans/LoanPackagePreviewScreen';
 import { LoanStatusScreen } from '../screens/loans/LoanStatusScreen';
+// Phase 7 Wave 2: KFS screen (GAP-021 / M3a) — inserted before LoanConsent
+import { KeyFactsStatementScreen } from '../screens/loans/KeyFactsStatementScreen';
 
 // Pre-existing utility screens wired into this stack
 import { EMICalculatorScreen } from '../screens/loan/EMICalculatorScreen';
@@ -27,6 +29,13 @@ import type { CtaCategory, LinkedEntity } from '../components/callbacks/RequestC
 export type LoanStackParamList = {
   LoanHub: undefined;
   LoanEligibility: { loanType: string };
+  /**
+   * GAP-021: KeyFactsStatement is inserted BEFORE LoanConsent.
+   * Borrower must read and acknowledge the KFS before consent screens.
+   */
+  KeyFactsStatement: {
+    applicationId: string;
+  };
   LoanConsent: {
     applicationId: string;
     productId?: string;
@@ -34,6 +43,12 @@ export type LoanStackParamList = {
     userName?: string;
     /** Masked account number e.g. "XXXX-1234" for mandate consent */
     acctMask?: string;
+    /**
+     * GAP-021: KFS id the borrower acknowledged — REQUIRED.
+     * Backend rejects consent without an acknowledged kfsId.
+     */
+    kfsId: string;
+    kfsVersion?: number;
   };
   LoanApplication: {
     productId: string;
@@ -63,6 +78,8 @@ export function LoanStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="LoanHub" component={LoanHubScreen} />
       <Stack.Screen name="LoanEligibility" component={LoanEligibilityScreen} />
+      {/* GAP-021: KFS must be shown and acknowledged BEFORE consent */}
+      <Stack.Screen name="KeyFactsStatement" component={KeyFactsStatementScreen} />
       <Stack.Screen name="LoanConsent" component={LoanConsentScreen} />
       <Stack.Screen name="LoanApplication" component={LoanApplicationScreen} />
       <Stack.Screen name="LoanPackagePreview" component={LoanPackagePreviewScreen} />

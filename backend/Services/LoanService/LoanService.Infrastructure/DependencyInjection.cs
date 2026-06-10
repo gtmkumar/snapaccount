@@ -79,6 +79,9 @@ public static class DependencyInjection
         // P6-HANDOFF-26: Consent HMAC key provider
         services.AddSingleton<IConsentHmacKeyProvider, ConsentHmacKeyProvider>();
 
+        // B8: KFS config (processing fee rate, grievance officer, cooling-off days)
+        services.AddSingleton<ILoanKfsConfig, LoanKfsConfig>();
+
         // Eligibility engine (cross-service via HTTP clients)
         services.AddScoped<IEligibilityEngine, EligibilityEngine>();
         services.AddHttpClient("GstService", client =>

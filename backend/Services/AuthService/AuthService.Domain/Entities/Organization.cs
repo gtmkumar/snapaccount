@@ -60,4 +60,25 @@ public class Organization : BaseAuditableEntity
     {
         GovernmentVerificationEnabled = enabled;
     }
+
+    /// <summary>
+    /// Updates mutable self-service settings (address, logo URL).
+    /// Identity-critical fields (BusinessName, Gstin, PanNumber) are intentionally excluded —
+    /// those require a KYC re-verification flow.
+    /// </summary>
+    public void UpdateSettings(
+        string? logoUrl,
+        string? addressLine1,
+        string? addressLine2,
+        string? city,
+        string? state,
+        string? pincode)
+    {
+        if (logoUrl     is not null) LogoUrl      = logoUrl;
+        if (addressLine1 is not null) AddressLine1 = addressLine1;
+        if (addressLine2 is not null) AddressLine2 = addressLine2;
+        if (city        is not null) City         = city;
+        if (state       is not null) State        = state;
+        if (pincode     is not null) Pincode      = pincode;
+    }
 }

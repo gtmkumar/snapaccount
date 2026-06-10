@@ -28,11 +28,7 @@
       },
       "package": "com.snapaccount.app",
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "RECEIVE_SMS",
-        "READ_SMS"
+        "CAMERA"
       ]
     },
     "web": {

@@ -259,6 +259,37 @@ export async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
+/**
+ * GAP-007 / BUG-5: Re-issue the session JWT with current org/RBAC claims by
+ * calling POST /auth/token/refresh-context, then atomically swap the access
+ * token in the auth store.
+ *
+ * Unlike refreshAccessToken() this does NOT rotate the opaque refresh token —
+ * it only re-mints the access-token claims (picks up the new OrganizationId
+ * written by CreateOrganizationCommandHandler or the invite-accept membership row).
+ *
+ * Call this immediately after:
+ *   - the business-onboarding wizard creates the org (POST /auth/organizations)
+ *   - a team invite is accepted (POST /auth/invite/{token}/accept)
+ *
+ * Failure is non-fatal: returns false and logs. The current access token
+ * remains valid for non-org-scoped endpoints; callers MUST continue their flow
+ * (org creation / invite accept already succeeded). Do NOT block completion on
+ * a context-refresh failure.
+ */
+export async function refreshContextAndSwap(): Promise<boolean> {
+  try {
+    const res = await apiClient.post<{ accessToken: string; expiresAt: string }>(
+      '/auth/token/refresh-context',
+    );
+    useAuthStore.getState().swapAccessToken(res.data.accessToken);
+    return true;
+  } catch (err) {
+    console.warn('[refreshContextAndSwap] Failed to refresh org context:', err);
+    return false;
+  }
+}
+
 /** Organization shape as returned by GET /auth/organizations. */
 export interface ServerOrganization {
   id: string;

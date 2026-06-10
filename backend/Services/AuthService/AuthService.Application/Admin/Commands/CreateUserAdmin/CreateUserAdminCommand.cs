@@ -62,7 +62,12 @@ public record CreateUserAdminResponse(
     string Email,
     string Scope,
     Guid RoleId,
-    IReadOnlyList<string> GrantedPermissions);
+    IReadOnlyList<string> GrantedPermissions,
+    /// <summary>
+    /// I1.3-003: Set to true when InitialPassword was supplied but LOCAL_AUTH is disabled,
+    /// so the caller knows the password was NOT set on the account.
+    /// </summary>
+    bool InitialPasswordIgnored = false);
 
 public sealed class CreateUserAdminCommandValidator : AbstractValidator<CreateUserAdminCommand>
 {
@@ -189,19 +194,25 @@ public sealed class CreateUserAdminCommandHandler(
                 "User.PrivilegeEscalation",
                 "You cannot assign a platform/system role. Only a wildcard SUPER_ADMIN may do so.");
 
+        // I1.3-002: Resolve caller's effective permissions ONCE to avoid TOCTOU.
+        // Reused for both role delegation check and override permission delegation check.
+        HashSet<string>? callerEffective = null;
+        if (!isWildcardAdmin)
+        {
+            callerEffective = await EffectivePermissionResolver.ResolveAsync(
+                db, currentUser.UserId, currentUser.OrganizationId, cancellationToken);
+            callerEffective.UnionWith(currentUser.Permissions.Where(p => p != "*"));
+        }
+
         // ── Delegation check: role perms ⊆ caller's effective set ─────────────
         if (!isWildcardAdmin)
         {
-            var callerEffective = await EffectivePermissionResolver.ResolveAsync(
-                db, currentUser.UserId, currentUser.OrganizationId, cancellationToken);
-            callerEffective.UnionWith(currentUser.Permissions.Where(p => p != "*"));
-
             var rolePermNames = role.Permissions
                 .Where(rp => rp.DeletedAt == null && rp.Permission?.IsActive == true)
                 .Select(rp => rp.Permission!.Name)
                 .ToList();
 
-            var notGrantable = rolePermNames.Except(callerEffective, StringComparer.OrdinalIgnoreCase).ToList();
+            var notGrantable = rolePermNames.Except(callerEffective!, StringComparer.OrdinalIgnoreCase).ToList();
             if (notGrantable.Count > 0)
                 return Error.Forbidden(
                     "Role.PrivilegeEscalation",
@@ -227,13 +238,10 @@ public sealed class CreateUserAdminCommandHandler(
 
             if (!isWildcardAdmin)
             {
-                var callerEffective = await EffectivePermissionResolver.ResolveAsync(
-                    db, currentUser.UserId, currentUser.OrganizationId, cancellationToken);
-                callerEffective.UnionWith(currentUser.Permissions.Where(p => p != "*"));
-
+                // Reuse the already-resolved callerEffective (I1.3-002: no second DB call).
                 var notGrantable = overridePerms
                     .Select(p => p.Name)
-                    .Except(callerEffective, StringComparer.OrdinalIgnoreCase)
+                    .Except(callerEffective!, StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 if (notGrantable.Count > 0)
                     return Error.Forbidden(
@@ -253,8 +261,10 @@ public sealed class CreateUserAdminCommandHandler(
         };
         if (!request.IsActive) newUser.SetActive(false);
 
-        // Set password only in LOCAL_AUTH mode (dev sets it as an env var) and when provided.
-        // IConfiguration is intentionally NOT referenced from the Application layer.
+        // I1.3-003: Explicitly track whether InitialPassword is ignored.
+        // Set password only in LOCAL_AUTH mode; when LOCAL_AUTH is disabled the password
+        // is silently dropped — tell the caller via InitialPasswordIgnored in the response.
+        bool initialPasswordIgnored = false;
         if (request.InitialPassword is not null)
         {
             var localAuthEnabled =
@@ -263,6 +273,8 @@ public sealed class CreateUserAdminCommandHandler(
 
             if (localAuthEnabled)
                 newUser.SetPasswordHash(hasher.Hash(request.InitialPassword));
+            else
+                initialPasswordIgnored = true;  // I1.3-003: caller-visible signal
         }
 
         db.Users.Add(newUser);
@@ -324,6 +336,7 @@ public sealed class CreateUserAdminCommandHandler(
             newUser.Email!,
             request.Scope,
             role.Id,
-            overridePerms.Select(p => p.Name).OrderBy(n => n).ToList());
+            overridePerms.Select(p => p.Name).OrderBy(n => n).ToList(),
+            InitialPasswordIgnored: initialPasswordIgnored);
     }
 }

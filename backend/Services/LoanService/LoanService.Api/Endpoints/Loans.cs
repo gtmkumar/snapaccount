@@ -6,6 +6,8 @@ using LoanService.Application.LoanApplications.Commands.GeneratePackage;
 using LoanService.Application.LoanApplications.Commands.RecordBankDecision;
 using LoanService.Application.Consents.Queries.GetConsentCatalog;
 using LoanService.Application.Dashboard.Queries.GetDashboardStats;
+using LoanService.Application.KeyFacts.Commands.GenerateKfs;
+using LoanService.Application.KeyFacts.Queries.GetKfs;
 using LoanService.Application.LoanApplications.Commands.RecordConsent;
 using LoanService.Application.LoanApplications.Commands.RecordDisbursement;
 using LoanService.Application.LoanApplications.Commands.StartApplication;
@@ -68,6 +70,19 @@ public sealed class Loans : EndpointGroupBase
         groupBuilder.MapPost("/applications/{id:guid}/documents", AttachDocument)
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("AttachLoanDocument");
+
+        // GAP-021: KFS MUST be generated and acknowledged before consent submission.
+        /// <summary>POST /loans/applications/{id}/kfs — Generate a Key Facts Statement.</summary>
+        groupBuilder.MapPost("/applications/{id:guid}/kfs", GenerateKfs)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GenerateKfs")
+            .WithSummary("Generate an RBI-compliant Key Facts Statement for this loan application. Must be acknowledged before consent.");
+
+        /// <summary>GET /loans/applications/{id}/kfs — Retrieve the most-recent KFS.</summary>
+        groupBuilder.MapGet("/applications/{id:guid}/kfs", GetKfs)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetKfs")
+            .WithSummary("Retrieve the current Key Facts Statement for this loan application.");
 
         /// <summary>POST /loans/applications/{id}/consents — Record a consent.</summary>
         groupBuilder.MapPost("/applications/{id:guid}/consents", RecordConsent)
@@ -180,6 +195,22 @@ public sealed class Loans : EndpointGroupBase
 
     // ── Handler delegates ──────────────────────────────────────────────────────
 
+    private static async Task<IResult> GenerateKfs(
+        Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GenerateKfsCommand(id), ct);
+        return result.IsSuccess
+            ? Results.Created($"/loans/applications/{id}/kfs/{result.Value.KfsId}", result.Value)
+            : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
+    private static async Task<IResult> GetKfs(
+        Guid id, Guid? kfsId, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetKfsQuery(id, kfsId), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound(result.Error.Message);
+    }
+
     private static async Task<IResult> StartApplication(
         StartApplicationCommand command, ISender sender, CancellationToken ct)
     {
@@ -227,7 +258,7 @@ public sealed class Loans : EndpointGroupBase
         var ip = http.Connection.RemoteIpAddress?.ToString();
         var ua = http.Request.Headers.UserAgent.ToString();
         var result = await sender.Send(
-            new RecordConsentCommand(id, req.ConsentType, req.ConsentTextVersion, ip, ua, req.ConsentLocale), ct);
+            new RecordConsentCommand(id, req.ConsentType, req.ConsentTextVersion, ip, ua, req.KfsId, req.ConsentLocale), ct);
         return result.IsSuccess
             ? Results.Created($"/loans/applications/{id}/consents/{result.Value.ConsentId}", result.Value)
             : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
@@ -398,9 +429,14 @@ internal record AttachDocumentRequest(Guid DocumentId, LoanService.Domain.Entiti
 /// GET /loans/consents/catalog. Defaults to "en". Required for DPDP / RBI audit trail (GAP-040).
 /// </para>
 /// </summary>
+/// <summary>
+/// Request body for recording consent.
+/// GAP-021: <see cref="KfsId"/> is required — the borrower must acknowledge a KFS before consent.
+/// </summary>
 internal record RecordConsentRequest(
     LoanService.Domain.Entities.ConsentType ConsentType,
     string ConsentTextVersion,
+    Guid KfsId,
     string ConsentLocale = "en");
 
 /// <summary>Request body for assigning to bank.</summary>

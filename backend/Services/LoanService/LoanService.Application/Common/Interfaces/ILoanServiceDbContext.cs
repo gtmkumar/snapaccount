@@ -24,6 +24,9 @@ public interface ILoanServiceDbContext
     /// <summary>P6-HANDOFF-25 / SEC-050: Versioned consent text catalog.</summary>
     DbSet<ConsentCatalogEntry> ConsentCatalog { get; }
 
+    /// <summary>GAP-021: RBI Key Facts Statements (immutable, HMAC-signed).</summary>
+    DbSet<KeyFactsStatement> KeyFactsStatements { get; }
+
     /// <summary>Persists changes to the loan schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

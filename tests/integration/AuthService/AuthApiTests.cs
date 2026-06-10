@@ -64,6 +64,7 @@ public class AuthApiTests(PostgresFixture pg) : IAsyncLifetime
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Testing");
+                builder.UseSetting("Auth:SessionSecret", "it-session-secret-for-testing-min32!!");
                 // Connection string for AddAuthInfrastructure (else the host fails to build),
                 // and LOCAL_AUTH=true so Firebase init is skipped (no GCP ADC) while auth
                 // enforcement stays ON — NOT DEV_AUTH_BYPASS, which would break the 401 tests.

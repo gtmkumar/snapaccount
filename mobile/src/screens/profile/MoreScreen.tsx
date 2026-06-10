@@ -50,6 +50,7 @@ export function MoreScreen({ navigation }: Props) {
         }]
       : []),
     { label: t('mobile.more.notifications'), icon: 'notifications-outline', route: 'NotificationCenter', color: Colors.accent[500], desc: t('mobile.more.notificationsDesc') },
+    { label: t('mobile.more.privacyData'), icon: 'shield-outline', route: 'PrivacyCenter', color: Colors.brand[700], desc: t('mobile.more.privacyDataDesc') },
     { label: t('mobile.more.profileSettings'), icon: 'person-circle-outline', route: 'Profile', color: Colors.neutral[600], desc: t('mobile.more.profileSettingsDesc') },
   ];
 

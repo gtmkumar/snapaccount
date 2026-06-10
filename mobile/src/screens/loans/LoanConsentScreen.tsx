@@ -27,8 +27,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import * as LocalAuthentication from 'expo-local-authentication';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useBiometricGate } from '../../hooks/useBiometricGate';
 import type { RouteProp } from '@react-navigation/native';
 import { Colors } from '../../constants/colors';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
@@ -85,8 +85,9 @@ const CONSENT_STEPS: {
 export function LoanConsentScreen({ navigation, route }: Props) {
   useSensitiveScreen();
   const { t } = useTranslation();
-  const { applicationId, userName = 'User', acctMask = 'XXXX' } = route.params;
+  const { applicationId, userName = 'User', acctMask = 'XXXX', kfsId = '' } = route.params;
 
+  const { trigger: triggerBiometric } = useBiometricGate();
   const [currentStep, setCurrentStep] = useState(0);
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -122,6 +123,9 @@ export function LoanConsentScreen({ navigation, route }: Props) {
         // SEC-050: version sourced from backend catalog, not hardcoded
         consentVersion: getConsentVersion(step.type),
         consentType: step.type,
+        // GAP-021: kfsId is required — ties each consent to the acknowledged KFS
+        kfsId: kfsId,
+        consentLocale: 'en',
       }),
     onSuccess: () => {
       if (currentStep < CONSENT_STEPS.length - 1) {
@@ -160,38 +164,13 @@ export function LoanConsentScreen({ navigation, route }: Props) {
   const handleSign = async () => {
     if (!checked) return;
     if (!biometricPassed) {
-      // SEC-048: Real biometric via expo-local-authentication.
-      // Graceful fallback to Alert PIN confirm on devices with no biometric hardware.
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      if (!hasHardware) {
-        Alert.alert(
-          t('mobile.loan.consent.bio.prompt'),
-          t('mobile.common.usePin'),
-          [
-            { text: t('mobile.common.cancel'), style: 'cancel' },
-            {
-              text: t('common.confirm'),
-              onPress: () => {
-                setBiometricPassed(true);
-                signMutation.mutate();
-              },
-            },
-          ],
-        );
-        return;
-      }
-
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: t('mobile.biometric.confirm'),
-        fallbackLabel: t('common.usePin'),
-        disableDeviceFallback: false,
+      // GAP-063 / M4: Use centralized useBiometricGate hook.
+      // Handles hardware check, enrollment check, authenticateAsync,
+      // and Alert-fallback for Expo Go / no-hardware paths.
+      const passed = await triggerBiometric({
+        promptMessage: t('mobile.biometric.prompt'),
       });
-
-      if (!result.success) {
-        // Bio cancelled or failed — do not proceed
-        return;
-      }
-
+      if (!passed) return;
       setBiometricPassed(true);
       signMutation.mutate();
     } else {

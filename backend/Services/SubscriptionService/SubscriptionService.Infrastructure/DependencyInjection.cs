@@ -9,6 +9,8 @@ using SubscriptionService.Application;
 using SubscriptionService.Application.Common.Interfaces;
 using SubscriptionService.Infrastructure.Messaging;
 using SubscriptionService.Infrastructure.Persistence;
+using SubscriptionService.Infrastructure.Razorpay;
+using SubscriptionService.Infrastructure.Services;
 
 namespace SubscriptionService.Infrastructure;
 
@@ -47,6 +49,19 @@ public static class DependencyInjection
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, CurrentUser>();
+
+        // GAP-034: Credential encryption for Razorpay config storage.
+        services.AddSingleton<ICredentialEncryptionService, AesCredentialEncryptionService>();
+
+        // GAP-034: Razorpay client — mock (no-op) until admin configures live credentials.
+        // The production RazorpayHttpClient is registered lazily by the UpdateRazorpayConfig
+        // handler (or at startup if a config row exists).
+        services.AddHttpClient("Razorpay", c =>
+        {
+            c.BaseAddress = new Uri("https://api.razorpay.com/v1/");
+            c.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddScoped<IRazorpayClient, MockRazorpayClient>();
 
         // SEC-052: DPDP account deletion erasure subscriber
         if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();

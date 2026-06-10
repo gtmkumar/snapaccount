@@ -1,6 +1,7 @@
 using MediatR;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Domain;
+using SubscriptionService.Application.Config.Commands.UpdateRazorpayConfig;
 using SubscriptionService.Application.Plans.Commands.CreatePlan;
 using SubscriptionService.Application.Plans.Commands.UpdatePlan;
 using SubscriptionService.Application.Plans.Queries.ListPlans;
@@ -120,6 +121,13 @@ public sealed class Subscriptions : EndpointGroupBase
             .RequireRateLimiting("standard")
             .WithName("GetMrrDashboard")
             .WithSummary("MRR dashboard. Requires subscription.plan.create permission.");
+
+        // GAP-034: PATCH /subscriptions/config/razorpay — admin-configured Razorpay credentials
+        g.MapMethods("/config/razorpay", ["PATCH"], PatchRazorpayConfig)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("PatchRazorpayConfig")
+            .WithSummary("Update Razorpay API credentials. Requires subscription.config.write permission.");
     }
 
     // ── Handlers ──────────────────────────────────────────────────────────────
@@ -218,6 +226,19 @@ public sealed class Subscriptions : EndpointGroupBase
         return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
     }
 
+    private static async Task<IResult> PatchRazorpayConfig(
+        PatchRazorpayConfigRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new UpdateRazorpayConfigCommand(
+                req.KeyId,
+                req.KeySecret,
+                req.WebhookSecret,
+                req.TestMode,
+                req.IsEnabled), ct);
+        return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
+    }
+
     private static IResult MapError(Error error)
         => error.Type switch
         {
@@ -253,6 +274,12 @@ internal record SubscribeRequest(
 
 internal record UpgradeRequest(Guid NewPlanId);
 internal record DowngradeRequest(Guid NewPlanId);
+internal record PatchRazorpayConfigRequest(
+    string KeyId,
+    string KeySecret,
+    string? WebhookSecret,
+    bool TestMode = true,
+    bool IsEnabled = false);
 
 internal record RecordPaymentRequest(
     string RazorpayPaymentId,

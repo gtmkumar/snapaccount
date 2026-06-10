@@ -19,8 +19,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import * as LocalAuthentication from 'expo-local-authentication';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useBiometricGate } from '../../hooks/useBiometricGate';
 import type { RouteProp } from '@react-navigation/native';
 import { Colors } from '../../constants/colors';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
@@ -46,6 +46,7 @@ const DISCLAIMER_PARAGRAPHS = [
 export function UserApprovalScreen({ navigation, route }: Props) {
   useSensitiveScreen();
   const { t } = useTranslation();
+  const { trigger: triggerBiometric } = useBiometricGate();
   const { filingId } = route.params;
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
   const [biometricPassed, setBiometricPassed] = useState(false);
@@ -74,29 +75,11 @@ export function UserApprovalScreen({ navigation, route }: Props) {
   };
 
   const handleBiometric = async () => {
-    // SEC-048: Use real biometric via expo-local-authentication.
-    // Graceful fallback: if no hardware available (simulator, old device), use Alert PIN path.
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    if (!hasHardware) {
-      // Fallback: Alert-based passcode confirm for devices without biometric hardware
-      Alert.alert(
-        t('mobile.itr.approval.biometricPrompt'),
-        t('mobile.common.usePin'),
-        [
-          { text: t('mobile.common.cancel'), style: 'cancel' },
-          { text: t('common.confirm'), onPress: () => setBiometricPassed(true) },
-        ],
-      );
-      return;
-    }
-
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: t('mobile.biometric.confirm'),
-      fallbackLabel: t('common.usePin'),
-      disableDeviceFallback: false,
+    // GAP-063 / M4: Use centralized useBiometricGate hook.
+    const passed = await triggerBiometric({
+      promptMessage: t('mobile.biometric.prompt'),
     });
-
-    if (result.success) {
+    if (passed) {
       setBiometricPassed(true);
     }
     // On failure/cancel: do nothing — user must re-tap the biometric button

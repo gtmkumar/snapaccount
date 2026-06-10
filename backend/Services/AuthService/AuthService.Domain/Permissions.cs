@@ -41,4 +41,10 @@ public static class Permissions
     public const string PlatformPermissionsManage = "platform.permissions.manage";
     public const string PlatformRefDataManage     = "platform.refdata.manage";
     public const string PlatformAiManage          = "platform.ai.manage";
+
+    public const string PlatformFeatureFlagsRead  = "platform.feature-flags.read";
+    public const string PlatformFeatureFlagsWrite = "platform.feature-flags.write";
+
+    public const string PlatformConfigRead        = "platform.config.read";
+    public const string PlatformConfigWrite       = "platform.config.write";
 }

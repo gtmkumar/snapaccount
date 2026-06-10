@@ -110,6 +110,10 @@ public static class DependencyInjection
         // GAP-003 / NEW-002: Firebase revoke retry scheduler — Hangfire-backed, observable in dashboard.
         services.AddScoped<IFirebaseRevokeRetryScheduler, HangfireFirebaseRevokeRetryScheduler>();
 
+        // GAP-020 / DPDP: Data export job scheduler — Hangfire-backed.
+        services.AddScoped<IDataExportJobScheduler, HangfireDataExportScheduler>();
+        services.AddScoped<DataExportJob>();
+
         // SEC-013: PAN encryption service — AES-256 key from GCP Secret Manager
         services.AddSingleton<IPanEncryptionService, AesPanEncryptionService>();
 

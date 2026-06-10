@@ -40,6 +40,9 @@ public class LoanServiceDbContext(DbContextOptions<LoanServiceDbContext> options
     public DbSet<ConsentCatalogEntry> ConsentCatalog => Set<ConsentCatalogEntry>();
 
     /// <inheritdoc />
+    public DbSet<KeyFactsStatement> KeyFactsStatements => Set<KeyFactsStatement>();
+
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("loan");

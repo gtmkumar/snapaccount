@@ -103,6 +103,21 @@ public interface IAuthDbContext
     /// <summary>KYC verification records (PAN / Aadhaar) in <c>auth.kyc_verification</c>.</summary>
     DbSet<KycVerification> KycVerifications { get; }
 
+    /// <summary>DPDP Act 2023 — purpose-coded consent audit trail in <c>auth.user_consent</c>.</summary>
+    DbSet<UserConsent> UserConsents { get; }
+
+    /// <summary>DPDP Act 2023 — per-user data export (portability) requests in <c>auth.data_export_request</c>.</summary>
+    DbSet<DataExportRequest> DataExportRequests { get; }
+
+    /// <summary>DPDP Act 2023 — user-submitted data correction requests in <c>auth.data_correction_request</c>.</summary>
+    DbSet<DataCorrectionRequest> DataCorrectionRequests { get; }
+
+    /// <summary>SEC-056 — runtime feature flags in <c>auth.feature_flag</c>.</summary>
+    DbSet<FeatureFlag> FeatureFlags { get; }
+
+    /// <summary>SEC-056 — generic key-value platform config (language, WhatsApp) in <c>auth.platform_config</c>.</summary>
+    DbSet<PlatformConfig> PlatformConfigs { get; }
+
     /// <summary>Persists changes to the auth schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

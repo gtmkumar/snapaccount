@@ -35,7 +35,7 @@ import { Input } from '../../components/ui/Input';
 import { Colors } from '../../constants/colors';
 import { useAuthStore } from '../../store/authStore';
 import {
-  refreshAccessToken,
+  refreshContextAndSwap,
   fetchOrganizations,
   getApiError,
   type ServerOrganization,
@@ -152,10 +152,11 @@ export function AcceptInviteScreen({ navigation, route }: Props) {
     try {
       const result = await acceptInvite(token);
 
-      // Critical: the current access token predates this membership and lacks the
-      // new organizationId / RBAC claims. Force a refresh so subsequent calls are
-      // authorized for the joined org, then hydrate the org list into the store.
-      await refreshAccessToken();
+      // GAP-007 / BUG-5: The current access token predates this membership and
+      // lacks the new organizationId / RBAC claims. Re-mint the JWT so subsequent
+      // calls are authorized for the joined org. refreshContextAndSwap() is
+      // non-fatal — failure is logged but the accept result still stands.
+      await refreshContextAndSwap();
       const orgs = await fetchOrganizations();
       if (orgs.length > 0) {
         const mapped = orgs.map(mapServerOrg);

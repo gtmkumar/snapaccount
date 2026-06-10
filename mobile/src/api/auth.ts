@@ -153,3 +153,37 @@ export async function complete2faChallenge(
   });
   return res.data;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Context refresh (GAP-007 / BUG-5)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RefreshContextResponse {
+  /** New HS256 session JWT with up-to-date RBAC + org claims. */
+  accessToken: string;
+  /** UTC ISO-8601 expiry of the new token (e.g. "2026-06-10T10:30:00Z"). */
+  expiresAt: string;
+}
+
+/**
+ * POST /auth/token/refresh-context [Authorize]
+ *
+ * GAP-007 / BUG-5: Re-issues the session JWT carrying the caller's current
+ * RBAC + OrganizationId claims — without rotating the opaque refresh token.
+ *
+ * Call this immediately after:
+ *   - `POST /auth/organizations` completes (business-onboarding wizard finish)
+ *   - `POST /auth/invite/{token}/accept` completes (team invite accept)
+ *
+ * The backend re-resolves all RBAC claims from the DB, so the returned access
+ * token will include the new OrganizationId that was created/joined during the
+ * triggering operation. Subsequent org-scoped calls (e.g. POST /auth/team/invite)
+ * will succeed without requiring a full sign-out and re-login.
+ *
+ * No request body. Uses the current Bearer token from the auth store interceptor.
+ * Throws on HTTP error — callers should catch and treat as non-fatal.
+ */
+export async function refreshContext(): Promise<RefreshContextResponse> {
+  const res = await apiClient.post<RefreshContextResponse>('/auth/token/refresh-context');
+  return res.data;
+}
