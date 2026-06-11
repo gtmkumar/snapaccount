@@ -24,8 +24,12 @@ namespace ReportService.Infrastructure.Reports;
 /// &lt;/ENVELOPE&gt;
 /// </code>
 ///
-/// Cross-schema read: reads accounting.chart_of_accounts + accounting.journal_entries
+/// Cross-schema read: reads accounting.account + accounting.journal_entry (+ journal_entry_line)
 /// via raw SQL on the same PostgreSQL database (read-only).
+/// BUG-W7-04: original code referenced accounting.chart_of_accounts / accounting.journal_entries
+/// which do not exist. Corrected to accounting.account and accounting.journal_entry per the
+/// canonical schema (migration 003, confirmed in ChartOfAccountConfiguration.cs and
+/// JournalBatchConfiguration.cs SWEEP-FIX WEB-14 comments).
 ///
 /// Feature flag: <c>Report:TallyExportEnabled=true</c> in configuration.
 /// When flag is false (default) → CSV fallback is returned instead.
@@ -208,12 +212,12 @@ public sealed class TallyExportGenerator(
             await using var conn = new NpgsqlConnection(GetConnectionString());
             await conn.OpenAsync(ct);
             await using var cmd = new NpgsqlCommand("""
-                SELECT id, name, account_type,
-                       COALESCE(opening_balance, 0) AS opening_balance
-                FROM   accounting.chart_of_accounts
+                SELECT id, account_name, account_type,
+                       0 AS opening_balance
+                FROM   accounting.account
                 WHERE  organization_id = @orgId
                   AND  deleted_at IS NULL
-                ORDER  BY name
+                ORDER  BY account_name
                 """, conn);
             cmd.Parameters.AddWithValue("orgId", orgId);
 
@@ -230,7 +234,7 @@ public sealed class TallyExportGenerator(
         catch (Exception ex)
         {
             logger.LogWarning(ex,
-                "TallyExportGenerator: Could not read accounting.chart_of_accounts for org {OrgId}. Returning empty ledgers.",
+                "TallyExportGenerator: Could not read accounting.account for org {OrgId}. Returning empty ledgers.",
                 orgId);
         }
         return results;
@@ -244,27 +248,37 @@ public sealed class TallyExportGenerator(
         {
             await using var conn = new NpgsqlConnection(GetConnectionString());
             await conn.OpenAsync(ct);
-            // Use a simplified query that handles orgs with missing ledger splits gracefully
+            // BUG-W7-04 FIX: corrected table names and column references.
+            // accounting.journal_entry (not journal_entries), accounting.journal_entry_line
+            // (not journal_entry_lines), accounting.account (not chart_of_accounts).
+            // journal_entry_line uses debit_amount/credit_amount (not entry_type='DEBIT').
+            // Debit leg = line with debit_amount > 0; credit leg = line with credit_amount > 0.
             await using var cmd = new NpgsqlCommand("""
                 SELECT je.id, je.entry_date,
-                       je.reference_number,
-                       je.description AS narration,
-                       COALESCE(deb.name, 'Unknown Debit')  AS debit_ledger,
-                       COALESCE(cred.name, 'Unknown Credit') AS credit_ledger,
-                       COALESCE(je.total_debit, 0)           AS amount
-                FROM   accounting.journal_entries je
+                       je.entry_number   AS reference_number,
+                       je.description    AS narration,
+                       COALESCE(deb.account_name, 'Unknown Debit')   AS debit_ledger,
+                       COALESCE(cred.account_name, 'Unknown Credit') AS credit_ledger,
+                       COALESCE(je.total_debit, 0)                   AS amount
+                FROM   accounting.journal_entry je
                 LEFT JOIN LATERAL (
-                    SELECT coa.name FROM accounting.journal_entry_lines jl
-                    JOIN   accounting.chart_of_accounts coa ON coa.id = jl.account_id
-                    WHERE  jl.journal_entry_id = je.id AND jl.entry_type = 'DEBIT'
+                    SELECT a.account_name
+                    FROM   accounting.journal_entry_line jl
+                    JOIN   accounting.account a ON a.id = jl.account_id
+                    WHERE  jl.journal_entry_id = je.id
+                      AND  jl.debit_amount > 0
+                    ORDER  BY jl.line_number
                     LIMIT  1
-                ) deb(name) ON TRUE
+                ) deb(account_name) ON TRUE
                 LEFT JOIN LATERAL (
-                    SELECT coa.name FROM accounting.journal_entry_lines jl
-                    JOIN   accounting.chart_of_accounts coa ON coa.id = jl.account_id
-                    WHERE  jl.journal_entry_id = je.id AND jl.entry_type = 'CREDIT'
+                    SELECT a.account_name
+                    FROM   accounting.journal_entry_line jl
+                    JOIN   accounting.account a ON a.id = jl.account_id
+                    WHERE  jl.journal_entry_id = je.id
+                      AND  jl.credit_amount > 0
+                    ORDER  BY jl.line_number
                     LIMIT  1
-                ) cred(name) ON TRUE
+                ) cred(account_name) ON TRUE
                 WHERE  je.organization_id = @orgId
                   AND  je.entry_date BETWEEN @start AND @end
                   AND  je.deleted_at IS NULL
@@ -292,7 +306,7 @@ public sealed class TallyExportGenerator(
         catch (Exception ex)
         {
             logger.LogWarning(ex,
-                "TallyExportGenerator: Could not read accounting.journal_entries for org {OrgId}. Returning empty vouchers.",
+                "TallyExportGenerator: Could not read accounting.journal_entry for org {OrgId}. Returning empty vouchers.",
                 orgId);
         }
         return results;

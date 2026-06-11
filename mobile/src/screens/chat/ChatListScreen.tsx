@@ -277,6 +277,13 @@ export function ChatListScreen({ navigation }: Props) {
     setRefreshing(false);
   }, [queryClient, haptics]);
 
+  // BUG-W7-002: header "+" and FAB open the new-conversation sheet (spec §4.6).
+  const navigateToNewChat = useCallback(() => {
+    haptics.lightTap();
+    // ChatStack is the parent navigator (same cast pattern as CaSelect below).
+    (navigation.navigate as (route: string) => void)('NewChat');
+  }, [navigation, haptics]);
+
   const navigateToDetail = useCallback(
     (threadId: string) => {
       // Navigate to ChatDetail — ChatStack is the parent navigator.
@@ -325,9 +332,11 @@ export function ChatListScreen({ navigation }: Props) {
         </Text>
         <Pressable
           style={[styles.newChatBtn, { backgroundColor: tokens.brand500 + '18' }]}
+          onPress={navigateToNewChat}
           accessibilityRole="button"
           accessibilityLabel={t('mobile.chat.list.fab.new')}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          testID="chat-list-new-header"
         >
           <Ionicons name="add" size={22} color={tokens.brand500} />
         </Pressable>
@@ -499,8 +508,10 @@ export function ChatListScreen({ navigation }: Props) {
       {/* FAB */}
       <Pressable
         style={[styles.fab, { backgroundColor: tokens.brand500 }]}
+        onPress={navigateToNewChat}
         accessibilityRole="button"
         accessibilityLabel={t('mobile.chat.list.fab.new')}
+        testID="chat-list-new-fab"
       >
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </Pressable>

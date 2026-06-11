@@ -1363,6 +1363,43 @@ Migration **`076_auth_seed_accounting_editlog_read_permission.sql`** seeds the R
 
 ---
 
+## Phase 7 — `notification.notification_log.notification_id` nullable (BUG-W7-02, `087`, 2026-06-12)
+
+Migration **`087_notification_log_notification_id_nullable.sql`** relaxes `NOT NULL` on `notification.notification_log.notification_id` (`NOT NULL → NULL`). The column is an **FK-by-value** to `notification.notification` with **no FK constraint** — the parent table is partitioned, so a cross-partition FK is not declared. It was minted `NOT NULL` by migration `008`.
+
+- **Why:** Wave 7 added two legitimate **log-only** dispatch flows that have no parent notification row — the template-manager **"test send"** (renders + dispatches a template without persisting a notification) and **celebration/milestone** log entries. Both failed at INSERT with `23502` (null value in column `notification_id`). backend-agent already mapped `NotificationLogEntry.notification_id` nullable in the EF config; this aligns the DB.
+- **Safety:** relaxing `NOT NULL` is non-destructive — no existing row is touched and previously populated values are unaffected. The `idx_notification_log_notification_id` btree index (from `008`) is unchanged; btree already permits NULL keys.
+- **Replay-safe:** guarded by an `information_schema.is_nullable = 'NO'` check; `COMMENT ON COLUMN` documents the nullability rationale.
+
+#### Verification summary (087)
+
+- Applied to live `snapaccount` under `ON_ERROR_STOP=1` (`DO`, `COMMENT`); back-to-back re-run clean (idempotent — guard skips the already-applied `ALTER`).
+- `information_schema` confirms `notification_log.notification_id → is_nullable = YES`; `\d notification.notification_log` shows the Nullable column now blank (was `not null`).
+
+---
+
+## Phase 7 — `report.report` status-vocabulary realign + `financial_year` widen (Wave 7 live retest, `088`, 2026-06-12)
+
+Migration **`088_report_status_check_realign_and_fy_widen.sql`** fixes the `report.report` EF↔DB **write-path** divergence found in Wave 7 live retest. The table had **0 rows**, so no data migration was needed. Three changes:
+
+1. **`report_status_check` CHECK** — dropped and recreated: `('PENDING','GENERATING','COMPLETED','FAILED')` → **`('QUEUED','PROCESSING','COMPLETED','FAILED')`**.
+2. **`status` column DEFAULT** — `'PENDING'` → **`'QUEUED'`** (the old default referenced the now-removed value; realigned to the enum's idle state `ReportJobStatus.Queued`).
+3. **`financial_year`** — `varchar(10)` → **`varchar(40)`**.
+
+- **Why (1)+(2) — status realignment:** the C# `ReportJobStatus` enum (`ReportService.Domain/Entities/ReportType.cs`) is `Queued / Processing / Completed / Failed`, but the original DB CHECK allowed `PENDING / GENERATING / COMPLETED / FAILED`, so every report INSERT (the EF write path sets `Processing` on insert, then `Completed`/`Failed`) violated the CHECK. Orchestrator decision: align the DB to the enum under the **house UPPER_SNAKE** serialization convention (matches `auth.user_profile.kyc_status`, `document.document.status`, etc.). Single-word members → `QUEUED / PROCESSING / COMPLETED / FAILED`.
+- **Why (3) — `financial_year` widen:** the GAP-043 chat-thread-PDF flow (`ReportService.Api/Endpoints/Reports.cs` + `Infrastructure/Reports/ChatThreadPdfGenerator.cs`) **encodes a 36-char UUID thread id in `financial_year`** by design — reusing the report job schema without bespoke DDL. A 36-char value overflows `varchar(10)` (`22001`); `varchar(40)` fits the UUID + headroom while staying bounded.
+- **Safety:** 0 rows ⇒ no remap needed; the widening (`varchar(10)→varchar(40)`) never truncates; the CHECK/DEFAULT swap leaves `idx_report_status` (btree) untouched.
+- **Replay-safe:** the DROP is guarded on the constraint def still containing `PENDING`; the DEFAULT change on the current default still containing `PENDING`; the widen on `character_maximum_length = 10`. `COMMENT ON CONSTRAINT` / `COMMENT ON COLUMN` document the rationale.
+
+> **⚠️ Paired backend change (flagged to orchestrator → backend-agent):** `ReportJobConfiguration` maps `Status` with `.HasConversion<string>()`, which persists the **PascalCase** enum member name (`"Queued"/"Processing"/…`) — **not** the UPPER_SNAKE values this CHECK now requires. After migration `088`, EF writes still violate the CHECK **until** the converter is changed to emit UPPER_SNAKE (e.g. `.HasConversion(v => v.ToString().ToUpperInvariant(), v => Enum.Parse<ReportJobStatus>(v, true))`). This migration is the DB half of the orchestrator decision; the EF converter change is the matching backend half and must land together to fully close the write-path bug.
+
+#### Verification summary (088)
+
+- Applied to live `snapaccount` under `ON_ERROR_STOP=1` (`DO`×3, `COMMENT`×2), `EXIT=0`; back-to-back replay clean (`REPLAY_EXIT=0`) with identical post-state — idempotent (guards skip the already-applied DROP/SET DEFAULT/widen).
+- `\d report.report` confirms: `financial_year → character varying(40)`, `status → DEFAULT 'QUEUED'`, `report_status_check → ('QUEUED','PROCESSING','COMPLETED','FAILED')`.
+
+---
+
 ## Local dev seed — the two seed mechanisms and apply order (GAP-072, Wave 6, 2026-06-11)
 
 A fresh developer environment is seeded by **two independent mechanisms**. Confusing them is the source of most "why is my local DB empty / orphaned" reports.

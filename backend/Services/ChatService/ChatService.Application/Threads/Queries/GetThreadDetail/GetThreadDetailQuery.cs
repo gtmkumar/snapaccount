@@ -1,3 +1,4 @@
+using ChatService.Application.Common;
 using ChatService.Application.Common.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
@@ -65,10 +66,13 @@ public sealed class GetThreadDetailQueryHandler(
         if (thread == null)
             return Error.NotFound("ChatThread", request.ThreadId);
 
+        // BUG-W7-001 fix: all three enum-to-string projections use EnumUpperSnake.Serialize
+        // so the mobile contract (UPPER_SNAKE) is honoured for Status, Category, and Role.
+        // thread.Participants is already materialised from the anonymous-type projection.
         return new ThreadDetailDto(
             thread.Id,
-            thread.Status.ToString(),
-            thread.Category.ToString(),
+            EnumUpperSnake.Serialize(thread.Status),
+            EnumUpperSnake.Serialize(thread.Category),
             thread.Subject,
             thread.OrganizationId,
             thread.InitiatedByUserId,
@@ -77,6 +81,6 @@ public sealed class GetThreadDetailQueryHandler(
             thread.EscalatedAt,
             thread.CreatedAt,
             thread.UpdatedAt,
-            thread.Participants.Select(p => new ParticipantDto(p.UserId, p.Role.ToString())).ToList());
+            thread.Participants.Select(p => new ParticipantDto(p.UserId, EnumUpperSnake.Serialize(p.Role))).ToList());
     }
 }

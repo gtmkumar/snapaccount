@@ -1,8 +1,8 @@
 # SnapAccount — Orchestrator Status
 
-## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 7 BUILD COMPLETE — 2026-06-12, live QA pending)
+## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 7 COMPLETE & LIVE-VERIFIED — 2026-06-12)
 
-### Phase 7 Wave 7 — Feature wave: CA consultations, templates, notice engine, fraud/auth hardening (2026-06-12, BUILD COMPLETE — unit/component gates green, live QA pending)
+### Phase 7 Wave 7 — Feature wave: CA consultations, templates, notice engine, fraud/auth hardening (2026-06-12, COMPLETE & LIVE-VERIFIED web + Android + iOS)
 
 Closes GAP-031/032/037/043/044/047/051/108/110 + board #42/#44/#45/#46 + full client-contract reconciliation. Session was interrupted (window closed) mid-wave 2026-06-12; reconstructed from agent memories + git state, then completed.
 
@@ -16,7 +16,15 @@ Closes GAP-031/032/037/043/044/047/051/108/110 + board #42/#44/#45/#46 + full cl
 - **Mobile (build + residual reconciliation)**: CA booking flow (SlotPicker w/ server day-map, topic first-class — notes-prefix workaround removed), bookmarks (enriched DTO, role-based sender fallback), device approval (real my-approval-status polling, NOTIFY_ONLY no-gate branch), GST/ITR notice parity (canonical statuses only), comparative report screen. Deferred per TL gate: approximate-location, resend-push.
 - **Verification (orchestrator, independent)**: backend 1,452 unit tests green across the 7 changed services (Chat 157, Auth 752, Gst 198, Loan 166, Accounting 60, Notification 91, Report 28); admin vitest 1078/1078, lint 0/0, build pass; mobile jest 715/715 (76 suites), lint clean, type-check 0 new.
 - **Migrations 080–086** all applied + scratch-replayed (idempotent).
-- **Open**: Wave 7 live QA pass (web + Android + iOS) not yet run; TL queue unchanged (#24); deferred GAP-064 + decision-gated 105/109 (GAP-104), 039 (GAP-073); Wave 6 OTP-lockout-pending live re-checks still queued.
+- **Live QA cycle (2026-06-12, full test→fix→retest)**: fresh stack restart on committed build (stale-process lesson applied). **Web pass**: 8 areas PASS + 6 HIGH bugs. **Android pass**: 6/6 PASS after 2 fixes. **iOS pass**: 6/6 PASS first run (both bug-fix regressions re-verified on-device, 35 screenshots). All bugs VERIFIED-FIXED in final browser/device retest; zero new issues. Reports: .claude/qa/wave7-live-qa-{web,android,ios}-2026-06-12.md.
+  - **Web bugs fixed**: W7-01/03 missing `JsonStringEnumConverter` in Notification+Gst Program.cs (string PascalCase enums → 500); W7-02 notification_log write-path divergence (notification_id NOT NULL → migration 087 + Guid? shadow no-default; then notification_at unmapped NOT NULL → explicit value); W7-04 TallyExportGenerator wrong table names (chart_of_accounts/journal_entries → account/journal_entry(_line) + debit/credit predicate); W7-05 ChatThreadPdf FY validator guard + financial_year varchar(10)→40 (migration 088); W7-06 device-approval admin queue UI never built → built (Settings section, approve/deny modals w/ reviewer-device picker, 14 tests, +32 i18n keys ×3).
+  - **Mobile bugs fixed**: W7-001 appointment enum projections PascalCase `.ToString()` vs UPPER_SNAKE contract → EnumUpperSnake.Serialize across 6 ChatService projection sites + 38 pinning tests; W7-002 new-conversation flow entirely absent (unwired "+"/FAB) → NewChatScreen + ChatStack route + createThread numeric-enum wire fix + 8 tests.
+  - **Write-path audit** (retest still 500'd → orchestrator captured real exceptions via standalone side-port instances): report.report divergences — status CHECK vocabulary PENDING/GENERATING vs C# Queued/Processing (migration 088 realigns CHECK to QUEUED/PROCESSING/COMPLETED/FAILED + UpperSnakeEnumConverter), user_id uuid column vs string property (42804), phantom EF defaults (title HasDefaultValue, notification_at HasDefaultValueSql — no real DB defaults exist; values now written explicitly). **Lesson**: EfSmoke read-materialization misses write paths on 0-row tables; insert-path model-inspection tests added pinning mappings/converters/no-phantom-defaults.
+  - **Env/QA-error closures**: LoanService:ConsentHmacKey dev user-secret seeded → KFS 201 all locales incl. hi (closes Wave 6 KFS-hi re-check); consent-catalog "404" was QA wrong-path (real route /loans/consents/catalog, 200); org-switcher re-check PASS; IMS inbox live PASS on Android AND iOS (all Wave 6 lockout-pending re-checks now closed).
+- **Migrations 087–088** authored + applied + replay-verified idempotent (notification_log.notification_id nullable; report.report CHECK realign + status default QUEUED + financial_year varchar(40)).
+- **Final gates @ wrap (orchestrator re-run)**: backend Chat 195, Gst 217, Notification 114, Report 52; admin lint 0/0, build pass, vitest 1092/1092 (58 files), i18n 2171 ×3 parity; mobile lint clean, type-check clean, jest 724/724 (77 suites).
+- **Known issue (logged, not blocking)**: BUG-W7-IOS-001 — ChatService SignalR hub 404 in local dev (pre-existing, dev-only; REST messaging unaffected; Expo overlay toast noise). Route to backend-agent next wave.
+- **Open**: TL queue unchanged (#24); deferred GAP-064 + decision-gated 105/109 (GAP-104), 039 (GAP-073); approximate-location + resend-push (TL gate).
 
 ### Phase 7 Wave 6 — Medium/Low gap tail (2026-06-11, COMPLETE & live-verified)
 

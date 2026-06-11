@@ -9,6 +9,7 @@ using Serilog;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Infrastructure.Auth;
 using System.Reflection;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
 Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateBootstrapLogger();
@@ -31,6 +32,12 @@ try
 
     // MediatR + JT-pattern pipeline (UnhandledException → Logging → Validation → Performance)
     builder.Services.AddGstApplicationServices();
+
+    // BUG-W7-03: Register JsonStringEnumConverter globally so that UPPER_SNAKE string enum values
+    // (e.g. {"formType":"DRC_01B"}) are correctly deserialized from request bodies. Without this,
+    // GstNoticeFormType (and GstNoticeAppealStage) in request DTOs throw 500 on string input.
+    builder.Services.ConfigureHttpJsonOptions(opts =>
+        opts.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
     builder.Services.AddOpenApi();
 

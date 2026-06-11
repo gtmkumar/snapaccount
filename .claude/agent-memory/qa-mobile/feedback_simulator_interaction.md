@@ -275,6 +275,72 @@ Android delivers Appearance events to RN new arch (Fabric) JS correctly — conf
 
 ---
 
+## Updated 2026-06-12: Wave 7 iOS Live Pass — New Patterns
+
+### SignalR dev overlay blocks tab bar navigation
+- In ChatDetailScreen, SignalR 404 reconnect loop fires `console.error` every 3s
+- Expo dev overlay toast appears at y=787–835 (48pt tall) overlapping the tab bar at y=818–874
+- Tapping tab buttons at y=846 (center) hits the toast button instead of the tab
+- **Workaround**: tap tab buttons at y=858 or y=865 (lower 20px of tab bar, below toast bottom)
+- This is a pre-existing dev-environment artifact (timestamp 2026-06-11), NOT a production bug
+
+### Wave 7 iOS: long-press action sheet via duration tap
+- `mcp__ios-simulator__ui_tap` with `duration="1.2"` triggers long-press correctly
+- Long-press on chat bubble (testID `chat-bubble-{id}`) opens action sheet with `message-action-bookmark`
+- AX confirms: `custom_actions: ["Bookmark"]` on chat bubble before pressing
+
+### Bookmark sender label: "You" vs "Team member"
+- iOS shows "You" when the bookmarked message's senderUserId matches the current user's ID
+- Android showed "Team member" for USER role (different i18n key resolution path)
+- Both are correct — the `BookmarkRow` has two keys: `mobile.chat.bookmarks.sender.you` and `mobile.chat.bookmarks.sender.member`
+- NOT a bug: the distinction is intentional per the spec
+
+### NewChatScreen submit button position
+- `new-chat-submit` is at y=559, height=48 — center is y=583
+- The tab bar is at y=818. If NewChatScreen is presented as a modal (no tab bar visible), still avoid tapping below y=810
+- First tap at y=846 hit the Loans tab (tab bar shows through modal area)
+
+### Wave 7 iOS booking flow: direct to SlotPickerScreen
+- "Book a video consultation" (`ca-book-entry`) navigates DIRECTLY to SlotPickerScreen (skips CaSelectScreen)
+- When only one CA exists (CA Priya Sharma), the CA selection step is bypassed
+- SlotPickerScreen shows "Pick a slot / CA Priya Sharma" subtitle
+
+### Tab navigation from nested stacks
+- Tapping a tab button while in a deeply nested stack (Bookmarks → ChatDetail → More stack) DOES switch tabs
+- The navigation switches to the new tab root, but the back button of the previous stack is dismissed
+- Use double-tap of More tab to reliably pop to MoreStack root (React Navigation tab-press-to-root behavior)
+
+## Updated 2026-06-12: Wave 7 Android — New Bugs + Interaction Patterns
+
+### BUG-W7-001 — AppointmentCard crash: PascalCase vs UPPERCASE enum mismatch (Critical)
+- `ListAppointmentsQuery.cs:91` uses `x.a.Status.ToString()` on C# enum `AppointmentStatus { Draft, Confirmed, Cancelled... }` — returns PascalCase strings
+- `AppointmentCard.tsx:77` calls `statusVisual()` with the status string; switch cases are UPPERCASE (`'CONFIRMED'`, `'CANCELLED'`)
+- If status doesn't match any case → `statusVisual()` returns `undefined` → line 107 `{ backgroundColor: visual.bg }` crashes
+- Affects: Past tab of MyAppointmentsScreen (any CONFIRMED/CANCELLED/COMPLETED appointment)
+- Fix: Use `UpperSnakeEnumConverter` in DTO projection OR add `.ToUpper()` on the status string in the handler
+
+### BUG-W7-002 — ChatListScreen new conversation button non-functional (High)
+- `ChatListScreen.tsx` lines 326–333 (header "+" button) and 500–506 (FAB): both `Pressable` elements have NO `onPress` handler
+- Users cannot start a new chat conversation from the mobile app
+- This also blocks testing of ChatBookmarks (requires entering a thread first)
+
+### Pattern: Backend enum serialization to mobile
+- **Safe**: Status stored as raw string in DB (e.g. `GstNotice.Status = "RECEIVED"`) → no `.ToString()` involved → always uppercase
+- **Safe**: EF Core UpperSnakeEnumConverter → DB stores `CONFIRMED` → handler reads from DB → returns uppercase
+- **UNSAFE**: C# enum `.ToString()` in LINQ projection (like `.Select(x => x.Status.ToString())`) → always PascalCase → breaks mobile UPPERCASE expectations
+- Pattern to avoid: `x.SomeEnum.ToString()` in DTO projections — use `UpperSnakeEnumConverter` instead
+
+### ChatListScreen "+" button coordinate verified
+- Element listing shows: `Button{label: "New conversation", x:923, y:95, w:115, h:115}` (device pixels)
+- Tap at (923, 95) registers but has no effect — confirmed no onPress handler in code
+
+### IMS Inbox accessible from GstDashboard
+- GstDashboard "Pending Actions" section has IMS Inbox card with testID `gst-ims-entry-card`
+- Tap navigates to `ImsInboxScreen` with current period (May 2026)
+- Period switcher, KPI cards, filter tabs all render correctly with 0 data
+
+---
+
 ## Updated 2026-06-11: Wave 6 Android — Crashlytics Audit + Deep Link + BUG-W6-003
 
 ### Crashlytics PII Audit (GAP-107) — Wave 6 finding

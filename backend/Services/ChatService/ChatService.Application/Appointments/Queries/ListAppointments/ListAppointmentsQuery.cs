@@ -1,3 +1,4 @@
+using ChatService.Application.Common;
 using ChatService.Application.Common.Interfaces;
 using ChatService.Domain.Enums;
 using FluentValidation;
@@ -71,7 +72,11 @@ public sealed class ListAppointmentsQueryHandler(
 
         var total = await query.CountAsync(cancellationToken);
 
-        var items = await query
+        // BUG-W7-001 fix: materialise the anonymous projection first, then map enums
+        // client-side via EnumUpperSnake.Serialize so the mobile contract (UPPER_SNAKE)
+        // is honoured.  Calling .ToString() inside an EF LINQ Select() emits the
+        // PascalCase member name ("Confirmed") rather than the DB string ("CONFIRMED").
+        var rows = await query
             .OrderByDescending(a => a.CreatedAt)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
@@ -82,19 +87,34 @@ public sealed class ListAppointmentsQueryHandler(
             .Join(db.CaProfiles,
                 x => x.a.CaProfileId,
                 p => p.Id,
-                (x, p) => new AppointmentSummaryDto(
+                (x, p) => new
+                {
                     x.a.Id,
-                    p.Id,
-                    p.DisplayName,
-                    x.s.StartUtc,
-                    x.s.EndUtc,
-                    x.a.Status.ToString(),
+                    CaProfileId = p.Id,
+                    CaDisplayName = p.DisplayName,
+                    SlotStartUtc = x.s.StartUtc,
+                    SlotEndUtc = x.s.EndUtc,
+                    x.a.Status,
                     x.a.MeetLink,
                     x.a.RatingStars,
                     x.a.CreatedAt,
                     x.a.Topic,
-                    x.a.Notes))
+                    x.a.Notes
+                })
             .ToListAsync(cancellationToken);
+
+        var items = rows.Select(r => new AppointmentSummaryDto(
+            r.Id,
+            r.CaProfileId,
+            r.CaDisplayName,
+            r.SlotStartUtc,
+            r.SlotEndUtc,
+            EnumUpperSnake.Serialize(r.Status),
+            r.MeetLink,
+            r.RatingStars,
+            r.CreatedAt,
+            r.Topic,
+            r.Notes)).ToList();
 
         return Result<ListAppointmentsResponse>.Success(
             new ListAppointmentsResponse(items, total, request.Page, request.PageSize));

@@ -9,9 +9,19 @@ namespace NotificationService.Infrastructure.Persistence.Configurations;
 /// Maps <see cref="NotificationLogEntry"/> (the dispatch record) to
 /// <c>notification.notification_log</c>.
 ///
-/// Migration 066 confirmed: user_id, event_code, channel, language, rendered_body, dedupe_key
-/// columns exist in the DB. All entity properties are fully mapped.
-/// Provider/cost/retry/status/failure_reason columns from earlier migrations are also mapped.
+/// Write-path audit (2026-06-12) — every NOT NULL column verified against pg_attrdef:
+///   notification_at  — NOT NULL, NO DB default → mapped to NotificationAt (DateTime), set in factory
+///   provider         — NOT NULL, NO DB default → mapped to Provider (string), always set in factory
+///   created_at       — NOT NULL, has now() default → safe (EF writes it via interceptor anyway)
+///   updated_at       — NOT NULL, has now() default → safe
+///   status           — NOT NULL, has 'QUEUED' default → safe (EF writes it)
+///   retry_count      — NOT NULL, has 0 default → safe (EF writes 0)
+///   language         — NOT NULL, has 'en' default → safe (EF writes it)
+///
+/// Type audit — uuid columns require Guid mapping, never string:
+///   user_id    uuid  → UserId (Guid) — OK
+///   created_by uuid  → CreatedBy (string?) — handled by BaseDbContext.GuidStringConverter
+///   updated_by uuid  → UpdatedBy (string?) — handled by BaseDbContext.GuidStringConverter
 /// </summary>
 public sealed class NotificationLogEntryConfiguration : IEntityTypeConfiguration<NotificationLogEntry>
 {
@@ -22,8 +32,6 @@ public sealed class NotificationLogEntryConfiguration : IEntityTypeConfiguration
 
         builder.Property(l => l.Id).HasColumnName("id");
 
-        // Migration 066: user_id, event_code, channel, language, rendered_body, dedupe_key
-        // columns confirmed present in notification.notification_log — re-enable mappings.
         builder.Property(l => l.UserId).HasColumnName("user_id");
         builder.Property(l => l.EventCode).HasColumnName("event_code").HasMaxLength(200);
         builder.Property(l => l.Channel)
@@ -34,20 +42,35 @@ public sealed class NotificationLogEntryConfiguration : IEntityTypeConfiguration
         builder.Property(l => l.RenderedBody).HasColumnName("rendered_body");
         builder.Property(l => l.DedupeKey).HasColumnName("dedupe_key").HasMaxLength(128);
 
-        // Status is present in DB (migration 017) — map it.
+        // status: UpperSnakeEnumConverter; NOT NULL with DB default 'QUEUED' — safe to omit on insert.
         builder.Property(l => l.Status).HasColumnName("status")
             .HasConversion(new UpperSnakeEnumConverter<DispatchStatus>())
             .HasMaxLength(20).IsRequired();
 
-        // Reuse the 008/017 provider columns.
+        // provider: NOT NULL, NO DB default. Domain entity always sets Provider in factory methods
+        // (Sent → provider arg, CreateCelebration → "celebration", Failed → "unknown").
+        // Do NOT add HasDefaultValue here — EF would omit the column and Postgres raises 23502.
+        builder.Property(l => l.Provider).HasColumnName("provider").HasMaxLength(50).IsRequired();
         builder.Property(l => l.ProviderMessageId).HasColumnName("provider_message_id").HasMaxLength(300);
-        builder.Property(l => l.Provider).HasColumnName("provider").HasMaxLength(50);
+
         builder.Property(l => l.CostInr).HasColumnName("cost_inr").HasColumnType("numeric(10,4)");
+        // retry_count: NOT NULL, DB default 0 — EF writes the C# value (defaults to 0).
         builder.Property(l => l.RetryCount).HasColumnName("retry_count");
         builder.Property(l => l.ErrorMessage).HasColumnName("failure_reason");
 
-        // DB also has notification_id (FK to notification table) — shadow property
-        builder.Property<Guid?>("NotificationId").HasColumnName("notification_id");
+        // notification_at: NOT NULL, NO DB default. Set explicitly in every factory method
+        // to DateTime.UtcNow (= "when the notification event occurred").
+        // MUST NOT use HasDefaultValueSql("NOW()") + ValueGeneratedOnAdd — those patterns cause
+        // EF to omit the column from INSERT (it treats it as server-generated), so Postgres gets
+        // no value and raises 23502 because there is no actual server-side DEFAULT on the column.
+        builder.Property(l => l.NotificationAt)
+            .HasColumnName("notification_at")
+            .IsRequired();
+
+        // notification_id: nullable (migration 087). No HasDefaultValue — EF writes NULL for
+        // Guid? shadow property on test-send and celebration paths (no parent notification row).
+        builder.Property<Guid?>("NotificationId")
+            .HasColumnName("notification_id");
 
         builder.Property(l => l.CreatedAt).HasColumnName("created_at");
         builder.Property(l => l.UpdatedAt).HasColumnName("updated_at");

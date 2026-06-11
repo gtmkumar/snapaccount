@@ -1,3 +1,4 @@
+using ChatService.Application.Common;
 using ChatService.Application.Common.Interfaces;
 using ChatService.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -105,10 +106,13 @@ public sealed class GetThreadInboxQueryHandler(
             })
             .ToListAsync(cancellationToken);
 
+        // BUG-W7-001 fix: use EnumUpperSnake.Serialize instead of .ToString() so
+        // ThreadStatus.PendingUser → "PENDING_USER" (not "PendingUser") and
+        // ThreadCategory.GST → "GST" (coincidentally correct but now explicit).
         var items = threads.Select(t => new ThreadSummaryDto(
             t.Id,
-            t.Status.ToString(),
-            t.Category.ToString(),
+            EnumUpperSnake.Serialize(t.Status),
+            EnumUpperSnake.Serialize(t.Category),
             t.Subject,
             t.InitiatedByUserId,
             t.AssignedToUserId,

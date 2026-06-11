@@ -1,9 +1,10 @@
+using ChatService.Application.Common;
 using ChatService.Application.Common.Interfaces;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
-using SnapAccount.Shared.Domain;
 using SnapAccount.Shared.Application.Behaviors;
+using SnapAccount.Shared.Domain;
 
 namespace ChatService.Application.Bookmarks.Queries.ListBookmarks;
 
@@ -86,7 +87,10 @@ public sealed class ListBookmarksQueryHandler(
 
         var total = await query.CountAsync(cancellationToken);
 
-        var items = await query
+        // BUG-W7-001 fix: materialise first, then serialise SenderRole via
+        // EnumUpperSnake.Serialize to produce "USER"/"CA" not "User"/"CA" (CA is
+        // coincidentally correct but User/Admin/System are wrong PascalCase).
+        var rows = await query
             .OrderByDescending(b => b.CreatedAt)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
@@ -97,18 +101,32 @@ public sealed class ListBookmarksQueryHandler(
             .Join(db.Threads,
                 x => x.m.ThreadId,
                 t => t.Id,
-                (x, t) => new BookmarkDto(
-                    x.b.Id,
-                    x.m.Id,
+                (x, t) => new
+                {
+                    BookmarkId = x.b.Id,
+                    MessageId = x.m.Id,
                     x.m.ThreadId,
-                    x.m.Body,
-                    x.b.Note,
-                    x.b.CreatedAt,
-                    x.m.CreatedAt,
+                    MessageBody = x.m.Body,
+                    Note = x.b.Note,
+                    BookmarkedAt = x.b.CreatedAt,
+                    MessageCreatedAt = x.m.CreatedAt,
                     x.m.SenderUserId,
-                    x.m.SenderRole.ToString(),
-                    t.Subject))
+                    x.m.SenderRole,
+                    ThreadSubject = t.Subject
+                })
             .ToListAsync(cancellationToken);
+
+        var items = rows.Select(r => new BookmarkDto(
+            r.BookmarkId,
+            r.MessageId,
+            r.ThreadId,
+            r.MessageBody,
+            r.Note,
+            r.BookmarkedAt,
+            r.MessageCreatedAt,
+            r.SenderUserId,
+            EnumUpperSnake.Serialize(r.SenderRole),
+            r.ThreadSubject)).ToList();
 
         return Result<ListBookmarksResponse>.Success(
             new ListBookmarksResponse(items, total, request.Page, request.PageSize));

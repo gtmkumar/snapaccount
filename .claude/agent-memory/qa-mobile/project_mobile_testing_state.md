@@ -4,17 +4,19 @@ description: Current phase, test baseline, known pre-existing failures, and key 
 type: project
 ---
 
-Phase 7 Wave 1+2+6 complete on branch `2026-06-10-s5t4`. Live Android Wave 6 sweep (2026-06-11) complete. 648/648 Jest tests passing (64 suites).
+Phase 7 Wave 7 live QA COMPLETE AND VERIFIED on branch `2026-06-10-s5t4` (2026-06-12). 724/724 Jest tests passing (77 suites). Wave 7 Android live QA: 6/6 PASS after fixes. Wave 7 iOS live QA: 6/6 PASS. Two Wave 7 bugs (BUG-W7-001/002) confirmed fixed on BOTH platforms. One dev-environment-only bug noted (BUG-W7-IOS-001 Low).
 
-**Why:** Phase 7 Wave 6 adds org-switcher, invite deep link, celebration single-fire, KFS locale, touch targets, Crashlytics PII audit (GAP-107), and quick regression. BUG-W6-003 (refreshContextAndSwap 500) open — backend fix in flight. Login constraint blocked live verification of items 1, 4, 7c.
+**Why:** Wave 7 covers CA consultations/templates, GST notice engine, fraud/auth hardening, chat bookmarks, device approval flow. Two bugs found during Android live QA: BUG-W7-001 (Critical — enum PascalCase/UPPERCASE mismatch in appointment projections) and BUG-W7-002 (High — NewChatScreen entirely missing, FAB non-functional, createThread wire format wrong). Both fixed by respective agents and re-verified on iOS.
 
-**How to apply:** Jest baseline is 648 passing (64 suites). Wave 6 is CONDITIONAL PASS. BUG-W6-003 requires backend fix + re-check. Report at `.claude/qa/live-android-wave6-2026-06-11.md`.
+**How to apply:** Jest baseline is 724 passing (77 suites). All 6 Wave 7 live items PASS on BOTH platforms. Regression suite 100% green. Reports: `.claude/qa/mobile-report.md`, `.claude/qa/wave7-live-qa-android-2026-06-12.md`, `.claude/qa/wave7-live-qa-ios-2026-06-12.md`.
 
 ## Jest baseline per phase
 - Phase 6A/6E: 153 → 204 → 235 passing
 - Phase 6B/6D: 235 → ~270 (estimate)
 - Phase 6F: 323 total, 319 passing (4 pre-existing LoanPackagePreview failures)
 - Phase 7 Wave 1+2: 438 total, 438 passing
+- Phase 7 Wave 6: 648 passing (64 suites)
+- Phase 7 Wave 7: 724 passing (77 suites) — CURRENT BASELINE
 
 ## Known pre-existing failures
 - `LoanPackagePreviewScreen.test.tsx` — 4 tests: watermark test calls `.toMatch()` on array (icon + Text children array). Filed as pre-existing. Resolved in Phase 7 baseline.

@@ -1204,6 +1204,29 @@
           "new": "New conversation"
         }
       },
+      "new": {
+        "title": "New conversation",
+        "category": {
+          "label": "Topic",
+          "general": "General",
+          "gst": "GST",
+          "itr": "Income Tax",
+          "doc": "Documents",
+          "loan": "Loan",
+          "billing": "Billing"
+        },
+        "subject": {
+          "label": "Subject (optional)",
+          "placeholder": "What is this about?"
+        },
+        "message": {
+          "label": "Your message",
+          "placeholder": "Describe your query…"
+        },
+        "submit": "Start conversation",
+        "submitting": "Starting…",
+        "error": "Couldn't start the conversation. Please try again."
+      },
       "detail": {
         "header": {
           "defaultTitle": "Chat",

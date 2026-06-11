@@ -339,4 +339,32 @@ describe('ChatListScreen', () => {
       source: 'list',
     });
   });
+
+  // ── new conversation (BUG-W7-002) ─────────────────────────────────────────
+  // Both the header "+" button and the FAB must open the NewChat compose
+  // screen — they previously had NO onPress handler at all.
+
+  it('header + button navigates to NewChat', () => {
+    const { getByTestId } = render(
+      <Wrapper>
+        <ChatListScreen navigation={mockNavigation as never} />
+      </Wrapper>,
+    );
+
+    fireEvent.press(getByTestId('chat-list-new-header'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('NewChat');
+  });
+
+  it('FAB navigates to NewChat', () => {
+    const { getByTestId } = render(
+      <Wrapper>
+        <ChatListScreen navigation={mockNavigation as never} />
+      </Wrapper>,
+    );
+
+    fireEvent.press(getByTestId('chat-list-new-fab'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('NewChat');
+  });
 });

@@ -1,0 +1,1 @@
+- [Report status enum / UPPER_SNAKE convention](project_report_status_enum_convention.md) — house UPPER_SNAKE CHECK convention + the EF .HasConversion<string>() PascalCase write-path trap (mig 088); financial_year overloaded with UUID thread-id.

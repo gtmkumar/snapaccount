@@ -1,4 +1,5 @@
 using ChatService.Application.Appointments.Queries.ListAppointments;
+using ChatService.Application.Common;
 using ChatService.Application.Common.Interfaces;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -62,7 +63,10 @@ public sealed class GetAppointmentQueryHandler(
             return Result<AppointmentDetailDto>.Failure(
                 Error.Unauthorized("Appointment.Unauthenticated", "User is not authenticated."));
 
-        var row = await db.Appointments
+        // BUG-W7-001 fix: same two-step pattern as ListAppointmentsQuery — materialise
+        // the anonymous type first so EnumUpperSnake.Serialize runs in memory, not
+        // inside the EF SQL translation that would emit the PascalCase name.
+        var raw = await db.Appointments
             .Where(a => a.Id == request.AppointmentId
                      && a.OrganizationId == currentUser.OrganizationId.Value)
             .Join(db.AppointmentSlots,
@@ -72,13 +76,14 @@ public sealed class GetAppointmentQueryHandler(
             .Join(db.CaProfiles,
                 x => x.a.CaProfileId,
                 p => p.Id,
-                (x, p) => new AppointmentDetailDto(
+                (x, p) => new
+                {
                     x.a.Id,
-                    p.Id,
-                    p.DisplayName,
-                    x.s.StartUtc,
-                    x.s.EndUtc,
-                    x.a.Status.ToString(),
+                    CaProfileId = p.Id,
+                    CaDisplayName = p.DisplayName,
+                    SlotStartUtc = x.s.StartUtc,
+                    SlotEndUtc = x.s.EndUtc,
+                    x.a.Status,
                     x.a.MeetLink,
                     x.a.RatingStars,
                     x.a.CreatedAt,
@@ -87,12 +92,30 @@ public sealed class GetAppointmentQueryHandler(
                     x.a.RatingComment,
                     x.a.RatedAt,
                     x.a.CancelledByCa,
-                    x.a.CaCancellationReason))
+                    x.a.CaCancellationReason
+                })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (row is null)
+        if (raw is null)
             return Result<AppointmentDetailDto>.Failure(
                 Error.NotFound("Appointment.NotFound", "Appointment not found."));
+
+        var row = new AppointmentDetailDto(
+            raw.Id,
+            raw.CaProfileId,
+            raw.CaDisplayName,
+            raw.SlotStartUtc,
+            raw.SlotEndUtc,
+            EnumUpperSnake.Serialize(raw.Status),
+            raw.MeetLink,
+            raw.RatingStars,
+            raw.CreatedAt,
+            raw.Topic,
+            raw.Notes,
+            raw.RatingComment,
+            raw.RatedAt,
+            raw.CancelledByCa,
+            raw.CaCancellationReason);
 
         return Result<AppointmentDetailDto>.Success(row);
     }

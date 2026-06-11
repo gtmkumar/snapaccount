@@ -11,8 +11,19 @@ public sealed class ReportJob : BaseAuditableEntity
     /// <summary>Organisation that owns this report.</summary>
     public Guid OrgId { get; set; }
 
-    /// <summary>User who requested the report.</summary>
-    public string? RequestedBy { get; set; }
+    /// <summary>
+    /// User who requested the report.
+    /// Maps to report.report.user_id (uuid, nullable) — stored as Guid, not string,
+    /// to avoid the 42804 type mismatch that a varchar→uuid assignment triggers.
+    /// </summary>
+    public Guid? RequestedBy { get; set; }
+
+    /// <summary>
+    /// Human-readable title for the report.
+    /// Maps to report.report.title (VARCHAR(500) NOT NULL, NO DB default).
+    /// Must be set before SaveChanges — handler derives it from ReportType + FinancialYear.
+    /// </summary>
+    public string Title { get; set; } = string.Empty;
 
     /// <summary>Type of report to generate.</summary>
     public ReportType ReportType { get; set; }

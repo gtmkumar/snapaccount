@@ -2,6 +2,97 @@
 
 ---
 
+## Phase 7 Wave 7 — 2026-06-12
+
+### Summary
+- Jest tests: 724 passing (77 suites) | 0 Failed | 0 Skipped
+- Live Android QA (emulator-5554): 6/6 PASS (all items re-verified after bug fixes)
+- iOS: NOT RUN this wave (Android emulator-only scope per orchestrator instructions)
+
+### Wave 7 Android Live Test Items
+
+| Test | Status | Notes |
+|------|--------|-------|
+| T1: CA Appointment Booking | PASS | DateStrip fed by slot day-map; topic ACCOUNTING persisted as first-class field |
+| T2: Appointment Detail | PASS | BUG-W7-001 fixed; Past tab renders CONFIRMED status badge correctly |
+| T3: Chat Bookmarks | PASS | BUG-W7-002 fixed; GST thread created, message bookmarked, ChatBookmarksScreen verified live |
+| T4: Device Approval Flow | PASS | Code + DB verified; polling 3s, all status transitions correct |
+| T5: GST Notice Screens | PASS | Canonical statuses confirmed; form-type DRC_01B badge renders; deadline chip correct |
+| T6: IMS Inbox Android | PASS | Screen renders with all elements; period/KPI/filter/search/empty state all present |
+
+### Bugs Found
+
+| Bug ID | Title | Severity | Platform | Status |
+|--------|-------|----------|----------|--------|
+| BUG-W7-001 | AppointmentCard crashes — `x.a.Status.ToString()` returns PascalCase, mobile expects UPPERCASE | Critical | Both | FIXED (195/195 ChatService tests) |
+| BUG-W7-002 | ChatListScreen new conversation FAB and header button have no `onPress` handler; NewChatScreen missing entirely | High | Both | FIXED (724/724 Jest tests) |
+
+### Bug Details
+- **BUG-W7-001 (FIXED)**: `ListAppointmentsQuery.cs:91` used LINQ projection `x.a.Status.ToString()` on C# enum → PascalCase (`"Confirmed"`). Mobile `statusVisual()` switch cases expect UPPERCASE (`"CONFIRMED"`). Fixed by `EnumUpperSnake.Serialize<TEnum>()` helper applied across 6 projection sites in 4 files. 38 new unit tests pin the contract. 195/195 ChatService tests pass.
+- **BUG-W7-002 (FIXED)**: Both the "+" header button and the FAB in `ChatListScreen.tsx` had no `onPress`. Root cause deeper: `NewChatScreen` and `NewChat` route were never built. Additionally `createThread()` sent string category (`"general"`) instead of numeric (6). Fixed with new `NewChatScreen.tsx`, corrected `createThread()` wire format, `ChatStack.tsx` route, navigation wired. Live-verified: GST thread created, bubble bookmarked, `BookmarkRow.tsx` renders sender "Team member" correctly. 77 suites / 724 tests pass.
+
+### New Tests Added (Wave 7)
+- `mobile/__tests__/screens/NewChatScreen.test.tsx` — 6 tests (render, category chips, submit, error state)
+- `mobile/__tests__/screens/ChatListScreen.test.tsx` — +2 tests (header/FAB navigation wired)
+- `mobile/__tests__/api/chat.test.ts` — updated (numeric category wire format assertions)
+- `tests/unit/ChatService/EnumUpperSnakeProjectionTests.cs` — 38 tests pinning UPPER_SNAKE serialization for 5 enum types
+
+### Regression Results
+- Wave 7 fixes introduced no regressions
+- Full Jest suite: 724/724 passing (77 suites)
+- Backend ChatService: 195/195 passing
+
+### Sign-off (Android)
+PASS — all 6 Wave 7 live items verified on Android emulator. Both bugs found (BUG-W7-001 Critical, BUG-W7-002 High) are fixed and re-verified. Regression suite 100% green. Ready to proceed.
+
+Full live QA report: `.claude/qa/wave7-live-qa-android-2026-06-12.md`
+
+---
+
+## Phase 7 Wave 7 iOS Pass — 2026-06-12
+
+### Summary
+- Platform: iPhone 17 Pro, iOS 26.5, UDID 17BF04F0-A5F0-4C76-80FA-05FB8204FE4C
+- App: com.snapaccount.app (native build, pre-installed from 2026-06-11 session)
+- Total live tests: 6 | Passed: 6 | Failed: 0 | Blocked: 0
+
+### iOS Live Test Items
+
+| Test | Status | Notes |
+|------|--------|-------|
+| T6: General Smoke — Login + 5 Tabs | PASS | All tabs render without crash; touch targets ≥44pt verified via AX |
+| T1: CA Appointment Booking | PASS | DateStrip day-map, 10:00 AM slot, ITR topic, DB confirmed (CONFIRMED/ITR) |
+| T2: Appointment Detail + Past Tab Regression | PASS | BUG-W7-001 fix confirmed: "Confirmed" renders; Past tab shows empty state, no crash |
+| T3: Chat New Conversation + Bookmark + Bookmarks | PASS | BUG-W7-002 fix confirmed: FAB → NewChatScreen → ITR thread created → bookmarked → ChatBookmarksScreen shows "You" sender |
+| T4: Device Approval Flow | PASS (code+DB) | Identical to Android; polling/routing verified; seeded IOS device_approval_request row |
+| T5: GST Notice Screens + IMS Inbox | PASS (code+DB+live) | IMS Inbox live-verified on iOS; canonical statuses confirmed |
+
+### Bugs Found (iOS-specific)
+
+| Bug ID | Title | Severity | Platform | Status |
+|--------|-------|----------|----------|--------|
+| BUG-W7-IOS-001 | SignalR hub returns 404 in local dev; Expo dev overlay toast accumulates and overlaps tab bar | Low | iOS + Android (dev env only) | Open — pre-existing, non-production |
+
+### Android Bugs Verified Fixed on iOS
+
+| Bug ID | Android Status | iOS Verification |
+|--------|---------------|-----------------|
+| BUG-W7-001 (Critical) | FIXED | CONFIRMED FIXED — CONFIRMED status badge renders correctly; Past tab no crash |
+| BUG-W7-002 (High) | FIXED | CONFIRMED FIXED — FAB navigates to NewChatScreen; ITR thread created |
+
+### iOS vs Android Deltas (non-blocking)
+
+- **Bookmark sender label**: iOS shows "You" (own message), Android showed "Team member" (USER role). Both correct — "You" resolves when senderUserId matches current user.
+- **FLAG_SECURE**: iOS exposes all screen content in screenshots. Android shows black on financial screens. Expected platform difference.
+- **SignalR toast navigation**: Error toast overlaps tab bar in dev mode. Workaround: tap tab buttons at y≥850 (below toast boundary). No impact in production.
+
+### Sign-off (iOS)
+PASS — all 6 Wave 7 live items verified on iOS simulator. Both Wave 7 bugs (BUG-W7-001 Critical, BUG-W7-002 High) confirmed fixed on iOS. One pre-existing dev-environment issue noted (BUG-W7-IOS-001 Low, SignalR 404 overlay). No new iOS-specific regressions. Regression suite remains 100% green (724/724 Jest, 195/195 ChatService unit). Wave 7 iOS QA complete.
+
+Full live QA report: `.claude/qa/wave7-live-qa-ios-2026-06-12.md`
+
+---
+
 ## Phase 7 — 2026-06-11
 
 ### Summary

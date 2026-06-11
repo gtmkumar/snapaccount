@@ -1,6 +1,7 @@
 /**
  * ChatStack — Phase 6F Track F2 · Wave 7 (GAP-031 CA booking, GAP-043 bookmarks)
  * Routes: ChatList → ChatDetail / ChatBookmarks
+ *         ChatList → NewChat → (replace) ChatDetail   [BUG-W7-002]
  *         ChatList → CaSelect → SlotPicker → BookingConfirm → AppointmentConfirmed
  *         ChatList → MyAppointments → AppointmentDetail
  */
@@ -10,6 +11,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ChatListScreen } from '../screens/chat/ChatListScreen';
 import { ChatDetailScreen } from '../screens/chat/ChatDetailScreen';
 import { ChatBookmarksScreen } from '../screens/chat/ChatBookmarksScreen';
+import { NewChatScreen } from '../screens/chat/NewChatScreen';
 import { CaSelectScreen } from '../screens/appointments/CaSelectScreen';
 import { SlotPickerScreen } from '../screens/appointments/SlotPickerScreen';
 import { BookingConfirmScreen } from '../screens/appointments/BookingConfirmScreen';
@@ -27,6 +29,8 @@ export type ChatStackParamList = {
   };
   /** GAP-043: bookmarked messages list. */
   ChatBookmarks: undefined;
+  /** BUG-W7-002: new-conversation compose sheet (category → first message). */
+  NewChat: undefined;
   // ── GAP-031 CA booking (modal flow) ────────────────────────────────────────
   CaSelect: undefined;
   SlotPicker: {
@@ -55,6 +59,7 @@ export function ChatStack() {
       <Stack.Screen name="ChatList" component={ChatListScreen} />
       <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
       <Stack.Screen name="ChatBookmarks" component={ChatBookmarksScreen} />
+      <Stack.Screen name="NewChat" component={NewChatScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="CaSelect" component={CaSelectScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="SlotPicker" component={SlotPickerScreen} />
       <Stack.Screen name="BookingConfirm" component={BookingConfirmScreen} />

@@ -135,8 +135,37 @@ export interface SendMessageRequest {
   clientMessageId?: string;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BUG-W7-002: new-conversation (StartThread) wire format.
+// RECONCILED 2026-06-12 against ChatService.Domain.Enums.ThreadCategory and
+// live-probed on :5107 — POST /chat/threads binds `category` via default
+// System.Text.Json (NO JsonStringEnumConverter), so the NUMERIC enum value
+// must be sent; string forms ("general"/"GENERAL") fail binding (500).
+// Server enum: GST=1, ITR=2, DOC=3, LOAN=4, BILLING=5, GENERAL=6.
+// Response: { threadId, status: "Open", category: "GENERAL", messageId }.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Server-side thread categories accepted by POST /chat/threads. */
+export type ServerThreadCategory =
+  | 'GST'
+  | 'ITR'
+  | 'DOC'
+  | 'LOAN'
+  | 'BILLING'
+  | 'GENERAL';
+
+/** Numeric values of ChatService.Domain.Enums.ThreadCategory (see header). */
+export const SERVER_THREAD_CATEGORY_VALUES: Record<ServerThreadCategory, number> = {
+  GST: 1,
+  ITR: 2,
+  DOC: 3,
+  LOAN: 4,
+  BILLING: 5,
+  GENERAL: 6,
+};
+
 export interface CreateThreadRequest {
-  category: ThreadCategory;
+  category: ServerThreadCategory;
   subject?: string;
   initialMessage: string;
   clientMessageId?: string;
@@ -144,8 +173,10 @@ export interface CreateThreadRequest {
 
 export interface CreateThreadResponse {
   threadId: string;
-  status: ThreadStatus;
-  category: ThreadCategory;
+  /** Server ThreadStatus.ToString() — e.g. "Open". */
+  status: string;
+  /** Server ThreadCategory.ToString() — e.g. "GENERAL". */
+  category: string;
   messageId: string;
 }
 
@@ -203,11 +234,20 @@ export async function markThreadRead(threadId: string): Promise<void> {
   await apiClient.post(`/chat/threads/${threadId}/read`);
 }
 
-/** Open a new support thread. */
+/**
+ * Open a new support thread (BUG-W7-002).
+ * Sends the NUMERIC server enum value for category — see the wire-format
+ * note above `ServerThreadCategory` (string categories 500 on the server).
+ */
 export async function createThread(
   req: CreateThreadRequest,
 ): Promise<CreateThreadResponse> {
-  const res = await apiClient.post<CreateThreadResponse>('/chat/threads', req);
+  const res = await apiClient.post<CreateThreadResponse>('/chat/threads', {
+    category: SERVER_THREAD_CATEGORY_VALUES[req.category],
+    subject: req.subject,
+    initialMessage: req.initialMessage,
+    clientMessageId: req.clientMessageId,
+  });
   return res.data;
 }
 

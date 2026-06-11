@@ -13,6 +13,7 @@ import {
   User,
   Monitor,
   ShieldCheck,
+  ShieldAlert,
   ExternalLink,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
@@ -35,6 +36,7 @@ import { FeatureFlagsSettings } from './sections/FeatureFlagsSettings'
 import { NotificationSettings } from './sections/NotificationSettings'
 import { UserPreferencesSettings } from './sections/UserPreferencesSettings'
 import { DevicesSettings } from './sections/DevicesSettings'
+import { DeviceApprovalQueue } from './sections/DeviceApprovalQueue'
 import { TwoFaSettings } from './sections/TwoFaSettings'
 
 type SettingSection =
@@ -49,6 +51,7 @@ type SettingSection =
   | 'notifications'
   | 'preferences'
   | 'devices'
+  | 'device-approvals'
   | 'two-fa'
 
 interface NavItem {
@@ -70,6 +73,7 @@ const navItems: NavItem[] = [
   { id: 'feature-flags', label: 'Feature Flags', icon: Flag, group: 'Platform' },
   { id: 'preferences', label: 'My Preferences', icon: User, group: 'Account' },
   { id: 'devices', label: 'Logged-in Devices', icon: Monitor, group: 'Account' },
+  { id: 'device-approvals', label: 'Device Approval Queue', icon: ShieldAlert, group: 'Account' },
   { id: 'two-fa', label: 'Two-Factor Authentication', icon: ShieldCheck, group: 'Account' },
 ]
 
@@ -82,6 +86,7 @@ const SECTION_COMPONENT_MAP: Record<SettingSection, () => ReactNode> = {
   'tally': () => <TallySettings />,
   'preferences': () => <UserPreferencesSettings />,
   'devices': () => <DevicesSettings />,
+  'device-approvals': () => <DeviceApprovalQueue />,
   'two-fa': () => <TwoFaSettings />,
   'subscriptions': () => <SubscriptionTiersSettings />,
   'feature-flags': () => <FeatureFlagsSettings />,

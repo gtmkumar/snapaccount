@@ -79,3 +79,29 @@ All 3 residuals from the Wave 7 build are now wired to real backend contracts (W
 - `src/__tests__/CaAppointmentsPage.test.tsx` — 6 tests: list, drawer, cancel-by-ca flow
 
 **How to apply:** When building future CA consultation features, use UUID-based routing (caProfileId from ChatService, not userId from AuthService). Weekday conversions and TimeSpan parsing are encapsulated in `caApi.ts` — do not duplicate elsewhere.
+
+---
+
+## BUG-W7-06 fix (2026-06-12 — post Wave 7 live QA)
+
+**Bug**: Device approval admin queue UI was missing. AuthService endpoints existed (GAP-047) but no frontend wiring.
+
+**Fix**: Extended `src/admin/src/lib/devicesApi.ts` with:
+- `getPendingApprovals()` → `GET /auth/devices/pending-approvals` → `PendingApprovalsResponse { pending: DeviceApprovalDto[] }`
+- `approveDevice(approvalId, reviewingDeviceEntityId)` → `POST /auth/devices/{approvalId}/approve { reviewingDeviceEntityId }` → `ApproveDeviceResponse`
+- `denyDevice(approvalId, reviewingDeviceEntityId, reason?)` → `POST /auth/devices/{approvalId}/deny { reviewingDeviceEntityId, reason? }` → `DenyDeviceResponse { enforced: boolean }`
+
+**New component**: `src/admin/src/pages/settings/sections/DeviceApprovalQueue.tsx`
+- Integrated into Settings page under Account group (between "Logged-in Devices" and "Two-FA")
+- Reviewer device picker: pulls from `GET /auth/devices` (active devices only) to pre-populate the `reviewingDeviceEntityId` required by backend IDOR validation
+- Auto-refreshes every 30s (requests expire after 10min)
+- Expired requests shown with badge + disabled actions
+
+**Key contract notes**:
+- Backend requires `reviewingDeviceEntityId` (the reviewer's own device UUID) on both approve and deny — it's IDOR validation, not optional
+- `DenyDeviceResponse.enforced: boolean` reflects whether `DeviceApproval:Enforce=true` was set on the backend (soft-launch flag)
+- Both endpoints return conflict (409) if request already resolved or expired
+
+**i18n**: 32 new `deviceApproval.*` keys added to en/hi/bn. Key count: 2171 (was 2139).
+**Tests**: `src/__tests__/DeviceApprovalQueue.test.tsx` — 14 tests covering happy path, empty/error states, approve/deny flows, expired rows.
+**Gates**: 1092/1092 vitest, 0 lint warnings, build green.
