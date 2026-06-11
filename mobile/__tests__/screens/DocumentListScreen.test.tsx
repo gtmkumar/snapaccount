@@ -72,7 +72,7 @@ describe('DocumentListScreen', () => {
         <DocumentListScreen navigation={mockNavigation} />
       </Wrapper>,
     );
-    expect(getByText('Documents')).toBeTruthy();
+    expect(getByText('mobile.docs.title')).toBeTruthy();
   });
 
   it('shows empty state when no documents or queue items', () => {
@@ -82,7 +82,7 @@ describe('DocumentListScreen', () => {
       </Wrapper>,
     );
     // Empty state renders after data loads — header is always visible
-    expect(getByText('Documents')).toBeTruthy();
+    expect(getByText('mobile.docs.title')).toBeTruthy();
   });
 
   // AND-04: backend list DTO uses fileName/vendorName/documentDate — rows

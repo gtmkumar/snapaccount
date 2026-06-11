@@ -9,6 +9,7 @@ import React, { useMemo, useState } from 'react';
 import {
   FlatList,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,6 +23,8 @@ import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { ListSkeleton } from '../../components/shared/ListStates';
+import { useHaptics } from '../../hooks/useHaptics';
 import { getFinancialYears } from '../../lib/utils';
 import type { HomeStackParamList } from '../../navigation/HomeStack';
 import { getFinancialReport } from '../../api/accounting';
@@ -36,21 +39,21 @@ type ApiReportId = 'profit-and-loss' | 'balance-sheet' | 'trial-balance';
 type ReportCard = {
   id: string;
   apiId?: ApiReportId;
-  label: string;
+  labelKey: string;
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
-  badge?: string;
+  badgeKey?: string;
 };
 
 const buildReportTypes = (tk: ThemeTokens): ReportCard[] => [
-  { id: 'trial-balance', apiId: 'trial-balance', label: 'Trial Balance', icon: 'scale-outline', color: tk.brand500 },
-  { id: 'pnl', apiId: 'profit-and-loss', label: 'Profit & Loss', icon: 'trending-up-outline', color: tk.successFg },
-  { id: 'balance-sheet', apiId: 'balance-sheet', label: 'Balance Sheet', icon: 'business-outline', color: tk.brandCta },
-  { id: 'cash-flow', label: 'Cash Flow', icon: 'swap-horizontal-outline', color: tk.infoFg },
-  { id: 'tax-liability', label: 'Tax Liability', icon: 'calculator-outline', color: tk.gstAccent },
-  { id: 'ledger', label: 'Ledger', icon: 'book-outline', color: tk.textSecondary },
-  { id: 'comparative', label: 'Comparative', icon: 'bar-chart-outline', color: tk.loanAccent, badge: 'NEW' },
-  { id: 'forecast', label: 'Cash Flow Forecast', icon: 'analytics-outline', color: tk.itrAccent, badge: 'AI' },
+  { id: 'trial-balance', apiId: 'trial-balance', labelKey: 'mobile.reports.types.trialBalance', icon: 'scale-outline', color: tk.brand500 },
+  { id: 'pnl', apiId: 'profit-and-loss', labelKey: 'mobile.reports.types.pnl', icon: 'trending-up-outline', color: tk.successFg },
+  { id: 'balance-sheet', apiId: 'balance-sheet', labelKey: 'mobile.reports.types.balanceSheet', icon: 'business-outline', color: tk.brandCta },
+  { id: 'cash-flow', labelKey: 'mobile.reports.types.cashFlow', icon: 'swap-horizontal-outline', color: tk.infoFg },
+  { id: 'tax-liability', labelKey: 'mobile.reports.types.taxLiability', icon: 'calculator-outline', color: tk.gstAccent },
+  { id: 'ledger', labelKey: 'mobile.reports.types.ledger', icon: 'book-outline', color: tk.textSecondary },
+  { id: 'comparative', labelKey: 'mobile.reports.types.comparative', icon: 'bar-chart-outline', color: tk.loanAccent, badgeKey: 'mobile.reports.badge.new' },
+  { id: 'forecast', labelKey: 'mobile.reports.types.forecast', icon: 'analytics-outline', color: tk.itrAccent, badgeKey: 'mobile.reports.badge.ai' },
 ];
 
 const FY_LIST = getFinancialYears(4);
@@ -73,7 +76,8 @@ export function FinancialReportsListScreen({ navigation }: Props) {
 
   // Pre-fetch P&L as the primary report for the selected FY
   // Individual report detail fetches happen in ReportDetailScreen
-  const { data: plReport, isLoading, isError, refetch } = useQuery({
+  const haptics = useHaptics();
+  const { data: plReport, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ['report', 'profit-and-loss', organizationId, fiscalYear],
     queryFn: () => getFinancialReport('profit-and-loss', { organizationId, fiscalYear }),
     retry: 1,
@@ -89,16 +93,43 @@ export function FinancialReportsListScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.common.back')}
+        >
           <Ionicons name="arrow-back" size={22} color={tokens.brand500} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.reports.title')}</Text>
-        <Pressable onPress={() => refetch()} style={styles.headerBtn} hitSlop={8}>
+        <Pressable
+          onPress={() => refetch()}
+          style={styles.headerBtn}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.common.retry')}
+        >
           <Ionicons name="refresh-outline" size={20} color={tokens.textSecondary} />
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              // §3.3 haptics map: pull-to-refresh release → light impact.
+              haptics.lightTap();
+              void refetch();
+            }}
+            tintColor={tokens.brand500}
+            colors={[tokens.brand500]}
+          />
+        }
+      >
         {/* FY Selector */}
         <ScrollView
           horizontal
@@ -123,17 +154,20 @@ export function FinancialReportsListScreen({ navigation }: Props) {
 
         {/* P&L summary card */}
         {isLoading ? (
-          <View style={styles.summarySkeletonCard} />
+          // §3.1: shaped skeleton matching the summary card silhouette
+          <ListSkeleton variant="card" count={1} cardHeight={72} testID="reports-skeleton" />
         ) : isError ? (
-          <Card style={styles.errorCard}>
-            <Text style={styles.errorText}>{t('mobile.reports.error')}</Text>
-            <Button label={t('mobile.reports.retry')} size="sm" onPress={() => refetch()} />
-          </Card>
+          <View accessibilityLiveRegion="assertive" accessibilityRole="alert">
+            <Card style={styles.errorCard}>
+              <Text style={styles.errorText}>{t('mobile.reports.error')}</Text>
+              <Button label={t('mobile.reports.retry')} size="sm" onPress={() => refetch()} />
+            </Card>
+          </View>
         ) : plReport ? (
           <Card shadow="md" padding="md" style={styles.summaryCard}>
             <View style={styles.summaryCardRow}>
               <View>
-                <Text style={styles.summaryLabel}>Net Profit / Loss</Text>
+                <Text style={styles.summaryLabel}>{t('mobile.reports.netProfitLoss')}</Text>
                 <Text
                   style={[
                     styles.summaryAmount,
@@ -146,7 +180,9 @@ export function FinancialReportsListScreen({ navigation }: Props) {
                 </Text>
               </View>
               {lastUpdated && (
-                <Text style={styles.summaryUpdated}>Updated {lastUpdated}</Text>
+                <Text style={styles.summaryUpdated}>
+                  {t('mobile.reports.updatedAt', { time: lastUpdated })}
+                </Text>
               )}
             </View>
           </Card>
@@ -167,27 +203,31 @@ export function FinancialReportsListScreen({ navigation }: Props) {
                 })
               }
               accessibilityRole="button"
-              accessibilityLabel={`View ${item.label} report`}
+              accessibilityLabel={t('mobile.reports.viewA11y', { report: t(item.labelKey) })}
             >
               <View style={[styles.reportIconBg, { backgroundColor: item.color + '20' }]}>
                 <Ionicons name={item.icon} size={22} color={item.color} />
               </View>
               <View style={styles.reportCardContent}>
-                <Text style={styles.reportLabel}>{item.label}</Text>
-                {item.badge && (
-                  <View style={[styles.reportBadge, item.badge === 'AI' && styles.reportBadgeAI]}>
-                    <Text style={styles.reportBadgeText}>{item.badge}</Text>
+                <Text style={styles.reportLabel}>{t(item.labelKey)}</Text>
+                {item.badgeKey && (
+                  <View style={[styles.reportBadge, item.id === 'forecast' && styles.reportBadgeAI]}>
+                    <Text style={styles.reportBadgeText}>{t(item.badgeKey)}</Text>
                   </View>
                 )}
                 {item.apiId ? (
                   <Text style={styles.reportUpdated}>
-                    {isLoading ? 'Loading…' : lastUpdated ? `Updated ${lastUpdated}` : 'Tap to load'}
+                    {isLoading
+                      ? t('mobile.reports.loading')
+                      : lastUpdated
+                        ? t('mobile.reports.updatedAt', { time: lastUpdated })
+                        : t('mobile.reports.tapToLoad')}
                   </Text>
                 ) : (
-                  <Text style={styles.reportUpdated}>Coming soon</Text>
+                  <Text style={styles.reportUpdated}>{t('mobile.reports.comingSoon')}</Text>
                 )}
               </View>
-              {item.apiId && <Text style={styles.viewText}>View →</Text>}
+              {item.apiId && <Text style={styles.viewText}>{t('mobile.reports.view')} →</Text>}
             </Pressable>
           )}
           columnWrapperStyle={styles.columnWrapper}
@@ -196,10 +236,10 @@ export function FinancialReportsListScreen({ navigation }: Props) {
 
         {/* Export section */}
         <Card style={styles.exportCard}>
-          <Text style={styles.exportTitle}>Export for CA / Auditor</Text>
+          <Text style={styles.exportTitle}>{t('mobile.reports.export.title')}</Text>
           <View style={styles.exportButtons}>
-            <Button label="Tally XML Export" variant="secondary" size="sm" onPress={() => {}} />
-            <Button label="Standard CSV Export" variant="secondary" size="sm" onPress={() => {}} />
+            <Button label={t('mobile.reports.export.tally')} variant="secondary" size="sm" onPress={() => {}} />
+            <Button label={t('mobile.reports.export.csv')} variant="secondary" size="sm" onPress={() => {}} />
           </View>
         </Card>
       </ScrollView>

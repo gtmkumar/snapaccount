@@ -102,7 +102,14 @@ export function DocChecklistScreen({ navigation, route }: Props) {
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => void refetch()}
+            tintColor={tokens.brand500}
+            colors={[tokens.brand500]}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         {/* Progress ring summary */}

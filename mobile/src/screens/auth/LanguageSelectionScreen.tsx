@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import {
@@ -38,6 +39,7 @@ const LANGUAGE_LIST: { code: AppLanguage; label: string; nativeLabel: string }[]
 export function LanguageSelectionScreen({ navigation }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
+  const { t } = useTranslation();
   const { language: savedLanguage, setLanguage, setLanguageSelected } = usePreferencesStore();
   const [selected, setSelected] = useState<AppLanguage>(savedLanguage);
 
@@ -55,8 +57,8 @@ export function LanguageSelectionScreen({ navigation }: Props) {
           <View style={styles.illustration}>
             <Ionicons name="language-outline" size={28} color={tokens.brand500} />
           </View>
-          <Text style={styles.heading}>Choose your language</Text>
-          <Text style={styles.subtext}>You can change this anytime in Settings</Text>
+          <Text style={styles.heading}>{t('mobile.auth.language.heading')}</Text>
+          <Text style={styles.subtext}>{t('mobile.auth.language.subtext')}</Text>
         </View>
 
         {/* Language grid */}
@@ -81,7 +83,7 @@ export function LanguageSelectionScreen({ navigation }: Props) {
         {/* Continue button */}
         <View style={styles.footer}>
           <Button
-            label="Continue"
+            label={t('mobile.auth.language.continue')}
             onPress={handleContinue}
             disabled={!selected}
             fullWidth

@@ -111,8 +111,12 @@ public sealed class GstEfModelSmokeTests
     public async Task ImsInvoices_CanQuery_WithoutError()
     {
         using var db = CreateDbContext();
-        // Materialises all columns including: status, deemed_accepted, actioned_at,
-        // actioned_by, rejection_reason, period, source, supplier_gstin.
+        // W5-IMS-02: MUST include CreatedBy and UpdatedBy in projection.
+        // These are character varying(128) in gst.ims_invoices (not uuid) — the
+        // GuidStringConverter from BaseDbContext was incorrectly applied and caused
+        // Npgsql InvalidCastException on full-entity materialisation.
+        // The EfSmoke previously omitted CreatedBy/UpdatedBy, allowing the bug to
+        // slip through. This gap is now closed.
         var act = async () => await db.ImsInvoices
             .Select(i => new
             {
@@ -137,11 +141,37 @@ public sealed class GstEfModelSmokeTests
                 i.RejectionReason,
                 i.CreatedAt,
                 i.UpdatedAt,
-                i.DeletedAt
+                i.DeletedAt,
+                // W5-IMS-02 gap closure — must be present to catch GuidStringConverter:
+                i.CreatedBy,
+                i.UpdatedBy
             })
             .ToListAsync();
         await act.Should().NotThrowAsync(
-            "EF mapping for gst.ims_invoices must be correct (migration 074)");
+            "EF mapping for gst.ims_invoices must be correct (migration 074, W5-IMS-02 fix)");
+    }
+
+    [Fact]
+    public async Task ImsInvoices_FullEntityMaterialise_WithActionLogInclude_WithoutError()
+    {
+        // W5-IMS-02 gap closure: the detail endpoint materialises the full ImsInvoice entity
+        // (FirstOrDefaultAsync, no projection) and then loads ImsActionLogs.
+        // A projection-only smoke test cannot catch converters that only fire on
+        // full-entity load. This test replicates the detail handler's exact access pattern.
+        using var db = CreateDbContext();
+        var act = async () =>
+        {
+            // Full entity load — replicates GetImsInvoiceQueryHandler's FirstOrDefaultAsync.
+            _ = await db.ImsInvoices
+                .IgnoreQueryFilters() // bypass soft-delete filter so empty table doesn't short-circuit
+                .FirstOrDefaultAsync();
+            // Action log include — replicates the second query in the detail handler.
+            _ = await db.ImsActionLogs
+                .Select(l => new { l.Id, l.ImsInvoiceId, l.Action, l.PreviousStatus, l.NewStatus, l.ActedAt, l.ActedBy, l.Reason, l.IsBulk })
+                .ToListAsync();
+        };
+        await act.Should().NotThrowAsync(
+            "Full ImsInvoice entity materialisation must not throw (W5-IMS-02: GuidStringConverter override)");
     }
 
     [Fact]
@@ -149,8 +179,8 @@ public sealed class GstEfModelSmokeTests
     {
         using var db = CreateDbContext();
         // Append-only table — no soft-delete filter.
-        // Note: ImsActionLog inherits BaseEntity (not BaseAuditableEntity) so
-        // CreatedAt is not an EF-mapped property (it is DB-generated via now()).
+        // ImsActionLog inherits BaseEntity (not BaseAuditableEntity) so
+        // CreatedBy/UpdatedBy are NOT EF-mapped properties (DB-generated via now()).
         var act = async () => await db.ImsActionLogs
             .Select(l => new
             {
@@ -174,10 +204,31 @@ public sealed class GstEfModelSmokeTests
     public async Task Gstr1aAmendments_CanQuery_WithoutError()
     {
         using var db = CreateDbContext();
+        // W5-IMS-02 gap closure: include CreatedBy and UpdatedBy — same varchar vs uuid
+        // mismatch existed for gstr1a_amendments. Previously the projection omitted them.
         var act = async () => await db.Gstr1aAmendments
-            .Select(a => new { a.Id, a.OrganizationId, a.Status, a.CreatedAt })
+            .Select(a => new
+            {
+                a.Id,
+                a.OrganizationId,
+                a.OriginalImsInvoiceId,
+                a.OriginalInvoiceNumber,
+                a.OriginalSupplierGstin,
+                a.AmendmentType,
+                a.AmendmentPayloadJson,
+                a.Period,
+                a.Status,
+                a.ArnNumber,
+                a.FiledAt,
+                a.CreatedAt,
+                a.UpdatedAt,
+                a.DeletedAt,
+                // W5-IMS-02 gap closure:
+                a.CreatedBy,
+                a.UpdatedBy
+            })
             .ToListAsync();
         await act.Should().NotThrowAsync(
-            "EF mapping for gst.gstr1a_amendments must be correct (migration 074)");
+            "EF mapping for gst.gstr1a_amendments must be correct (migration 074, W5-IMS-02 fix)");
     }
 }

@@ -51,6 +51,10 @@ function textPairs(tk: ThemeTokens): [string, string, number, string][] {
     [tk.textSecondary, tk.raised, 4.5, 'textSecondary on raised'],
     // Solid CTAs
     [tk.textOnBrand, tk.brandCta, 4.5, 'textOnBrand on brandCta'],
+    // S4 chat contrast fix: own-message bubble fill bumped brand500→brandCta
+    // (brand500+white measured 4.27:1 in light — borderline AA).
+    [tk.textOnBrand, tk.brandCta, 4.5, 'chat own-bubble text on brandCta fill'],
+    [tk.textPrimary, tk.sunken, 4.5, 'chat other-bubble text on sunken fill'],
     ['#FFFFFF', tk.errorCta, 4.5, 'white on errorCta (destructive)'],
     // Module accents used as text on plain surfaces
     [tk.gstAccent, tk.raised, 4.5, 'gstAccent text on raised'],

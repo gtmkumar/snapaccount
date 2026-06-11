@@ -115,7 +115,14 @@ export function GstDashboardScreen({ navigation }: Props) {
       </View>
 
       <ScrollView
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor={tokens.brand500}
+            colors={[tokens.brand500]}
+          />
+        }
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >

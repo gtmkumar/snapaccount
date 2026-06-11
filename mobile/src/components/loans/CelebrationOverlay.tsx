@@ -19,6 +19,7 @@ import { useReducedMotion } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
 
 /**
  * Phase 6F: expanded kind enum.
@@ -103,11 +104,15 @@ export function CelebrationOverlay({
   const styles = useStyles();
   const { t } = useTranslation();
   const reduceMotion = useReducedMotion();
+  const haptics = useHaptics();
   const [slideAnim] = useState(() => new Animated.Value(reduceMotion ? 0 : 60));
   const [opacityAnim] = useState(() => new Animated.Value(0));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // §3.4: one-shot celebration burst — shortened to a single Success
+    // notification under reduce-motion. Haptics are additive feedback only.
+    haptics.celebrationBurst(reduceMotion);
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: 0,
@@ -160,55 +165,55 @@ export function CelebrationOverlay({
         };
       case 'firstGst':
         return {
-          headline: t('celebration.firstGst.headline'),
-          body: t('celebration.firstGst.subline', { period, ack }),
-          primary: t('celebration.firstGst.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          headline: t('mobile.celebration.firstGst.headline'),
+          body: t('mobile.celebration.firstGst.subline', { period, ack }),
+          primary: t('mobile.celebration.firstGst.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'firstRefund':
         return {
-          headline: t('celebration.firstRefund.headline'),
-          body: t('celebration.firstRefund.subline', {
+          headline: t('mobile.celebration.firstRefund.headline'),
+          body: t('mobile.celebration.firstRefund.subline', {
             amount: formatIndianAmount(amount),
             date,
           }),
-          primary: t('celebration.firstRefund.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          primary: t('mobile.celebration.firstRefund.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'firstItr':
         return {
-          headline: t('celebration.firstItr.headline'),
-          body: t('celebration.firstItr.subline', { ay }),
-          primary: t('celebration.firstItr.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          headline: t('mobile.celebration.firstItr.headline'),
+          body: t('mobile.celebration.firstItr.subline', { ay }),
+          primary: t('mobile.celebration.firstItr.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'firstNoticeResolved':
         return {
-          headline: t('celebration.firstNoticeResolved.headline'),
-          body: t('celebration.firstNoticeResolved.subline'),
-          primary: t('celebration.firstNoticeResolved.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          headline: t('mobile.celebration.firstNoticeResolved.headline'),
+          body: t('mobile.celebration.firstNoticeResolved.subline'),
+          primary: t('mobile.celebration.firstNoticeResolved.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'planK2Step15':
         return {
-          headline: t('celebration.planK2Step15.headline'),
-          body: t('celebration.planK2Step15.subline'),
-          primary: t('celebration.planK2Step15.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          headline: t('mobile.celebration.planK2Step15.headline'),
+          body: t('mobile.celebration.planK2Step15.subline'),
+          primary: t('mobile.celebration.planK2Step15.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'firstChatResolved':
         return {
-          headline: t('celebration.firstChatResolved.headline'),
-          body: t('celebration.firstChatResolved.subline', { count }),
-          primary: t('celebration.firstChatResolved.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          headline: t('mobile.celebration.firstChatResolved.headline'),
+          body: t('mobile.celebration.firstChatResolved.subline', { count }),
+          primary: t('mobile.celebration.firstChatResolved.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'custom':
       default:
         return {
-          headline: customHeadline ?? t('celebration.custom.headline'),
+          headline: customHeadline ?? t('mobile.celebration.custom.headline'),
           body: customSubline ?? '',
-          primary: t('celebration.custom.cta.primary'),
+          primary: t('mobile.celebration.custom.cta.primary'),
         };
     }
   })();

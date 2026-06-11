@@ -3,12 +3,15 @@
  */
 
 import React from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { ListSkeleton, EmptyState, ErrorState } from '../../components/shared/ListStates';
+import { useHaptics } from '../../hooks/useHaptics';
 import { timeAgo } from '../../lib/utils';
 import apiClient from '../../lib/api';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
@@ -43,7 +46,9 @@ const typeConfigFor = (tk: ThemeTokens): Record<string, { icon: keyof typeof Ion
 export function NotificationCenterScreen({ navigation }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
-  const { data: notifications = [], isLoading } = useQuery({
+  const { t } = useTranslation();
+  const haptics = useHaptics();
+  const { data: notifications = [], isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ['notifications', 'inbox'],
     queryFn: async () => {
       const res = await apiClient.get<{ items: AppNotification[]; totalCount: number; unreadCount: number }>(
@@ -52,24 +57,47 @@ export function NotificationCenterScreen({ navigation }: Props) {
       );
       return res.data.items ?? [];
     },
-    placeholderData: [],
   });
+
+  // §3.3 haptics map: pull-to-refresh release → light impact.
+  const handleRefresh = () => {
+    haptics.lightTap();
+    void refetch();
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.common.back')}
+        >
           <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
-        <Text style={styles.title}>Notifications</Text>
-        <Pressable onPress={() => Alert.alert('Coming Soon', 'Mark all read coming soon.')} style={styles.markAllBtn}>
-          <Text style={styles.markAll}>Mark all read</Text>
+        <Text style={styles.title}>{t('mobile.notifications.title')}</Text>
+        <Pressable
+          onPress={() => Alert.alert(t('mobile.common.comingSoon'), t('mobile.notifications.markAllSoon'))}
+          style={styles.markAllBtn}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.notifications.markAll')}
+        >
+          <Text style={styles.markAll}>{t('mobile.notifications.markAll')}</Text>
         </Pressable>
       </View>
 
       <FlatList
         data={notifications}
         keyExtractor={(item) => item.id}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={handleRefresh}
+            tintColor={tokens.brand500}
+            colors={[tokens.brand500]}
+          />
+        }
         renderItem={({ item }) => {
           const typeConfig = typeConfigFor(tokens);
           const cfg = typeConfig[item.type] ?? typeConfig.system;
@@ -88,17 +116,24 @@ export function NotificationCenterScreen({ navigation }: Props) {
           );
         }}
         ListEmptyComponent={
-          !isLoading ? (
-            <View style={styles.empty}>
-              <View style={styles.emptyIconWrap}>
-                <Ionicons name="notifications-outline" size={36} color={tokens.textTertiary} />
-              </View>
-              <Text style={styles.emptyTitle}>No notifications yet</Text>
-              <Text style={styles.emptyText}>
-                GST deadlines, document updates, and expert chat messages will appear here.
-              </Text>
-            </View>
-          ) : null
+          isLoading ? (
+            // §3.1: row-shaped skeleton matching notification rows
+            <ListSkeleton variant="row" count={7} testID="notif-skeleton" />
+          ) : isError ? (
+            <ErrorState
+              message={t('mobile.notifications.error.loadFailed')}
+              retryLabel={t('mobile.common.retry')}
+              onRetry={() => void refetch()}
+              testID="notif-error-state"
+            />
+          ) : (
+            <EmptyState
+              icon="notifications-outline"
+              title={t('mobile.notifications.empty.title')}
+              body={t('mobile.notifications.empty.body')}
+              testID="notif-empty-state"
+            />
+          )
         }
       />
     </SafeAreaView>
@@ -109,9 +144,9 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   StyleSheet.create({
   container: { flex: 1, backgroundColor: tk.canvas },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  backBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
-  markAllBtn: { paddingHorizontal: 8, paddingVertical: 4 },
+  markAllBtn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   markAll: { fontSize: 13, color: tk.brand500, fontWeight: '600' },
   notifItem: { flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderBottomColor: tk.border, gap: 12 },
   notifUnread: { backgroundColor: tk.brandTint + '40' },
@@ -121,9 +156,5 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   notifTitle: { fontSize: 14, fontWeight: '600', color: tk.textPrimary, marginBottom: 4 },
   notifBody: { fontSize: 13, color: tk.textSecondary, lineHeight: 18 },
   notifTime: { fontSize: 11, color: tk.textTertiary, marginTop: 6 },
-  empty: { alignItems: 'center', padding: 48, gap: 12 },
-  emptyIconWrap: { width: 64, height: 64, borderRadius: 18, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
-  emptyText: { fontSize: 14, color: tk.textSecondary, textAlign: 'center', lineHeight: 22 },
   }),
 );

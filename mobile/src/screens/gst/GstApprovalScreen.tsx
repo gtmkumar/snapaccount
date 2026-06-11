@@ -24,7 +24,9 @@ import * as StoreReview from 'expo-store-review';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { StatusTimeline } from '../../components/shared/StatusTimeline';
+import { useTranslation } from 'react-i18next';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
 import apiClient from '../../lib/api';
 import type { GstStackParamList } from '../../navigation/GstStack';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
@@ -72,6 +74,8 @@ export function GstApprovalScreen({ navigation, route }: Props) {
   useSensitiveScreen();
 
   const { trigger: triggerBiometric } = useBiometricGate();
+  const { t } = useTranslation();
+  const haptics = useHaptics();
   const { returnId, returnType } = route.params;
   const [checked, setChecked] = useState<Record<string, boolean>>(
     Object.fromEntries(CHECKLIST.map((item) => [item.id, false])),
@@ -83,26 +87,29 @@ export function GstApprovalScreen({ navigation, route }: Props) {
   const allChecked = CHECKLIST.every((item) => checked[item.id]);
 
   const toggleCheck = (id: string) => {
+    haptics.lightTap(); // §3.3: checkbox toggle
     setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const handleApprove = async () => {
     if (!allChecked) return;
     // GAP-063 / M4: Biometric step-up before GST approval submission.
-    const passed = await triggerBiometric({ promptMessage: 'Verify to approve GST return' });
+    const passed = await triggerBiometric({ promptMessage: t('mobile.gst.approval.biometricPrompt') });
     if (!passed) return;
     setSubmitting(true);
     try {
       await apiClient.post(`/gst/returns/${returnId}/approve`);
+      haptics.success(); // §3.3: GST approval submitted
       // One-time app-rating prompt on first successful GST approval (Phase 6F)
       void maybeRequestReview();
       Alert.alert(
-        'Return Approved! ✅',
-        'Our team will file your return within 24 hours of the deadline.',
-        [{ text: 'OK', onPress: () => navigation.popToTop() }],
+        t('mobile.gst.approval.successTitle'),
+        t('mobile.gst.approval.successBody'),
+        [{ text: t('mobile.common.ok'), onPress: () => navigation.popToTop() }],
       );
     } catch {
-      Alert.alert('Error', 'Could not submit approval. Please try again.');
+      haptics.error(); // §3.3: submit failure
+      Alert.alert(t('mobile.common.error'), t('mobile.gst.approval.errorBody'));
     } finally {
       setSubmitting(false);
     }

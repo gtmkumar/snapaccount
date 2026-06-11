@@ -73,24 +73,24 @@ export function PersonaSelectionScreen({ navigation }: Props) {
           <Ionicons name="people-outline" size={32} color={tokens.brand500} />
         </View>
 
-        <Text style={styles.heading}>How will you use SnapAccount?</Text>
+        <Text style={styles.heading}>{t('mobile.auth.persona.heading')}</Text>
         <Text style={styles.subtext}>
-          This personalises your app. You can change it later from Settings.
+          {t('mobile.auth.persona.subtext')}
         </Text>
 
         <View style={styles.cards}>
           <PersonaCard
             icon="storefront-outline"
-            title="I run a business"
-            description="GST filing, accounting, loans, document vault & expert CA chat"
+            title={t('mobile.auth.persona.business.title')}
+            description={t('mobile.auth.persona.business.description')}
             accentBg={tokens.brandTint}
             accentFg={tokens.brand500}
             onPress={() => navigation.navigate('BusinessProfileWizard')}
           />
           <PersonaCard
             icon="person-outline"
-            title="I'm a salaried individual"
-            description="File your personal ITR, upload Form 16 & get tax support"
+            title={t('mobile.auth.persona.individual.title')}
+            description={t('mobile.auth.persona.individual.description')}
             accentBg={tokens.successTint}
             accentFg={tokens.successFg}
             onPress={() => navigation.navigate('IndividualProfileWizard')}
@@ -98,7 +98,7 @@ export function PersonaSelectionScreen({ navigation }: Props) {
         </View>
 
         <Text style={styles.note}>
-          Both options keep your documents in a secure, encrypted vault.
+          {t('mobile.auth.persona.note')}
         </Text>
 
         {/* Phase 2: invitees who already have an org invite can join directly. */}

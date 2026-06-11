@@ -22,6 +22,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { ErrorState } from '../../components/shared/ListStates';
+import { useHaptics } from '../../hooks/useHaptics';
 import {
   getCallback,
   rescheduleCallback,
@@ -225,6 +227,7 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const { callbackId } = route.params;
   const queryClient = useQueryClient();
   // Refreshes every 30s so the stale-in-progress banner appears without a refetch.
@@ -323,13 +326,14 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
           <Text style={styles.headerTitle}>{t('mobile.callback.status.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.errorState}>
-          <Ionicons name="alert-circle-outline" size={48} color={tokens.textTertiary} />
-          <Text style={styles.errorTitle}>{t('mobile.callback.status.notFound')}</Text>
-          <Pressable style={styles.errorBackBtn} onPress={() => navigation.popToTop()}>
-            <Text style={styles.errorBackBtnText}>{t('mobile.callback.status.backHome')}</Text>
-          </Pressable>
-        </View>
+        <ErrorState
+          message={t('mobile.callback.status.notFound')}
+          retryLabel={t('mobile.common.retry')}
+          onRetry={() => void refetch()}
+          secondaryLabel={t('mobile.callback.status.backHome')}
+          onSecondaryPress={() => navigation.popToTop()}
+          testID="callback-error-state"
+        />
       </SafeAreaView>
     );
   }
@@ -363,7 +367,17 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
       </View>
 
       <ScrollView
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              haptics.lightTap();
+              void refetch();
+            }}
+            tintColor={tokens.brand500}
+            colors={[tokens.brand500]}
+          />
+        }
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >

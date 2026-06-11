@@ -32,8 +32,20 @@ public sealed class AiInteractionConfiguration : IEntityTypeConfiguration<AiInte
         builder.Property(i => i.CreatedAt).HasColumnName("created_at");
         builder.Property(i => i.UpdatedAt).HasColumnName("updated_at");
         builder.Property(i => i.DeletedAt).HasColumnName("deleted_at");
-        builder.Property(i => i.CreatedBy).HasColumnName("created_by");
-        builder.Property(i => i.UpdatedBy).HasColumnName("updated_by");
+
+        // W5-IMS-02 mirror fix: ai.interactions.created_by / updated_by are TEXT columns
+        // in migration 075 (not uuid). BaseDbContext applies GuidStringConverter globally to
+        // all BaseAuditableEntity.CreatedBy/UpdatedBy; that converter tells Npgsql to bind a
+        // uuid provider type, causing InvalidCastException on TEXT columns. Override with
+        // identity HasConversion<string>() so no conversion is applied (plain text path).
+        builder.Property(i => i.CreatedBy)
+            .HasColumnName("created_by")
+            .HasColumnType("text")
+            .HasConversion<string>();
+        builder.Property(i => i.UpdatedBy)
+            .HasColumnName("updated_by")
+            .HasColumnType("text")
+            .HasConversion<string>();
 
         builder.HasIndex(i => i.OrganizationId).HasDatabaseName("ix_ai_interactions_org_id");
         builder.HasIndex(i => i.CreatedAt).HasDatabaseName("ix_ai_interactions_created_at");

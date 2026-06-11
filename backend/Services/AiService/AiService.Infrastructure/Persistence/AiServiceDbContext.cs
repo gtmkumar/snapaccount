@@ -26,7 +26,15 @@ public class AiServiceDbContext(DbContextOptions<AiServiceDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("ai");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AiServiceDbContext).Assembly);
+        // W5-IMS-02 mirror fix: base.OnModelCreating MUST run BEFORE
+        // ApplyConfigurationsFromAssembly. BaseDbContext.OnModelCreating applies the global
+        // GuidStringConverter to CreatedBy/UpdatedBy on every BaseAuditableEntity. When the
+        // base call runs AFTER, it overwrites any per-entity HasConversion<string>() overrides
+        // set by AiChunkConfiguration and AiInteractionConfiguration, causing Npgsql to bind
+        // a uuid-typed parameter against the TEXT columns in migration 075 and throw
+        // InvalidCastException on full-entity materialisation (FirstOrDefaultAsync / ToListAsync
+        // with no projection). Running base first means per-entity configs win the last-write.
         base.OnModelCreating(modelBuilder);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AiServiceDbContext).Assembly);
     }
 }

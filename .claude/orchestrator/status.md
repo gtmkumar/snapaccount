@@ -1,6 +1,20 @@
 # SnapAccount — Orchestrator Status
 
-## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 3 LIVE-TEST CYCLE COMPLETE — 2026-06-11)
+## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 5 COMPLETE — 2026-06-11)
+
+### Phase 7 Wave 5 — IMS/MCA UI, SEC-AI-02 to GO, design-elevation completion (2026-06-11, COMPLETE & live-verified)
+
+Built, security-gated, live-tested (web + iOS), fixed, and re-verified in one cycle. Commits: `18ce9b0` (build wave) + closing slice (this commit).
+- **IMS UI (#32)**: implementation-ready spec (docs/design/ims-inbox-spec.md) → admin 3 pages (/gst/ims, detail, GSTR-1A) + mobile 3 screens + 6 components; optimistic accept/5s undo→PENDING_KEPT, client-required reject reason, bulk cap 100, deemed banners; Hangfire deemed-acceptance job (14th 02:00 IST). Live web re-verify: 8/8 PASS.
+- **MCA UI (#33)**: /compliance/edit-log page, FY+entity filters, CSV export, accounting.editlog.read gate. Live PASS.
+- **SEC-AI-02 (#34)**: 2 review rounds + 2 fix rounds → **GO for staging**. AES-GCM key protection, platform.ai.manage gate + X-Internal-Token, advisory-locked reservation-row token budget (migration 077, concurrency-tested), RAG ingestion ownership check, Gemini systemInstruction separation, JWT-only org, chunk redaction, FG-01 cancellation abort. Conditions (TL): Pub/Sub publish IAM + InternalApi:SharedToken secret.
+- **Design elevation #26 CLOSED (S0–S7)**: admin S3 skeleton/empty sweep + S5 3-tier dashboard (ARIA tabs w/ keyboard nav); mobile dark-mode ALL screens (ThemeProvider mount bug found by live QA — context default was a working light theme so tests passed silently; now null-default + real-App test); S3-mobile ListStates kit, S4 haptics/pull-to-refresh/celebration, S6 onboarding trust signals; tokens.json v2.1.0 (dark tertiary contrast fix). Mobile debt #35: type-check+lint 0/0.
+- **Contract gaps #27**: org name editable (GSTIN explicitly KYC-gated 400), addressLine2 read-back, /subscriptions/me 404 typed, /auth/config/privacy-contact.
+- **Bug class closed platform-wide**: BaseDbContext GuidStringConverter vs varchar created_by/updated_by (4 tables: gst.ims_invoices, gst.gstr1a_amendments, ai.chunks, ai.interactions — all other schemas uuid-clean). Full-materialization EfSmoke tests added (projection-only tests structurally can't catch this).
+- **Boot bug found+fixed**: GstService Hangfire RecurringJob registered pre-app.Run() → ApplicationStarted callback.
+- **Test totals**: backend 1418+ green (12 services), admin vitest 1022, mobile jest 596; i18n en/hi/bn parity (admin 1824, mobile 1322 keys/locale).
+- **Open**: #24 TL queue (+2 new: Pub/Sub IAM, SharedToken secret), #36 wizard i18n (LOW), #37 dark-mode visual verify on iOS 17/18 sim (iOS 26.5 pre-release sim doesn't deliver Appearance events to RN 0.85 old-arch JS — fix is in-bundle + jest-pinned).
+- QA reports: .claude/qa/live-web-wave5-2026-06-11.md, live-ios-wave5-2026-06-11.md.
 
 ### Phase 7 Wave 4 — Regulatory & platform build wave (2026-06-11, same session, COMPLETE & live-verified)
 

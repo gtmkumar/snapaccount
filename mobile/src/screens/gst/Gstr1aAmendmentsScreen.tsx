@@ -44,6 +44,7 @@ import {
   type Gstr1aAmendmentType,
   type Gstr1aStatus,
 } from '../../api/gstIms';
+import { EmptyState } from '../../components/shared/ListStates';
 import { Gstr1aStatusBadge } from '../../components/gst/ImsStatusBadge';
 import { Button } from '../../components/ui/Button';
 import type { GstStackParamList } from '../../navigation/GstStack';
@@ -129,6 +130,42 @@ export function Gstr1aAmendmentsScreen({ navigation, route }: Props) {
   const items = listQuery.data?.items ?? [];
   const formValid = invoiceNumber.trim().length > 0 && supplierGstin.trim().length > 0;
 
+  // ── No-organization guard (W5-IMS-01) ──────────────────────────────────────
+  // Same pattern as ImsInboxScreen: the list query is `enabled: !!orgId`, so a
+  // user with no org membership would otherwise see a misleading plain empty
+  // state. Render explicit guidance + CTA to business setup instead.
+
+  if (!orgId) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.common.back')}
+            hitSlop={8}
+          >
+            <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
+          </Pressable>
+          <Text style={styles.headerTitle}>{t('mobile.gst.gstr1a.nav.title')}</Text>
+          <View style={styles.backBtn} />
+        </View>
+        <EmptyState
+          icon="business-outline"
+          accentColor={tokens.gstAccent}
+          title={t('mobile.gst.ims.noOrg.title')}
+          body={t('mobile.gst.ims.noOrg.body')}
+          ctaLabel={t('mobile.gst.ims.noOrg.cta')}
+          onCtaPress={() =>
+            navigation.getParent()?.navigate('MoreTab', { screen: 'Profile' })
+          }
+          testID="gstr1a-no-org"
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -204,6 +241,8 @@ export function Gstr1aAmendmentsScreen({ navigation, route }: Props) {
             <RefreshControl
               refreshing={listQuery.isRefetching}
               onRefresh={() => void listQuery.refetch()}
+              tintColor={tokens.brand500}
+              colors={[tokens.brand500]}
             />
           }
         >

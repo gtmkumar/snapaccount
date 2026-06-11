@@ -20,6 +20,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
 import { getMyConsents, withdrawConsent, type UserConsent, type ConsentStatus } from '../../api/privacy';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
@@ -34,6 +35,7 @@ export function MyConsentsScreen({ navigation }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const qc = useQueryClient();
   const [filter, setFilter] = useState<FilterTab>('active');
   const [confirmingPurpose, setConfirmingPurpose] = useState<UserConsent | null>(null);
@@ -60,9 +62,13 @@ export function MyConsentsScreen({ navigation }: Props) {
       }));
       return { previous };
     },
+    onSuccess: () => {
+      haptics.success(); // §3.3: consent withdrawal confirmed by server
+    },
     onError: (_err, _purpose, ctx) => {
       // Rollback on error
       if (ctx?.previous) qc.setQueryData(['privacy-consents'], ctx.previous);
+      haptics.error(); // §3.3: API error
       Alert.alert(t('mobile.common.error'), t('mobile.privacy.consents.error.withdraw'));
     },
     onSettled: () => {
@@ -78,6 +84,7 @@ export function MyConsentsScreen({ navigation }: Props) {
 
   const handleWithdrawConfirm = () => {
     if (!confirmingPurpose) return;
+    haptics.warning(); // §3.3: destructive confirm (withdraw consent)
     withdrawMutation.mutate(confirmingPurpose.purposeCode);
     setConfirmingPurpose(null);
   };

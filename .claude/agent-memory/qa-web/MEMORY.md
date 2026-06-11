@@ -4,3 +4,6 @@
 - [No alert() dialogs](feedback_no_alert_dialogs.md) — Team lead rejected native alert()/confirm() on financial platform; require in-app toast/modal
 - [Live Sweep 2026-06-11](project_live_sweep_2026_06_11.md) — 16/46 endpoints FAIL; 3 EF mismatch patterns; RBAC returns 400/500 not 403; report at .claude/qa/live-web-sweep-2026-06-11.md
 - [Task #23 State](project_task23_state.md) — DPDP +21 unit tests (84% coverage), SEC-056 WIRED, PermissionCatalog filters (not disables) inactive, NEW-D09 IDOR 2/2 PASS; InMemory EF CreatedAt gotcha documented
+- [Wave 5 Live Test State](project_wave5_state.md) — Wave 5 live QA (2026-06-11): GstService DOWN (Hangfire static API bug), 4 bugs filed, 11/12 services green, 1418 unit + 1007 Vitest PASS; report at .claude/qa/live-web-wave5-2026-06-11.md
+- [EF OnModelCreating order bug](feedback_ef_onmodelcreating_order.md) — HasMaxLength(128) on BaseAuditableEntity audit cols + wrong base/Apply order → 500 on full entity materialization (W5-IMS-02 root cause + fix pattern)
+- [Stale bundle false positives](feedback_stale_bundle_false_positives.md) — Always verify frontend behaviour via source code, not browser alone; BUG-MCA-ETYPE-005 was stale HMR bundle artifact

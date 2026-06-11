@@ -19,6 +19,91 @@
         "remove": "Remove",
         "removeConfirmTitle": "Remove document?",
         "removeConfirmBody": "This will remove the document from the upload queue. This cannot be undone."
+      },
+      "title": "Documents",
+      "searchPlaceholder": "Search documents…",
+      "settingsSoon": "Document settings are coming soon.",
+      "count_one": "{{count}} document",
+      "count_other": "{{count}} documents",
+      "sortDate": "Date",
+      "categories": {
+        "all": "All",
+        "sales": "Sales Bills",
+        "purchase": "Purchase Bills",
+        "expenses": "Expenses",
+        "bank": "Bank Statements",
+        "salary": "Salary Slips",
+        "other": "Other"
+      },
+      "empty": {
+        "title": "No documents yet",
+        "body": "Photograph a bill or upload from your gallery to get started.",
+        "cta": "Capture first document"
+      },
+      "error": {
+        "loadFailed": "Couldn't load your documents. Check your connection and try again."
+      },
+      "add": {
+        "title": "Add document",
+        "body": "Choose how to add a document",
+        "photo": "Take photo",
+        "gallery": "Upload from gallery",
+        "permTitle": "Permission needed",
+        "permBody": "Allow photo library access to upload from your gallery.",
+        "galleryError": "Could not pick an image from the gallery."
+      },
+      "sr": {
+        "queued": "Document status: queued, waiting to upload",
+        "uploading": "Document status: uploading, {{percent}} percent",
+        "processing": "Document status: processing, please wait",
+        "ready": "Document status: ready",
+        "failed": "Document status: failed. Double-tap retry to try again."
+      },
+      "detail": {
+        "loading": "Loading…",
+        "share": "Share",
+        "categoryFallback": "Document",
+        "confidence": {
+          "high": "High confidence — auto-processed",
+          "medium": "Medium confidence — please verify the data",
+          "low": "Low confidence — manual review required"
+        },
+        "steps": {
+          "uploaded": "Uploaded",
+          "ocrComplete": "OCR Complete",
+          "inReview": "In Review",
+          "processed": "Processed"
+        },
+        "fields": {
+          "vendor": "Vendor",
+          "amount": "Amount",
+          "date": "Date",
+          "gstin": "GSTIN",
+          "invoiceNo": "Invoice No.",
+          "gstRate": "GST Rate",
+          "tax": "Tax",
+          "total": "Total"
+        },
+        "section": {
+          "status": "Status",
+          "extracted": "Extracted Data",
+          "details": "Details"
+        },
+        "meta": {
+          "category": "Category",
+          "uploaded": "Uploaded",
+          "fileSize": "File Size"
+        },
+        "action": {
+          "share": "Share Document",
+          "download": "Download PDF",
+          "delete": "Delete Document"
+        },
+        "delete": {
+          "body": "Are you sure you want to delete this document? This action cannot be undone.",
+          "confirm": "Delete",
+          "error": "Could not delete the document. Please try again."
+        }
       }
     },
     "camera": {
@@ -181,6 +266,31 @@
         "profit-and-loss": "Profit & Loss",
         "balance-sheet": "Balance Sheet",
         "trial-balance": "Trial Balance"
+      },
+      "types": {
+        "trialBalance": "Trial Balance",
+        "pnl": "Profit & Loss",
+        "balanceSheet": "Balance Sheet",
+        "cashFlow": "Cash Flow",
+        "taxLiability": "Tax Liability",
+        "ledger": "Ledger",
+        "comparative": "Comparative",
+        "forecast": "Cash Flow Forecast"
+      },
+      "badge": {
+        "new": "NEW",
+        "ai": "AI"
+      },
+      "netProfitLoss": "Net Profit / Loss",
+      "updatedAt": "Updated {{time}}",
+      "tapToLoad": "Tap to load",
+      "comingSoon": "Coming soon",
+      "view": "View",
+      "viewA11y": "View {{report}} report",
+      "export": {
+        "title": "Export for CA / Auditor",
+        "tally": "Tally XML Export",
+        "csv": "Standard CSV Export"
       }
     },
     "common": {
@@ -194,7 +304,9 @@
       "screenError": {
         "title": "Something went wrong",
         "body": "This screen hit an unexpected error. Try again, or go back to the previous screen."
-      }
+      },
+      "comingSoon": "Coming soon",
+      "goBack": "Go back"
     },
     "gst": {
       "notices": {
@@ -204,7 +316,14 @@
         "retry": "Retry",
         "emptyTitle": "No notices",
         "emptyBody": "You have no GST notices. We'll alert you when one arrives.",
-        "archiveGated": "Respond to notice before archiving."
+        "archiveGated": "Respond to notice before archiving.",
+        "filter": {
+          "all": "All",
+          "open": "Open",
+          "overdue": "Overdue",
+          "responded": "Responded",
+          "closed": "Closed"
+        }
       },
       "noticeDetail": {
         "title": "Notice Details",
@@ -373,6 +492,11 @@
           "neverSynced": "Sync to pull your inward invoices from GSTN for {{period}}.",
           "filtered": "No {{status}} invoices match your filters."
         },
+        "noOrg": {
+          "title": "Link your business first",
+          "body": "GST tools need a business linked to your account. Complete your business setup to start syncing invoices from GSTN.",
+          "cta": "Complete business setup"
+        },
         "error": {
           "loadFailed": "Couldn't load IMS invoices.",
           "alreadySettled": "This invoice is already {{status}} and can't be {{action}}. Use GSTR-1A to correct it.",
@@ -431,6 +555,12 @@
           "filed": "Filed"
         },
         "notFiled": "Not filed"
+      },
+      "approval": {
+        "successTitle": "Return approved!",
+        "successBody": "Our team will file your return within 24 hours of the deadline.",
+        "errorBody": "Could not submit approval. Please try again.",
+        "biometricPrompt": "Verify to approve GST return"
       }
     },
     "itr": {
@@ -606,7 +736,8 @@
           "Issued": "Refund issued",
           "Failed": "Refund failed",
           "Adjusted": "Adjusted against demand"
-        }
+        },
+        "error": "Couldn't load your refund status. Try again."
       },
       "notices": {
         "title": "ITR Notices",
@@ -656,7 +787,8 @@
             "Refund tracking timeline",
             "Notice handling (143(1), 143(2), 139(9))"
           ]
-        }
+        },
+        "error": "Couldn't load your returns. Try again."
       }
     },
     "loan": {
@@ -1294,6 +1426,89 @@
           "notFound": "We could not find this invite. Check the code and try again.",
           "generic": "Something went wrong. Please try again."
         }
+      },
+      "permissions": {
+        "heading": "App Permissions",
+        "subtext": "We need these permissions to work effectively for you",
+        "camera": {
+          "title": "Camera Access",
+          "reason": "To photograph bills and documents. Required for core functionality."
+        },
+        "notifications": {
+          "title": "Push Notifications",
+          "reason": "For GST filing deadlines, ITR reminders, and expert chat messages."
+        },
+        "storage": {
+          "title": "Storage Access",
+          "reason": "To save downloaded reports and upload documents from your gallery."
+        },
+        "required": "Required",
+        "allow": "Allow {{name}}",
+        "notNow": "Not Now",
+        "cameraDenied": {
+          "title": "Camera Required",
+          "body": "You won't be able to photograph documents. You can enable this in Settings later."
+        },
+        "granted": "Permission granted",
+        "denied": "Not granted — enable in device Settings if needed",
+        "continue": "Continue to SnapAccount"
+      },
+      "otp": {
+        "title": "Verify your number",
+        "subtitle": "Enter the 6-digit code sent to",
+        "changeNumber": "Change number",
+        "autoDetected": "OTP auto-detected from SMS",
+        "verifying": "Verifying…",
+        "verifyCta": "Verify & Continue",
+        "validity": "OTP is valid for 5 minutes",
+        "trust": "We only use your number to send a one-time code. Your data is encrypted and never shared without consent.",
+        "assistedHelp": "Trouble receiving the code? Sign in with password instead",
+        "errors": {
+          "tooMany": "Too many attempts. Please wait a few minutes.",
+          "failed": "Verification failed. Please try again.",
+          "resend": "Could not resend the OTP. Please try again."
+        }
+      },
+      "language": {
+        "heading": "Choose your language",
+        "subtext": "You can change this anytime in Settings",
+        "continue": "Continue"
+      },
+      "persona": {
+        "heading": "How will you use SnapAccount?",
+        "subtext": "This personalises your app. You can change it later from Settings.",
+        "business": {
+          "title": "I run a business",
+          "description": "GST filing, accounting, loans, document vault & expert CA chat"
+        },
+        "individual": {
+          "title": "I'm a salaried individual",
+          "description": "File your personal ITR, upload Form 16 & get tax support"
+        },
+        "note": "Both options keep your documents in a secure, encrypted vault."
+      },
+      "splash": {
+        "tagline": "Smart accounting for Indian businesses",
+        "madeInIndia": "Made with pride in India"
+      },
+      "wizard": {
+        "back": "Back",
+        "trustPan": "Your PAN is encrypted and never shared without your consent.",
+        "stepProgress": "Step {{current}} of {{total}}: {{label}}",
+        "step": "Step {{current}} of {{total}}"
+      },
+      "phone": {
+        "welcome": "Welcome to",
+        "subheading": "GST, ITR, Loans — all in one place for your business",
+        "sendingOtp": "Sending OTP…",
+        "continueOtp": "Continue with OTP",
+        "orContinue": "or continue with",
+        "passwordOption": "Phone number & password",
+        "sendError": "Could not send the OTP. Check your connection and try again.",
+        "termsPrefix": "By continuing, you agree to our",
+        "termsOfService": "Terms of Service",
+        "and": "and",
+        "privacyPolicy": "Privacy Policy"
       }
     },
     "documents": {
@@ -1390,7 +1605,8 @@
         "resentTitle": "Invite resent",
         "resentBody": "The invite validity has been extended.",
         "revokeConfirmTitle": "Revoke invite?",
-        "revokeConfirmBody": "This will cancel the invite for {{email}}."
+        "revokeConfirmBody": "This will cancel the invite for {{email}}.",
+        "error": "Couldn't load invites."
       },
       "invite": {
         "title": "Invite team member",
@@ -1749,6 +1965,18 @@
       "error": {
         "load": "Couldn't load business details",
         "save": "Couldn't save changes. Please try again."
+      }
+    },
+    "notifications": {
+      "title": "Notifications",
+      "markAll": "Mark all read",
+      "markAllSoon": "Mark all read is coming soon.",
+      "empty": {
+        "title": "No notifications yet",
+        "body": "GST deadlines, document updates, and expert chat messages will appear here."
+      },
+      "error": {
+        "loadFailed": "Couldn't load notifications. Check your connection and try again."
       }
     }
   }

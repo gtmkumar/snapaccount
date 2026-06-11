@@ -112,7 +112,7 @@ function ChatBubble({ message, isSelf, showAvatar, onRetry }: BubbleProps) {
         style={[
           styles.bubble,
           isSelf
-            ? [styles.bubbleSelf, { backgroundColor: tokens.brand500 }]
+            ? [styles.bubbleSelf, { backgroundColor: tokens.brandCta }]
             : [styles.bubbleOther, { backgroundColor: tokens.sunken, borderColor: tokens.border }],
           message.localStatus === 'failed' && styles.bubbleFailed,
         ]}

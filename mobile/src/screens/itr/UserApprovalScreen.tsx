@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useBiometricGate } from '../../hooks/useBiometricGate';
+import { useHaptics } from '../../hooks/useHaptics';
 import type { RouteProp } from '@react-navigation/native';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
@@ -49,6 +50,7 @@ export function UserApprovalScreen({ navigation, route }: Props) {
   useSensitiveScreen();
   const { t } = useTranslation();
   const { trigger: triggerBiometric } = useBiometricGate();
+  const haptics = useHaptics();
   const { filingId } = route.params;
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
   const [biometricPassed, setBiometricPassed] = useState(false);
@@ -57,9 +59,11 @@ export function UserApprovalScreen({ navigation, route }: Props) {
   const submitMutation = useMutation({
     mutationFn: () => submitFilingForReview(filingId),
     onSuccess: () => {
+      haptics.success(); // §3.3: primary action success
       navigation.navigate('EVerification', { filingId });
     },
     onError: () => {
+      haptics.error(); // §3.3: submit failure
       Alert.alert(
         t('mobile.itr.approval.errorTitle'),
         t('mobile.itr.approval.errorBody'),

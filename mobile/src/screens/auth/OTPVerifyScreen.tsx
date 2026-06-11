@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
 import { OTPInput, OTPResendTimer } from '../../components/forms/OTPInput';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
@@ -38,6 +39,7 @@ interface OTPVerifyScreenProps {
 export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
   const { tokens } = useTheme();
   const styles = useStyles();
+  const { t } = useTranslation();
   const { phone } = route.params;
   const { setAuthenticated, setSession, setOrganizations, updateProfile } = useAuthStore();
 
@@ -123,15 +125,15 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
         setOtp('');
         const apiErr = getApiError(err);
         if (apiErr.statusCode === 429) {
-          setErrorMessage('Too many attempts. Please wait a few minutes.');
+          setErrorMessage(t('mobile.auth.otp.errors.tooMany'));
         } else if (apiErr.message) {
           setErrorMessage(apiErr.message);
         } else {
-          setErrorMessage('Verification failed. Please try again.');
+          setErrorMessage(t('mobile.auth.otp.errors.failed'));
         }
       }
     },
-    [phone, navigation, setAuthenticated, setSession, setOrganizations, updateProfile],
+    [phone, navigation, setAuthenticated, setSession, setOrganizations, updateProfile, t],
   );
 
   const handleOTPComplete = useCallback(
@@ -148,7 +150,7 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
       setError(false);
       setErrorMessage('');
     } catch {
-      Alert.alert('Error', 'Could not resend OTP. Please try again.');
+      Alert.alert(t('mobile.common.error'), t('mobile.auth.otp.errors.resend'));
     }
   };
 
@@ -168,7 +170,7 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
             onPress={() => navigation.goBack()}
             style={styles.backBtn}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={t('mobile.common.goBack')}
           >
             <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
           </TouchableOpacity>
@@ -181,18 +183,18 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
           </View>
 
           {/* Heading */}
-          <Text style={styles.heading}>Verify your number</Text>
+          <Text style={styles.heading}>{t('mobile.auth.otp.title')}</Text>
           <Text style={styles.subtext}>
-            Enter the 6-digit code sent to{' '}
+            {t('mobile.auth.otp.subtitle')}{' '}
             <Text style={styles.phoneText}>{formattedPhone}</Text>
           </Text>
 
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             accessibilityRole="button"
-            accessibilityLabel="Change phone number"
+            accessibilityLabel={t('mobile.auth.otp.changeNumber')}
           >
-            <Text style={styles.changeNumber}>Change number</Text>
+            <Text style={styles.changeNumber}>{t('mobile.auth.otp.changeNumber')}</Text>
           </TouchableOpacity>
 
           {/* Auto-detected banner */}
@@ -200,7 +202,7 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
             <View style={styles.autoDetectedBanner}>
               <Ionicons name="checkmark-circle" size={16} color={tokens.successFg} />
               <Text style={styles.autoDetectedText}>
-                OTP auto-detected from SMS
+                {t('mobile.auth.otp.autoDetected')}
               </Text>
             </View>
           )}
@@ -238,7 +240,7 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
           {/* Verify button */}
           <View style={styles.buttonArea}>
             <Button
-              label={loading ? 'Verifying...' : 'Verify & Continue'}
+              label={loading ? t('mobile.auth.otp.verifying') : t('mobile.auth.otp.verifyCta')}
               onPress={() => verifyOTP(otp)}
               disabled={otp.length < 6 || loading}
               loading={loading}
@@ -248,8 +250,26 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
           </View>
 
           <Text style={styles.note}>
-            OTP is valid for 5 minutes
+            {t('mobile.auth.otp.validity')}
           </Text>
+
+          {/* Trust signal (design-elevation-spec §4.2) */}
+          <View style={styles.trustBanner}>
+            <Ionicons name="lock-closed-outline" size={16} color={tokens.successFg} />
+            <Text style={styles.trustText}>{t('mobile.auth.otp.trust')}</Text>
+          </View>
+
+          {/* Assisted entry — never stuck (a11y §3 / spec §4.2) */}
+          <TouchableOpacity
+            style={styles.assistedHelp}
+            onPress={() => navigation.navigate('PasswordAuth')}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.auth.otp.assistedHelp')}
+            testID="otp-assisted-help"
+          >
+            <Ionicons name="help-buoy-outline" size={16} color={tokens.brandFg} />
+            <Text style={styles.assistedHelpText}>{t('mobile.auth.otp.assistedHelp')}</Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -357,6 +377,37 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     color: tk.textSecondary,
     marginTop: 14,
     textAlign: 'center',
+  },
+  trustBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: tk.successTint,
+    borderWidth: 1,
+    borderColor: tk.successTintBorder,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 24,
+  },
+  trustText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: tk.successFg,
+    fontWeight: '500',
+  },
+  assistedHelp: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  assistedHelpText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: tk.brandFg,
   },
   }),
 );

@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
 import { createCallback, type CallbackCategory, type CallbackPriority } from '../../api/callbacks';
 import type { CtaCategory } from '../../components/callbacks/RequestCallbackCta';
 import { useAuthStore } from '../../store/authStore';
@@ -75,6 +76,7 @@ export function RequestCallbackModalScreen({ navigation, route }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const { user } = useAuthStore();
   // SEC-033: prevent screenshot on sensitive modal
   useSensitiveScreen();
@@ -120,9 +122,11 @@ export function RequestCallbackModalScreen({ navigation, route }: Props) {
       });
     },
     onSuccess: (data) => {
+      haptics.success(); // §3.3: callback request submitted
       navigation.replace('CallbackStatus', { callbackId: data.callbackId });
     },
     onError: (err: unknown) => {
+      haptics.error(); // §3.3: submit failure
       const axErr = err as { response?: { status?: number; data?: { callbackId?: string; message?: string } } };
       const status = axErr?.response?.status;
       if (status === 409) {

@@ -5,7 +5,6 @@
 
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -20,7 +19,9 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { NoticeRowMobile } from '../../components/shared/NoticeRowMobile';
+import { ListSkeleton, ErrorState } from '../../components/shared/ListStates';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { apiClient } from '../../lib/api';
 import type { ItrNotice, ItrNoticeStatus } from '../../api/itr';
@@ -34,12 +35,12 @@ interface Props {
   route: RoutePropType;
 }
 
-const FILTER_TABS: { key: ItrNoticeStatus | 'All'; label: string }[] = [
-  { key: 'All', label: 'All' },
-  { key: 'Open', label: 'Open' },
-  { key: 'Overdue', label: 'Overdue' },
-  { key: 'Responded', label: 'Responded' },
-  { key: 'Closed', label: 'Closed' },
+const FILTER_TABS: { key: ItrNoticeStatus | 'All'; labelKey: string }[] = [
+  { key: 'All', labelKey: 'mobile.gst.notices.filter.all' },
+  { key: 'Open', labelKey: 'mobile.gst.notices.filter.open' },
+  { key: 'Overdue', labelKey: 'mobile.gst.notices.filter.overdue' },
+  { key: 'Responded', labelKey: 'mobile.gst.notices.filter.responded' },
+  { key: 'Closed', labelKey: 'mobile.gst.notices.filter.closed' },
 ];
 
 export function ItrNoticeInboxScreen({ navigation, route }: Props) {
@@ -47,6 +48,7 @@ export function ItrNoticeInboxScreen({ navigation, route }: Props) {
   const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const { filingId } = route.params;
   const [activeFilter, setActiveFilter] = useState<ItrNoticeStatus | 'All'>('All');
 
@@ -101,7 +103,7 @@ export function ItrNoticeInboxScreen({ navigation, route }: Props) {
               accessibilityState={{ selected: isActive }}
             >
               <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                {tab.label}
+                {t(tab.labelKey)}
               </Text>
             </Pressable>
           );
@@ -109,21 +111,33 @@ export function ItrNoticeInboxScreen({ navigation, route }: Props) {
       </ScrollView>
 
       {isLoading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={tokens.itrAccent} />
+        // §3.1: shaped skeleton matching notice rows
+        <View style={styles.listContent}>
+          <ListSkeleton variant="card" count={6} cardHeight={96} testID="itr-notices-skeleton" />
         </View>
       ) : error ? (
-        <View style={styles.errorWrap}>
-          <Ionicons name="alert-circle-outline" size={40} color={tokens.errorFg} />
-          <Text style={styles.errorText}>{t('mobile.itr.notices.error')}</Text>
-          <Pressable style={styles.retryBtn} onPress={() => void refetch()}>
-            <Text style={styles.retryText}>{t('mobile.common.retry')}</Text>
-          </Pressable>
-        </View>
+        <ErrorState
+          message={t('mobile.itr.notices.error')}
+          retryLabel={t('mobile.common.retry')}
+          onRetry={() => void refetch()}
+          secondaryLabel={t('mobile.common.goBack')}
+          onSecondaryPress={() => navigation.goBack()}
+          testID="itr-notices-error-state"
+        />
       ) : (
         <ScrollView
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => {
+                haptics.lightTap();
+                void refetch();
+              }}
+              tintColor={tokens.brand500}
+              colors={[tokens.brand500]}
+            />
+          }
           showsVerticalScrollIndicator={false}
         >
           {notices.length === 0 ? (
@@ -178,12 +192,6 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   tabActive: { backgroundColor: tk.itrAccent },
   tabText: { fontSize: 13, fontWeight: '600', color: tk.textSecondary },
   tabTextActive: { color: tk.textOnBrand },
-
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  errorWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
-  errorText: { fontSize: 15, color: tk.textSecondary, textAlign: 'center' },
-  retryBtn: { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: tk.itrAccent, borderRadius: 12, minHeight: 44 },
-  retryText: { fontSize: 14, fontWeight: '700', color: tk.textOnBrand },
 
   listContent: { padding: 16, gap: 2 },
   emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },

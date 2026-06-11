@@ -11,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
@@ -25,8 +26,8 @@ type PermStatus = 'idle' | 'granted' | 'denied';
 interface PermissionItem {
   id: string;
   icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  reason: string;
+  titleKey: string;
+  reasonKey: string;
   required: boolean;
 }
 
@@ -34,15 +35,15 @@ const PERMISSIONS: PermissionItem[] = [
   {
     id: 'camera',
     icon: 'camera-outline',
-    title: 'Camera Access',
-    reason: 'To photograph bills and documents. Required for core functionality.',
+    titleKey: 'mobile.auth.permissions.camera.title',
+    reasonKey: 'mobile.auth.permissions.camera.reason',
     required: true,
   },
   {
     id: 'notifications',
     icon: 'notifications-outline',
-    title: 'Push Notifications',
-    reason: 'For GST filing deadlines, ITR reminders, and expert chat messages.',
+    titleKey: 'mobile.auth.permissions.notifications.title',
+    reasonKey: 'mobile.auth.permissions.notifications.reason',
     required: false,
   },
   ...(Platform.OS === 'android'
@@ -50,8 +51,8 @@ const PERMISSIONS: PermissionItem[] = [
         {
           id: 'storage',
           icon: 'folder-outline' as keyof typeof Ionicons.glyphMap,
-          title: 'Storage Access',
-          reason: 'To save downloaded reports and upload documents from gallery.',
+          titleKey: 'mobile.auth.permissions.storage.title',
+          reasonKey: 'mobile.auth.permissions.storage.reason',
           required: false,
         },
       ]
@@ -61,6 +62,7 @@ const PERMISSIONS: PermissionItem[] = [
 export function PermissionRequestsScreen({ navigation }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
+  const { t } = useTranslation();
   const { setPermissionsGranted } = usePreferencesStore();
   const [statuses, setStatuses] = useState<Record<string, PermStatus>>(
     Object.fromEntries(PERMISSIONS.map((p) => [p.id, 'idle'])),
@@ -83,8 +85,8 @@ export function PermissionRequestsScreen({ navigation }: Props) {
         setStatus(id, result.granted ? 'granted' : 'denied');
         if (!result.granted) {
           Alert.alert(
-            'Camera Required',
-            'You won\'t be able to photograph documents. You can enable this in Settings later.',
+            t('mobile.auth.permissions.cameraDenied.title'),
+            t('mobile.auth.permissions.cameraDenied.body'),
           );
         }
       } else if (id === 'notifications') {
@@ -102,9 +104,9 @@ export function PermissionRequestsScreen({ navigation }: Props) {
   const handleSkip = (id: string) => {
     if (id === 'camera') {
       Alert.alert(
-        'Camera Access',
-        'You won\'t be able to photograph documents. You can enable this in Settings later.',
-        [{ text: 'OK', onPress: () => setStatus(id, 'denied') }],
+        t('mobile.auth.permissions.camera.title'),
+        t('mobile.auth.permissions.cameraDenied.body'),
+        [{ text: t('mobile.common.ok'), onPress: () => setStatus(id, 'denied') }],
       );
     } else {
       setStatus(id, 'denied');
@@ -119,9 +121,9 @@ export function PermissionRequestsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.heading}>App Permissions</Text>
+        <Text style={styles.heading}>{t('mobile.auth.permissions.heading')}</Text>
         <Text style={styles.subtext}>
-          We need these permissions to work effectively for you
+          {t('mobile.auth.permissions.subtext')}
         </Text>
 
         {PERMISSIONS.map((permission) => {
@@ -139,9 +141,9 @@ export function PermissionRequestsScreen({ navigation }: Props) {
                   <Ionicons name={permission.icon} size={24} color={tokens.brand500} />
                 </View>
                 <View style={styles.permTextArea}>
-                  <Text style={styles.permTitle}>{permission.title}</Text>
+                  <Text style={styles.permTitle}>{t(permission.titleKey)}</Text>
                   {permission.required && (
-                    <Text style={styles.requiredBadge}>Required</Text>
+                    <Text style={styles.requiredBadge}>{t('mobile.auth.permissions.required')}</Text>
                   )}
                 </View>
                 {status === 'granted' && (
@@ -149,18 +151,18 @@ export function PermissionRequestsScreen({ navigation }: Props) {
                 )}
               </View>
 
-              <Text style={styles.permReason}>{permission.reason}</Text>
+              <Text style={styles.permReason}>{t(permission.reasonKey)}</Text>
 
               {status === 'idle' && (
                 <View style={styles.permActions}>
                   <Button
-                    label={`Allow ${permission.title.split(' ')[0]}`}
+                    label={t('mobile.auth.permissions.allow', { name: t(permission.titleKey) })}
                     onPress={() => handleAllow(permission.id)}
                     fullWidth
                     size="md"
                   />
                   <Button
-                    label="Not Now"
+                    label={t('mobile.auth.permissions.notNow')}
                     variant="ghost"
                     onPress={() => handleSkip(permission.id)}
                     fullWidth
@@ -170,12 +172,12 @@ export function PermissionRequestsScreen({ navigation }: Props) {
               )}
 
               {status === 'granted' && (
-                <Text style={styles.grantedText}>✓ Permission granted</Text>
+                <Text style={styles.grantedText}>✓ {t('mobile.auth.permissions.granted')}</Text>
               )}
 
               {status === 'denied' && (
                 <Text style={styles.deniedText}>
-                  Not granted — enable in device Settings if needed
+                  {t('mobile.auth.permissions.denied')}
                 </Text>
               )}
             </Card>
@@ -185,7 +187,7 @@ export function PermissionRequestsScreen({ navigation }: Props) {
         {allAddressed && (
           <View style={styles.continueArea}>
             <Button
-              label="Continue to SnapAccount"
+              label={t('mobile.auth.permissions.continue')}
               onPress={handleContinue}
               fullWidth
               size="lg"
@@ -273,7 +275,8 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   },
   deniedText: {
     fontSize: 12,
-    color: tk.textTertiary,
+    // Carries meaning (a11y §4) — textSecondary stays ≥4.5:1 in both modes.
+    color: tk.textSecondary,
     textAlign: 'center',
   },
   continueArea: {

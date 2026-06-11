@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -15,6 +15,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../components/ui/Card';
 import { StatusBadge } from '../../components/ui/Badge';
+import { ListSkeleton, ErrorState } from '../../components/shared/ListStates';
 import {
   createThemedStyles,
   useTheme,
@@ -24,6 +25,7 @@ import apiClient from '../../lib/api';
 import type { ItrStackParamList } from '../../navigation/ItrStack';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { RequestCallbackCta } from '../../components/callbacks/RequestCallbackCta';
+import { useHaptics } from '../../hooks/useHaptics';
 import { useAuthStore } from '../../store/authStore';
 
 type NavProp = NativeStackNavigationProp<ItrStackParamList, 'ItrDashboard'>;
@@ -52,15 +54,15 @@ export function ITRDashboardScreen({ navigation }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
   const user = useAuthStore((s) => s.user);
+  const haptics = useHaptics();
 
   const currentFY = getCurrentFY();
-  const { data: returns = [], isLoading } = useQuery({
+  const { data: returns = [], isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ['itr-returns'],
     queryFn: async () => {
       const res = await apiClient.get<ITRReturn[]>('/itr/returns');
       return res.data;
     },
-    placeholderData: [],
   });
 
   const handleStartFiling = () => {
@@ -82,14 +84,34 @@ export function ITRDashboardScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.common.back')}
+        >
           <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.title}>{t('mobile.itr.dashboard.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              // §3.3 haptics map: pull-to-refresh release → light impact.
+              haptics.lightTap();
+              void refetch();
+            }}
+            tintColor={tokens.brand500}
+            colors={[tokens.brand500]}
+          />
+        }
+      >
         {/* Quick actions */}
         <View style={styles.actionsRow}>
           <Pressable
@@ -131,7 +153,15 @@ export function ITRDashboardScreen({ navigation }: Props) {
         <Text style={styles.sectionTitle}>{t('mobile.itr.dashboard.returnsTitle')}</Text>
 
         {isLoading ? (
-          <View style={styles.skeleton} />
+          // §3.1: shaped skeleton matching return cards
+          <ListSkeleton variant="card" count={2} cardHeight={100} testID="itr-dashboard-skeleton" />
+        ) : isError ? (
+          <ErrorState
+            message={t('mobile.itr.dashboard.error')}
+            retryLabel={t('mobile.common.retry')}
+            onRetry={() => void refetch()}
+            testID="itr-dashboard-error-state"
+          />
         ) : returns.length === 0 ? (
           <Card shadow="sm" padding="lg">
             <View style={styles.emptyCard}>

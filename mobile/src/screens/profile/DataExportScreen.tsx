@@ -19,6 +19,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
 import { getDataExportStatus, requestDataExport, type DataExportJob } from '../../api/privacy';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
@@ -31,6 +32,7 @@ export function DataExportScreen({ navigation }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const qc = useQueryClient();
 
   const { data: job, isLoading, error, refetch } = useQuery<DataExportJob | null>({
@@ -46,7 +48,11 @@ export function DataExportScreen({ navigation }: Props) {
   const requestMutation = useMutation({
     mutationFn: requestDataExport,
     onSuccess: () => {
+      haptics.success(); // §3.3: export requested
       void qc.invalidateQueries({ queryKey: ['data-export-status'] });
+    },
+    onError: () => {
+      haptics.error(); // §3.3: API error
     },
   });
 

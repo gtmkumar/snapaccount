@@ -103,7 +103,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Button label="← Back" variant="ghost" size="sm" onPress={() => navigation.goBack()} />
+        <Button label={`← ${t('mobile.auth.wizard.back')}`} variant="ghost" size="sm" onPress={() => navigation.goBack()} />
       </View>
 
       <KeyboardAvoidingView
@@ -116,6 +116,12 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
           keyboardShouldPersistTaps="handled"
         >
           <Text style={styles.stepTitle}>Your tax profile</Text>
+
+          {/* Trust signal on the regulated step (spec §4.2) */}
+          <View style={styles.trustBanner}>
+            <Ionicons name="lock-closed-outline" size={16} color={tokens.successFg} />
+            <Text style={styles.trustText}>{t('mobile.auth.wizard.trustPan')}</Text>
+          </View>
           <Text style={styles.stepSubtitle}>
             We'll use your PAN to set up personal ITR filing. No business details needed.
           </Text>
@@ -228,6 +234,24 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     borderTopWidth: 1,
     borderTopColor: tk.border,
     backgroundColor: tk.canvas,
+  },
+  trustBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: tk.successTint,
+    borderWidth: 1,
+    borderColor: tk.successTintBorder,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  trustText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: tk.successFg,
+    fontWeight: '500',
   },
   stepTitle: {
     fontSize: 24,

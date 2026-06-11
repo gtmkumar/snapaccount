@@ -12,7 +12,6 @@
  */
 import React from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   RefreshControl,
@@ -29,6 +28,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { ListSkeleton, ErrorState } from '../../components/shared/ListStates';
+import { useHaptics } from '../../hooks/useHaptics';
 import { useAuthStore } from '../../store/authStore';
 import { getApiError } from '../../lib/api';
 import {
@@ -141,6 +142,7 @@ export function TeamScreen({ navigation }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const qc = useQueryClient();
   const roleLabel = useRoleLabel();
   const isOwner = useAuthStore((s) => s.user?.userType === 'business_owner');
@@ -200,6 +202,8 @@ export function TeamScreen({ navigation }: Props) {
   const mutating = resendMutation.isPending || revokeMutation.isPending;
 
   const onRefresh = () => {
+    // §3.3 haptics map: pull-to-refresh release → light impact.
+    haptics.lightTap();
     void membersQuery.refetch();
     void invitesQuery.refetch();
   };
@@ -229,7 +233,14 @@ export function TeamScreen({ navigation }: Props) {
       ) : (
         <ScrollView
           contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={tokens.brand500}
+              colors={[tokens.brand500]}
+            />
+          }
           showsVerticalScrollIndicator={false}
         >
           <Button
@@ -244,7 +255,17 @@ export function TeamScreen({ navigation }: Props) {
           <Text style={styles.sectionTitle}>{t('mobile.team.invites.section')}</Text>
           <Card padding="none" style={styles.sectionCard}>
             {invitesQuery.isLoading ? (
-              <ActivityIndicator style={styles.cardLoader} color={tokens.brand500} />
+              // §3.1: row-shaped skeleton matching invite rows
+              <View style={styles.cardSkeleton}>
+                <ListSkeleton variant="row" count={2} testID="team-invites-skeleton" />
+              </View>
+            ) : invitesQuery.isError ? (
+              <ErrorState
+                message={t('mobile.team.invites.error')}
+                retryLabel={t('mobile.common.retry')}
+                onRetry={() => void invitesQuery.refetch()}
+                testID="team-invites-error-state"
+              />
             ) : pendingInvites.length === 0 ? (
               <Text style={styles.cardEmpty}>{t('mobile.team.invites.empty')}</Text>
             ) : (
@@ -267,9 +288,17 @@ export function TeamScreen({ navigation }: Props) {
           <Text style={styles.sectionTitle}>{t('mobile.team.members.section')}</Text>
           <Card padding="none" style={styles.sectionCard}>
             {membersQuery.isLoading ? (
-              <ActivityIndicator style={styles.cardLoader} color={tokens.brand500} />
+              // §3.1: row-shaped skeleton matching member rows
+              <View style={styles.cardSkeleton}>
+                <ListSkeleton variant="row" count={3} testID="team-members-skeleton" />
+              </View>
             ) : membersQuery.isError ? (
-              <Text style={styles.cardEmpty}>{t('mobile.team.members.error')}</Text>
+              <ErrorState
+                message={t('mobile.team.members.error')}
+                retryLabel={t('mobile.common.retry')}
+                onRetry={() => void membersQuery.refetch()}
+                testID="team-members-error-state"
+              />
             ) : members.length === 0 ? (
               <Text style={styles.cardEmpty}>{t('mobile.team.members.empty')}</Text>
             ) : (
@@ -333,6 +362,7 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   },
   sectionCard: { overflow: 'hidden' },
   cardLoader: { paddingVertical: 24 },
+  cardSkeleton: { paddingHorizontal: 12 },
   cardEmpty: {
     fontSize: 14,
     color: tk.textSecondary,

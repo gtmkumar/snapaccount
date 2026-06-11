@@ -101,16 +101,42 @@ function Tier3TabBar({
     { id: 'chatQueue', label: t('dashboard.chatQueue.title') },
     { id: 'teamWorkload', label: t('dashboard.teamWorkload.title') },
   ]
+
+  // ARIA Tabs pattern (WAI-ARIA 1.2): ArrowLeft/ArrowRight navigate tabs with
+  // wrap-around; Home/End jump to first/last; focus follows selection (automatic
+  // activation). Roving tabIndex: active tab = 0, inactive tabs = -1.
+  function handleKeyDown(e: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    let nextIndex: number | null = null
+    if (e.key === 'ArrowRight') {
+      nextIndex = (index + 1) % tabs.length
+    } else if (e.key === 'ArrowLeft') {
+      nextIndex = (index - 1 + tabs.length) % tabs.length
+    } else if (e.key === 'Home') {
+      nextIndex = 0
+    } else if (e.key === 'End') {
+      nextIndex = tabs.length - 1
+    }
+    if (nextIndex !== null) {
+      e.preventDefault()
+      onChange(tabs[nextIndex].id)
+      // Move DOM focus to the newly activated tab button
+      const tabEl = document.getElementById(`tier3-tab-${tabs[nextIndex].id}`)
+      tabEl?.focus()
+    }
+  }
+
   return (
     <div role="tablist" aria-label={t('dashboard.tier3.heading')} className="flex gap-1 border-b border-[var(--border-subtle)] mb-4">
-      {tabs.map(tab => (
+      {tabs.map((tab, index) => (
         <button
           key={tab.id}
           role="tab"
           aria-selected={active === tab.id}
           aria-controls={`tier3-panel-${tab.id}`}
           id={`tier3-tab-${tab.id}`}
+          tabIndex={active === tab.id ? 0 : -1}
           onClick={() => onChange(tab.id)}
+          onKeyDown={(e) => handleKeyDown(e, index)}
           className={cn(
             'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
             active === tab.id

@@ -45,8 +45,24 @@ public sealed class ImsInvoiceConfiguration : IEntityTypeConfiguration<ImsInvoic
         builder.Property(i => i.CreatedAt).HasColumnName("created_at");
         builder.Property(i => i.UpdatedAt).HasColumnName("updated_at");
         builder.Property(i => i.DeletedAt).HasColumnName("deleted_at");
-        builder.Property(i => i.CreatedBy).HasColumnName("created_by").HasMaxLength(128);
-        builder.Property(i => i.UpdatedBy).HasColumnName("updated_by").HasMaxLength(128);
+
+        // W5-IMS-02 fix: created_by / updated_by are character varying(128) in
+        // gst.ims_invoices (migration 074 used varchar for Firebase UIDs, not uuid).
+        // BaseDbContext applies GuidStringConverter globally to all BaseAuditableEntity
+        // subtype's CreatedBy/UpdatedBy properties — that converter tells Npgsql to
+        // read the column as a uuid provider type, causing InvalidCastException when
+        // the underlying column is varchar. Override with identity HasConversion<string>()
+        // so no conversion is applied and Npgsql reads the column as text (correct).
+        builder.Property(i => i.CreatedBy)
+            .HasColumnName("created_by")
+            .HasMaxLength(128)
+            .HasColumnType("character varying")
+            .HasConversion<string>();
+        builder.Property(i => i.UpdatedBy)
+            .HasColumnName("updated_by")
+            .HasMaxLength(128)
+            .HasColumnType("character varying")
+            .HasConversion<string>();
 
         // Soft-delete filter
         builder.HasQueryFilter(i => i.DeletedAt == null);

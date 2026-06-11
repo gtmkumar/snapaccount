@@ -7,7 +7,6 @@
 
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -25,6 +24,7 @@ import {
   useTheme,
   type ThemeTokens,
 } from '../../contexts/ThemeContext';
+import { ListSkeleton, ErrorState } from '../../components/shared/ListStates';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { listLoanProducts, type LoanProduct } from '../../api/loans';
 import { LoanProductCard } from '../../components/loans/LoanProductCard';
@@ -82,8 +82,9 @@ export function LoanHubScreen({ navigation }: Props) {
     return (
       <SafeAreaView style={styles.container}>
         {renderHeader()}
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={tokens.loanAccent} />
+        {/* §3.1: shaped skeleton matching loan product cards */}
+        <View style={styles.skeletonWrap}>
+          <ListSkeleton variant="card" count={4} cardHeight={148} testID="loan-hub-skeleton" />
         </View>
       </SafeAreaView>
     );
@@ -93,13 +94,14 @@ export function LoanHubScreen({ navigation }: Props) {
     return (
       <SafeAreaView style={styles.container}>
         {renderHeader()}
-        <View style={styles.centered}>
-          <Ionicons name="alert-circle-outline" size={40} color={tokens.errorFg} />
-          <Text style={styles.errorText}>{t('mobile.loan.hub.error')}</Text>
-          <Pressable style={styles.retryBtn} onPress={() => void refetch()}>
-            <Text style={styles.retryText}>{t('mobile.common.retry')}</Text>
-          </Pressable>
-        </View>
+        <ErrorState
+          message={t('mobile.loan.hub.error')}
+          retryLabel={t('mobile.common.retry')}
+          onRetry={() => void refetch()}
+          secondaryLabel={t('mobile.common.goBack')}
+          onSecondaryPress={() => navigation.goBack()}
+          testID="loan-hub-error-state"
+        />
       </SafeAreaView>
     );
   }
@@ -273,6 +275,7 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
       gap: 12,
     },
     errorText: { fontSize: 14, color: tk.textSecondary, textAlign: 'center' },
+    skeletonWrap: { padding: 16 },
     retryBtn: {
       backgroundColor: tk.loanAccent,
       paddingHorizontal: 24,

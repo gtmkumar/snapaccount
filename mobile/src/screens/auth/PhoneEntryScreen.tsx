@@ -161,7 +161,7 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
       } else if (apiErr.statusCode >= 400 && apiErr.statusCode < 500) {
         setError(apiErr.message || 'Invalid phone number. Please check and try again.');
       } else {
-        Alert.alert('Error', 'Could not send OTP. Please check your connection and try again.');
+        Alert.alert(t('mobile.common.error'), t('mobile.auth.phone.sendError'));
       }
     } finally {
       setLoading(false);
@@ -195,9 +195,9 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
 
           {/* Heading */}
           <View style={styles.headingArea}>
-            <Text style={styles.heading}>Welcome to{'\n'}SnapAccount</Text>
+            <Text style={styles.heading}>{t('mobile.auth.phone.welcome')}{'\n'}SnapAccount</Text>
             <Text style={styles.subheading}>
-              GST, ITR, Loans -- all in one place for your business
+              {t('mobile.auth.phone.subheading')}
             </Text>
           </View>
 
@@ -211,7 +211,7 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
             />
 
             <Button
-              label={loading ? 'Sending OTP...' : 'Continue with OTP'}
+              label={loading ? t('mobile.auth.phone.sendingOtp') : t('mobile.auth.phone.continueOtp')}
               onPress={handleSendOTP}
               disabled={!canSubmit}
               loading={loading}
@@ -223,7 +223,7 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
           {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or continue with</Text>
+            <Text style={styles.dividerText}>{t('mobile.auth.phone.orContinue')}</Text>
             <View style={styles.dividerLine} />
           </View>
 
@@ -231,7 +231,7 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
           <View style={styles.socialArea}>
             {showPasswordOption && (
               <Button
-                label="Phone number & password"
+                label={t('mobile.auth.phone.passwordOption')}
                 variant="secondary"
                 fullWidth
                 size="lg"
@@ -267,10 +267,10 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
 
           {/* Terms */}
           <Text style={styles.terms}>
-            By continuing, you agree to our{' '}
-            <Text style={styles.termsLink}>Terms of Service</Text>
-            {' '}and{' '}
-            <Text style={styles.termsLink}>Privacy Policy</Text>
+            {t('mobile.auth.phone.termsPrefix')}{' '}
+            <Text style={styles.termsLink}>{t('mobile.auth.phone.termsOfService')}</Text>
+            {' '}{t('mobile.auth.phone.and')}{' '}
+            <Text style={styles.termsLink}>{t('mobile.auth.phone.privacyPolicy')}</Text>
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>

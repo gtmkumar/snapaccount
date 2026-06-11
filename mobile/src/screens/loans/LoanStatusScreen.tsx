@@ -13,7 +13,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -28,6 +27,7 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { ListSkeleton, ErrorState } from '../../components/shared/ListStates';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { useNowMs } from '../../hooks/useNowMs';
 import { getLoanApplication, type LoanApplicationStatus } from '../../api/loans';
@@ -134,9 +134,9 @@ export function LoanStatusScreen({ navigation, route }: Props) {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={tokens.loanAccent} />
-          <Text style={styles.loadingText}>{t('mobile.loan.status.loading')}</Text>
+        {/* §3.1: shaped skeleton — status hero + stepper + comms silhouettes */}
+        <View style={styles.skeletonWrap}>
+          <ListSkeleton variant="card" count={3} cardHeight={140} testID="loan-status-skeleton" />
         </View>
       </SafeAreaView>
     );
@@ -145,13 +145,14 @@ export function LoanStatusScreen({ navigation, route }: Props) {
   if (isError || !app) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
-          <Ionicons name="alert-circle-outline" size={40} color={tokens.errorFg} />
-          <Text style={styles.errorText}>{t('mobile.loan.status.error')}</Text>
-          <Pressable style={styles.retryBtn} onPress={() => void refetch()}>
-            <Text style={styles.retryText}>{t('mobile.common.retry')}</Text>
-          </Pressable>
-        </View>
+        <ErrorState
+          message={t('mobile.loan.status.error')}
+          retryLabel={t('mobile.common.retry')}
+          onRetry={() => void refetch()}
+          secondaryLabel={t('mobile.common.goBack')}
+          onSecondaryPress={() => navigation.goBack()}
+          testID="loan-status-error-state"
+        />
       </SafeAreaView>
     );
   }
@@ -361,6 +362,7 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
   loadingText: { fontSize: 14, color: tk.textSecondary },
   errorText: { fontSize: 14, color: tk.textSecondary, textAlign: 'center' },
+  skeletonWrap: { padding: 16 },
   retryBtn: { backgroundColor: tk.loanAccent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
   retryText: { fontSize: 14, fontWeight: '700', color: tk.textOnBrand },
 

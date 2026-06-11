@@ -248,14 +248,19 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Button label="← Back" variant="ghost" size="sm" onPress={goBack} />
+        <Button label={`← ${t('mobile.auth.wizard.back')}`} variant="ghost" size="sm" onPress={goBack} />
         <Text style={styles.stepIndicator}>
-          Step {currentStep} of {TOTAL_STEPS}
+          {t('mobile.auth.wizard.step', { current: currentStep, total: TOTAL_STEPS })}
         </Text>
       </View>
 
-      {/* Progress bar */}
-      <View style={styles.progressBar}>
+      {/* Progress bar — accessible stepper (design-elevation-spec §4.2) */}
+      <View
+        style={styles.progressBar}
+        accessibilityRole="progressbar"
+        accessibilityValue={{ min: 1, max: TOTAL_STEPS, now: currentStep }}
+        accessibilityLabel={t('mobile.auth.wizard.step', { current: currentStep, total: TOTAL_STEPS })}
+      >
         <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
       </View>
 
@@ -275,6 +280,12 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
               <Text style={styles.stepSubtitle}>
                 We'll verify your PAN to link your tax profile
               </Text>
+
+              {/* Trust signal on the regulated step (spec §4.2) */}
+              <View style={styles.trustBanner}>
+                <Ionicons name="lock-closed-outline" size={16} color={tokens.successFg} />
+                <Text style={styles.trustText}>{t('mobile.auth.wizard.trustPan')}</Text>
+              </View>
 
               <Controller
                 control={form1.control}
@@ -592,6 +603,24 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   },
   stepContent: {
     gap: 4,
+  },
+  trustBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: tk.successTint,
+    borderWidth: 1,
+    borderColor: tk.successTintBorder,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  trustText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: tk.successFg,
+    fontWeight: '500',
   },
   stepTitle: {
     fontSize: 24,

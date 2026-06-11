@@ -233,12 +233,46 @@ async function savePreference(pref: ThemePreference): Promise<void> {
 // Context
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ThemeContext = createContext<ThemeContextValue>({
+/**
+ * W5-DARK-01 root-cause guard: the context default used to be a fully
+ * functional light-theme value, so useTheme() worked "correctly" everywhere
+ * even though <ThemeProvider> was never mounted in App.tsx — every component
+ * test passed and dark mode silently never existed at runtime.
+ *
+ * The default is now `null` so a missing provider is DETECTABLE. useTheme()
+ * falls back to light tokens (never hard-crash a production build over
+ * theming) but fires console.error — which surfaces as a red LogBox error in
+ * dev builds and as loud stderr noise in Jest — so this class of bug cannot
+ * ship silently again. App-level mounting is additionally pinned by
+ * __tests__/App.test.tsx, which renders the real <App /> and asserts the
+ * theme flips with the system color scheme.
+ */
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+const DETACHED_FALLBACK: ThemeContextValue = {
   preference: 'system',
   isDark: false,
   tokens: LIGHT_TOKENS,
   setTheme: () => undefined,
-});
+};
+
+/**
+ * Warns once per JS runtime that useTheme() ran without a provider.
+ * Kept outside the hook body (module helper, not render logic) so the
+ * once-flag mutation is not a render side effect (react-hooks/globals).
+ */
+const warnDetachedOnce = (() => {
+  let warned = false;
+  return () => {
+    if (warned) return;
+    warned = true;
+    console.error(
+      '[ThemeContext] useTheme() was called without a mounted <ThemeProvider>. ' +
+        'Falling back to static light tokens — dark mode and setTheme() will NOT work. ' +
+        'Mount <ThemeProvider> above the navigation tree (see App.tsx).',
+    );
+  };
+})();
 
 function resolveIsDark(
   pref: ThemePreference,
@@ -304,9 +338,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Consume theme tokens and isDark flag anywhere in the tree. */
+/**
+ * Consume theme tokens and isDark flag anywhere in the tree.
+ *
+ * If no <ThemeProvider> is mounted above the caller this logs a console.error
+ * (red LogBox in dev builds) once per JS runtime and returns a static light
+ * fallback — dark mode and setTheme() are NON-FUNCTIONAL in that state.
+ */
 export function useTheme(): ThemeContextValue {
-  return useContext(ThemeContext);
+  const ctx = useContext(ThemeContext);
+  if (ctx) return ctx;
+  warnDetachedOnce();
+  return DETACHED_FALLBACK;
 }
 
 /**

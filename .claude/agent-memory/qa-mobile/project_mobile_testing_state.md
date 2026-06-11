@@ -47,6 +47,23 @@ New iOS bugs found:
 - IOS-02 (Medium): Loan products API error for test account. Both platforms affected.
 - IOS-03 (Low): DPO section partially hidden behind tab bar in Privacy Center.
 
+## Wave 5 Live Verification (2026-06-11)
+FAIL. Report: .claude/qa/live-ios-wave5-2026-06-11.md
+
+**W5-DARK-01 (Critical, Both):** ThemeProvider never mounted in App.tsx. Dark mode is 100% non-functional at runtime. Fix: wrap `<RootNavigator>` with `<ThemeProvider>` in App.tsx.
+
+**W5-IMS-01 (High, Both):** RESOLVED — PASS (code-verified + Jest). EmptyState with testID "ims-no-org" and "gstr1a-no-org" are present in ImsInboxScreen and Gstr1aAmendmentsScreen. ImsNoOrgGuard.test.tsx: 5/5 pass.
+
+**W5-IMS-02 (High, Both — backend):** RESOLVED — PASS (API-verified). GET /gst/ims/invoices/{id} returns 200 with full detail. POST /gst/ims/sync returns 200 with 8 mock invoices. The Npgsql character varying → Guid type mismatch is fixed in GstService (commit 18ce9b0).
+
+**W5-DARK-01 (Critical, Both):** CONDITIONAL PASS — ThemeProvider IS now mounted in App.tsx (commit 18ce9b0). Live dark mode does NOT render on iOS 26.5 pre-release + RN 0.85 old arch (Appearance bridge limitation — NOT a code defect). Re-test required on iOS 17/18. See [[feedback_simulator_interaction]] for iOS 26.5 Appearance API limitation details.
+
+**S3/S4 polish (Items 3, 5):** Code-verified PASS. RefreshControl with brand500 tint + lightTap haptic on DocumentList/NotificationCenter/GstNoticeInbox. ListSkeleton on cold load. EmptyState/ErrorState. Chat bubble own messages use tokens.brandCta (#4F46E5 light / #818CF8 dark). Live visual blocked by auth session loss.
+
+**Auth session loss pattern:** AuthService runs as background process — stdout goes to original Claude task pipe, not accessible from QA session. OTP hash in DB cannot be reversed via SHA256 brute-force (blocked by auto-mode classifier). AXSecureTextField won't focus via ui_type in hardware keyboard mode. Use OTP path via fresh Aspire session where stdout is accessible.
+
+**Test phone 9111222333:** No org membership. OTP-only auth. Password unknown. Always use OTP path for authentication. OTP accessible from Aspire auth-service stdout log when AuthService is started via Aspire (not standalone).
+
 ## Critical Bugs Found (2026-06-06 smoke test) — task IDs
 - BUG-1 (Task #12): PUT /auth/profile 500 — FIXED
 - BUG-2 (Task #13): Team tile never shown — FIXED

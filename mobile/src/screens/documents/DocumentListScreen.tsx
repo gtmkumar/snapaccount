@@ -24,7 +24,9 @@ import { useQuery } from '@tanstack/react-query';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { DocumentCard, DocumentDto } from '../../components/shared/DocumentCard';
+import { ListSkeleton, EmptyState, ErrorState } from '../../components/shared/ListStates';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
 import apiClient from '../../lib/api';
 import type { DocumentStackParamList } from '../../navigation/DocumentStack';
 import { useDocumentQueue, type QueueItem } from '../../hooks/useDocumentQueue';
@@ -32,7 +34,16 @@ import { useDocumentQueue, type QueueItem } from '../../hooks/useDocumentQueue';
 type NavProp = NativeStackNavigationProp<DocumentStackParamList, 'DocumentList'>;
 interface Props { navigation: NavProp }
 
-const CATEGORIES = ['All', 'Sales Bills', 'Purchase Bills', 'Expenses', 'Bank Statements', 'Salary Slips', 'Other'];
+// value = API filter param (stable), labelKey = translated chip label.
+const CATEGORIES: { value: string; labelKey: string }[] = [
+  { value: 'All', labelKey: 'mobile.docs.categories.all' },
+  { value: 'Sales Bills', labelKey: 'mobile.docs.categories.sales' },
+  { value: 'Purchase Bills', labelKey: 'mobile.docs.categories.purchase' },
+  { value: 'Expenses', labelKey: 'mobile.docs.categories.expenses' },
+  { value: 'Bank Statements', labelKey: 'mobile.docs.categories.bank' },
+  { value: 'Salary Slips', labelKey: 'mobile.docs.categories.salary' },
+  { value: 'Other', labelKey: 'mobile.docs.categories.other' },
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API → DocumentDto normalization (AND-04)
@@ -89,11 +100,11 @@ function ProcessingBadge({ item }: { item: QueueItem }) {
   };
 
   const a11yLabel: Record<string, string> = {
-    QUEUED: 'Document status: Queued, waiting to upload',
-    UPLOADING: `Document status: Uploading, ${item.uploadProgress} percent`,
-    PROCESSING: 'Document status: Processing, please wait',
-    READY: 'Document status: Ready',
-    FAILED: 'Document status: Failed. Double-tap Retry to try again.',
+    QUEUED: t('mobile.docs.sr.queued'),
+    UPLOADING: t('mobile.docs.sr.uploading', { percent: item.uploadProgress }),
+    PROCESSING: t('mobile.docs.sr.processing'),
+    READY: t('mobile.docs.sr.ready'),
+    FAILED: t('mobile.docs.sr.failed'),
   };
 
   return (
@@ -134,7 +145,7 @@ function QueueCard({ item, onRetry, onRemove }: {
       t('mobile.docs.action.removeConfirmTitle'),
       t('mobile.docs.action.removeConfirmBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('mobile.common.cancel'), style: 'cancel' },
         { text: t('mobile.docs.action.remove'), style: 'destructive', onPress: () => onRemove(item.localId) },
       ],
     );
@@ -209,6 +220,8 @@ function QueueCard({ item, onRetry, onRemove }: {
 export function DocumentListScreen({ navigation }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
+  const { t } = useTranslation();
+  const haptics = useHaptics();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showSearch, setShowSearch] = useState(false);
@@ -220,7 +233,7 @@ export function DocumentListScreen({ navigation }: Props) {
     (i) => i.status !== 'READY' || !i.serverId,
   );
 
-  const { data: documents = [], isLoading, refetch, isRefetching } = useQuery({
+  const { data: documents = [], isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ['documents', selectedCategory, searchQuery],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -236,7 +249,6 @@ export function DocumentListScreen({ navigation }: Props) {
       // DocumentDto shape DocumentCard binds to.
       return items.map(normalizeDocument);
     },
-    placeholderData: [],
   });
 
   // ── Poll in-flight (uploaded but still processing) items until the server finishes OCR.
@@ -282,7 +294,7 @@ export function DocumentListScreen({ navigation }: Props) {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permission needed', 'Allow photo library access to upload from gallery.');
+        Alert.alert(t('mobile.docs.add.permTitle'), t('mobile.docs.add.permBody'));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -294,16 +306,23 @@ export function DocumentListScreen({ navigation }: Props) {
       const filename = asset.fileName ?? `gallery_${Date.now()}.jpg`;
       await enqueue({ localUri: asset.uri, filename });
     } catch {
-      Alert.alert('Error', 'Could not pick image from gallery.');
+      haptics.error();
+      Alert.alert(t('mobile.common.error'), t('mobile.docs.add.galleryError'));
     }
   };
 
   const handleAddDocument = () => {
-    Alert.alert('Add Document', 'Choose how to add a document', [
-      { text: 'Take Photo', onPress: () => navigation.navigate('Camera') },
-      { text: 'Upload from Gallery', onPress: handlePickFromGallery },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('mobile.docs.add.title'), t('mobile.docs.add.body'), [
+      { text: t('mobile.docs.add.photo'), onPress: () => navigation.navigate('Camera') },
+      { text: t('mobile.docs.add.gallery'), onPress: handlePickFromGallery },
+      { text: t('mobile.common.cancel'), style: 'cancel' },
     ]);
+  };
+
+  // §3.3 haptics map: pull-to-refresh release → light impact.
+  const handleRefresh = () => {
+    haptics.lightTap();
+    void refetch();
   };
 
   return (
@@ -317,24 +336,37 @@ export function DocumentListScreen({ navigation }: Props) {
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="Search documents..."
+              placeholder={t('mobile.docs.searchPlaceholder')}
               placeholderTextColor={tokens.textTertiary}
+              accessibilityLabel={t('mobile.docs.searchPlaceholder')}
               autoFocus
             />
-            <Pressable onPress={() => { setShowSearch(false); setSearchQuery(''); }}>
-              <Text style={styles.cancelSearch}>Cancel</Text>
+            <Pressable
+              onPress={() => { setShowSearch(false); setSearchQuery(''); }}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.common.cancel')}
+              hitSlop={8}
+            >
+              <Text style={styles.cancelSearch}>{t('mobile.common.cancel')}</Text>
             </Pressable>
           </View>
         ) : (
           <>
-            <Text style={styles.headerTitle}>Documents</Text>
+            <Text style={styles.headerTitle}>{t('mobile.docs.title')}</Text>
             <View style={styles.headerActions}>
-              <Pressable onPress={() => setShowSearch(true)} style={styles.headerBtn}>
+              <Pressable
+                onPress={() => setShowSearch(true)}
+                style={styles.headerBtn}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.docs.searchPlaceholder')}
+              >
                 <Ionicons name="search" size={20} color={tokens.textSecondary} />
               </Pressable>
               <Pressable
                 style={styles.headerBtn}
-                onPress={() => Alert.alert('Coming Soon', 'Document settings coming soon.')}
+                onPress={() => Alert.alert(t('mobile.common.comingSoon'), t('mobile.docs.settingsSoon'))}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.common.comingSoon')}
               >
                 <Ionicons name="options-outline" size={20} color={tokens.textSecondary} />
               </Pressable>
@@ -352,12 +384,15 @@ export function DocumentListScreen({ navigation }: Props) {
       >
         {CATEGORIES.map((cat) => (
           <Pressable
-            key={cat}
-            style={[styles.filterChip, selectedCategory === cat && styles.filterChipActive]}
-            onPress={() => setSelectedCategory(cat)}
+            key={cat.value}
+            style={[styles.filterChip, selectedCategory === cat.value && styles.filterChipActive]}
+            onPress={() => setSelectedCategory(cat.value)}
+            accessibilityRole="tab"
+            accessibilityLabel={t(cat.labelKey)}
+            accessibilityState={{ selected: selectedCategory === cat.value }}
           >
-            <Text style={[styles.filterChipText, selectedCategory === cat && styles.filterChipTextActive]}>
-              {cat}
+            <Text style={[styles.filterChipText, selectedCategory === cat.value && styles.filterChipTextActive]}>
+              {t(cat.labelKey)}
             </Text>
           </Pressable>
         ))}
@@ -366,10 +401,10 @@ export function DocumentListScreen({ navigation }: Props) {
       {/* Sort info */}
       <View style={styles.sortBar}>
         <Text style={styles.sortText}>
-          {activeQueueItems.length + documents.length} document{(activeQueueItems.length + documents.length) !== 1 ? 's' : ''}
+          {t('mobile.docs.count', { count: activeQueueItems.length + documents.length })}
         </Text>
         <Pressable style={styles.sortAction}>
-          <Text style={styles.sortActionText}>Date</Text>
+          <Text style={styles.sortActionText}>{t('mobile.docs.sortDate')}</Text>
           <Ionicons name="chevron-down" size={14} color={tokens.textSecondary} />
         </Pressable>
       </View>
@@ -400,25 +435,34 @@ export function DocumentListScreen({ navigation }: Props) {
         )}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={handleRefresh}
+            tintColor={tokens.brand500}
+            colors={[tokens.brand500]}
+          />
+        }
         ListEmptyComponent={
-          isLoading || activeQueueItems.length > 0 ? null : (
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconWrap}>
-                <Ionicons name="folder-open-outline" size={40} color={tokens.textTertiary} />
-              </View>
-              <Text style={styles.emptyTitle}>No documents yet</Text>
-              <Text style={styles.emptySubtext}>
-                Photograph a bill or upload from gallery to get started
-              </Text>
-              <Pressable
-                style={styles.emptyBtn}
-                onPress={handleAddDocument}
-              >
-                <Ionicons name="camera-outline" size={18} color={tokens.textOnBrand} style={{ marginRight: 6 }} />
-                <Text style={styles.emptyBtnText}>Capture First Document</Text>
-              </Pressable>
-            </View>
+          activeQueueItems.length > 0 ? null : isLoading ? (
+            // §3.1: shaped skeleton (card silhouettes match DocumentCard rows)
+            <ListSkeleton variant="card" count={6} cardHeight={88} testID="docs-skeleton" />
+          ) : isError ? (
+            <ErrorState
+              message={t('mobile.docs.error.loadFailed')}
+              retryLabel={t('mobile.common.retry')}
+              onRetry={() => void refetch()}
+              testID="docs-error-state"
+            />
+          ) : (
+            <EmptyState
+              icon="folder-open-outline"
+              title={t('mobile.docs.empty.title')}
+              body={t('mobile.docs.empty.body')}
+              ctaLabel={t('mobile.docs.empty.cta')}
+              onCtaPress={handleAddDocument}
+              testID="docs-empty-state"
+            />
           )
         }
       />
@@ -427,7 +471,7 @@ export function DocumentListScreen({ navigation }: Props) {
       <Pressable
         style={styles.fab}
         onPress={handleAddDocument}
-        accessibilityLabel="Add document"
+        accessibilityLabel={t('mobile.docs.add.title')}
         accessibilityRole="button"
       >
         <Ionicons name="add" size={28} color={tokens.textOnBrand} />
@@ -516,18 +560,6 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   },
   removeBtnText: { fontSize: 13, fontWeight: '600', color: tk.errorFg },
 
-  // Empty state
-  emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 32 },
-  emptyIconWrap: { width: 72, height: 72, borderRadius: 20, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  emptyTitle: { fontSize: 20, fontWeight: '700', color: tk.textPrimary, marginBottom: 8 },
-  emptySubtext: { fontSize: 14, color: tk.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
-  emptyBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: tk.brand500, paddingHorizontal: 24, paddingVertical: 14,
-    borderRadius: 14, shadowColor: tk.brand500,
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
-  },
-  emptyBtnText: { color: tk.textOnBrand, fontSize: 15, fontWeight: '700' },
   fab: {
     position: 'absolute', bottom: 88, right: 20,
     width: 56, height: 56, borderRadius: 18,

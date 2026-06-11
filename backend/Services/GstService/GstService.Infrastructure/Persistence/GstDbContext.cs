@@ -71,7 +71,13 @@ public class GstDbContext(DbContextOptions<GstDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("gst");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(GstDbContext).Assembly);
+        // SEC-fix W5-IMS-02: base.OnModelCreating must run FIRST so that the global
+        // GuidStringConverter for CreatedBy/UpdatedBy is applied before per-entity
+        // IEntityTypeConfiguration classes run. Configurations that need to override
+        // the converter (e.g. ImsInvoiceConfiguration, Gstr1aAmendmentConfiguration
+        // where those columns are character varying(128), NOT uuid) call
+        // HasConversion<string>() after this base call, which wins the last-write.
         base.OnModelCreating(modelBuilder);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(GstDbContext).Assembly);
     }
 }

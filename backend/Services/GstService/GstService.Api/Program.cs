@@ -104,17 +104,26 @@ try
     // Auto-discover and register all EndpointGroupBase subclasses in this assembly
     app.MapEndpoints(Assembly.GetExecutingAssembly());
 
-    // Hangfire recurring jobs
-    // IMS Deemed Acceptance: 14th of every month at 02:00 IST (20:30 UTC on 13th).
-    // GSTN GSTR-2B is generated on the 14th; any PENDING invoice is deemed ACCEPTED.
-    RecurringJob.AddOrUpdate<ImsDeemedAcceptanceJob>(
-        recurringJobId: "ims-deemed-acceptance-monthly",
-        methodCall: job => job.RunAsync(),
-        cronExpression: "30 20 13 * *", // 13th at 20:30 UTC = 14th at 02:00 IST
-        options: new RecurringJobOptions
-        {
-            TimeZone = TimeZoneInfo.Utc
-        });
+    // Hangfire recurring jobs — registered via ApplicationStarted callback so that
+    // JobStorage.Current is guaranteed to be initialized (the HangfireServer hosted service
+    // starts before ApplicationStarted fires). Using the static RecurringJob.AddOrUpdate()
+    // at builder time throws InvalidOperationException: Current JobStorage instance has not
+    // been initialized yet. (BUG-IMS-GSTSTART-001)
+    app.Lifetime.ApplicationStarted.Register(() =>
+    {
+        // IMS Deemed Acceptance: 14th of every month at 02:00 IST (20:30 UTC on 13th).
+        // GSTN GSTR-2B is generated on the 14th; any PENDING invoice is deemed ACCEPTED.
+        var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
+        recurringJobs.AddOrUpdate<ImsDeemedAcceptanceJob>(
+            recurringJobId: "ims-deemed-acceptance-monthly",
+            methodCall: job => job.RunAsync(),
+            cronExpression: "30 20 13 * *", // 13th at 20:30 UTC = 14th at 02:00 IST
+            options: new RecurringJobOptions
+            {
+                TimeZone = TimeZoneInfo.Utc
+            });
+        Log.Information("GstService: Hangfire recurring job 'ims-deemed-acceptance-monthly' registered.");
+    });
 
     // GAP-005: Fail-fast in non-Development when SESSION_JWT_SECRET is absent.
     SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);

@@ -6,7 +6,6 @@
 
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -21,7 +20,9 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { NoticeRowMobile } from '../../components/shared/NoticeRowMobile';
+import { ListSkeleton, ErrorState } from '../../components/shared/ListStates';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import type { GstNoticeStatus } from '../../api/gst';
 import { listGstNotices, respondToGstNotice } from '../../api/gst';
@@ -35,12 +36,12 @@ interface Props {
   route: RoutePropType;
 }
 
-const FILTER_TABS: { key: GstNoticeStatus | 'All'; label: string }[] = [
-  { key: 'All', label: 'All' },
-  { key: 'Open', label: 'Open' },
-  { key: 'Overdue', label: 'Overdue' },
-  { key: 'Responded', label: 'Responded' },
-  { key: 'Closed', label: 'Closed' },
+const FILTER_TABS: { key: GstNoticeStatus | 'All'; labelKey: string }[] = [
+  { key: 'All', labelKey: 'mobile.gst.notices.filter.all' },
+  { key: 'Open', labelKey: 'mobile.gst.notices.filter.open' },
+  { key: 'Overdue', labelKey: 'mobile.gst.notices.filter.overdue' },
+  { key: 'Responded', labelKey: 'mobile.gst.notices.filter.responded' },
+  { key: 'Closed', labelKey: 'mobile.gst.notices.filter.closed' },
 ];
 
 export function GstNoticeInboxScreen({ navigation, route }: Props) {
@@ -48,6 +49,7 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
   const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const { orgId } = route.params;
   const qc = useQueryClient();
   const [activeFilter, setActiveFilter] = useState<GstNoticeStatus | 'All'>('All');
@@ -115,7 +117,7 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
               accessibilityState={{ selected: isActive }}
             >
               <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                {tab.label}
+                {t(tab.labelKey)}
               </Text>
             </Pressable>
           );
@@ -124,23 +126,32 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
 
       {/* Body */}
       {isLoading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={tokens.gstAccent} />
-          <Text style={styles.loadingText}>{t('mobile.gst.notices.loading')}</Text>
+        // §3.1: shaped skeleton matching notice rows
+        <View style={styles.listContent}>
+          <ListSkeleton variant="card" count={6} cardHeight={96} testID="gst-notices-skeleton" />
         </View>
       ) : error ? (
-        <View style={styles.errorWrap}>
-          <Ionicons name="alert-circle-outline" size={40} color={tokens.errorFg} />
-          <Text style={styles.errorText}>{t('mobile.gst.notices.error')}</Text>
-          <Pressable style={styles.retryBtn} onPress={() => void refetch()}>
-            <Text style={styles.retryText}>{t('mobile.gst.notices.retry')}</Text>
-          </Pressable>
-        </View>
+        <ErrorState
+          message={t('mobile.gst.notices.error')}
+          retryLabel={t('mobile.gst.notices.retry')}
+          onRetry={() => void refetch()}
+          secondaryLabel={t('mobile.common.goBack')}
+          onSecondaryPress={() => navigation.goBack()}
+          testID="gst-notices-error-state"
+        />
       ) : (
         <ScrollView
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => {
+                haptics.lightTap();
+                void refetch();
+              }}
+              tintColor={tokens.brand500}
+              colors={[tokens.brand500]}
+            />
           }
           showsVerticalScrollIndicator={false}
         >
@@ -260,40 +271,6 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     color: tk.textSecondary,
   },
   tabTextActive: {
-    color: tk.textOnBrand,
-  },
-  loadingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: tk.textSecondary,
-  },
-  errorWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-    padding: 24,
-  },
-  errorText: {
-    fontSize: 15,
-    color: tk.textSecondary,
-    textAlign: 'center',
-  },
-  retryBtn: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: tk.gstAccent,
-    borderRadius: 12,
-    minHeight: 44,
-  },
-  retryText: {
-    fontSize: 14,
-    fontWeight: '700',
     color: tk.textOnBrand,
   },
   listContent: {

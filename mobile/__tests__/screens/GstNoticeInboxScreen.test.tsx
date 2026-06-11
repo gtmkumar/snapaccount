@@ -95,7 +95,13 @@ describe('GstNoticeInboxScreen', () => {
       <GstNoticeInboxScreen navigation={mockNavigation} route={mockRoute} />,
       { wrapper: makeWrapper() },
     );
-    ['All', 'Open', 'Overdue', 'Responded', 'Closed'].forEach((label) => {
+    [
+      'mobile.gst.notices.filter.all',
+      'mobile.gst.notices.filter.open',
+      'mobile.gst.notices.filter.overdue',
+      'mobile.gst.notices.filter.responded',
+      'mobile.gst.notices.filter.closed',
+    ].forEach((label) => {
       expect(getByText(label)).toBeTruthy();
     });
   });
@@ -125,9 +131,9 @@ describe('GstNoticeInboxScreen', () => {
       <GstNoticeInboxScreen navigation={mockNavigation} route={mockRoute} />,
       { wrapper: makeWrapper() },
     );
-    await waitFor(() => expect(getByText('All')).toBeTruthy());
+    await waitFor(() => expect(getByText('mobile.gst.notices.filter.all')).toBeTruthy());
     // Press the tab (role="tab"), not a notice-row status chip with same text.
-    const openTab = getAllByRole('tab').find((tab) => within(tab).queryByText('Open'));
+    const openTab = getAllByRole('tab').find((tab) => within(tab).queryByText('mobile.gst.notices.filter.open'));
     fireEvent.press(openTab!);
     await waitFor(() =>
       expect(mockListGstNotices).toHaveBeenCalledWith(
@@ -141,9 +147,9 @@ describe('GstNoticeInboxScreen', () => {
       <GstNoticeInboxScreen navigation={mockNavigation} route={mockRoute} />,
       { wrapper: makeWrapper() },
     );
-    await waitFor(() => expect(getByText('All')).toBeTruthy());
+    await waitFor(() => expect(getByText('mobile.gst.notices.filter.all')).toBeTruthy());
     // Press the tab (role="tab"), not a notice-row status chip with same text.
-    const closedTab = getAllByRole('tab').find((tab) => within(tab).queryByText('Closed'));
+    const closedTab = getAllByRole('tab').find((tab) => within(tab).queryByText('mobile.gst.notices.filter.closed'));
     fireEvent.press(closedTab!);
     await waitFor(() =>
       expect(mockListGstNotices).toHaveBeenCalledWith(

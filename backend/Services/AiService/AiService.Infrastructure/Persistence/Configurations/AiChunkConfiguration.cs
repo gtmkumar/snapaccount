@@ -28,8 +28,20 @@ public sealed class AiChunkConfiguration : IEntityTypeConfiguration<AiChunk>
         builder.Property(c => c.CreatedAt).HasColumnName("created_at");
         builder.Property(c => c.UpdatedAt).HasColumnName("updated_at");
         builder.Property(c => c.DeletedAt).HasColumnName("deleted_at");
-        builder.Property(c => c.CreatedBy).HasColumnName("created_by");
-        builder.Property(c => c.UpdatedBy).HasColumnName("updated_by");
+        // W5-IMS-02 mirror fix: ai.chunks.created_by / updated_by are TEXT columns in
+        // migration 075 (not uuid). BaseDbContext applies GuidStringConverter globally to
+        // all BaseAuditableEntity.CreatedBy/UpdatedBy properties; that converter tells Npgsql
+        // to bind a uuid provider type, causing InvalidCastException when the column is TEXT.
+        // Override here with identity HasConversion<string>() so no conversion is applied and
+        // Npgsql reads/writes the column as plain text (Firebase UID strings).
+        builder.Property(c => c.CreatedBy)
+            .HasColumnName("created_by")
+            .HasColumnType("text")
+            .HasConversion<string>();
+        builder.Property(c => c.UpdatedBy)
+            .HasColumnName("updated_by")
+            .HasColumnType("text")
+            .HasConversion<string>();
 
         builder.HasIndex(c => c.DocumentId).HasDatabaseName("ix_ai_chunks_document_id");
         builder.HasIndex(c => c.OrganizationId).HasDatabaseName("ix_ai_chunks_organization_id");

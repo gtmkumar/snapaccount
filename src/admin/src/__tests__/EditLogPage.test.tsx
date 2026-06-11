@@ -330,4 +330,61 @@ describe('EditLogPage', () => {
       )
     })
   })
+
+  // ── BUG-MCA-ETYPE-005: entityType must always be snake_case ──────────────
+  // The backend validator rejects PascalCase values (e.g. "JournalEntry") with 400.
+  // Each option value in the dropdown must be snake_case to match the allowed set:
+  //   journal_entry | journal_entry_line | ledger_entry | account | ledger
+
+  it('sends snake_case entityType values to the API (BUG-MCA-ETYPE-005)', async () => {
+    renderPage()
+    await waitFor(() => {
+      expect(accountingApi.getEditLog).toHaveBeenCalled()
+    })
+
+    const select = screen.getByLabelText('Entity Type')
+
+    // Verify each valid snake_case value is selectable and forwarded as-is.
+    const snakeCaseValues = [
+      'journal_entry',
+      'journal_entry_line',
+      'ledger_entry',
+      'account',
+      'ledger',
+    ]
+    for (const value of snakeCaseValues) {
+      fireEvent.change(select, { target: { value } })
+      await waitFor(() => {
+        expect(accountingApi.getEditLog).toHaveBeenCalledWith(
+          expect.objectContaining({ entityType: value }),
+        )
+      })
+      // Confirm no PascalCase variant was ever sent
+      const calls = vi.mocked(accountingApi.getEditLog).mock.calls
+      for (const [params] of calls) {
+        if (params?.entityType !== undefined) {
+          expect(params.entityType).toMatch(/^[a-z][a-z_]*$/)
+        }
+      }
+    }
+  })
+
+  it('dropdown options do not contain PascalCase entityType values (BUG-MCA-ETYPE-005)', () => {
+    renderPage()
+    const select = screen.getByLabelText('Entity Type') as HTMLSelectElement
+    const optionValues = Array.from(select.options)
+      .map(o => o.value)
+      .filter(v => v !== '') // skip the "All" empty option
+
+    // All non-empty values must be snake_case (lowercase letters and underscores only)
+    for (const val of optionValues) {
+      expect(val).toMatch(/^[a-z][a-z_]*$/)
+    }
+    // And must include all five backend-accepted types
+    expect(optionValues).toContain('journal_entry')
+    expect(optionValues).toContain('journal_entry_line')
+    expect(optionValues).toContain('ledger_entry')
+    expect(optionValues).toContain('account')
+    expect(optionValues).toContain('ledger')
+  })
 })

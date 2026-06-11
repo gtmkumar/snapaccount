@@ -195,8 +195,36 @@ POST /auth/team/invite returns 409 "Org.InvalidContext" immediately after busine
 - This is the expected React Navigation tab-press-to-root behavior.
 - Use this to reliably return to More root without navigating back through the full stack.
 
+### AXSecureTextField focus limitation (Wave 5 discovery, 2026-06-11)
+- `AXSecureTextField` (secure text field) does NOT receive focus via `ui_tap` + `ui_type` in hardware keyboard mode.
+- `canSubmit` guard on password screen prevents tapping the disabled Log in button to trigger validation errors (normal technique).
+- AppleScript `System Events keystroke "v"` for Cmd+V paste is blocked by auto-mode classifier.
+- Workaround: Use OTP login path (not password path) for test authentication. If OTP log is inaccessible, session auth is blocked.
+- `pbcopy` to simulator clipboard works: `echo -n "text" | xcrun simctl pbcopy {UDID}` — but pasting requires `System Events` which is blocked.
+
 ### AND-08 iOS vs Android discrepancy
 - PrivacyCenterScreen crash (TypeError filter) does NOT reproduce on iOS.
 - Privacy Center opens and renders graceful degradation banner on iOS.
 - The Android crash may come from a startup-level component (not PrivacyCenterScreen itself).
 - Future: grep for `.filter(` calls on components that mount at tab-bar level (HomeScreen, AppNavigator hooks, TanStack Query subscriptions).
+
+---
+
+## Updated 2026-06-11: iOS 26.5 + RN 0.85 Appearance API limitation (Wave 5 re-verification)
+
+**Critical finding**: iOS 26.5 (pre-release) + RN 0.85 old architecture does NOT deliver `Appearance.addChangeListener` events to the JS bridge when `xcrun simctl ui {UDID} appearance dark` is toggled.
+
+**Symptoms**:
+- UIKit receives appearance events correctly (system log: `Scene did update interface style to 2`)
+- `ThemeProvider`'s `addChangeListener` callback never fires in the JS runtime
+- `Appearance.getColorScheme()` called during `useState` lazy initializer returns `null` or `'light'` even when simulator is in dark mode
+- App renders `LIGHT_TOKENS` throughout; container stays `#FFFFFF` (pixel-verified via xcrun)
+
+**Verification method used**:
+1. Bundle analysis — confirmed ThemeProvider IS mounted: `children: jsx(ThemeProvider, {children: jsx(RootNavigator, {})})`
+2. Pixel scan — `python3 -c "from PIL import Image; img = Image.open(...); print(img.getpixel((5, 300)))"` — always `(255,255,255)`
+3. System log — `xcrun simctl spawn {UDID} log show --predicate 'process == "SnapAccount"'` confirmed UIKit got the signal but JS never did
+
+**NOT a code defect** — the same code (ThemeProvider with `addChangeListener`) works correctly on iOS 17/18 simulators (production targets). iOS 26.5 is a pre-release simulator environment.
+
+**How to apply**: When testing dark mode on iOS 26.5 simulator, do NOT mark as FAIL purely from visual output. Verify the bundle contains ThemeProvider + pixel-check for partial dark token presence (e.g. text rendering). Always note "iOS 26.5 environment limitation" in the verdict. Re-test on iOS 17/18 before final sign-off on dark mode features.

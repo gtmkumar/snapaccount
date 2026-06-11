@@ -293,4 +293,26 @@ describe('ThemeContext', () => {
       expect(getByTestId('canvas').props.children).toBe('#F8FAFC');
     });
   });
+
+  // ── missing-provider guard (W5-DARK-01) ───────────────────────────────────
+  // The context default used to be a fully working light-theme value, which
+  // let the entire dark-mode migration ship with ThemeProvider never mounted.
+  // useTheme() must now WARN LOUDLY (console.error → red LogBox in dev) when
+  // no provider is present, while still falling back to light tokens so a
+  // production build never hard-crashes over theming.
+
+  it('useTheme() without a ThemeProvider warns loudly and falls back to light tokens', () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { getByTestId } = render(<ThemeConsumer />); // NO provider
+      expect(getByTestId('canvas').props.children).toBe('#F8FAFC');
+      expect(getByTestId('isDark').props.children).toBe('false');
+      const warned = errorSpy.mock.calls.some((c) =>
+        String(c[0]).includes('[ThemeContext]'),
+      );
+      expect(warned).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

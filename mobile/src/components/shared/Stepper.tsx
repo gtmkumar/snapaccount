@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import {
   createThemedStyles,
   type ThemeTokens,
@@ -18,10 +19,15 @@ interface StepperProps {
 
 export function Stepper({ steps, currentStep, testID }: StepperProps) {
   const styles = useStyles();
+  const { t } = useTranslation();
   return (
     <View testID={testID} style={styles.container} accessibilityRole="progressbar"
       accessibilityValue={{ min: 0, max: steps.length - 1, now: currentStep }}
-      accessibilityLabel={`Step ${currentStep + 1} of ${steps.length}: ${steps[currentStep]}`}
+      accessibilityLabel={t('mobile.auth.wizard.stepProgress', {
+        current: currentStep + 1,
+        total: steps.length,
+        label: steps[currentStep],
+      })}
     >
       {steps.map((step, index) => {
         const isCompleted = index < currentStep;

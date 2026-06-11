@@ -5,7 +5,6 @@
 
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -20,7 +19,9 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { RaiseGrievanceModal } from '../../components/shared/RaiseGrievanceModal';
+import { ListSkeleton, ErrorState } from '../../components/shared/ListStates';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { getRefundStatus } from '../../api/itr';
 import type { RefundStatus } from '../../api/itr';
@@ -71,7 +72,8 @@ export function RefundTrackerScreen({ navigation, route }: Props) {
   const { filingId } = route.params;
   const [grievanceVisible, setGrievanceVisible] = useState(false);
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const haptics = useHaptics();
+  const { data, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ['refund-status', filingId],
     queryFn: () => getRefundStatus(filingId),
     refetchInterval: 30_000, // Poll every 30s
@@ -98,13 +100,31 @@ export function RefundTrackerScreen({ navigation, route }: Props) {
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              haptics.lightTap();
+              void refetch();
+            }}
+            tintColor={tokens.brand500}
+            colors={[tokens.brand500]}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         {isLoading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={tokens.itrAccent} />
-          </View>
+          // §3.1: shaped skeleton — hero card + timeline silhouette
+          <ListSkeleton variant="card" count={3} cardHeight={120} testID="refund-skeleton" />
+        ) : isError ? (
+          <ErrorState
+            message={t('mobile.itr.refund.error')}
+            retryLabel={t('mobile.common.retry')}
+            onRetry={() => void refetch()}
+            secondaryLabel={t('mobile.common.goBack')}
+            onSecondaryPress={() => navigation.goBack()}
+            testID="refund-error-state"
+          />
         ) : data ? (
           <>
             {/* Status hero card */}

@@ -70,6 +70,7 @@ import {
   type ImsInvoiceSummary,
   type ImsSummary,
 } from '../../api/gstIms';
+import { EmptyState } from '../../components/shared/ListStates';
 import { ImsInvoiceCard, legalImsActions } from '../../components/gst/ImsInvoiceCard';
 import { RejectReasonSheet } from '../../components/gst/RejectReasonSheet';
 import { ImsEducationSheet } from '../../components/gst/ImsEducationSheet';
@@ -497,6 +498,43 @@ export function ImsInboxScreen({ navigation, route }: Props) {
 
   const bulkRejectInfo = rejectTarget === 'bulk' ? eligibleForBulk('REJECTED') : null;
 
+  // ── No-organization guard (W5-IMS-01) ──────────────────────────────────────
+  // Every IMS query is `enabled: !!orgId`; without this branch a user with no
+  // org membership would see the misleading "Not synced yet" empty state while
+  // all queries are silently disabled. Render an explicit guidance state with
+  // a CTA to business setup instead. (Placed after all hooks — rules of hooks.)
+
+  if (!orgId) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Pressable
+            style={styles.headerBtn}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.common.back')}
+            hitSlop={8}
+          >
+            <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
+          </Pressable>
+          <Text style={styles.headerTitle}>{t('mobile.gst.ims.nav.title')}</Text>
+          <View style={styles.headerBtn} />
+        </View>
+        <EmptyState
+          icon="business-outline"
+          accentColor={tokens.gstAccent}
+          title={t('mobile.gst.ims.noOrg.title')}
+          body={t('mobile.gst.ims.noOrg.body')}
+          ctaLabel={t('mobile.gst.ims.noOrg.cta')}
+          onCtaPress={() =>
+            navigation.getParent()?.navigate('MoreTab', { screen: 'Profile' })
+          }
+          testID="ims-no-org"
+        />
+      </SafeAreaView>
+    );
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -560,6 +598,8 @@ export function ImsInboxScreen({ navigation, route }: Props) {
           <RefreshControl
             refreshing={listQuery.isRefetching && !listQuery.isFetchingNextPage}
             onRefresh={refetchAll}
+            tintColor={tokens.brand500}
+            colors={[tokens.brand500]}
           />
         }
         showsVerticalScrollIndicator={false}

@@ -36,8 +36,21 @@ public sealed class Gstr1aAmendmentConfiguration : IEntityTypeConfiguration<Gstr
         builder.Property(a => a.CreatedAt).HasColumnName("created_at");
         builder.Property(a => a.UpdatedAt).HasColumnName("updated_at");
         builder.Property(a => a.DeletedAt).HasColumnName("deleted_at");
-        builder.Property(a => a.CreatedBy).HasColumnName("created_by").HasMaxLength(128);
-        builder.Property(a => a.UpdatedBy).HasColumnName("updated_by").HasMaxLength(128);
+
+        // W5-IMS-02 fix: same root cause as ImsInvoiceConfiguration — created_by /
+        // updated_by are character varying(128) in gst.gstr1a_amendments (migration 074),
+        // not uuid. Override the global GuidStringConverter from BaseDbContext with
+        // identity HasConversion<string>() so Npgsql reads them as text.
+        builder.Property(a => a.CreatedBy)
+            .HasColumnName("created_by")
+            .HasMaxLength(128)
+            .HasColumnType("character varying")
+            .HasConversion<string>();
+        builder.Property(a => a.UpdatedBy)
+            .HasColumnName("updated_by")
+            .HasMaxLength(128)
+            .HasColumnType("character varying")
+            .HasConversion<string>();
 
         // Soft-delete filter
         builder.HasQueryFilter(a => a.DeletedAt == null);
