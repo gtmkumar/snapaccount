@@ -28,7 +28,7 @@ function normalizePhone(phone: string | null | undefined): string {
 export function MoreScreen({ navigation }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
-  const { user } = useAuthStore();
+  const { user, currentOrganization } = useAuthStore();
   const { t } = useTranslation();
   const isOwner = user?.userType === 'business_owner';
 
@@ -88,6 +88,33 @@ export function MoreScreen({ navigation }: Props) {
             </View>
           </Pressable>
         </Card>
+
+        {/* GAP-045: current business + organization switcher entry */}
+        {currentOrganization && (
+          <Pressable
+            style={styles.orgCard}
+            onPress={() => navigation.navigate('OrganizationSwitcher')}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.orgSwitcher.entryA11y', {
+              org: currentOrganization.name,
+            })}
+            testID="more-org-switcher"
+          >
+            <View style={styles.orgCardIcon}>
+              <Ionicons name="business-outline" size={22} color={tokens.brand500} />
+            </View>
+            <View style={styles.orgCardInfo}>
+              <Text style={styles.orgCardLabel}>{t('mobile.orgSwitcher.currentLabel')}</Text>
+              <Text style={styles.orgCardName} numberOfLines={1}>
+                {currentOrganization.name}
+              </Text>
+            </View>
+            <View style={styles.orgCardSwitch}>
+              <Ionicons name="swap-horizontal-outline" size={16} color={tokens.brand500} />
+              <Text style={styles.orgCardSwitchText}>{t('mobile.orgSwitcher.switchCta')}</Text>
+            </View>
+          </Pressable>
+        )}
 
         {/* Menu grid */}
         <View style={styles.grid}>
@@ -164,5 +191,41 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     minHeight: 56,
   },
   joinRowText: { flex: 1, fontSize: 15, fontWeight: '600', color: tk.textPrimary },
+  // GAP-045: current business card → OrganizationSwitcher
+  orgCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: tk.raised,
+    borderRadius: 16,
+    padding: 16,
+    minHeight: 56,
+    shadowColor: tk.shadowColor,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  orgCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: tk.brandTint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orgCardInfo: { flex: 1 },
+  orgCardLabel: { fontSize: 11, color: tk.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4 },
+  orgCardName: { fontSize: 15, fontWeight: '700', color: tk.textPrimary, marginTop: 2, letterSpacing: -0.2 },
+  orgCardSwitch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: tk.brandTint,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    minHeight: 44,
+  },
+  orgCardSwitchText: { fontSize: 13, fontWeight: '700', color: tk.brand500 },
   }),
 );

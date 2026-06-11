@@ -1706,6 +1706,18 @@
       "privacyData": "Privacy & Data",
       "privacyDataDesc": "Manage consents & your rights"
     },
+    "orgSwitcher": {
+      "title": "Switch Business",
+      "subtitle": "Choose the business you want to work in. Everything in the app — documents, GST, loans and reports — is scoped to the selected business.",
+      "currentLabel": "Current business",
+      "switchCta": "Switch",
+      "switched": "Switched to {{org}}",
+      "currentA11y": "{{org}}, current business",
+      "switchToA11y": "Switch to {{org}}",
+      "entryA11y": "Current business {{org}}. Open business switcher",
+      "singleOrgNote": "You belong to one business right now. Businesses you create or join by invite will appear here.",
+      "empty": "No businesses found"
+    },
     "kfs": {
       "title": "Key Facts Statement",
       "verified": {

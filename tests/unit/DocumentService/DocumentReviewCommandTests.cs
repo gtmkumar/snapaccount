@@ -34,31 +34,9 @@ using Xunit;
 namespace DocumentService.Tests;
 
 // ────────────────────────────────────────────────────────────────────────────
-// Helpers
+// Helpers — see TestHelpers.cs for FakeCurrentUser, MockDbSetExtensions,
+// InMemoryAsyncQueryProvider, InMemoryAsyncEnumerator (shared across test files)
 // ────────────────────────────────────────────────────────────────────────────
-
-file static class FakeCurrentUser
-{
-    public static ICurrentUser Make(Guid? orgId = null, Guid? userId = null)
-    {
-        var mock = new Mock<ICurrentUser>();
-        mock.Setup(u => u.IsAuthenticated).Returns(true);
-        mock.Setup(u => u.UserId).Returns(userId ?? Guid.NewGuid());
-        mock.Setup(u => u.OrganizationId).Returns(orgId ?? Guid.NewGuid());
-        mock.Setup(u => u.HasPermission(It.IsAny<string>())).Returns(true);
-        mock.Setup(u => u.Permissions).Returns(["document.review", "document.archive"]);
-        mock.Setup(u => u.Roles).Returns([]);
-        return mock.Object;
-    }
-
-    public static ICurrentUser Unauthenticated()
-    {
-        var mock = new Mock<ICurrentUser>();
-        mock.Setup(u => u.IsAuthenticated).Returns(false);
-        mock.Setup(u => u.OrganizationId).Returns((Guid?)null);
-        return mock.Object;
-    }
-}
 
 /// <summary>
 /// Builds Document entities by driving them through domain methods to reach the desired status.
@@ -137,81 +115,6 @@ file static class FakeDocumentDb
 
         return doc;
     }
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Async DbSet mock helpers (list-backed, no custom IAsyncQueryProvider reflection)
-// ────────────────────────────────────────────────────────────────────────────
-
-file static class MockDbSetExtensions
-{
-    /// <summary>
-    /// Builds a Moq <see cref="Microsoft.EntityFrameworkCore.DbSet{T}"/> from a list.
-    /// Supports LINQ + async operations (FirstOrDefaultAsync, etc.) via
-    /// <c>InMemoryAsyncEnumerable</c> which does NOT require reflection over
-    /// <c>IQueryProvider.Execute</c>.
-    /// </summary>
-    public static Microsoft.EntityFrameworkCore.DbSet<T> BuildAsyncDbSetMock<T>(
-        this List<T> source) where T : class
-    {
-        var queryable = source.AsQueryable();
-        var mock = new Mock<Microsoft.EntityFrameworkCore.DbSet<T>>();
-
-        mock.As<IAsyncEnumerable<T>>()
-            .Setup(m => m.GetAsyncEnumerator(It.IsAny<CancellationToken>()))
-            .Returns(new InMemoryAsyncEnumerator<T>(source.GetEnumerator()));
-
-        mock.As<IQueryable<T>>()
-            .Setup(m => m.Provider)
-            .Returns(new InMemoryAsyncQueryProvider<T>(queryable.Provider));
-
-        mock.As<IQueryable<T>>()
-            .Setup(m => m.Expression).Returns(queryable.Expression);
-        mock.As<IQueryable<T>>()
-            .Setup(m => m.ElementType).Returns(queryable.ElementType);
-        mock.As<IQueryable<T>>()
-            .Setup(m => m.GetEnumerator()).Returns(queryable.GetEnumerator());
-
-        return mock.Object;
-    }
-}
-
-/// <summary>Wraps a synchronous <see cref="IQueryProvider"/> so EF Core's async overloads work.</summary>
-file sealed class InMemoryAsyncQueryProvider<T>(IQueryProvider inner)
-    : Microsoft.EntityFrameworkCore.Query.IAsyncQueryProvider
-{
-    public IQueryable CreateQuery(System.Linq.Expressions.Expression expression)
-        => inner.CreateQuery(expression);
-
-    public IQueryable<TElement> CreateQuery<TElement>(System.Linq.Expressions.Expression expression)
-        => inner.CreateQuery<TElement>(expression);
-
-    public object? Execute(System.Linq.Expressions.Expression expression)
-        => inner.Execute(expression);
-
-    public TResult Execute<TResult>(System.Linq.Expressions.Expression expression)
-        => inner.Execute<TResult>(expression);
-
-    public TResult ExecuteAsync<TResult>(
-        System.Linq.Expressions.Expression expression,
-        CancellationToken cancellationToken = default)
-    {
-        // TResult is Task<TEntity> — unwrap the generic argument and call Execute<TEntity>.
-        var elementType = typeof(TResult).GetGenericArguments()[0];
-
-        // Call the strongly-typed Execute<TElement> via dynamic dispatch (avoids reflection ambiguity).
-        dynamic syncResult = Execute<object>(expression)!;
-        // Wrap in Task.
-        return (TResult)(object)Task.FromResult((dynamic)syncResult);
-    }
-}
-
-/// <summary>Async enumerator backed by a synchronous <see cref="IEnumerator{T}"/>.</summary>
-file sealed class InMemoryAsyncEnumerator<T>(IEnumerator<T> inner) : IAsyncEnumerator<T>
-{
-    public T Current => inner.Current;
-    public ValueTask<bool> MoveNextAsync() => ValueTask.FromResult(inner.MoveNext());
-    public ValueTask DisposeAsync() { inner.Dispose(); return ValueTask.CompletedTask; }
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -246,9 +246,10 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
       borderBottomWidth: 1,
       borderBottomColor: tk.border,
     },
+    // P6-QA-MOBILE-09: 44×44pt minimum touch target (was 40×40).
     backBtn: {
-      width: 40,
-      height: 40,
+      width: 44,
+      height: 44,
       borderRadius: 12,
       backgroundColor: tk.sunken,
       alignItems: 'center',
@@ -261,8 +262,8 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
       letterSpacing: -0.2,
     },
     helpBtn: {
-      width: 40,
-      height: 40,
+      width: 44,
+      height: 44,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -356,7 +357,8 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
       paddingVertical: 8,
       borderRadius: 20,
       backgroundColor: tk.sunken,
-      minHeight: 36,
+      // P6-QA-MOBILE-08: 44pt minimum touch target (was 36).
+      minHeight: 44,
       alignItems: 'center',
       justifyContent: 'center',
     },

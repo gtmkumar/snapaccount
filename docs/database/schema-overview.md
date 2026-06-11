@@ -1360,3 +1360,46 @@ Migration **`076_auth_seed_accounting_editlog_read_permission.sql`** seeds the R
 
 - Full chain `000…076` replays clean on a scratch DB; applied to live `snapaccount` under `ON_ERROR_STOP=1` (`INSERT 0 1`, `UPDATE 1`, `INSERT 0 5`); idempotent re-run — all zeros.
 - Confirmed: permission present (`resource_type_id` set, `action_type_id` NULL); non-admin roles **accounts_clerk** and **REVIEWER** now hold `accounting.editlog.read`; grant audience matches `accounting.journal.review` exactly.
+
+---
+
+## Local dev seed — the two seed mechanisms and apply order (GAP-072, Wave 6, 2026-06-11)
+
+A fresh developer environment is seeded by **two independent mechanisms**. Confusing them is the source of most "why is my local DB empty / orphaned" reports.
+
+### 1. LOCAL_AUTH logins — backend runtime seed (NOT SQL)
+The canonical local logins are seeded **at AuthService startup** by `LocalAuthService.EnsureDevAdminAsync` (only when `LOCAL_AUTH=true`), *not* by any file in `database/`. Do **not** add these to SQL — doing so would race/conflict with the backend seeder.
+
+| Login | Password | Role / perms | Org |
+|---|---|---|---|
+| `admin@snapaccount.local`   | `Admin@12345`   | `SUPER_ADMIN`, wildcard `*` (in-code, no DB row) | dev org `11111111-1111-1111-1111-111111111111` |
+| `manager@snapaccount.local` | `Manager@12345` | `DEV_LIMITED_MANAGER`, 7 perms (`org.roles.read/create/update`, `org.permissions.read/grant`, `gst.returns.file`, `document.read`) | same dev org |
+
+All 7 manager permissions and the `SUPER_ADMIN` role already exist in the migrated schema (`036` + later seeds), so the runtime seeder finds them. The dev org `11111111-…` is created by the backend seeder, **not** by `100_dev_users.sql`.
+
+### 2. Business data — SQL dev seed (`database/dev-seed/`)
+Realistic cross-service business data for the admin/mobile UIs lives in `database/dev-seed/`, seeded under a **separate** anchor org/owner so it does not collide with the LOCAL_AUTH dev org:
+
+| File | Seeds | Anchors |
+|---|---|---|
+| `100_dev_users.sql` | 3 `.dev` users + Acme org + owner membership | user `33333333-…`, org `44444444-…` (Acme Trading Co.) |
+| `200_dev_business_data.sql` | loans, GST invoices+ITC (with an intentional ITC mismatch), ITR assessee/filing/grievance, a pending callback, an active subscription, accounting/notification rows | references org `44444444-…`, owner `33333333-…` |
+
+**Apply order:** `…migrations 000→077` → `999_seed_reference_data.sql` → `100_dev_users.sql` → `200_dev_business_data.sql`. All four steps are idempotent (`ON CONFLICT DO NOTHING`); re-running converges to the same state with no duplicate rows.
+
+### Why the cross-service rows are *by value*, not FK
+`loan.applications.org_id`, `gst.gst_invoice.organization_id`, `itr.filings.user_id`, `subscription.subscription.organization_id`, etc. reference `auth.organization` / `auth."user"` **by value with no FK constraint** (schema-per-service isolation). A missing anchor therefore inserts **silently orphaned** rows that no API can resolve — there is no constraint to catch it.
+
+### GAP-072 reconciliation (what changed)
+- The dev-seed SQL was **column-correct** against the `000→077` migrated schema (no column drift). The real drift was **wiring/ordering robustness**:
+  - `200_dev_business_data.sql` now contains a **self-sufficiency guard** that ensures the org/owner/membership anchors exist (mirroring `100_dev_users.sql`) before the business-data inserts. So the file works **standalone** — e.g. when CI's migration-replay applies only the dev seed — *and* chained after `100`, both idempotently. This eliminates the silent-orphan failure mode.
+  - Removed a stray `COMMIT;` (no matching `BEGIN`) at the tail of `999_seed_reference_data.sql` that emitted a harmless `there is no transaction in progress` WARNING on every replay.
+- **Still owed by devops-engineer** (outside `database/` ownership — flagged to orchestrator):
+  - `.github/workflows/ci.yml` migration-replay job references `database/migrations/200_dev_business_data.sql`, but the file lives at `database/dev-seed/200_dev_business_data.sql`; the `[ -f … ]` guard therefore never finds it and the seed is silently skipped (the GAP-072 warning text never even fires). Point CI at `database/dev-seed/100_dev_users.sql` then `…/200_dev_business_data.sql`, and (now that `200` is self-sufficient) flip `|| true` to strict `ON_ERROR_STOP` so seed drift fails the job.
+  - `docker-compose.override.yml` mounts `./database/dev-seed` into a **subdirectory** of `/docker-entrypoint-initdb.d` (`/seed`); the Postgres entrypoint only runs files in the top level of that dir, so the dev seed never auto-applies in the docker path. Mount the files at top level (they sort `100_` before `200_`, after the `00_` extensions script).
+
+### Fresh-setup verification (2026-06-11, PG18 scratch DB + pgvector)
+- Full chain `000→077` replays clean on a brand-new DB under `ON_ERROR_STOP=1`.
+- `999` applies with **zero** warnings (stray COMMIT removed).
+- `200` applied **standalone** (no `100`): RC=0, anchors auto-created, every business row resolves to org `44444444-…` / owner `33333333-…` — no orphans.
+- Canonical chained flow `999 → 100 → 200`, then a full **double re-run** of `100`+`200`: all RC=0, row counts stable (orgs=1, members=1, partner_banks=2, applications=1, subscriptions=1) — idempotent.

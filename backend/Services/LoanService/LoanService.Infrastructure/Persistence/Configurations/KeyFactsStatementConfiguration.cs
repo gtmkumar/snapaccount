@@ -33,6 +33,8 @@ public class KeyFactsStatementConfiguration : IEntityTypeConfiguration<KeyFactsS
         builder.Property(k => k.HmacSignature).HasColumnName("hmac_signature").HasMaxLength(500);
         builder.Property(k => k.GeneratedAt).HasColumnName("generated_at");
         builder.Property(k => k.AcknowledgedAt).HasColumnName("acknowledged_at");
+        // NEW-D10: locale column added by migration 079. VARCHAR(10) NOT NULL DEFAULT 'en'.
+        builder.Property(k => k.Locale).HasColumnName("locale").HasMaxLength(10).HasDefaultValue("en");
         builder.Property(k => k.CreatedAt).HasColumnName("created_at");
         builder.Property(k => k.UpdatedAt).HasColumnName("updated_at");
         builder.Property(k => k.DeletedAt).HasColumnName("deleted_at");

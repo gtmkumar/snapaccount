@@ -231,4 +231,34 @@ public sealed class GstEfModelSmokeTests
         await act.Should().NotThrowAsync(
             "EF mapping for gst.gstr1a_amendments must be correct (migration 074, W5-IMS-02 fix)");
     }
+
+    // ── GAP-022: GstTaxRates (Wave 6, migration 078) ──────────────────────
+
+    [Fact]
+    public async Task GstTaxRates_CanQuery_WithoutError()
+    {
+        using var db = CreateDbContext();
+        // Full projection — catches EF↔DB column mapping errors (house rule: avoid AnyAsync).
+        var act = async () => await db.GstTaxRates
+            .Select(r => new
+            {
+                r.Id,
+                r.RateName,
+                r.RatePct,
+                r.CgstPct,
+                r.SgstPct,
+                r.IgstPct,
+                r.CessPct,
+                r.ValidFrom,
+                r.ValidTo,
+                r.IsActive,
+                r.Notes,
+                r.CreatedAt,
+                r.UpdatedAt,
+                r.DeletedAt
+            })
+            .ToListAsync();
+        await act.Should().NotThrowAsync(
+            "EF mapping for gst.gst_tax_rate must be correct (GAP-022, migration 078)");
+    }
 }

@@ -14,6 +14,7 @@ using SubscriptionService.Application.Subscriptions.Commands.UpgradeSubscription
 using SubscriptionService.Application.Subscriptions.Queries.GetMrrDashboard;
 using SubscriptionService.Application.Subscriptions.Queries.GetSubscription;
 using SubscriptionService.Application.Subscriptions.Queries.ListInvoices;
+using SubscriptionService.Application.Subscriptions.Queries.ListSubscribers;
 using SubscriptionService.Domain.Enums;
 
 namespace SubscriptionService.Api.Endpoints;
@@ -121,6 +122,15 @@ public sealed class Subscriptions : EndpointGroupBase
             .RequireRateLimiting("standard")
             .WithName("GetMrrDashboard")
             .WithSummary("MRR dashboard. Requires subscription.plan.create permission.");
+
+        // GET /subscriptions/admin/list — platform-admin subscriber list (paginated)
+        // GAP-036: admin subscriber management page (SubscriberListPage.tsx)
+        g.MapGet("/admin/list", ListSubscribers)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("ListSubscribers")
+            .WithSummary("Platform-admin paginated subscriber list with plan tier, status, MRR, renewal date. " +
+                         "Requires subscription.plan.create permission.");
 
         // GAP-034: PATCH /subscriptions/config/razorpay — admin-configured Razorpay credentials
         g.MapMethods("/config/razorpay", ["PATCH"], PatchRazorpayConfig)
@@ -242,6 +252,14 @@ public sealed class Subscriptions : EndpointGroupBase
         return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
     }
 
+    private static async Task<IResult> ListSubscribers(
+        [AsParameters] SubscriberListParams p, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new ListSubscribersQuery(p.Page, p.PageSize, p.Status, p.Tier), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+    }
+
     private static async Task<IResult> PatchRazorpayConfig(
         PatchRazorpayConfigRequest req, ISender sender, CancellationToken ct)
     {
@@ -304,3 +322,10 @@ internal record RecordPaymentRequest(
     DateTime NewPeriodEnd);
 
 internal record PageParams(int Page = 1, int PageSize = 20);
+
+/// <summary>Query parameters for GET /subscriptions/admin/list.</summary>
+internal record SubscriberListParams(
+    int Page = 1,
+    int PageSize = 25,
+    string? Status = null,
+    string? Tier = null);

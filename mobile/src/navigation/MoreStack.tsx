@@ -19,6 +19,8 @@ import { BillingScreen } from '../screens/profile/BillingScreen';
 import { HelpScreen } from '../screens/profile/HelpScreen';
 import { EditBusinessScreen } from '../screens/profile/EditBusinessScreen';
 import { MyConsentsScreen } from '../screens/profile/MyConsentsScreen';
+// GAP-045: multi-organization switcher (More tab entry)
+import { OrganizationSwitcherScreen } from '../screens/profile/OrganizationSwitcherScreen';
 import { DataExportScreen } from '../screens/profile/DataExportScreen';
 import { CorrectionRequestScreen } from '../screens/profile/CorrectionRequestScreen';
 import { MyCorrectionsScreen } from '../screens/profile/MyCorrectionsScreen';
@@ -69,6 +71,8 @@ export type MoreStackParamList = {
   Help: undefined;
   /** Edit business details (GET/PATCH /auth/org/settings) */
   EditBusiness: undefined;
+  /** GAP-045: switch between organizations the user belongs to */
+  OrganizationSwitcher: undefined;
 };
 
 const Stack = createNativeStackNavigator<MoreStackParamList>();
@@ -85,6 +89,7 @@ const SafeDpoContactScreen = withScreenErrorBoundary(DpoContactScreen);
 const SafeBillingScreen = withScreenErrorBoundary(BillingScreen);
 const SafeHelpScreen = withScreenErrorBoundary(HelpScreen);
 const SafeEditBusinessScreen = withScreenErrorBoundary(EditBusinessScreen);
+const SafeOrganizationSwitcherScreen = withScreenErrorBoundary(OrganizationSwitcherScreen);
 
 export function MoreStack() {
   return (
@@ -120,6 +125,8 @@ export function MoreStack() {
       <Stack.Screen name="Billing" component={SafeBillingScreen} />
       <Stack.Screen name="Help" component={SafeHelpScreen} />
       <Stack.Screen name="EditBusiness" component={SafeEditBusinessScreen} />
+      {/* GAP-045: multi-organization switcher */}
+      <Stack.Screen name="OrganizationSwitcher" component={SafeOrganizationSwitcherScreen} />
     </Stack.Navigator>
   );
 }

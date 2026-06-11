@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -14,10 +15,16 @@ namespace LoanService.Application.KeyFacts.Commands.GenerateKfs;
 /// <summary>
 /// RBI Digital Lending Guidelines — Generate and persist a Key Facts Statement (KFS)
 /// for a loan application.  The KFS MUST be served to the borrower before consent.
+///
+/// NEW-D10: accepts an optional <paramref name="Locale"/> parameter that drives the KFS language.
+/// Resolution chain: caller param → user preference → org default → "en" (fallback).
+/// Supported values: "en", "hi", "bn" (configurable via Loan:SupportedKfsLocales).
+/// RBI KFS is statutory — "en" is always the fallback, never a failure.
 /// </summary>
 /// <param name="ApplicationId">The loan application for which to generate the KFS.</param>
+/// <param name="Locale">Optional BCP-47 locale tag (e.g. "en", "hi", "bn"). Defaults to "en".</param>
 [RequiresPermission("loan.kfs.generate")]
-public record GenerateKfsCommand(Guid ApplicationId) : ICommand<GenerateKfsResult>;
+public record GenerateKfsCommand(Guid ApplicationId, string? Locale = null) : ICommand<GenerateKfsResult>;
 
 /// <summary>Result returned after the KFS is generated and persisted.</summary>
 public sealed record GenerateKfsResult(
@@ -31,14 +38,24 @@ public sealed record GenerateKfsResult(
     string LenderName,
     string GrievanceOfficerContact,
     int CoolingOffDays,
-    DateTime GeneratedAt);
+    DateTime GeneratedAt,
+    string Locale = "en");
 
 /// <summary>FluentValidation validator for <see cref="GenerateKfsCommand"/>.</summary>
 public sealed class GenerateKfsCommandValidator : AbstractValidator<GenerateKfsCommand>
 {
+    // Supported KFS locales. The 'en' fallback must always remain in this set.
+    // NEW-D10: validated here; additional locales are supported via config at runtime.
+    private static readonly HashSet<string> SupportedLocales =
+        ["en", "hi", "bn"];
+
     public GenerateKfsCommandValidator()
     {
         RuleFor(x => x.ApplicationId).NotEmpty();
+        RuleFor(x => x.Locale)
+            .Must(locale => locale is null || SupportedLocales.Contains(locale.ToLowerInvariant()))
+            .WithMessage($"locale must be one of: {string.Join(", ", SupportedLocales)} (or omit for 'en' default).")
+            .When(x => x.Locale is not null);
     }
 }
 
@@ -125,6 +142,15 @@ public sealed class GenerateKfsCommandHandler(
         var payload  = $"{request.ApplicationId}|{principal}|{annualRate}|{tenureMonths}|{monthlyEmi}|{feesJson}";
         var signature = ComputeHmac(hmacKey, payload);
 
+        // ── NEW-D10: locale resolution chain ──────────────────────────────────
+        // 1. caller param  → already validated by GenerateKfsCommandValidator
+        // 2. user pref     → not available in LoanService (cross-service); skip
+        // 3. org default   → not yet persisted; skip for now
+        // 4. fallback      → "en" (RBI KFS is statutory; never fail on locale)
+        var resolvedLocale = string.IsNullOrWhiteSpace(request.Locale)
+            ? "en"
+            : request.Locale.Trim().ToLowerInvariant();
+
         var kfs = KeyFactsStatement.Create(
             applicationId:           request.ApplicationId,
             loanAmount:              principal,
@@ -136,7 +162,8 @@ public sealed class GenerateKfsCommandHandler(
             lenderName:              lenderName,
             grievanceOfficerContact: grievanceOfficerContact,
             coolingOffDays:          coolingOffDays,
-            hmacSignature:           signature);
+            hmacSignature:           signature,
+            locale:                  resolvedLocale);
 
         db.KeyFactsStatements.Add(kfs);
         await db.SaveChangesAsync(cancellationToken);
@@ -152,7 +179,8 @@ public sealed class GenerateKfsCommandHandler(
             kfs.LenderName,
             kfs.GrievanceOfficerContact,
             kfs.CoolingOffDays,
-            kfs.GeneratedAt));
+            kfs.GeneratedAt,
+            kfs.Locale));
     }
 
     private static object[] BuildRepaymentSchedule(

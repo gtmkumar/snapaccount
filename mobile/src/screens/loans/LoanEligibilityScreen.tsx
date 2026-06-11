@@ -128,7 +128,7 @@ export function LoanEligibilityScreen({ navigation }: Props) {
             <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
           </Pressable>
           <Text style={styles.headerTitle}>{t('mobile.loan.eligibility.title')}</Text>
-          <View style={{ width: 40 }} />
+          <View style={{ width: 44 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -272,7 +272,7 @@ export function LoanEligibilityScreen({ navigation }: Props) {
           <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.loan.eligibility.title')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -464,9 +464,10 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     borderBottomWidth: 1,
     borderBottomColor: tk.border,
   },
+  // P6-QA-MOBILE-09: 44×44pt minimum touch target (was 40×40).
   backBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     backgroundColor: tk.sunken,
     alignItems: 'center',

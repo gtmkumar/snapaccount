@@ -496,13 +496,21 @@ export async function recordLoanConsent(
  * Generate (or regenerate) a Key Facts Statement for a loan application.
  * Requires loan.kfs.generate permission.
  * POST /loans/applications/{id}/kfs
+ *
+ * NEW-D10: `locale` is passed as an explicit query param so the statutory KFS
+ * is rendered in the language the user is reading the app in. Server-side
+ * resolution order (docs/api/endpoints.md "KFS Locale Resolution"): caller
+ * param → user preference → org default → "en". Omitting it falls back to the
+ * server chain, so this stays backward-compatible.
  */
 export async function generateKfs(
   applicationId: string,
+  locale?: string,
 ): Promise<GenerateKfsResponse> {
-  const res = await apiClient.post<GenerateKfsResponse>(
-    `/loans/applications/${applicationId}/kfs`,
-  );
+  const url = `/loans/applications/${applicationId}/kfs`;
+  const res = locale
+    ? await apiClient.post<GenerateKfsResponse>(url, undefined, { params: { locale } })
+    : await apiClient.post<GenerateKfsResponse>(url);
   return res.data;
 }
 
@@ -510,10 +518,18 @@ export async function generateKfs(
  * Retrieve the most recent KFS for a loan application.
  * Returns null (404 mapped) if no KFS has been generated yet.
  * GET /loans/applications/{id}/kfs
+ *
+ * NEW-D10: `locale` query param — see generateKfs() for resolution rules.
  */
-export async function getKfs(applicationId: string): Promise<KfsParsed | null> {
+export async function getKfs(
+  applicationId: string,
+  locale?: string,
+): Promise<KfsParsed | null> {
   try {
-    const res = await apiClient.get<KfsDto>(`/loans/applications/${applicationId}/kfs`);
+    const url = `/loans/applications/${applicationId}/kfs`;
+    const res = locale
+      ? await apiClient.get<KfsDto>(url, { params: { locale } })
+      : await apiClient.get<KfsDto>(url);
     const dto = res.data;
 
     let fees: KfsFee[] = [];
@@ -572,6 +588,12 @@ export interface ConsentCatalogEntry {
    * Backend increments this when legal body changes.
    */
   textVersion: string;
+  /**
+   * NEW-D10: BCP-47 locale of the catalog entry (e.g. "en", "hi", "bn").
+   * Matches loan.consent_catalog.locale (migration 061 seeded hi/bn variants).
+   * Optional for back-compat with responses that pre-date the locale column.
+   */
+  locale?: string;
   /** ISO-8601 date the version was published */
   effectiveDate: string;
 }
@@ -584,12 +606,16 @@ export interface ConsentCatalogResponse {
  * Fetch the current consent version catalog from backend.
  * SEC-050: replaces the hardcoded CONSENT_VERSION = '1.4' constant.
  *
- * P6-HANDOFF-25: GET /loans/consents/catalog endpoint must be implemented
- * by backend-agent. Until then, this throws a 404 and the screen falls back
- * to the FALLBACK_CONSENT_VERSION constant.
+ * NEW-D10: pass the active UI locale so the catalog returns the hi/bn text
+ * versions seeded by migration 061. Backend filters exactly by locale and
+ * defaults to "en" when the param is omitted.
  */
-export async function getConsentCatalog(): Promise<ConsentCatalogResponse> {
-  const res = await apiClient.get<ConsentCatalogResponse>('/loans/consents/catalog');
+export async function getConsentCatalog(locale?: string): Promise<ConsentCatalogResponse> {
+  const res = locale
+    ? await apiClient.get<ConsentCatalogResponse>('/loans/consents/catalog', {
+        params: { locale },
+      })
+    : await apiClient.get<ConsentCatalogResponse>('/loans/consents/catalog');
   return res.data;
 }
 

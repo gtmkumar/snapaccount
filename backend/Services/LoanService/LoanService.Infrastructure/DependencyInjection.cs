@@ -105,8 +105,31 @@ public static class DependencyInjection
         // GCS for loan packages (ILoanStorageService — avoids collision with Shared.Infrastructure.ICloudStorageService)
         services.AddSingleton<ILoanStorageService, GoogleCloudStorageServiceAdapter>();
 
-        // Loan PDF generator (stub — fully implemented in ReportService.Infrastructure)
-        services.AddScoped<ILoanPdfGenerator, StubLoanPdfGenerator>();
+        // GAP-041: Loan PDF generator — stub is Development-only.
+        // Non-Development environments must wire the real QuestPDF generator via ReportService.
+        // Fail-fast if the stub would be used outside Development, so the gap surfaces at startup
+        // rather than silently emitting placeholder PDFs into bank submissions.
+        var isDevelopment = string.Equals(
+            configuration["ASPNETCORE_ENVIRONMENT"], "Development",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (isDevelopment)
+        {
+            services.AddScoped<ILoanPdfGenerator, StubLoanPdfGenerator>();
+        }
+        else
+        {
+            // Production/Staging: fail-fast if a real ILoanPdfGenerator is not already registered.
+            // In the current architecture the real PDF is generated via ReportService HTTP call;
+            // GeneratePackageCommandHandler must be updated to call that endpoint and this
+            // registration should be replaced with the HTTP-backed adapter once shipped.
+            // Until then throw at startup so the misconfiguration is immediately visible.
+            services.AddScoped<ILoanPdfGenerator>(_ =>
+                throw new InvalidOperationException(
+                    "GAP-041: ILoanPdfGenerator is not configured for non-Development environments. " +
+                    "Wire the real QuestPDF generator via ReportService before deploying. " +
+                    "Set ASPNETCORE_ENVIRONMENT=Development to use the stub locally."));
+        }
 
         // SEC-007: Cross-service events via Pub/Sub (ILoanEventPublisher — avoids collision with Shared.Infrastructure.IPubSubPublisher)
         services.AddSingleton<ILoanEventPublisher, GooglePubSubPublisherAdapter>();

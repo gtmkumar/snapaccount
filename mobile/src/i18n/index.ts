@@ -10,6 +10,19 @@ import en from './en.json';
 import hi from './hi.json';
 import bn from './bn.json';
 
+import { normalizeLocale, type SupportedLocale } from './locale';
+
+export { SUPPORTED_LOCALES, normalizeLocale, type SupportedLocale } from './locale';
+
+/**
+ * NEW-D10: The active UI locale, normalised to a supported base tag
+ * (see ./locale.ts for the resolution rationale). Screens with a mocked
+ * react-i18next should prefer `normalizeLocale(useTranslation().i18n.language)`.
+ */
+export function getActiveLocale(): SupportedLocale {
+  return normalizeLocale(i18n.language);
+}
+
 i18n
   .use(initReactI18next)
   .init({

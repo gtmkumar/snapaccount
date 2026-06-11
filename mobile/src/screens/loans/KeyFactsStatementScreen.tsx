@@ -42,6 +42,7 @@ import {
 } from '../../contexts/ThemeContext';
 import { getKfs, generateKfs } from '../../api/loans';
 import type { KfsParsed, KfsInstalment, KfsFee } from '../../api/loans';
+import { normalizeLocale } from '../../i18n/locale';
 import { ScrollHintBanner } from '../../components/loans/ScrollHintBanner';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { useScreenReaderEnabled } from '../../hooks/useScreenReaderEnabled';
@@ -99,7 +100,7 @@ function extractEmail(contact: string): string | null {
 
 export function KeyFactsStatementScreen({ navigation, route }: Props) {
   useSensitiveScreen();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { tokens } = useTheme();
   const styles = useStyles();
   const { applicationId } = route.params;
@@ -127,6 +128,10 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
     });
   }, [t]);
 
+  // NEW-D10: statutory KFS must be requested in the language the user is
+  // reading the app in (server resolution: param → user pref → org default → en).
+  const activeLocale = normalizeLocale(i18n.language);
+
   // Fetch KFS
   const {
     data: kfs,
@@ -135,8 +140,8 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
     refetch,
     isRefetching,
   } = useQuery<KfsParsed | null>({
-    queryKey: ['kfs', applicationId],
-    queryFn: () => getKfs(applicationId),
+    queryKey: ['kfs', applicationId, activeLocale],
+    queryFn: () => getKfs(applicationId, activeLocale),
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
@@ -148,7 +153,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
 
   // Generate KFS (used when 404 — no KFS yet)
   const generateMutation = useMutation({
-    mutationFn: () => generateKfs(applicationId),
+    mutationFn: () => generateKfs(applicationId, activeLocale),
     onSuccess: () => { void refetch(); },
     onError: (err: unknown) => {
       // NEW-W2-005: structured logging instead of bare console.warn.
@@ -638,9 +643,10 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
       borderBottomWidth: 1,
       borderBottomColor: tk.border,
     },
+    // P6-QA-MOBILE-09: 44×44pt minimum touch target (was 40×40).
     backBtn: {
-      width: 40,
-      height: 40,
+      width: 44,
+      height: 44,
       borderRadius: 12,
       backgroundColor: tk.sunken,
       alignItems: 'center',

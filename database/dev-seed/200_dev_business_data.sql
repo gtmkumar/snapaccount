@@ -26,6 +26,53 @@
 -- user_id = '33333333-3333-3333-3333-333333333333'  (Acme owner)
 
 -- ──────────────────────────────────────────────────────────────────────────
+-- SELF-SUFFICIENCY GUARD (GAP-072 reconciliation)
+-- ──────────────────────────────────────────────────────────────────────────
+-- The cross-service business tables below reference auth.organization /
+-- auth."user" BY VALUE (schema-per-service isolation → no FK constraint), so a
+-- missing anchor would silently insert ORPHANED rows that no API can resolve.
+-- 100_dev_users.sql is the canonical anchor seed, but this file must also work
+-- standalone (CI's migration-replay applies the dev seed on its own). We
+-- therefore ensure the org + owner + membership anchors exist here too, exactly
+-- mirroring 100_dev_users.sql. Idempotent (ON CONFLICT DO NOTHING) — re-running
+-- 100 then 200, or 200 alone, both converge to the same state.
+INSERT INTO auth."user"
+    (id, firebase_uid, phone_number, email, full_name,
+     is_phone_verified, is_email_verified, is_active, preferred_language,
+     created_at, updated_at)
+VALUES
+    ('33333333-3333-3333-3333-333333333333',
+     'dev-owner-uid', '+919999900003', 'owner@acme.dev', 'Acme Owner',
+     TRUE, TRUE, TRUE, 'en', NOW(), NOW())
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO auth.organization
+    (id, owner_user_id, business_name, gstin, pan_number,
+     business_type, industry_type, annual_turnover_inr,
+     address_line1, city, state, pincode, country,
+     is_gst_registered, is_msme_registered, is_active,
+     created_at, updated_at)
+VALUES
+    ('44444444-4444-4444-4444-444444444444',
+     '33333333-3333-3333-3333-333333333333',
+     'Acme Trading Co.', '27AABCU9603R1ZX', 'AABCU9603R',
+     'Private Limited', 'Retail Trade', 25000000,
+     '123 MG Road', 'Mumbai', 'Maharashtra', '400001', 'India',
+     TRUE, TRUE, TRUE, NOW(), NOW())
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO auth.organization_member
+    (id, organization_id, user_id, role_id, is_active, created_at, updated_at)
+SELECT
+    '45555555-5555-5555-5555-555555555555',
+    '44444444-4444-4444-4444-444444444444',
+    '33333333-3333-3333-3333-333333333333',
+    (SELECT id FROM auth.role WHERE name = 'ORG_ADMIN' AND organization_id IS NULL LIMIT 1),
+    TRUE, NOW(), NOW()
+WHERE EXISTS (SELECT 1 FROM auth.role WHERE name = 'ORG_ADMIN' AND organization_id IS NULL)
+ON CONFLICT (id) DO NOTHING;
+
+-- ──────────────────────────────────────────────────────────────────────────
 -- LOANS — partner banks, products, and an application
 -- ──────────────────────────────────────────────────────────────────────────
 -- Schema (migration 028): column is `name` (not bank_name); `adapter_type` (enum

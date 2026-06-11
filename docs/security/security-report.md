@@ -37,6 +37,9 @@
 | SEC-AI-02 Remediation Pass 2 + Final Gate (2026-06-11) | 0 | 0 | 0 | 1 | 0 | Complete — **GO** (all RV-03/RV-01/RV-02/M-01/L-03/L-04/I-02 fixed; FG-01 LOW new; 2 CONDITIONS tracked) |
 | **Total (Phases 4–SEC-AI-02 final gate)** | **4** | **26** | **37** | **21** | **19** | — |
 | **Total open (pre-prod blockers)** | **0** | **2** (NEW-002, M1-R-001) | **9** (prior deferred + M1-R-002 + I1.1-001 + I1.3-002) | **10** (prior deferred + M1-R-003 + I1.1-002 + I1.3-003 + I1.4A-001 + FG-01 cancel-leak) | **9** (prior INFO) | SEC-AI-02 final gate: **GO** |
+| Wave 6 — GAP-106 PCI Scope + GAP-025 VAPT Plan (2026-06-11) | 0 | 0 | 0 | 2 | 3 | Complete — **GO** (2 LOW new: GAP-PCI-01, GAP-PCI-02; 3 INFO new: GAP-PCI-03, GAP-PCI-04, dead VerifyWebhookSignature) |
+| **Total (Phases 4–Wave 6)** | **4** | **26** | **37** | **23** | **22** | — |
+| **Total open (pre-prod blockers)** | **0** | **2** (NEW-002, M1-R-001) | **9** (unchanged) | **12** (+ GAP-PCI-01, GAP-PCI-02) | **12** (+ GAP-PCI-03, GAP-PCI-04, dead VerifyWebhookSignature) | Wave 6: **GO** |
 
 ---
 
@@ -2876,3 +2879,100 @@ All four focus areas pass. The write-endpoint gating is correctly implemented �
 I1.4A-001 (LOW) is the only substantive finding: the `_ => 0` default in `CountUsagesAsync` would silently allow deletion of a future category without an in-use check. The recommended fix is to replace the default with an `InvalidOperationException` so that category additions that omit the guard produce a loud failure at test time. This does not block the current increment.
 
 *Increment 1.4 Phase A review completed: 2026-05-29*
+
+---
+
+## Wave 6 — GAP-106 PCI Scope + GAP-025 VAPT Plan Security Review
+
+**Scope:** Razorpay integration (SubscriptionService backend + mobile BillingScreen + admin PaymentGatewaySettings); PCI-DSS SAQ A boundary verification; VAPT plan authoring (all 12 services, admin, mobile, AI surface). Code-verified against branch `2026-06-10-s5t4`.
+**Review Date:** 2026-06-11
+**Reviewer:** security-reviewer agent
+**Deliverables:** `docs/security/pci-scope.md`, `docs/security/vapt-plan.md`
+
+---
+
+### Findings
+
+#### [LOW] GAP-PCI-01: `IRazorpayClient.VerifyWebhookSignature` Uses Non-Constant-Time Comparison — Dead Code With Dangerous Implementation
+
+- **File:** `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/Razorpay/RazorpayHttpClient.cs`
+- **Line:** 154–160
+- **Description:** The `VerifyWebhookSignature` method on the production `RazorpayHttpClient` compares HMAC-SHA256 signatures using `string.Equals(computed64, signature, StringComparison.OrdinalIgnoreCase)`. This is a non-constant-time comparison that is susceptible to timing attacks. However, this method is **not called from any production code path** — the webhook endpoint (`RazorpayWebhook.cs`) implements its own private static `VerifyHmac()` method that correctly uses `CryptographicOperations.FixedTimeEquals`. The `VerifyWebhookSignature` method exists on the `IRazorpayClient` interface (confirmed at `SubscriptionService.Application/Common/Interfaces/IRazorpayClient.cs:50`) and is implemented in both `RazorpayHttpClient` and `MockRazorpayClient`, but no code in the `Application` or `Api` layer calls it. The risk is that a future refactor that routes webhook verification through `IRazorpayClient` would silently introduce a timing vulnerability.
+- **Recommended Fix:** Remove `VerifyWebhookSignature` from the `IRazorpayClient` interface and from both implementations. Webhook signature verification is a transport-layer concern that belongs exclusively in `RazorpayWebhook.cs`. This avoids having two divergent implementations of the same security-critical operation.
+- **Reference:** CWE-208 (Observable Timing Discrepancy); OWASP Cryptographic Failures
+
+---
+
+#### [LOW] GAP-PCI-02: No Startup Guard Preventing MockRazorpayClient in Production
+
+- **File:** `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/DependencyInjection.cs`
+- **Line:** 64
+- **Description:** `MockRazorpayClient` is registered unconditionally as the `IRazorpayClient` implementation: `services.AddScoped<IRazorpayClient, MockRazorpayClient>()`. The real `RazorpayHttpClient` is only registered when an admin calls `PATCH /subscriptions/config/razorpay` (via `UpdateRazorpayConfigCommand`). There is no startup-time validation that fails or warns if the service is deployed to a non-Development environment without a live `RazorpayConfig` row. The `AesCredentialEncryptionService` correctly throws `InvalidOperationException` on startup if `ENCRYPTION_KEY` is absent — the same defensive pattern should apply here. With the mock active, all subscription create/renew operations return `mock_order_*` / `mock_sub_*` IDs without charging users, silently appearing successful.
+- **Recommended Fix:** On startup in non-Development environments, perform a database check (or at minimum a config-layer check) for a `RazorpayConfig` row with `IsEnabled = true` and `TestMode = false`. If absent, log a `LogWarning` with a clear message. For hard enforcement, add a `IHostedService` startup check that writes a health-check failure. Also consider throwing in `MockRazorpayClient.CreateOrderAsync` when `ASPNETCORE_ENVIRONMENT != Development` to provide a loud failure mode.
+- **Reference:** CWE-654 (Reliance on a Single Factor in a Security Decision); OWASP Security Misconfiguration
+
+---
+
+#### [INFO] GAP-PCI-03: Admin PaymentGatewaySettings Save Button Not Wired to API
+
+- **File:** `src/admin/src/pages/settings/sections/PaymentGatewaySettings.tsx`
+- **Line:** 247
+- **Description:** The "Save Payment Settings" button calls `toast.success('Payment settings saved (local only — API endpoint pending)')` and does not make an API call to `PATCH /subscriptions/config/razorpay`. The backend endpoint is fully implemented, secured (`subscription.config.write` permission via `[RequiresPermission]`), and validated. The frontend-only stub means an operator cannot configure live Razorpay credentials through the admin panel and must use a direct API call. The file header comment acknowledges this: "TODO: Wire to API when SubscriptionService exposes PATCH /subscriptions/config/razorpay". Note: the endpoint does exist (it was wired in Wave 2 as part of GAP-034).
+- **Risk:** Operational rather than security — the backend endpoint is protected. However, an operator believing the UI is functional might assume credentials are saved when they are not.
+- **Note:** Already tracked as a frontend-dev task in Wave 6 triage (Batch F). Recording here for PCI completeness as this is the credential management interface.
+
+---
+
+#### [INFO] GAP-PCI-04: Razorpay TPSP Annual Certification Review Not Documented
+
+- **File:** No file — gap in compliance documentation.
+- **Description:** PCI-DSS v4.0 Requirement 12.8.4 requires organizations to monitor the PCI-DSS compliance status of third-party service providers at least once every 12 months. Razorpay holds PCI-DSS Level 1 certification, but no formal TPSP register or annual review record exists in `docs/`. Before the first production billing transaction, a compliance record must be established.
+- **Recommended Fix:** Create `docs/compliance/tpsp-register.md` listing Razorpay (and other relevant third-party processors) with their current AOC (Attestation of Compliance) reference, certification expiry date, and last-reviewed date. Schedule annual review. Devops/compliance owner required.
+
+---
+
+#### [INFO] GAP-PCI-05: `VerifyHmac` Compares UTF-8 Hex String Bytes Rather Than Decoded Binary Bytes
+
+- **File:** `backend/Services/SubscriptionService/SubscriptionService.Api/Endpoints/RazorpayWebhook.cs`
+- **Line:** 116–140
+- **Description:** This was previously documented as NEW-001 (MEDIUM) in Phase 5. Recording here for traceability. The production webhook `VerifyHmac` static method converts both the computed hash and the received signature to their UTF-8 byte representations as hex strings, then compares using `CryptographicOperations.FixedTimeEquals`. Both sides are lowercased before comparison. The comparison is functionally correct and timing-safe when both sides are valid lowercase hex strings of equal length. The method's `try/catch` at line 137 handles malformed (non-hex) signatures by returning `false`. The remaining theoretical risk (length-mismatch early exit before constant-time comparison) is present but the 503 path (missing secret) exits before the comparison in the likely misconfiguration scenario. Status: DEFERRED (recorded in Phase 5 as medium-priority fix before production).
+- **Recommended Fix:** Decode both hex strings to `byte[]` before comparison: `CryptographicOperations.FixedTimeEquals(Convert.FromHexString(computedHex), Convert.FromHexString(signature.ToLowerInvariant()))`. Wrap in try/catch for `FormatException`.
+
+---
+
+### Verification Evidence — Razorpay PCI Scope (GAP-106)
+
+The following evidence was gathered from the codebase to establish the SAQ A boundary:
+
+| Claim | Evidence | File/Line |
+|---|---|---|
+| No card-entry form in mobile app | No `react-native-razorpay` in `mobile/package.json`; `BillingScreen.tsx` shows plan/invoices only | `mobile/src/screens/profile/BillingScreen.tsx` |
+| No card-entry form in admin frontend | No Razorpay JS SDK in `src/admin/package.json`; `PaymentGatewaySettings.tsx` collects only API keys | `src/admin/src/pages/settings/sections/PaymentGatewaySettings.tsx` |
+| Card PAN (payment) never stored | All "PAN" references in codebase are Indian tax PAN (format XXXXX9999X); grep for `card.*number|cvv|credit.*card` in backend source produces zero application-code results | Grep verified 2026-06-11 |
+| Webhook uses HTTPS and HMAC-SHA256 | `RazorpayHttpClient` uses `https://api.razorpay.com/v1/`; `RazorpayWebhook.cs` implements HMAC-SHA256 with FixedTimeEquals | `RazorpayHttpClient.cs:61`, `RazorpayWebhook.cs:116-140` |
+| API key secret encrypted at rest | `AesCredentialEncryptionService` uses AES-256-GCM; `RazorpayConfig.EncryptedKeySecret` stores only ciphertext | `AesCredentialEncryptionService.cs:37-53`, `RazorpayConfig.cs:21` |
+| `subscription.config.write` gates credential write | `[RequiresPermission("subscription.config.write")]` on `UpdateRazorpayConfigCommand` | `UpdateRazorpayConfigCommand.cs:18` |
+| Webhook endpoint is not behind Firebase Auth | `.AllowAnonymous()` explicitly set; `VerifyHmac` replaces JWT auth | `RazorpayWebhook.cs:34` |
+| Idempotency deduplication in place | `IDistributedCache` keyed on `X-Razorpay-Event-Id`, TTL 24h | `RazorpayWebhook.cs:77-93` |
+
+---
+
+### Wave 6 Summary
+
+| Severity | Count | Finding IDs |
+|----------|-------|-------------|
+| CRITICAL | 0 | — |
+| HIGH | 0 | — |
+| MEDIUM | 0 | — |
+| LOW | 2 | GAP-PCI-01, GAP-PCI-02 |
+| INFO | 3 | GAP-PCI-03, GAP-PCI-04, GAP-PCI-05 |
+
+**GATE VERDICT: GO**
+
+SnapAccount correctly implements the SAQ A boundary for PCI-DSS. Card data never enters, transits, or is stored within SnapAccount systems. The Razorpay integration is server-to-server (API keys + webhook only); no card-capture SDK is embedded. The two LOW findings (GAP-PCI-01 dead code with non-constant-time comparison; GAP-PCI-02 no startup guard for mock client) are pre-production hygiene items that do not affect the current SAQ A eligibility claim but must be resolved before go-live. The three INFO items are operational/compliance documentation gaps.
+
+Deliverables written:
+- `docs/security/pci-scope.md` — PCI-DSS SAQ A scope statement, boundary verification, guardrails, and conditions.
+- `docs/security/vapt-plan.md` — VAPT methodology, 12-target prioritized test list, ASVS/MASVS mapping, prerequisites, escalation rules, and remediation SLAs.
+
+*Wave 6 review completed: 2026-06-11*

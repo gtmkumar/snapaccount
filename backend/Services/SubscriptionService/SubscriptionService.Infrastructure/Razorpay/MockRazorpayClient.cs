@@ -70,11 +70,6 @@ public sealed class MockRazorpayClient(ILogger<MockRazorpayClient> logger) : IRa
             Interval:            interval));
     }
 
-    /// <inheritdoc />
-    public bool VerifyWebhookSignature(string payload, string signature, string secret)
-    {
-        // Always return true in mock mode so tests do not need to compute real signatures.
-        logger.LogWarning("MockRazorpayClient: VerifyWebhookSignature always returns true in mock mode.");
-        return true;
-    }
+    // GAP-PCI-01: VerifyWebhookSignature removed from the interface.
+    // Webhook signature verification is performed in the endpoint (constant-time HMAC).
 }

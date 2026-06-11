@@ -1,8 +1,7 @@
 /**
  * CallbackKpiPage — Admin Callback KPI Dashboard
  * Route: /callbacks/kpi
- * Phase: 6E
- * TODO Phase 6F: role-gate to Admin + Ops Lead only; CAs see limited view
+ * Phase: 6E — GAP-053: route-level guard restricts to SUPER_ADMIN + OPERATIONS_MANAGER
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router'

@@ -75,13 +75,17 @@ public sealed class Auth : EndpointGroupBase
         // GAP-007 / BUG-5: Re-issues the session JWT with current RBAC + org claims after
         // the onboarding wizard creates the organisation. Mobile calls this immediately after
         // POST /auth/organizations so subsequent calls carry the new OrganizationId claim.
+        // ORG-SWITCHER (mobile Wave 6): accepts optional { organizationId } body; validates
+        // active membership before minting — non-member/deleted-member → 403.
         groupBuilder.MapPost("/token/refresh-context", RefreshContext)
             .RequireAuthorization()
             .WithName("RefreshContextToken")
-            .WithSummary("Re-issue session JWT with current org/RBAC claims after org creation")
+            .WithSummary("Re-issue session JWT with current org/RBAC claims after org creation or org switch")
             .WithDescription(
                 "GAP-007/BUG-5: Called by mobile immediately after onboarding org creation. " +
-                "Returns a fresh access token whose OrganizationId claim reflects the newly created org. " +
+                "ORG-SWITCHER: optional body { organizationId } selects which org's claims to mint. " +
+                "Membership validated before token is issued — non-member returns 403. " +
+                "Returns a fresh access token + echo of the effective organizationId. " +
                 "Does NOT rotate the opaque refresh token. Rate-limited: standard 100 req/min.")
             .RequireRateLimiting("standard");
 
@@ -225,14 +229,19 @@ public sealed class Auth : EndpointGroupBase
 
     // POST /auth/token/refresh-context [Authorize]
     // GAP-007 / BUG-5: Re-issue session JWT with current org claims (no refresh token rotation).
-    private static async Task<IResult> RefreshContext(ISender sender)
+    // ORG-SWITCHER (mobile Wave 6): optional { organizationId } body param selects a specific org.
+    // Security: membership validated before token is minted — non-member → 403.
+    private static async Task<IResult> RefreshContext(
+        RefreshContextRequest req, ISender sender)
     {
-        var result = await sender.Send(new RefreshContextCommand());
+        var result = await sender.Send(new RefreshContextCommand(req.OrganizationId));
         return result.IsSuccess
             ? Results.Ok(result.Value)
             : result.Error.Type == ErrorType.Unauthorized
                 ? Results.Unauthorized()
-                : Results.Problem(result.Error.Message);
+                : result.Error.Type == ErrorType.Forbidden
+                    ? Results.Json(new { error = result.Error.Message, code = result.Error.Code }, statusCode: 403)
+                    : Results.Problem(result.Error.Message);
     }
 
     // GET /auth/me [Authorize]
@@ -378,6 +387,17 @@ internal record LoginWithPasswordRequest(string PhoneNumber, string Password);
 /// <summary>Enabled login methods the mobile/admin clients should surface.</summary>
 public record AuthMethodsResponse(bool Otp, bool WhatsApp, bool Password);
 internal record RefreshTokenRequest(string Token);
+
+/// <summary>
+/// POST /auth/token/refresh-context request body.
+/// ORG-SWITCHER (mobile Wave 6): optional <c>organizationId</c> selects which org's claims
+/// to embed in the new session JWT. When omitted, the handler uses the most-recently-created
+/// active membership (existing behaviour, backward-compatible).
+///
+/// Security note: the handler validates active membership before minting any token.
+/// A non-member or soft-deleted member receives 403.
+/// </summary>
+internal record RefreshContextRequest(Guid? OrganizationId = null);
 internal record UpdateUserProfileRequest(
     string? FullName, string? Email, string? PanNumber, string? AadhaarLast4,
     DateOnly? DateOfBirth, string? Gender, string? AddressLine1, string? AddressLine2,

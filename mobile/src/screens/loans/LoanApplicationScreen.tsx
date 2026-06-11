@@ -351,16 +351,17 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     borderBottomColor: tk.border,
     gap: 8,
   },
+  // P6-QA-MOBILE-09: 44×44pt minimum touch target (was 40×40).
   backBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: tk.textPrimary },
-  saveDraftBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  saveDraftBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 
   scrollContent: { padding: 16, gap: 14, paddingBottom: 24 },
 
@@ -415,7 +416,8 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: tk.warningTint,
-    minHeight: 36,
+    // P6-QA-MOBILE-08: 44pt minimum touch target (was 36).
+    minHeight: 44,
   },
   uploadCtaText: { fontSize: 12, fontWeight: '700', color: tk.loanAccent },
 

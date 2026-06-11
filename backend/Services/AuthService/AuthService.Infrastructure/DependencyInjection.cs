@@ -101,6 +101,10 @@ public static class DependencyInjection
 
         // MSG91 OTP SMS sender — used by OtpService to deliver the OTP.
         services.AddHttpClient("Msg91Otp");
+
+        // GAP-038/052: Service health probe client — Aspire service-discovery resolves
+        // http://{service-name} URIs at runtime. Short timeout (3 s) set per-request in the endpoint.
+        services.AddHttpClient("HealthProbe");
         services.AddScoped<IOtpSmsSender, Msg91OtpSmsSender>();
 
         // Domain services

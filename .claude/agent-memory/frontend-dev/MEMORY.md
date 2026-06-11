@@ -20,3 +20,5 @@
 - [Task #32 GSTN IMS Inbox](project_task32_ims_inbox.md) — 3 routes + gstImsApi + 84 i18n keys (en/hi/bn) + 44 tests; Zod UUID v4 caveat; optimistic accept/undo; 963→1007 tests
 - [S3/S5 design elevation: skeleton sweep + dashboard hierarchy](project_s3_s5_design_elevation.md) — 5 pages fixed (UserDetail/LoansListKpi/PartnerBanks/PartnerBanksSettings/CallbackKpi); dashboard 3-tier hierarchy; 89 new i18n keys; 1007 tests
 - [Wave 5 QA bugfixes BUG-MCA-ETYPE-005 + BUG-DASH-KB-004](project_wave5_bugfixes.md) — entityType snake_case regression tests; Tier3TabBar ARIA keyboard nav (roving tabIndex + Arrow/Home/End); 1007→1022 tests
+- [Wave 6 batch #39 completion](project_wave6_batch39.md) — GAP-023 callback gating, GAP-036 subscriber/invoice pages, GAP-038 health page, GAP-035 upgrade CTA, GAP-052 UX fixes; +91 i18n keys; 1022 tests, 0 lint
+- [GAP-022 GST Tax Rate Config](project_gap022_tax_rates.md) — effective-dated rate admin page; GST_SLABS constant; computeTaxBreakdown; EmptyState uses variant not icon; 1022→1047 tests

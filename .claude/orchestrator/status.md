@@ -1,6 +1,17 @@
 # SnapAccount — Orchestrator Status
 
-## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 5 COMPLETE — 2026-06-11)
+## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 6 COMPLETE — 2026-06-11)
+
+### Phase 7 Wave 6 — Medium/Low gap tail (2026-06-11, COMPLETE & live-verified)
+
+Triage-first (54 deferred items code-verified at HEAD: 9 already closed, 14 partial, 26 open → built; triage table: wave6-triage-2026-06-11.md). Delivered:
+- **Backend**: OCR-feedback write path + accuracy report (GAP-014), document tags idempotent CRUD (015), stub-PDF + MockRazorpay prod guards (041/PCI-02), GcpStartup warn logs (053), GST tax-rate config FY-versioned CRUD + 8-slab validation (022, migration 078), WhatsApp adapter mock-first (045), subscriber admin list, /admin/health/aggregate, KFS server-side locale chain (079) + consent-catalog locale, refresh-context org selection w/ membership check (org-switcher backend).
+- **Frontend**: callback <Can> gating (023), Subscriber/Invoice pages (036), live System Health page + dashboard widget (038), upgrade CTA (035), GstTaxRatesPage. Admin vitest 1047.
+- **Mobile**: locale on KFS/consent calls (+ fixed consentLocale hardcoded 'en' DPDP audit bug), invite-token resume via SecureStore single-shot, celebration single-fire + server fire-guard, 44pt sweep (~14 screens), multi-org switcher. Mobile jest 648.
+- **Ops/Sec/DB**: RBI data-residency map (14 stores; 3 TL verify items), CERT-In/DPDP incident runbook + statutory log-retention buckets (7yr financial), HSN/SAC pipeline script, PCI-DSS SAQ-A scope statement (eligibility confirmed in code), VAPT plan (12 targets), dev-seed drift fixed (was CI path mismatch + silent orphans; CI now strict).
+- **QA cycle**: web 2,564 regression green + 4 bugs found→fixed→live-verified (missing "standard" rate-limit policy in Auth/Ai → 500s; slab validation unwired; stale SubscriptionService process; tag dup). Android: invite deep-link + dark-mode live PASS; Crashlytics PII audit CLEAN (no Crashlytics calls in mobile/src).
+- **Open**: #24 TL queue, #42 refresh-context typed-401 polish (LOW). Wave 7+ deferred: GAP-031/032/037/043/044/047/051/064/108/110, decision-gated 105/109 (GAP-104), 039 (GAP-073). QA live re-checks pending OTP lockout expiry: org-switcher multi-org, KFS hi live, IMS inbox on Android (all code+jest verified).
+- Reports: .claude/qa/live-web-wave6-2026-06-11.md, live-android-wave6-2026-06-11.md.
 
 ### Phase 7 Wave 5 — IMS/MCA UI, SEC-AI-02 to GO, design-elevation completion (2026-06-11, COMPLETE & live-verified)
 

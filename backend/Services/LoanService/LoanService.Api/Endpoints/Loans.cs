@@ -102,13 +102,23 @@ public sealed class Loans : EndpointGroupBase
         groupBuilder.MapPost("/applications/{id:guid}/kfs", GenerateKfs)
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GenerateKfs")
-            .WithSummary("Generate an RBI-compliant Key Facts Statement for this loan application. Must be acknowledged before consent.");
+            .WithSummary("Generate an RBI-compliant Key Facts Statement for this loan application. Must be acknowledged before consent.")
+            .WithDescription(
+                "NEW-D10: Optional ?locale=hi|bn|en query param selects the KFS language. " +
+                "Resolution chain: caller param → 'en' fallback. " +
+                "Validated against supported set: en, hi, bn. " +
+                "The generated locale is stored on the KFS row (migration 079).");
 
         /// <summary>GET /loans/applications/{id}/kfs — Retrieve the most-recent KFS.</summary>
         groupBuilder.MapGet("/applications/{id:guid}/kfs", GetKfs)
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetKfs")
-            .WithSummary("Retrieve the current Key Facts Statement for this loan application.");
+            .WithSummary("Retrieve the current Key Facts Statement for this loan application.")
+            .WithDescription(
+                "NEW-D10: Optional ?locale=hi query param prefers a locale variant. " +
+                "Falls back to any locale (typically 'en') if the requested locale is not found. " +
+                "Never fails because of locale — RBI KFS retrieval is statutory. " +
+                "Optional ?kfsId=<guid> pins to a specific KFS row (audit path).");
 
         /// <summary>POST /loans/applications/{id}/consents — Record a consent.</summary>
         groupBuilder.MapPost("/applications/{id:guid}/consents", RecordConsent)
@@ -236,19 +246,28 @@ public sealed class Loans : EndpointGroupBase
 
     // ── Handler delegates ──────────────────────────────────────────────────────
 
+    /// <summary>
+    /// POST /loans/applications/{id}/kfs?locale=hi
+    /// NEW-D10: binds optional locale query param (en/hi/bn). Validated by GenerateKfsCommandValidator.
+    /// </summary>
     private static async Task<IResult> GenerateKfs(
-        Guid id, ISender sender, CancellationToken ct)
+        Guid id, ISender sender, CancellationToken ct, string? locale = null)
     {
-        var result = await sender.Send(new GenerateKfsCommand(id), ct);
+        var result = await sender.Send(new GenerateKfsCommand(id, locale), ct);
         return result.IsSuccess
             ? Results.Created($"/loans/applications/{id}/kfs/{result.Value.KfsId}", result.Value)
             : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
     }
 
+    /// <summary>
+    /// GET /loans/applications/{id}/kfs?kfsId=&amp;locale=hi
+    /// NEW-D10: binds optional locale query param. Falls back to en if locale variant not found.
+    /// Never fails solely because of locale — RBI KFS is statutory.
+    /// </summary>
     private static async Task<IResult> GetKfs(
-        Guid id, Guid? kfsId, ISender sender, CancellationToken ct)
+        Guid id, ISender sender, CancellationToken ct, Guid? kfsId = null, string? locale = null)
     {
-        var result = await sender.Send(new GetKfsQuery(id, kfsId), ct);
+        var result = await sender.Send(new GetKfsQuery(id, kfsId, locale), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound(result.Error.Message);
     }
 

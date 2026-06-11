@@ -371,12 +371,13 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     borderBottomWidth: 1,
     borderBottomColor: tk.border,
   },
+  // P6-QA-MOBILE-09: 44×44pt minimum touch target (was 40×40).
   backBtn: {
-    width: 40, height: 40, borderRadius: 12,
+    width: 44, height: 44, borderRadius: 12,
     backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center',
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
-  shareBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  shareBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 
   scrollContent: { padding: 16, gap: 14, paddingBottom: 24 },
 

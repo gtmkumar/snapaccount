@@ -24,12 +24,14 @@ The session JWT issued by `POST /auth/otp/verify`, `POST /auth/password/login`, 
 
 For `POST /loans/applications/{id}/kfs` and `GET /loans/applications/{id}/kfs`, the locale of the KFS document is resolved as:
 
-1. `locale` query/body param from the caller
-2. → User preference locale (from `auth.user_profile.preferred_locale`)
-3. → Organisation default locale (from `auth.organization.default_locale`)
-4. → `"en"` (hard fallback)
+1. `?locale` query param from the caller (validated: `en | hi | bn`)
+2. → `"en"` (hard fallback — RBI KFS is statutory, never fail on locale)
 
-The resolved locale is stored in `key_facts_statement.locale` and echoed in the response.
+Steps 2 (user preference) and 3 (org default) will be added in a future phase when LoanService→AuthService cross-service locale lookup is implemented. Current implementation skips to "en" if caller omits locale.
+
+The resolved locale is stored in `loan.key_facts_statement.locale` (migration 079, default `'en'`) and echoed in the POST response and GET response.
+
+**GET locale behaviour:** When `?locale=hi` is requested, the handler first looks for a KFS row with `locale='hi'`. If none exists, it falls back to the most-recent KFS row regardless of locale. This means GET never returns 404 solely because of a locale mismatch.
 
 ---
 
@@ -50,7 +52,7 @@ The resolved locale is stored in `key_facts_statement.locale` and echoed in the 
 | POST | /auth/social/firebase | PUBLIC | Google/Apple sign-in | `{ firebaseIdToken, provider: "google"\|"apple", email?, displayName? }` | `{ token, userId, refreshToken, isNewUser }` 200 |
 | GET | /auth/methods | PUBLIC | List available auth methods | — | `{ otp, password, google, apple }` 200 |
 | POST | /auth/token/refresh | PUBLIC | Rotate access token using refresh token | `{ refreshToken }` | `{ token, refreshToken, expiresAt }` 200 |
-| POST | /auth/token/refresh-context | Required | Re-issue session JWT with current org/RBAC claims (does NOT rotate refresh token) | — | `{ token, expiresAt }` 200 |
+| POST | /auth/token/refresh-context | Required | Re-issue session JWT with current org/RBAC claims (does NOT rotate refresh token). Accepts optional body `{ organizationId? }` for org-switcher. | `{ organizationId?: uuid }` | `{ accessToken, expiresAt, organizationId? }` 200; 403 if membership invalid |
 | POST | /auth/local/login | PUBLIC (dev only) | DEV_AUTH_BYPASS login | `{ email }` | `{ token, userId, refreshToken }` 200 |
 | GET | /auth/me | Required | Get current user profile | — | `{ userId, email, displayName, phoneNumber, organizationId, roles, photoUrl }` 200 |
 | GET | /auth/me/permissions | Required | Get effective permission list | — | `{ userId, roles:[string], permissions:[string] }` 200 |
@@ -65,6 +67,8 @@ The resolved locale is stored in `key_facts_statement.locale` and echoed in the 
 | GET | /search | Required | Global command-palette search | `?q&types` | `{ query, results:[{type,id,title,subtitle,url}], totalCount }` 200 |
 
 **`POST /auth/token/refresh-context`:** Re-issues the access token JWT whose `organizationId` and `roles` claims reflect the user's current org membership — used by mobile/web after onboarding completes to pick up the new org context. Does NOT rotate the opaque refresh token (refresh token lifetime unchanged). Rate limit: standard 100 req/min.
+
+**ORG-SWITCHER (mobile Wave 6):** Accepts an optional body `{ "organizationId": "<uuid>" }`. When present, the handler verifies the caller has an active (non-deleted, `IsActive=true`) membership in that org before minting the token. Returns `403` with `{ error, code: "Auth.OrgSwitchForbidden" }` if membership check fails. The response echoes the effective `organizationId` regardless of whether one was requested. Never silently falls back to another org — a 403 is the only outcome for a bad membership hint.
 
 ### Privacy — DPDP Act 2023 (`/auth/me`)
 
@@ -542,8 +546,8 @@ Mobile LoanHubScreen calls `GET /loans/products?pageSize=50` on mount.
 | GET | /loans/applications/{id} | Required | Get application detail | — | `{ applicationId, orgId, loanProductId, productName, requestedAmount, tenureMonths, purpose, status, submittedAt, bankReferenceNo, disbursedAt, disbursedAmount, assignedBankId?, assignedBankName?, createdAt, updatedAt }` 200 |
 | PATCH | /loans/applications/{id} | Required | Update DRAFT application | `{ requestedAmount?, tenureMonths?, purpose? }` | `{ applicationId, ... }` 200 |
 | POST | /loans/applications/{id}/documents | Required | Attach a supporting document | `{ documentId, documentType }` | `{ applicationDocumentId }` 201 |
-| POST | /loans/applications/{id}/kfs | Required | Generate RBI-compliant Key Facts Statement | — | `{ kfsId, annualPercentageRate, loanAmount, tenureMonths, monthlyEmi, fees, repaymentSchedule, lenderName, grievanceOfficerContact, coolingOffDays, generatedAt }` 201 |
-| GET | /loans/applications/{id}/kfs | Required | Retrieve current KFS | `?kfsId` (optional, defaults to latest) | `{ kfsId, applicationId, annualPercentageRate, loanAmount, tenureMonths, monthlyEmi, feesJson, repaymentScheduleJson, ... }` 200 |
+| POST | /loans/applications/{id}/kfs | Required | Generate RBI-compliant Key Facts Statement | `?locale=en\|hi\|bn` (optional, defaults to en) | `{ kfsId, annualPercentageRate, loanAmount, tenureMonths, monthlyEmi, fees, repaymentSchedule, lenderName, grievanceOfficerContact, coolingOffDays, generatedAt, locale }` 201 |
+| GET | /loans/applications/{id}/kfs | Required | Retrieve current KFS | `?kfsId` (optional, defaults to latest) `?locale=hi` (optional, prefers locale variant) | `{ kfsId, applicationId, annualPercentageRate, loanAmount, tenureMonths, monthlyEmi, feesJson, repaymentScheduleJson, locale, ... }` 200 |
 | POST | /loans/applications/{id}/consents | Required | Record consent signature (HMAC-SHA256) | `{ consentType, consentTextVersion, kfsId, consentLocale? }` | `{ consentId, signatureHex }` 201 |
 | POST | /loans/applications/{id}/submit | Required | Submit DRAFT application for bank review | — | 200 |
 | POST | /loans/applications/{id}/assign-bank | `loan.applications.assign` | Assign to partner bank | `{ bankId, packageId }` | `{ assignedBankId, ... }` 200 |
@@ -594,6 +598,7 @@ Mobile LoanHubScreen calls `GET /loans/products?pageSize=50` on mount.
 **State machine:** DRAFT → SUBMITTED → UNDER_REVIEW → APPROVED | REJECTED | DOCS_REQUESTED → DISBURSED → CLOSED.
 **Consent locale:** `consentLocale` (BCP-47, e.g. `"en"`, `"hi"`) stored in `loan.consents.consent_locale` (GAP-040/RBI audit trail).
 **KFS:** Must be generated and acknowledged before consent submission (GAP-021 RBI Digital Lending Guidelines).
+**KFS locale (NEW-D10):** `POST /kfs?locale=hi` generates a Hindi KFS row stored with `locale='hi'`. `GET /kfs?locale=hi` prefers the Hindi variant; falls back to any locale (typically `en`) if the requested variant is not found — never errors on locale mismatch. Supported values: `en`, `hi`, `bn`. Validated by `GenerateKfsCommandValidator` before hitting the handler.
 **Cooling-off:** `coolingOffDays` from KFS stored on `loan.applications.cooling_off_days` + `cooling_off_ends_at` after disbursement.
 **DPDP:** `AnonymizedAt` + `AnonymizationReason` on `LoanApplication`. `UserId` nullable for right-to-erasure.
 **Rate limits:** Standard 100 req/min per user.
@@ -1008,6 +1013,134 @@ No API surface change — this is a resolver upgrade within `GetTaxSlabsQuery` a
 | `SendGrid:ApiKey` | (none) | SendGrid for password-reset emails |
 | `App:BaseUrl` | `http://localhost:3000` | Password reset link base URL |
 | `REDIS_CONNECTION_STRING` | `localhost:6379` | Redis for distributed cache / presence |
+
+---
+
+## Wave 6 Backend Batch #38 (2026-06-11)
+
+Items: GAP-014, GAP-041, GAP-013, GAP-015, GAP-053, GAP-022, GAP-045, GAP-PCI-01, GAP-PCI-02, GAP-036, GAP-038/052.
+
+### DocumentService — OCR Feedback Write-Path (GAP-014)
+
+> Service: DocumentService (port Aspire-assigned). Gate: `document.review` permission.
+> Rate limit: standard (100 req/min). Latency note: DB write only, no AI call.
+
+| Method | Route | Auth | Description | Request Body | Response |
+|--------|-------|------|-------------|-------------|----------|
+| POST | /documents/{id}/ocr-feedback | Required | Submit operator correction for an OCR-extracted field | `{ ocrFieldId: uuid, issueType: "WRONG_VALUE"\|"MISSING_FIELD"\|"WRONG_FIELD"\|"ILLEGIBLE"\|"FORMATTING_ERROR"\|"OTHER", notes?: string }` | `{ feedbackId, createdAt }` 200 |
+| GET | /documents/admin/ocr-accuracy | Required | Aggregated OCR feedback accuracy metrics (admin view) | — | `{ totalFeedbacks, byIssueType: {...}, last30DaysTrend: [...] }` 200 |
+
+Notes:
+- `ocrFieldId` must belong to the document identified by `{id}` — IDOR-guarded.
+- `notes` is required when `issueType == "OTHER"`, max 2000 chars.
+- `ErrorType.NotFound` returned as 404 if document or OCR field not found.
+
+### DocumentService — Document Tags (GAP-015)
+
+> Gate: `document.write` (add/remove), `document.read` (list). IDOR-scoped to caller's org.
+
+| Method | Route | Auth | Description | Request Body | Response |
+|--------|-------|------|-------------|-------------|----------|
+| GET | /documents/{id}/tags | Required | List tags on a document | — | `[{ tagId, name, createdAt }]` 200 |
+| POST | /documents/{id}/tags | Required | Add a tag to a document (idempotent) | `{ name: string }` | `{ tagId, name, createdAt }` 200 |
+| DELETE | /documents/{id}/tags/{tagId} | Required | Remove a tag from a document (idempotent) | — | 204 |
+
+Notes:
+- Tag name max 100 chars.
+- Adding an already-present tag returns 200 with the existing tag (idempotent, no duplicate row created).
+- Removing a non-existent tag returns 204 (idempotent).
+
+### DocumentService — Document SLA Tracking (GAP-013)
+
+Already-surfaced via the document review loop (Task B15). The `document_slas` table (migration added with B15) stores `due_at`, `breached_at`, `priority` per document. No new API surface in Wave 6 (surfaced via existing review-loop endpoints).
+
+### GstService — Tax Rate CRUD (GAP-022)
+
+> Service: GstService. Gate: `gst.tax-rate.manage` (write), `gst.tax-rate.read` (read).
+> Tax rates are effective-dated: a new rate supersedes the current one; old row gets `valid_to` set.
+> Never hardcode rates — always load from this table.
+
+| Method | Route | Auth | Description | Request Body | Response |
+|--------|-------|------|-------------|-------------|----------|
+| GET | /gst/tax-rates | Required | List all tax rates (optionally filter by active) | `?activeOnly=true` | `[{ id, rateName, ratePct, cgstPct, sgstPct, igstPct, cessPct, validFrom, validTo, isActive, notes }]` 200 |
+| GET | /gst/tax-rates/effective | Required | Get the currently-effective rate by name | `?rateName=GST_18` | `{ id, rateName, ratePct, cgstPct, sgstPct, igstPct, cessPct, validFrom, notes }` 200 / 404 |
+| POST | /gst/tax-rates | Required | Create a new tax rate (terminates prior active same-name rate) | `{ rateName, ratePct, cgstPct, sgstPct, igstPct, cessPct?, validFrom, notes? }` | `{ id, rateName, validFrom }` 201 |
+| DELETE | /gst/tax-rates/{id}/deactivate | Required | Soft-deactivate a tax rate (sets `is_active=false`) | — | 204 |
+
+Notes:
+- `ratePct` standard values: 0, 5, 12, 18, 28 — enforced by constraint, not hardcoded in code.
+- `cgstPct` = `sgstPct` = `ratePct / 2` for intra-state; `igstPct` = `ratePct` for inter-state.
+- `validFrom` defaults to `UtcNow` if not supplied.
+- Deactivate is idempotent; deactivating an already-inactive rate returns 204.
+
+### NotificationService — WhatsApp Adapter (GAP-045)
+
+No new public API route. Feature-flag controlled at dispatch: `WhatsApp:Enabled = true|false` in config.
+When disabled, dispatches return a "WHATSAPP_DISABLED" status without HTTP call. No consumer-facing change.
+
+### SubscriptionService — Admin Subscriber List (GAP-036)
+
+> Service: SubscriptionService. Gate: `subscription.plan.create` permission (same as MRR dashboard).
+> Rate limit: standard. Pagination: page/pageSize (max 100).
+
+| Method | Route | Auth | Description | Query Params | Response |
+|--------|-------|------|-------------|-------------|----------|
+| GET | /subscriptions/admin/list | Required | Paginated platform-admin view of all org subscriptions | `?page=1&pageSize=25&status=Active&tier=Pro` | `{ items: [SubscriberRowDto], totalCount, page, pageSize, totalPages }` 200 |
+
+`SubscriberRowDto`:
+```json
+{
+  "subscriptionId": "uuid",
+  "organizationId": "uuid",
+  "organizationName": "uuid-string (org name read-model pending)",
+  "planId": "uuid",
+  "planName": "string",
+  "tier": "Free|Starter|Pro|Enterprise",
+  "status": "Active|Trialing|PastDue|Canceled|Expired",
+  "currentPeriodEnd": "ISO-8601",
+  "razorpaySubscriptionId": "string|null",
+  "mrr": "decimal (planPriceInr / billingCycleDays)",
+  "createdAt": "ISO-8601"
+}
+```
+
+Notes:
+- `organizationName` currently returns the `organizationId` string until the AuthService org-name read-model ships.
+- `status` and `tier` filters are string-equality matched against enum `ToString()`.
+
+### AuthService — Aggregate Health (GAP-038/052)
+
+> Service: AuthService (admin endpoints group). Gate: `admin.dashboard.read` permission.
+> Fans out to all 12 services' `/healthz` endpoints in parallel (3-second per-service timeout).
+> Rate limit: standard.
+
+| Method | Route | Auth | Description | Response |
+|--------|-------|------|-------------|----------|
+| GET | /admin/health/aggregate | Required | Aggregated health status of all 12 services | `{ overall: "healthy"\|"degraded"\|"down"\|"unknown", services: [ServiceHealthResult], checkedAt: ISO-8601 }` 200 |
+
+`ServiceHealthResult`:
+```json
+{
+  "name": "auth-service",
+  "status": "healthy|degraded|down|unknown",
+  "statusCode": 200,
+  "responseTimeMs": 42,
+  "checkedAt": "ISO-8601"
+}
+```
+
+Status derivation: all healthy → `"healthy"`, any `down` → `"down"`, any `degraded` → `"degraded"`, else `"unknown"`.
+Services probed: `auth-service`, `document-service`, `accounting-service`, `gst-service`, `loan-service`, `itr-service`, `chat-service`, `notification-service`, `report-service`, `subscription-service`, `ai-service`, `callback-service`.
+
+### Guards / Security (GAP-041, GAP-053, GAP-PCI-01, GAP-PCI-02)
+
+No new public API routes. Internal changes:
+- **GAP-041** (LoanService): `ILoanPdfGenerator` registered as dev-only stub; non-Development environments throw `InvalidOperationException` at resolve with code `GAP-041`.
+- **GAP-053** (GcpStartup): GCP service registrations emit `Console.Error.WriteLine` warning when feature flag disabled, instead of silently no-op.
+- **GAP-PCI-01**: `VerifyWebhookSignature` removed from `IRazorpayClient` interface and both implementations; constant-time HMAC verification lives exclusively in `RazorpayWebhook.cs` (not exposed to Application layer).
+- **GAP-PCI-02** (SubscriptionService): `MockRazorpayClient` registered as dev-only; non-Development environments throw at resolve with code `GAP-PCI-02`.
+
+---
 
 ### Indian Compliance
 

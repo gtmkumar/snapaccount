@@ -13,6 +13,7 @@ import { useTheme, createThemedStyles, type ThemeTokens } from '../contexts/Them
 import { useAuthStore } from '../store/authStore';
 import { initPushNotifications, configureForegroundNotificationHandler } from '../notifications/pushTokenManager';
 import { wireNotificationRouter } from '../notifications/notificationRouter';
+import { consumePendingInviteToken } from '../lib/pendingInvite';
 
 // Configure foreground notification display at module level
 configureForegroundNotificationHandler();
@@ -71,6 +72,47 @@ export function RootNavigator() {
     if (isAuthenticated) {
       initPushNotifications().catch(console.warn);
     }
+  }, [isAuthenticated]);
+
+  // GAP-065: resume a pending org-invite after sign-in. A deep-link invite
+  // tapped while logged out persists its token (AcceptInviteScreen →
+  // storePendingInviteToken); when auth completes the tree remounts as
+  // AppNavigator, so reopen AcceptInvite (MoreTab/MoreStack) with the token.
+  // consumePendingInviteToken() is single-shot — a failed accept never loops.
+  const inviteResumeArmedRef = useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated) {
+      inviteResumeArmedRef.current = false;
+      return;
+    }
+    if (inviteResumeArmedRef.current) return;
+    inviteResumeArmedRef.current = true;
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    void consumePendingInviteToken().then((token) => {
+      if (!token || cancelled) return;
+      // The freshly-mounted AppNavigator may not be ready on the same tick.
+      const tryNavigate = (attempt: number) => {
+        if (cancelled) return;
+        const nav = navigationRef.current;
+        if (nav?.isReady()) {
+          nav.navigate('MoreTab', {
+            screen: 'AcceptInvite',
+            params: { token },
+          });
+        } else if (attempt < 20) {
+          retryTimer = setTimeout(() => tryNavigate(attempt + 1), 150);
+        }
+      };
+      tryNavigate(0);
+    });
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [isAuthenticated]);
 
   useEffect(() => {

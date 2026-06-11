@@ -102,10 +102,32 @@ public static class DependencyInjection
 
         // Phase 6B: Recurring job subscriber for deadline reminders
         services.AddScoped<IGstDeadlineCheckHandler, GstDeadlineCheckHandler>();
-        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<GstRecurringJobsSubscriber>();
+
+        // GAP-053: GcpStartup silent-skip fix — log a warning when GCP-dependent hosted services
+        // are skipped so the disabled state is observable in startup output.
+        var gcpEnabled = SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration);
+        if (gcpEnabled)
+        {
+            services.AddHostedService<GstRecurringJobsSubscriber>();
+        }
+        else
+        {
+            // GAP-053: warn via startup console so the skip is not silent
+            System.Console.Error.WriteLine(
+                "[WARN] GstService: GstRecurringJobsSubscriber skipped — GCP disabled " +
+                "(set GCP_ENABLED=true or provide Firebase:ServiceAccountJson to activate).");
+        }
 
         // SEC-040: DPDP Act 2023 Right-to-Erasure cascade
-        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();
+        if (gcpEnabled)
+        {
+            services.AddHostedService<AccountDeletionSubscriber>();
+        }
+        else
+        {
+            System.Console.Error.WriteLine(
+                "[WARN] GstService: AccountDeletionSubscriber (DPDP erasure) skipped — GCP disabled.");
+        }
 
         // Current user
         services.AddHttpContextAccessor();

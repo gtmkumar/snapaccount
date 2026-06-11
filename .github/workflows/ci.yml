@@ -324,24 +324,32 @@ jobs:
             -f "${SEED_FILE}"
           echo "  ✓ Seed data applied"
 
-      - name: Apply dev seed if present (200_dev_business_data.sql)
-        # The dev seed may have column-name drift (GAP-072); we apply it to catch drift
-        # but do NOT fail the job — the seed is best-effort in CI.
-        # When GAP-072 is resolved, change `|| true` to strict error handling.
+      - name: Apply dev seed (100_dev_users + 200_dev_business_data)
+        # GAP-072 resolved by db-engineer: 200_dev_business_data.sql is now self-sufficient
+        # and lives at database/dev-seed/ (NOT database/migrations/).
+        # Apply 100_ first (canonical users + org), then 200_ (business data that
+        # references the org/user UUIDs seeded by 100_).
+        # Both steps are strict: ON_ERROR_STOP=1, no `|| true`.
+        # Any drift in either file now fails the CI job immediately.
         run: |
           set -euo pipefail
-          DEV_SEED="database/migrations/200_dev_business_data.sql"
-          if [ -f "${DEV_SEED}" ]; then
-            echo "Applying dev seed: ${DEV_SEED}"
-            PGPASSWORD=migration_test psql \
-              -h localhost -p 5432 -U postgres -d snapaccount \
-              -v ON_ERROR_STOP=1 \
-              -f "${DEV_SEED}" || {
-                echo "::warning::Dev seed (200_dev_business_data.sql) failed — GAP-072 (column drift). Fix in db-engineer scope."
-              }
-          else
-            echo "Dev seed not found at ${DEV_SEED} — skipping (not a failure)"
-          fi
+
+          SEED_100="database/dev-seed/100_dev_users.sql"
+          SEED_200="database/dev-seed/200_dev_business_data.sql"
+
+          echo "Applying dev seed 100: ${SEED_100}"
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -v ON_ERROR_STOP=1 \
+            -f "${SEED_100}"
+          echo "  ✓ 100_dev_users.sql applied"
+
+          echo "Applying dev seed 200: ${SEED_200}"
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -v ON_ERROR_STOP=1 \
+            -f "${SEED_200}"
+          echo "  ✓ 200_dev_business_data.sql applied"
 
       - name: Verify schema integrity
         # Quick sanity check — confirm expected tables exist in key schemas.

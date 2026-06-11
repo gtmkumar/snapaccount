@@ -180,15 +180,17 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     paddingHorizontal: 16, paddingVertical: 12,
     backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  // P6-QA-MOBILE-04/-09: 44×44pt minimum touch target (was 40×40).
+  backBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
   headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
   badge: { backgroundColor: tk.errorCta, borderRadius: 10, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   badgeText: { fontSize: 11, fontWeight: '800', color: '#FFFFFF' }, // white on errorCta, AA both modes
 
-  tabsContainer: { borderBottomWidth: 1, borderBottomColor: tk.border, backgroundColor: tk.raised, maxHeight: 52 },
+  // P6-QA-MOBILE-04: 44pt tabs (was 36) + container raised to fit (was 52).
+  tabsContainer: { borderBottomWidth: 1, borderBottomColor: tk.border, backgroundColor: tk.raised, maxHeight: 66 },
   tabsRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center' },
-  tab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: tk.sunken, minHeight: 36, alignItems: 'center', justifyContent: 'center' },
+  tab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: tk.sunken, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   tabActive: { backgroundColor: tk.itrAccent },
   tabText: { fontSize: 13, fontWeight: '600', color: tk.textSecondary },
   tabTextActive: { color: tk.textOnBrand },

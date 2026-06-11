@@ -46,9 +46,20 @@ try
     builder.Services.AddSnapAuthentication();
     builder.Services.AddHttpContextAccessor();
 
-    // SEC-011: AI endpoints rate-limited to 20 req/min per user (cost guardrail)
+    // SEC-011: Rate limiting — standard (100/min) and AI endpoints (20/min, cost guardrail)
+    // BUG-W6-003: AiService endpoints reference "standard" — must register the policy here.
     builder.Services.AddRateLimiter(options =>
     {
+        // Standard endpoints: 100 req/min fixed window
+        options.AddFixedWindowLimiter("standard", opt =>
+        {
+            opt.PermitLimit = 100;
+            opt.Window = TimeSpan.FromMinutes(1);
+            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            opt.QueueLimit = 0;
+        });
+
+        // AI endpoints: 20 req/min per user (token cost guardrail per CLAUDE.md)
         options.AddFixedWindowLimiter("ai", opt =>
         {
             opt.PermitLimit = 20;

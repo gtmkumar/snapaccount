@@ -46,8 +46,13 @@ public interface IRazorpayClient
         int interval = 1,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Verifies the HMAC-SHA256 signature of a Razorpay webhook payload.</summary>
-    bool VerifyWebhookSignature(string payload, string signature, string secret);
+    // GAP-PCI-01: VerifyWebhookSignature removed from this interface.
+    // The production webhook verification is performed directly in
+    // RazorpayWebhook.cs::VerifyHmac() using CryptographicOperations.FixedTimeEquals
+    // (constant-time HMAC). The interface method used string.Equals (non-constant-time)
+    // and was dead code — it was never called from any production code path.
+    // Keeping the verification in the interface would invite callers to use the
+    // insecure string.Equals path. Removed entirely; the endpoint-level impl is authoritative.
 }
 
 /// <summary>Represents a Razorpay order creation result.</summary>

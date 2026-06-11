@@ -30,6 +30,7 @@ import {
   ClipboardList,
   ScrollText,
   Inbox,
+  Activity,
 } from 'lucide-react'
 import type { AdminRole } from '@/hooks/useAuth'
 
@@ -75,6 +76,14 @@ const navItems: NavItem[] = [
     icon: Inbox,
     requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
     requiredServerPermission: 'gst.ims.read',
+  },
+  {
+    // GAP-022: Admin Tax Rate Config — configuration-driven GST rates (no code deploy on policy change)
+    label: 'GST Tax Rates',
+    href: '/gst/tax-rates',
+    icon: Receipt,
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredServerPermission: 'gst.admin.taxrates',
   },
   {
     label: 'ITR',
@@ -133,11 +142,12 @@ const navItems: NavItem[] = [
     requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA'],
   },
   {
-    // TODO Phase 6F: role-gate to CA + Admin + Ops only (real RBAC)
+    // GAP-053: role-gated to Admin, Ops and CA only — SUPPORT_EXECUTIVE removed
     label: 'Callbacks',
     href: '/callbacks',
     icon: PhoneCall,
-    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA'],
+    requiredServerPermission: 'callback.read',
   },
   {
     label: 'Settings',
@@ -168,6 +178,22 @@ const navItems: NavItem[] = [
     icon: ClipboardList,
     requiredRoles: ['SUPER_ADMIN'],
     requiredServerPermission: 'admin.dashboard.read',
+  },
+  // System Health (SUPER_ADMIN, admin.dashboard.read) — GAP-038/GAP-052
+  {
+    label: 'System Health',
+    href: '/admin/system-health',
+    icon: Activity,
+    requiredRoles: ['SUPER_ADMIN'],
+    requiredServerPermission: 'admin.dashboard.read',
+  },
+  // Subscriber List (SUPER_ADMIN, subscription.plan.create) — GAP-036
+  {
+    label: 'Subscribers',
+    href: '/subscriptions/subscribers',
+    icon: Users2,
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredServerPermission: 'subscription.plan.create',
   },
   // MCA Compliance — Edit Log (accounting.editlog.read)
   {

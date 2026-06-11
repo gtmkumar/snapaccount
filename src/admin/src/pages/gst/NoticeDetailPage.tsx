@@ -384,22 +384,29 @@ export default function NoticeDetailPage() {
                   value={subject}
                   onChange={e => setSubject(e.target.value)}
                   disabled={isReadOnly}
+                  maxLength={500}
                   className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-brand-500 outline-none disabled:opacity-60"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-neutral-600 mb-1">
-                  {t('admin.gst.notice.response.body')} *
+                  {t('admin.gst.notice.response.body')} * {/* GAP-055: maxLength added */}
                 </label>
                 <textarea
                   value={body}
                   onChange={e => setBody(e.target.value)}
                   disabled={isReadOnly}
                   rows={6}
+                  maxLength={10000}
                   placeholder={t('admin.gst.notice.response.bodyPlaceholder')}
                   className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-brand-500 outline-none disabled:opacity-60 resize-none"
                 />
+                {!isReadOnly && (
+                  <p className="text-xs text-neutral-400 text-right mt-0.5">
+                    {body.length}/10000
+                  </p>
+                )}
               </div>
 
               <div>

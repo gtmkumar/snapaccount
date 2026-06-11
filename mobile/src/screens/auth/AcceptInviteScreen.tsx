@@ -45,6 +45,10 @@ import {
   validateInviteToken,
   type InvitePreview,
 } from '../../lib/team';
+import {
+  storePendingInviteToken,
+  clearPendingInviteToken,
+} from '../../lib/pendingInvite';
 
 // This screen is registered in BOTH the Auth stack and the authenticated
 // MoreStack. Both declare an identical `AcceptInvite: { token?: string } | undefined`
@@ -148,11 +152,24 @@ export function AcceptInviteScreen({ navigation, route }: Props) {
     };
   }, [initialToken, runValidation]);
 
+  // GAP-065: a deep-link token tapped while logged OUT must survive the auth
+  // flow (RootNavigator remounts the tree on sign-in, dropping route params).
+  // Persist it immediately; RootNavigator auto-resumes AcceptInvite post-auth.
+  React.useEffect(() => {
+    if (!isAuthenticated && initialToken) {
+      void storePendingInviteToken(initialToken);
+    }
+  }, [isAuthenticated, initialToken]);
+
   const handleAccept = async () => {
     setAccepting(true);
     setErrorKind(null);
     try {
       const result = await acceptInvite(token);
+
+      // GAP-065: the invite is consumed — drop any persisted pending token so
+      // the post-auth resume path can never replay it.
+      void clearPendingInviteToken();
 
       // GAP-007 / BUG-5: The current access token predates this membership and
       // lacks the new organizationId / RBAC claims. Re-mint the JWT so subsequent
@@ -193,11 +210,19 @@ export function AcceptInviteScreen({ navigation, route }: Props) {
   };
 
   const handleSignIn = () => {
-    // Preserve the token so the user can return and accept after authenticating.
-    // (The Auth stack lands on PhoneEntry; the token stays in this screen's state
-    // if they navigate back, and can be re-pasted if needed.) PhoneEntry only
-    // exists in the Auth stack — guarded so an authenticated caller is a no-op.
+    // GAP-065: persist the (validated or pasted) token so the post-auth resume
+    // path in RootNavigator reopens AcceptInvite with it after sign-in completes.
+    // PhoneEntry only exists in the Auth stack — guarded so an authenticated
+    // caller is a no-op.
+    if (token) void storePendingInviteToken(token);
     navigation.navigate('PhoneEntry');
+  };
+
+  const handleDecline = () => {
+    // GAP-065: declining abandons the invite — clear any persisted token so it
+    // is not auto-resumed after a later sign-in.
+    void clearPendingInviteToken();
+    navigation.goBack();
   };
 
   const errorMessage = errorKind ? t(`mobile.auth.invite.errors.${errorKind}`) : null;
@@ -328,7 +353,7 @@ export function AcceptInviteScreen({ navigation, route }: Props) {
             <Button
               label={t('mobile.auth.invite.declineCta')}
               variant="ghost"
-              onPress={() => navigation.goBack()}
+              onPress={handleDecline}
               fullWidth
               style={styles.topGapSm}
             />
@@ -352,16 +377,17 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     borderBottomWidth: 1,
     borderBottomColor: tk.border,
   },
+  // P6-QA-MOBILE-09: 44×44pt minimum touch target (was 40×40).
   backBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
-  headerSpacer: { width: 40 },
+  headerSpacer: { width: 44 },
   scrollContent: { padding: 24, paddingBottom: 40 },
   iconCircle: {
     width: 72,

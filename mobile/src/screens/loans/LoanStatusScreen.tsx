@@ -178,7 +178,7 @@ export function LoanStatusScreen({ navigation, route }: Props) {
           <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.loan.status.title')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView
@@ -371,8 +371,9 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     paddingHorizontal: 16, paddingVertical: 12,
     backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
+  // P6-QA-MOBILE-09: 44×44pt minimum touch target (was 40×40).
   backBtn: {
-    width: 40, height: 40, borderRadius: 12,
+    width: 44, height: 44, borderRadius: 12,
     backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center',
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },

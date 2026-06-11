@@ -150,14 +150,9 @@ public sealed class RazorpayHttpClient(
             Interval:            root.GetProperty("interval").GetInt32());
     }
 
-    /// <inheritdoc />
-    public bool VerifyWebhookSignature(string payload, string signature, string secret)
-    {
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
-        var computed   = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
-        var computed64 = Convert.ToHexString(computed).ToLowerInvariant();
-        return string.Equals(computed64, signature, StringComparison.OrdinalIgnoreCase);
-    }
+    // GAP-PCI-01: VerifyWebhookSignature removed — was non-constant-time (string.Equals)
+    // and dead code. The authoritative constant-time HMAC implementation lives in
+    // SubscriptionService.Api/Endpoints/RazorpayWebhook.cs::VerifyHmac().
 }
 
 /// <summary>Runtime credentials injected from the admin-configured row.</summary>

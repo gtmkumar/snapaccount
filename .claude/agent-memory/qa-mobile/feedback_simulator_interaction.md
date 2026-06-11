@@ -272,3 +272,26 @@ Android delivers Appearance events to RN new arch (Fabric) JS correctly — conf
 - ACCEPTED → REJECTED: INVALID — `ImsInvoice.InvalidTransition` (must use GSTR-1A amendment)
 - ACCEPTED → PENDING_KEPT: INVALID — only valid from PENDING
 - These are correct IMS business rules per GSTN portal behaviour.
+
+---
+
+## Updated 2026-06-11: Wave 6 Android — Crashlytics Audit + Deep Link + BUG-W6-003
+
+### Crashlytics PII Audit (GAP-107) — Wave 6 finding
+- NO direct Crashlytics SDK calls in `mobile/src/` — only `console.*` calls in `logger.ts` and `ScreenErrorBoundary`
+- Crashlytics picks up unhandled JS errors via the global hook installed by `@react-native-firebase/crashlytics` at native layer
+- `setUserId` is never called from app code → no user identifier (phone or Firebase UID) reaches Crashlytics
+- VERDICT: CLEAN — no PII violation
+
+### Deep link → AcceptInvite routing (Wave 6 confirmed)
+- `snapaccount://invite/{token}` while logged out → navigates to AcceptInvite screen (not PhoneEntry)
+- AcceptInvite is IN the Auth stack; it pre-fills token and validates it
+- When token is valid + user is not authenticated: "Sign in to accept" button navigates to PhoneEntry and calls `storePendingInviteToken(token)`
+- After login, RootNavigator's `consumePendingInviteToken` effect resumes AcceptInvite with token
+- This design (AcceptInvite in both Auth and App stacks) is intentional to avoid duplicate deep link pattern registration
+
+### BUG-W6-003 — refreshContextAndSwap 500 (non-fatal)
+- `POST /auth/token/refresh-context` returns 500 due to missing "standard" rate-limiting policy in AuthService Program.cs
+- Client-side: `refreshContextAndSwap` is wrapped in try/catch with only `console.warn` on failure — org switch still completes
+- Impact: org-scoped JWT claims not updated until next full re-auth; API calls after switch use old org claims
+- Fix: backend-agent must register the rate policy in Program.cs

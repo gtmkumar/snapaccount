@@ -424,4 +424,7 @@ VALUES
     (gen_random_uuid(), 'MSME_MUDRA',        'MSME / Mudra Loan',     'Government-backed Pradhan Mantri Mudra Yojana (Shishu, Kishor, Tarun)', 10000, 1000000, 12, 60, TRUE, 4)
 ON CONFLICT (code) DO NOTHING;
 
-COMMIT;
+-- NOTE: no explicit BEGIN/COMMIT — this file is applied via psql -f where each
+-- statement autocommits. A stray COMMIT here previously emitted a harmless
+-- "there is no transaction in progress" WARNING during replay; removed for a
+-- clean fresh-setup log.

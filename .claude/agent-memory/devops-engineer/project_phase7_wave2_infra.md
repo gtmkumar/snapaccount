@@ -1,6 +1,6 @@
 ---
-name: Phase 7 Wave 2 Infrastructure (D3/D4/D5)
-description: Key decisions and discoveries from Phase 7 Wave 2 devops work — secret slots, CI migration-replay, scheduler matrix
+name: Phase 7 Wave 2 + Wave 6 Infrastructure
+description: Key decisions from Wave 2 (D3/D4/D5) and Wave 6 (GAP-107/025/038) — secret slots, scheduler matrix, data residency, incident response, log retention, HSN staging
 type: project
 ---
 
@@ -50,3 +50,10 @@ Phase 7 Wave 2 completed 2026-06-10. Key facts:
 - PITR drill: `infra/scripts/pitr-drill.sh` (executable, bash -n verified). BLOCKER: gcloud not authenticated locally; first operator must `gcloud auth login` before running.
 - SLO alerts: `infra/monitoring-alert-policies.sh` — 12 services × 2 alert types + 2 Pub/Sub lag alerts = 26 alert policies total. Uses `gcloud alpha monitoring policies` API. Idempotent (delete + recreate by display name).
 - SLO data source: `docs/devops/observability-slos.md` (all thresholds preserved verbatim).
+
+**Wave 6 Batch D (2026-06-11):**
+- GAP-107 data-residency map: `docs/devops/data-residency-map.md` — complete enumeration of all stores with RBI verdict. Key findings: Firebase Auth region unverified (must check project default); Firebase Crashlytics is US-resident (must never receive PII/payment); Vertex AI must use `asia-south1-aiplatform.googleapis.com`; Document AI processors must be verified in `asia-south1`; SendGrid is US-resident (email template audit required). Org policy `gcp.resourceLocations → asia-south1` documented in §5 — needs `infra/setup.sh` Step 1b addition (TL action).
+- GAP-025 incident response: `docs/devops/incident-response.md` — S1–S4 severity matrix, on-call SLAs, CERT-In 6h clock, DPB 72h clock (DPDP), RBI supervisory 24h, PIR template, log retention policy with exact day counts (security 180d, financial 2555d=7yr, incident 1095d=3yr).
+- GAP-025 log retention script: `infra/scripts/log-retention-setup.sh` — creates 3 custom Cloud Logging buckets with sinks; idempotent; bash -n verified.
+- GAP-038 HSN staging script: `infra/scripts/hsn-sac-dataset-stage.sh` — end-to-end pipeline: CBIC download → Excel→CSV Python → idempotent SQL gen → Cloud SQL Proxy → load + verify. DRY_RUN=true supported. bash -n verified. Still BLOCKED on staging DB access TL grant (same blocker as runbook).
+- CI guard for payment-data residency: documented in data-residency-map.md §7 (grep pattern for Crashlytics + log leakage). Add to ci.yml when CI billing (TL-1) is restored.

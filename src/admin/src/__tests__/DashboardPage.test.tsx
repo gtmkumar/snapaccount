@@ -40,6 +40,15 @@ vi.mock('@/lib/dashboardApi', () => ({
   getAdminAuditEvents: vi.fn().mockResolvedValue([]),
 }))
 
+// ── Health API mock — GAP-052: SystemHealthWidget now queries getAggregateHealth ──
+vi.mock('@/lib/healthApi', () => ({
+  getAggregateHealth: vi.fn().mockResolvedValue({
+    overall: 'healthy',
+    services: [],
+    checkedAt: new Date().toISOString(),
+  }),
+}))
+
 // ── Recharts stub (avoids ResizeObserver issues in jsdom) ──────────────────
 vi.mock('recharts', () => ({
   LineChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

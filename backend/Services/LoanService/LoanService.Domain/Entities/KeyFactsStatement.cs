@@ -66,6 +66,13 @@ public class KeyFactsStatement : BaseAuditableEntity
     /// <summary>UTC timestamp when the borrower acknowledged this KFS. NULL until acknowledged.</summary>
     public DateTime? AcknowledgedAt { get; private set; }
 
+    /// <summary>
+    /// BCP-47 locale tag for this KFS version (e.g. "en", "hi", "bn").
+    /// NEW-D10: stored so GET /kfs can serve the locale variant the borrower originally saw.
+    /// Immutable after generation — protected by the DB trigger fn_kfs_immutable_signed_fields.
+    /// </summary>
+    public string Locale { get; private set; } = "en";
+
     private KeyFactsStatement() { }
 
     /// <summary>Creates and signs a new Key Facts Statement.</summary>
@@ -80,7 +87,8 @@ public class KeyFactsStatement : BaseAuditableEntity
         string lenderName,
         string grievanceOfficerContact,
         int coolingOffDays,
-        string hmacSignature)
+        string hmacSignature,
+        string locale = "en")
         => new()
         {
             ApplicationId = applicationId,
@@ -94,6 +102,7 @@ public class KeyFactsStatement : BaseAuditableEntity
             GrievanceOfficerContact = grievanceOfficerContact,
             CoolingOffDays = coolingOffDays,
             HmacSignature = hmacSignature,
+            Locale = string.IsNullOrWhiteSpace(locale) ? "en" : locale.Trim().ToLowerInvariant(),
             GeneratedAt = DateTime.UtcNow,
         };
 

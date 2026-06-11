@@ -563,3 +563,110 @@ export async function reconcileItc(body: ReconcileItcRequest): Promise<Reconcile
   const res = await api.post('/gst/itc-reconciliation', body)
   return ReconcileItcResponseSchema.parse(res.data)
 }
+
+// ---------------------------------------------------------------------------
+// GAP-022: Admin Tax Rate Configuration
+// Endpoints (GstService :5104):
+//   GET  /gst/tax-rates             → ListTaxRatesQuery — all rates, activeOnly?
+//   GET  /gst/tax-rates/effective   → GetEffectiveTaxRateQuery — for rateName+asOfDate
+//   POST /gst/tax-rates             → CreateTaxRateCommand (gst.admin.taxrates)
+//   DELETE /gst/tax-rates/{id}/deactivate → DeactivateTaxRateCommand (gst.admin.taxrates)
+// ---------------------------------------------------------------------------
+
+/**
+ * TaxRateDto — matches ListTaxRatesQueryHandler projection.
+ * Dates arrive as ISO strings from JSON serialisation of DateOnly.
+ */
+export const TaxRateDtoSchema = z.object({
+  id: z.string().uuid(),
+  rateName: z.string(),
+  ratePct: z.number(),
+  cgstPct: z.number(),
+  sgstPct: z.number(),
+  igstPct: z.number(),
+  cessPct: z.number(),
+  validFrom: z.string(),        // ISO date string e.g. "2024-07-01"
+  validTo: z.string().nullable(),
+  isActive: z.boolean(),
+  notes: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export type TaxRateDto = z.infer<typeof TaxRateDtoSchema>
+
+export const TaxRateListSchema = z.array(TaxRateDtoSchema)
+
+/** EffectiveTaxRateDto — GetEffectiveTaxRateQuery response. */
+export const EffectiveTaxRateDtoSchema = z.object({
+  id: z.string().uuid(),
+  rateName: z.string(),
+  ratePct: z.number(),
+  cgstPct: z.number(),
+  sgstPct: z.number(),
+  igstPct: z.number(),
+  cessPct: z.number(),
+  validFrom: z.string(),
+  validTo: z.string().nullable(),
+})
+
+export type EffectiveTaxRateDto = z.infer<typeof EffectiveTaxRateDtoSchema>
+
+/** CreateTaxRateResponse — 201 body from POST /gst/tax-rates. */
+export const CreateTaxRateResponseSchema = z.object({
+  taxRateId: z.string().uuid(),
+  rateName: z.string(),
+  ratePct: z.number(),
+  cgstPct: z.number(),
+  sgstPct: z.number(),
+  igstPct: z.number(),
+  validFrom: z.string(),
+})
+
+export type CreateTaxRateResponse = z.infer<typeof CreateTaxRateResponseSchema>
+
+/**
+ * Standard GST slabs (Indian statutory rates).
+ * Shown as a select in the create-rate form; backend also accepts non-standard
+ * values (the validator only enforces 0–100 range), but the UI restricts to slabs.
+ */
+export const GST_SLABS = [0, 1.5, 3, 5, 7.5, 12, 18, 28] as const
+export type GstSlab = (typeof GST_SLABS)[number]
+
+/** Compute CGST/SGST/IGST from a slab percentage. */
+export function computeTaxBreakdown(ratePct: number): { cgstPct: number; sgstPct: number; igstPct: number } {
+  const half = Math.round((ratePct / 2) * 100) / 100
+  return { cgstPct: half, sgstPct: half, igstPct: ratePct }
+}
+
+// API functions ---------------------------------------------------------------
+
+/** GET /gst/tax-rates — all rates, optionally filtered to active-only. */
+export async function listTaxRates(activeOnly = false): Promise<TaxRateDto[]> {
+  const res = await api.get('/gst/tax-rates', { params: { activeOnly } })
+  return TaxRateListSchema.parse(res.data)
+}
+
+/** GET /gst/tax-rates/effective?rateName=&asOfDate= */
+export async function getEffectiveTaxRate(rateName: string, asOfDate?: string): Promise<EffectiveTaxRateDto> {
+  const res = await api.get('/gst/tax-rates/effective', { params: { rateName, asOfDate } })
+  return EffectiveTaxRateDtoSchema.parse(res.data)
+}
+
+export interface CreateTaxRateRequest {
+  rateName: string
+  ratePct: number
+  validFrom: string   // ISO date string "YYYY-MM-DD"
+  notes?: string
+}
+
+/** POST /gst/tax-rates — requires gst.admin.taxrates permission. */
+export async function createTaxRate(body: CreateTaxRateRequest): Promise<CreateTaxRateResponse> {
+  const res = await api.post('/gst/tax-rates', body)
+  return CreateTaxRateResponseSchema.parse(res.data)
+}
+
+/** DELETE /gst/tax-rates/{id}/deactivate — requires gst.admin.taxrates permission. */
+export async function deactivateTaxRate(id: string): Promise<void> {
+  await api.delete(`/gst/tax-rates/${id}/deactivate`)
+}

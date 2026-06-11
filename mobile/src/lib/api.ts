@@ -279,12 +279,20 @@ export async function refreshAccessToken(): Promise<boolean> {
  * remains valid for non-org-scoped endpoints; callers MUST continue their flow
  * (org creation / invite accept already succeeded). Do NOT block completion on
  * a context-refresh failure.
+ *
+ * GAP-045 (org switcher): `organizationId` is sent as a forward-compatible
+ * body hint for multi-org users. The current backend handler resolves the
+ * active org as the user's most-recently-created membership and IGNORES the
+ * body — an org-select parameter on RefreshContextCommand is a pending
+ * backend-agent handoff. Mobile keeps its own currentOrganization in the auth
+ * store, so client-side org scoping is correct either way.
  */
-export async function refreshContextAndSwap(): Promise<boolean> {
+export async function refreshContextAndSwap(organizationId?: string): Promise<boolean> {
   try {
-    const res = await apiClient.post<{ accessToken: string; expiresAt: string }>(
-      '/auth/token/refresh-context',
-    );
+    const url = '/auth/token/refresh-context';
+    const res = organizationId
+      ? await apiClient.post<{ accessToken: string; expiresAt: string }>(url, { organizationId })
+      : await apiClient.post<{ accessToken: string; expiresAt: string }>(url);
     useAuthStore.getState().swapAccessToken(res.data.accessToken);
     return true;
   } catch (err) {

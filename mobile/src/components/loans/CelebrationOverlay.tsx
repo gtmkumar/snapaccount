@@ -5,6 +5,16 @@
  *
  * Respects reduceMotion: if enabled, renders simple fade-in without confetti.
  * Auto-dismisses after 6s if no interaction.
+ *
+ * P6-QA-MOBILE-10: "first …" kinds are server-guarded — on mount we POST
+ * /notifications/celebrations/{kind}/fire (idempotent per user × kind). If the
+ * server says alreadyFired, the overlay dismisses itself without showing, so a
+ * celebration can never replay across devices/sessions. Network failure is
+ * fail-open (celebrating twice beats never celebrating).
+ *
+ * P6-QA-MOBILE-11: dismissal fires exactly ONE callback exactly once (the old
+ * `onSecondary?.() ?? onPrimary()` fell through to onPrimary because a void
+ * call returns undefined).
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -20,6 +30,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useHaptics } from '../../hooks/useHaptics';
+import { fireCelebration, type ServerCelebrationKind } from '../../api/notifications';
 
 /**
  * Phase 6F: expanded kind enum.
@@ -69,6 +80,18 @@ function formatIndianAmount(n: number): string {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * P6-QA-MOBILE-10: kinds with a backend fired-once record. Kinds not listed
+ * here (APPROVED, custom, …) are event-driven by the parent screen and show
+ * unconditionally.
+ */
+const SERVER_GUARDED_KINDS: Partial<Record<CelebrationKind, ServerCelebrationKind>> = {
+  DISBURSED: 'first_loan_disbursed',
+  firstGst: 'first_gst_filed',
+  firstRefund: 'first_refund_credited',
+  firstItr: 'first_itr_filed',
+};
+
 const KIND_ICON: Record<CelebrationKind, React.ComponentProps<typeof Ionicons>['name']> = {
   APPROVED: 'checkmark-circle',
   DISBURSED: 'cash',
@@ -109,7 +132,51 @@ export function CelebrationOverlay({
   const [opacityAnim] = useState(() => new Animated.Value(0));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // P6-QA-MOBILE-10: server fire-guard. Guarded kinds stay hidden ('pending')
+  // until the idempotent fire call answers; alreadyFired → 'skipped' (dismiss
+  // without showing). Unguarded kinds show immediately.
+  const serverKind = SERVER_GUARDED_KINDS[kind];
+  const [gate, setGate] = useState<'pending' | 'visible' | 'skipped'>(
+    serverKind ? 'pending' : 'visible',
+  );
+
+  // P6-QA-MOBILE-11: every dismissal path funnels through here — exactly one
+  // callback, exactly once (auto-dismiss timer vs button press can race).
+  const dismissedRef = useRef(false);
+  const dismissOnce = (cb: (() => void) | undefined) => {
+    if (dismissedRef.current) return;
+    dismissedRef.current = true;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    (cb ?? onPrimary)();
+  };
+
   useEffect(() => {
+    if (!serverKind) return;
+    let active = true;
+    fireCelebration(serverKind)
+      .then((res) => {
+        if (!active) return;
+        if (res.alreadyFired) {
+          // Already celebrated on this or another device — dismiss silently so
+          // the parent clears its overlay state.
+          setGate('skipped');
+          dismissOnce(onSecondary);
+        } else {
+          setGate('visible');
+        }
+      })
+      .catch(() => {
+        // Fail-open: a network blip must not swallow the user's milestone.
+        if (active) setGate('visible');
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (gate !== 'visible') return;
     // §3.4: one-shot celebration burst — shortened to a single Success
     // notification under reduce-motion. Haptics are additive feedback only.
     haptics.celebrationBurst(reduceMotion);
@@ -126,16 +193,16 @@ export function CelebrationOverlay({
       }),
     ]).start();
 
-    // Auto-dismiss after 6s
+    // Auto-dismiss after 6s — exactly one callback (P6-QA-MOBILE-11).
     timerRef.current = setTimeout(() => {
-      onSecondary?.() ?? onPrimary();
+      dismissOnce(onSecondary);
     }, 6000);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [gate]);
 
   // ── Resolve copy per kind ──────────────────────────────────────────────────
   type CopyMap = { headline: string; body: string; primary: string; secondary?: string };
@@ -225,6 +292,10 @@ export function CelebrationOverlay({
   const primaryLabel = copy.primary;
   const secondaryLabel = copy.secondary;
 
+  // P6-QA-MOBILE-10: nothing renders until the server guard clears (or for
+  // unguarded kinds, immediately).
+  if (gate !== 'visible') return null;
+
   return (
     <Animated.View
       testID={testID}
@@ -249,7 +320,7 @@ export function CelebrationOverlay({
         <View style={styles.actions}>
           <Pressable
             style={styles.primaryBtn}
-            onPress={onPrimary}
+            onPress={() => dismissOnce(onPrimary)}
             accessibilityRole="button"
             accessibilityLabel={primaryLabel}
           >
@@ -259,7 +330,7 @@ export function CelebrationOverlay({
           {secondaryLabel && (
             <Pressable
               style={styles.secondaryBtn}
-              onPress={onSecondary}
+              onPress={() => dismissOnce(onSecondary)}
               accessibilityRole="button"
               accessibilityLabel={secondaryLabel}
             >

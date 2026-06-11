@@ -48,6 +48,7 @@ import {
   getAdminTeamWorkload,
 } from '@/lib/dashboardApi'
 import { t } from '@/i18n'
+import { getAggregateHealth } from '@/lib/healthApi'
 
 // PR #8: counts now fetched live via getAdminDashboardStats() which fans out
 // 5 parallel calls to per-service /admin/dashboard-stats endpoints. The
@@ -64,6 +65,96 @@ function SampleDataBadge() {
       <FlaskConical className="h-3 w-3" aria-hidden="true" />
       {t('dashboard.sampleDataBadge')}
     </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// System Health Widget — GAP-052: real data, no hardcoded values
+// ---------------------------------------------------------------------------
+function SystemHealthWidget() {
+  const navigate = useNavigate()
+  const { data, isLoading } = useQuery({
+    queryKey: ['system', 'health'],
+    queryFn: getAggregateHealth,
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  const services = data?.services ?? []
+  const healthy = services.filter(s => s.status === 'healthy').length
+  const allUnknown = services.length > 0 && services.every(s => s.status === 'unknown')
+
+  const overallStatus = data?.overall ?? 'unknown'
+  const overallColor =
+    overallStatus === 'healthy' ? 'bg-[var(--semantic-success-bg)] text-[var(--semantic-success-fg)]'
+    : overallStatus === 'down' ? 'bg-[var(--semantic-error-bg)] text-[var(--semantic-error-fg)]'
+    : overallStatus === 'degraded' ? 'bg-[var(--semantic-warning-bg)] text-[var(--semantic-warning-fg)]'
+    : 'bg-[var(--surface-sunken)] text-[var(--text-disabled)]'
+
+  return (
+    <section aria-labelledby="system-health-heading">
+      <Card>
+        <CardHeader
+          title={t('dashboard.systemHealth.title')}
+          subtitle={t('dashboard.systemHealth.subtitle')}
+          actions={
+            <Button variant="ghost" size="sm" onClick={() => void navigate('/admin/system-health')}>
+              {t('dashboard.systemHealth.cta')}
+            </Button>
+          }
+        />
+        {isLoading ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-pulse">
+            {[1,2,3,4].map(i => <div key={i} className="h-14 rounded-[var(--radius-lg)] bg-[var(--surface-sunken)]" />)}
+          </div>
+        ) : allUnknown ? (
+          <div className="py-4 text-center">
+            <p className="text-sm text-[var(--text-secondary)]">{t('dashboard.systemHealth.proxyMissing')}</p>
+            <button
+              onClick={() => void navigate('/admin/system-health')}
+              className="mt-1 text-xs text-[var(--color-brand-500)] hover:underline"
+            >
+              {t('dashboard.systemHealth.cta')}
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="flex items-center gap-3 p-3 rounded-[var(--radius-lg)] bg-[var(--surface-sunken)]">
+              <div className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium', overallColor)}>
+                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+                {t(`health.status.${overallStatus}`)}
+              </div>
+              <div>
+                <p className="text-xs text-[var(--text-secondary)]">{t('dashboard.systemHealth.overall')}</p>
+                <p className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">{healthy}/{services.length}</p>
+              </div>
+            </div>
+            {services.slice(0, 3).map(svc => {
+              const svcColor =
+                svc.status === 'healthy' ? 'bg-[var(--semantic-success-bg)] text-[var(--semantic-success-fg)]'
+                : svc.status === 'down' ? 'bg-[var(--semantic-error-bg)] text-[var(--semantic-error-fg)]'
+                : svc.status === 'degraded' ? 'bg-[var(--semantic-warning-bg)] text-[var(--semantic-warning-fg)]'
+                : 'bg-[var(--surface-sunken)] text-[var(--text-disabled)]'
+              const label = svc.name.replace(/-service$/, '').replace(/-/g, ' ')
+              return (
+                <div key={svc.name} className="flex items-center gap-3 p-3 rounded-[var(--radius-lg)] bg-[var(--surface-sunken)]">
+                  <div className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium', svcColor)}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+                    {t(`health.status.${svc.status}`)}
+                  </div>
+                  <div>
+                    <p className="text-xs text-[var(--text-secondary)] capitalize">{label}</p>
+                    <p className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">
+                      {svc.responseMs != null ? `${svc.responseMs}ms` : '—'}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Card>
+    </section>
   )
 }
 
@@ -731,56 +822,9 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* ── System Health (System Admin only) ── */}
+      {/* ── System Health (System Admin only) — GAP-052 fixed: no longer hardcoded ── */}
       {hasPermission('dashboard.system_health') && (
-        <section aria-labelledby="system-health-heading">
-          <Card>
-            <CardHeader
-              title={t('dashboard.systemHealth.title')}
-              subtitle={t('dashboard.systemHealth.subtitle')}
-              actions={
-                <Button variant="ghost" size="sm">
-                  {t('dashboard.systemHealth.cta')}
-                </Button>
-              }
-            />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: t('dashboard.systemHealth.apiResponse'), value: '142ms', status: 'success' },
-                { label: t('dashboard.systemHealth.errorRate'), value: '0.02%', status: 'success' },
-                { label: t('dashboard.systemHealth.ocrQueue'), value: '7', status: 'success' },
-                { label: t('dashboard.systemHealth.dbConnections'), value: '23/100', status: 'success' },
-              ].map((metric) => (
-                <div
-                  key={metric.label}
-                  className="flex items-center gap-3 p-3 rounded-[var(--radius-lg)] bg-[var(--surface-sunken)]"
-                >
-                  <div className={cn(
-                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
-                    metric.status === 'success' ? 'bg-[var(--semantic-success-bg)] text-[var(--semantic-success-fg)]'
-                    : metric.status === 'warning' ? 'bg-[var(--semantic-warning-bg)] text-[var(--semantic-warning-fg)]'
-                    : 'bg-[var(--semantic-error-bg)] text-[var(--semantic-error-fg)]'
-                  )}>
-                    <span
-                      className={cn(
-                        'h-1.5 w-1.5 rounded-full',
-                        metric.status === 'success' ? 'bg-success-500'
-                        : metric.status === 'warning' ? 'bg-warning-500'
-                        : 'bg-error-500'
-                      )}
-                      aria-hidden="true"
-                    />
-                    {metric.status}
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--text-secondary)]">{metric.label}</p>
-                    <p className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">{metric.value}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </section>
+        <SystemHealthWidget />
       )}
 
       {/* ── Recent Audit Events ── */}

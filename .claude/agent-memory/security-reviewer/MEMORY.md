@@ -7,3 +7,4 @@
 - [Module 1 Auth/RBAC Security Patterns](project_module1_patterns.md) — CRITICAL: Firebase plist committed; HIGH: empty handler stubs, RLS session var never set, permissions endpoint returns roles; gate NO-GO
 - [AiService P7a Security Patterns (SEC-AI-02)](project_ai_service_p7a_patterns.md) — 4 HIGH: AES-CBC key encryption, decrypted key on public endpoint, budget race, Pub/Sub origin gap; IDOR via body org_id; PII not redacted in RAG ingest; gate NO-GO
 - [AiService P7a Final Gate (SEC-AI-02)](project_ai_service_p7a_final_gate.md) — All HIGH/MEDIUM confirmed fixed 2026-06-11; GO for staging; FG-01 LOW cancel-leak + 2 infra conditions remain
+- [Wave 6 PCI Scope + VAPT Plan (2026-06-11)](project_wave6_pci_vapt.md) — SAQ A boundary verified; 2 LOW + 3 INFO; pci-scope.md + vapt-plan.md written; GO

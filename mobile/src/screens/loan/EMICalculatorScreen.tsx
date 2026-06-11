@@ -47,7 +47,7 @@ export function EMICalculatorScreen({ navigation }: Props) {
           <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.title}>EMI Calculator</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -199,7 +199,8 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   StyleSheet.create({
   container: { flex: 1, backgroundColor: tk.canvas },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  // P6-QA-MOBILE-09: 44×44pt minimum touch target (was 40×40).
+  backBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
   scrollContent: { padding: 16, gap: 16 },
   inputCard: { padding: 20 },

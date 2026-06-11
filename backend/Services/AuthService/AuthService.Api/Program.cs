@@ -61,6 +61,17 @@ try
     // SEC-011: Rate limiting
     builder.Services.AddRateLimiter(options =>
     {
+        // Standard endpoints: 100 req/min per user/IP (fixed window).
+        // BUG-W6-003: AggregateHealth, Privacy, Search, and refresh-context endpoints all
+        // reference this policy — it MUST be registered before the app starts.
+        options.AddFixedWindowLimiter("standard", opt =>
+        {
+            opt.PermitLimit = 100;
+            opt.Window = TimeSpan.FromMinutes(1);
+            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            opt.QueueLimit = 0;
+        });
+
         // OTP endpoints: 5 req / 10 min per client IP (sliding window)
         options.AddSlidingWindowLimiter("otp", opt =>
         {

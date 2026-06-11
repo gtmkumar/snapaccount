@@ -44,6 +44,7 @@ import {
   type ConsentType,
   type ConsentCatalogEntry,
 } from '../../api/loans';
+import { normalizeLocale } from '../../i18n/locale';
 import { ConsentSignatureBlock } from '../../components/loans/ConsentSignatureBlock';
 import { ScrollHintBanner } from '../../components/loans/ScrollHintBanner';
 import { Stepper } from '../../components/shared/Stepper';
@@ -90,7 +91,7 @@ const CONSENT_STEPS: {
 
 export function LoanConsentScreen({ navigation, route }: Props) {
   useSensitiveScreen();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { tokens } = useTheme();
   const styles = useStyles();
   const { applicationId, userName = 'User', acctMask = 'XXXX', kfsId = '' } = route.params;
@@ -117,11 +118,16 @@ export function LoanConsentScreen({ navigation, route }: Props) {
     });
   }, [t]);
 
+  // NEW-D10: the consent body the user reads is rendered via t() in the active
+  // UI locale — the catalog lookup and the recorded consentLocale must match it
+  // so the DPDP audit trail references the language actually displayed.
+  const activeLocale = normalizeLocale(i18n.language);
+
   // SEC-050: Fetch consent versions from backend catalog.
   // Falls back to FALLBACK_CONSENT_VERSION if endpoint not yet available (P6-HANDOFF-25).
   const { data: catalogData } = useQuery({
-    queryKey: ['loan-consent-catalog'],
-    queryFn: getConsentCatalog,
+    queryKey: ['loan-consent-catalog', activeLocale],
+    queryFn: () => getConsentCatalog(activeLocale),
     staleTime: 5 * 60 * 1000, // 5 min — version doesn't change mid-session
     retry: false, // Don't retry 404 — fall through to fallback
   });
@@ -147,7 +153,9 @@ export function LoanConsentScreen({ navigation, route }: Props) {
         consentType: step.type,
         // GAP-021: kfsId is required — ties each consent to the acknowledged KFS
         kfsId: kfsId,
-        consentLocale: 'en',
+        // NEW-D10: record the locale the consent text was actually shown in
+        // (was hardcoded 'en' — wrong for hi/bn users).
+        consentLocale: activeLocale,
       }),
     onSuccess: () => {
       if (currentStep < CONSENT_STEPS.length - 1) {
@@ -220,7 +228,7 @@ export function LoanConsentScreen({ navigation, route }: Props) {
           <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.loan.consent.title')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {/* Stepper */}
@@ -341,9 +349,10 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
       borderBottomWidth: 1,
       borderBottomColor: tk.border,
     },
+    // P6-QA-MOBILE-09: 44×44pt minimum touch target (was 40×40).
     backBtn: {
-      width: 40,
-      height: 40,
+      width: 44,
+      height: 44,
       borderRadius: 12,
       backgroundColor: tk.sunken,
       alignItems: 'center',

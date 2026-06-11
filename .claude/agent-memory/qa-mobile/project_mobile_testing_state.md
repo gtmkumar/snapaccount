@@ -4,11 +4,11 @@ description: Current phase, test baseline, known pre-existing failures, and key 
 type: project
 ---
 
-Phase 7 Wave 1+2 complete on branch `2026-06-10-s5t4`. Live Android sweep (2026-06-11) + iOS sweep (task #22, 2026-06-11) both complete. 438/438 Jest tests passing.
+Phase 7 Wave 1+2+6 complete on branch `2026-06-10-s5t4`. Live Android Wave 6 sweep (2026-06-11) complete. 648/648 Jest tests passing (64 suites).
 
-**Why:** Phase 7 Wave 2 includes DPDP privacy stack, RBI KFS, Razorpay, migrations 062-064. BUG-5 (team invite 409) still open. AND-08 startup crash Android-only still open.
+**Why:** Phase 7 Wave 6 adds org-switcher, invite deep link, celebration single-fire, KFS locale, touch targets, Crashlytics PII audit (GAP-107), and quick regression. BUG-W6-003 (refreshContextAndSwap 500) open — backend fix in flight. Login constraint blocked live verification of items 1, 4, 7c.
 
-**How to apply:** Jest baseline is 438 passing (47 suites). iOS sweep is PASS. Android is CONDITIONAL PASS (AND-08 crash + Metro cache issues).
+**How to apply:** Jest baseline is 648 passing (64 suites). Wave 6 is CONDITIONAL PASS. BUG-W6-003 requires backend fix + re-check. Report at `.claude/qa/live-android-wave6-2026-06-11.md`.
 
 ## Jest baseline per phase
 - Phase 6A/6E: 153 → 204 → 235 passing

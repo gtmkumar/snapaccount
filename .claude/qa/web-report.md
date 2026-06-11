@@ -1650,3 +1650,32 @@ Seeds and cleans up test data. MV schema created inline (no EF migrations needed
 
 All pre-existing tests remain green. No regressions introduced.
 
+---
+
+## Wave 6 Live Verification (2026-06-11)
+
+**Date:** 2026-06-11
+**QA Agent:** qa-web
+**Branch:** 2026-06-10-s5t4
+**Full report:** `.claude/qa/live-web-wave6-2026-06-11.md`
+
+### Test Counts
+
+| Suite | Tests | Pass | Fail |
+|---|---|---|---|
+| Frontend Vitest | 1047 | 1047 | 0 |
+| Backend unit (all 12 services) | 1517 | 1517 | 0 |
+| Wave 6 curl checklist items | 32 | 24 | 5 |
+
+### Bugs Found
+
+| ID | Severity | Title |
+|---|---|---|
+| BUG-W6-001 | Medium | CreateTaxRate validator accepts ratePct=7 → 201 instead of 400 |
+| BUG-W6-002 | High | GET /subscriptions/admin/list returns 404 — SubscriptionService not restarted with working-tree binary |
+| BUG-W6-003 | High | GET /admin/health/aggregate and POST /auth/token/refresh-context return 500 — "standard" rate limiter not registered in AuthService (also AiService) |
+| BUG-W6-004 | Low | Tag idempotent re-add creates duplicate rows |
+
+### Overall Verdict
+PARTIAL PASS. Regression suites fully green (2564 tests). 3 of 9 checklist areas have failures requiring backend-agent fixes before Wave 6 can be marked complete.
+

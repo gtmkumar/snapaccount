@@ -482,3 +482,202 @@ public sealed class RecordConsentKfsHandlerTests : IDisposable
         updatedKfs!.AcknowledgedAt.Should().NotBeNull("KFS must be marked acknowledged");
     }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// 6. KFS Locale — NEW-D10 backend half
+// ────────────────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// NEW-D10 / KFS Locale: verifies that GenerateKfsCommand stores the requested locale
+/// and GetKfsQuery returns the locale-matched variant with en-fallback semantics.
+/// </summary>
+[Trait("Category", "Unit")]
+public sealed class KfsLocaleTests : IDisposable
+{
+    private readonly InMemoryLoanDbContext _db = LoanTestDb.Create();
+    private readonly Guid _orgId  = Guid.NewGuid();
+    private readonly Guid _userId = Guid.NewGuid();
+
+    public void Dispose() => _db.Dispose();
+
+    // ── KeyFactsStatement.Create — locale storage ─────────────────────────────
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("hi")]
+    [InlineData("bn")]
+    public void Create_StoredLocale_MatchesInput(string locale)
+    {
+        var kfs = KeyFactsStatement.Create(
+            Guid.NewGuid(), 100_000m, 12, 12m, 8884.88m,
+            "[]", "[]", "Bank", "contact", 3, "sig",
+            locale: locale);
+
+        kfs.Locale.Should().Be(locale, $"locale '{locale}' must be stored exactly");
+    }
+
+    [Fact]
+    public void Create_NullLocale_DefaultsToEn()
+    {
+        var kfs = KeyFactsStatement.Create(
+            Guid.NewGuid(), 100_000m, 12, 12m, 8884.88m,
+            "[]", "[]", "Bank", "contact", 3, "sig",
+            locale: null!);  // null → "en"
+
+        kfs.Locale.Should().Be("en", "null locale must default to 'en'");
+    }
+
+    [Fact]
+    public void Create_EmptyLocale_DefaultsToEn()
+    {
+        var kfs = KeyFactsStatement.Create(
+            Guid.NewGuid(), 100_000m, 12, 12m, 8884.88m,
+            "[]", "[]", "Bank", "contact", 3, "sig",
+            locale: "   ");  // whitespace → "en"
+
+        kfs.Locale.Should().Be("en", "whitespace locale must default to 'en'");
+    }
+
+    // ── GenerateKfsCommandValidator — locale validation ───────────────────────
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("hi")]
+    [InlineData("bn")]
+    public void Validator_SupportedLocale_Passes(string locale)
+    {
+        var validator = new LoanService.Application.KeyFacts.Commands.GenerateKfs.GenerateKfsCommandValidator();
+        var cmd = new LoanService.Application.KeyFacts.Commands.GenerateKfs.GenerateKfsCommand(
+            ApplicationId: Guid.NewGuid(), Locale: locale);
+        validator.Validate(cmd).IsValid.Should().BeTrue($"'{locale}' is a supported KFS locale");
+    }
+
+    [Theory]
+    [InlineData("fr")]
+    [InlineData("de")]
+    [InlineData("invalid-locale-xyz")]
+    public void Validator_UnsupportedLocale_Fails(string locale)
+    {
+        var validator = new LoanService.Application.KeyFacts.Commands.GenerateKfs.GenerateKfsCommandValidator();
+        var cmd = new LoanService.Application.KeyFacts.Commands.GenerateKfs.GenerateKfsCommand(
+            ApplicationId: Guid.NewGuid(), Locale: locale);
+        validator.Validate(cmd).IsValid.Should().BeFalse($"'{locale}' is not a supported KFS locale");
+    }
+
+    [Fact]
+    public void Validator_NullLocale_Passes()
+    {
+        // Null locale = use default resolution chain (no explicit locale requested)
+        var validator = new LoanService.Application.KeyFacts.Commands.GenerateKfs.GenerateKfsCommandValidator();
+        var cmd = new LoanService.Application.KeyFacts.Commands.GenerateKfs.GenerateKfsCommand(
+            ApplicationId: Guid.NewGuid(), Locale: null);
+        validator.Validate(cmd).IsValid.Should().BeTrue("null locale is valid — defaults to 'en'");
+    }
+
+    // ── GetKfsQuery — locale-aware retrieval semantics ────────────────────────
+
+    /// <summary>
+    /// Seeds two KFS rows for the same application — one 'en' and one 'hi'.
+    /// Querying with locale='hi' must return the Hindi row.
+    /// </summary>
+    [Fact]
+    public async Task GetKfsQuery_LocaleHi_ReturnsHindiVariant()
+    {
+        // Arrange: seed application + two KFS rows
+        var appId = await SeedApp();
+        var enKfs = SeedKfs(appId, "en");
+        var hiKfs = SeedKfs(appId, "hi");
+
+        var handler = new LoanService.Application.KeyFacts.Queries.GetKfs.GetKfsQueryHandler(
+            _db, MockLoanCurrentUser.For(_userId, _orgId));
+
+        // Act
+        var result = await handler.Handle(
+            new LoanService.Application.KeyFacts.Queries.GetKfs.GetKfsQuery(appId, null, "hi"),
+            CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Value.KfsId.Should().Be(hiKfs.Id, "Hindi locale preference must return the 'hi' KFS row");
+        result.Value.Locale.Should().Be("hi");
+    }
+
+    /// <summary>
+    /// When the requested locale is not available, the handler must fall back to the most-recent
+    /// KFS row regardless of locale — never fail solely because of locale.
+    /// </summary>
+    [Fact]
+    public async Task GetKfsQuery_LocaleBn_NotAvailable_FallsBackToLatestKfs()
+    {
+        // Arrange: only 'en' KFS exists
+        var appId = await SeedApp();
+        var enKfs = SeedKfs(appId, "en");
+
+        var handler = new LoanService.Application.KeyFacts.Queries.GetKfs.GetKfsQueryHandler(
+            _db, MockLoanCurrentUser.For(_userId, _orgId));
+
+        // Act — request 'bn' locale that doesn't exist
+        var result = await handler.Handle(
+            new LoanService.Application.KeyFacts.Queries.GetKfs.GetKfsQuery(appId, null, "bn"),
+            CancellationToken.None);
+
+        // Assert — falls back to 'en', does NOT return NotFound
+        result.IsSuccess.Should().BeTrue(
+            "KFS GET must NEVER fail because of locale mismatch — RBI KFS is statutory");
+        result.Value.KfsId.Should().Be(enKfs.Id, "falls back to the only available KFS row");
+    }
+
+    /// <summary>
+    /// When KfsId is specified, locale hint is ignored — the specific row is returned.
+    /// </summary>
+    [Fact]
+    public async Task GetKfsQuery_WithKfsId_LocaleIgnored_ReturnsSpecificRow()
+    {
+        var appId = await SeedApp();
+        var enKfs = SeedKfs(appId, "en");
+        var hiKfs = SeedKfs(appId, "hi");
+
+        var handler = new LoanService.Application.KeyFacts.Queries.GetKfs.GetKfsQueryHandler(
+            _db, MockLoanCurrentUser.For(_userId, _orgId));
+
+        // Act — specify en KFS id but request hi locale
+        var result = await handler.Handle(
+            new LoanService.Application.KeyFacts.Queries.GetKfs.GetKfsQuery(appId, enKfs.Id, "hi"),
+            CancellationToken.None);
+
+        // Assert — kfsId wins
+        result.IsSuccess.Should().BeTrue();
+        result.Value.KfsId.Should().Be(enKfs.Id, "explicit KfsId pins to that row regardless of locale hint");
+        result.Value.Locale.Should().Be("en");
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private async Task<Guid> SeedApp()
+    {
+        var product = new LoanProduct
+        {
+            ProductName = "SME Loan", InterestRateMin = 12m, InterestRateMax = 18m,
+            MinAmount = 50_000m, MaxAmount = 5_000_000m, TenureMonths = 12, IsActive = true,
+        };
+        _db.LoanProducts.Add(product);
+
+        var app = new LoanApplication
+        {
+            OrgId = _orgId, UserId = _userId, LoanProductId = product.Id,
+            RequestedAmount = 100_000m, TenureMonths = 12,
+        };
+        _db.LoanApplications.Add(app);
+        await _db.SaveChangesAsync();
+        return app.Id;
+    }
+
+    private KeyFactsStatement SeedKfs(Guid appId, string locale)
+    {
+        var kfs = KeyFactsStatement.Create(appId, 100_000m, 12, 12m, 8884.88m,
+            "[]", "[]", "Bank", "contact", 3, "sig", locale);
+        _db.KeyFactsStatements.Add(kfs);
+        _db.SaveChanges();
+        return kfs;
+    }
+}
