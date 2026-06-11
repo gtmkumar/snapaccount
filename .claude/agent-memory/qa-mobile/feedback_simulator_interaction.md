@@ -166,3 +166,37 @@ After the keyboard appears, `ui_type` successfully injects text.
 
 **BUG-5 root cause (for future reference):**
 POST /auth/team/invite returns 409 "Org.InvalidContext" immediately after business onboarding because the session JWT does not carry OrganizationId — the org was created AFTER the JWT was issued at OTP login. The GET /auth/team/invites works because it resolves orgId from DB (not JWT). The fix is to refresh/reissue the session JWT inside `markAuthenticated()` or at the end of BusinessProfileWizardScreen onSuccess. See `OrgContextGuard.cs` line 44.
+
+---
+
+## Updated 2026-06-11: iOS Sweep (task #22) — mcp__ios-simulator__ confirmed patterns
+
+**Simulator: iPhone 17 Pro, iOS 26.5, UDID 17BF04F0-A5F0-4C76-80FA-05FB8204FE4C**
+
+### mcp__ios-simulator__ui_tap coordinate system
+- Coordinates are in POINTS (pt), NOT pixels. iPhone 17 Pro is 402x874 pt.
+- Screenshots from the tool are 2x or 3x resolution — do NOT use pixel offsets from screenshots as tap coordinates.
+- Always use `ui_describe_all` to get AXFrame coordinates in points, then tap at element center.
+- Tab bar is at y=818, height=56: HomeTab x=0-80, DocumentsTab x=80-160, GstTab x=161-241, LoanTab x=241-321, MoreTab x=322-402.
+
+### i18n en.json changes require Metro `--reset-cache`
+- Metro Fast Refresh updates JS modules but does NOT serve updated JSON assets.
+- When i18n en.json keys are added or changed (commit 75c0e69 added chat filter keys, callback category keys, preferences title), they are NOT served from the Metro bundle cache.
+- Fix: kill Metro (`kill $(lsof -ti :8081)`) and restart with `npx expo start --reset-cache --port 8081`.
+- After reset-cache: all new i18n keys are served. AND-10/11/15 all pass on iOS after this step.
+
+### iOS does not apply FLAG_SECURE
+- Android hides financial screen content via FLAG_SECURE (screenshot shows black screen).
+- iOS does NOT apply FLAG_SECURE — all screen content is visible in screenshots.
+- This allows visual verification of document filenames, amounts, GST values on iOS that cannot be confirmed on Android.
+
+### Navigation: double-tapping More tab goes back to root
+- If you're deep in the MoreStack (e.g. Privacy Center) and tap the More tab, iOS pops to the More root screen.
+- This is the expected React Navigation tab-press-to-root behavior.
+- Use this to reliably return to More root without navigating back through the full stack.
+
+### AND-08 iOS vs Android discrepancy
+- PrivacyCenterScreen crash (TypeError filter) does NOT reproduce on iOS.
+- Privacy Center opens and renders graceful degradation banner on iOS.
+- The Android crash may come from a startup-level component (not PrivacyCenterScreen itself).
+- Future: grep for `.filter(` calls on components that mount at tab-bar level (HomeScreen, AppNavigator hooks, TanStack Query subscriptions).

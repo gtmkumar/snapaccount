@@ -329,7 +329,7 @@ function OrgMembersTab({ orgId }: { orgId: string }) {
             disabled={page <= 1}
             onClick={() => setPage(p => Math.max(1, p - 1))}
           >
-            {t('common.previous')}
+            {t('common.prev')}
           </Button>
           <span className="text-sm text-[var(--text-tertiary)]">
             {t('common.pageOf', { page, total: totalPages })}

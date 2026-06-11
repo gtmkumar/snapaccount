@@ -4,7 +4,11 @@ description: How SnapAccount DB migrations are numbered/run and how to achieve E
 type: project
 ---
 
-Migrations live FLAT in `database/migrations/NNN_name.sql` (zero-padded 3-digit, run in numeric order; `999_seed_reference_data.sql` runs last). There are NO `Phase-N/` subfolders despite the generic db-engineer prompt — continue the flat sequence (latest as of 2026-06-10 is `064`).
+Migrations live FLAT in `database/migrations/NNN_name.sql` (zero-padded 3-digit, run in numeric order; `999_seed_reference_data.sql` runs last). There are NO `Phase-N/` subfolders despite the generic db-engineer prompt — continue the flat sequence (latest as of 2026-06-11 is `066`).
+
+**Local-DB replay drift is real — always diff the LIVE DB, never trust a migration file's claim.** When `066` reconciled the Phase-7 EF↔DB handoff (2026-06-11), TWO earlier migrations had declared schema that was ABSENT from the live `snapaccount` DB: `060` declared `notification.notification_event` + 6 `notification.notification_log` dispatch columns (none present), and `061` declared `loan.consents.consent_locale` (absent). The migration runner had not applied them in full locally. **How to apply:** before writing any "add column X" DDL, run `psql ... \d` / `information_schema.columns` against the live target table and add only the true delta; if an earlier file claims a column the DB lacks, re-apply it idempotently (`IF NOT EXISTS`) and flag the replay gap loudly in the migration header + schema-overview.md + the handoff report. `IF NOT EXISTS` makes re-application safe on environments where the earlier migration DID run.
+
+**Singular vs plural table traps:** loan has BOTH `loan.applications` (EF-mapped, has `org_id`) and legacy `loan.loan_application`; BOTH `loan.partner_banks` (active, PK id) and `loan.partner_bank`; BOTH `loan.consents` (active) and `loan.loan_consent`; subscription has `subscription.usage_record` (SINGULAR, the EF target — `UsageRecordConfiguration.ToTable("usage_record")`) and a separate plural `subscription.usage_records` (from `064`). Always confirm the EF `ToTable(...)` target before adding columns; the handoff may name either.
 
 **Why:** AuthService, LoanService, SubscriptionService, NotificationService, CallbackService have **no EF Core migrations** — these SQL files are the canonical schema. backend-agent regularly merges EF entities/`IEntityTypeConfiguration` with no SQL, and db-engineer authors the matching additive migration afterward.
 

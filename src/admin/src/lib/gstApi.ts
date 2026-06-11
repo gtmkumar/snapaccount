@@ -238,13 +238,17 @@ export const HsnSacListSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export interface ListReturnsParams {
-  organizationId?: string
+  /** Required: backend returns 500 without org context. Gate useQuery with enabled: !!organizationId */
+  organizationId: string
   financialYear?: string
   page?: number
   pageSize?: number
 }
 
-export async function listGstReturns(params: ListReturnsParams = {}) {
+export async function listGstReturns(params: ListReturnsParams) {
+  if (!params.organizationId) {
+    throw new Error('listGstReturns: organizationId is required — do not call before org context resolves')
+  }
   const res = await api.get('/gst/returns', { params })
   return GstReturnsListSchema.parse(res.data)
 }

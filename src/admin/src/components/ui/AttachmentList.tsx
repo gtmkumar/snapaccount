@@ -63,9 +63,9 @@ function AttachmentRow({ file, onRemove, onRetry }: AttachmentRowProps) {
 
   const stateLabel = () => {
     switch (file.state) {
-      case 'queued': return <span className="text-xs text-neutral-400">Queued</span>
+      case 'queued': return <span className="text-xs text-neutral-500">Queued</span>
       case 'uploading': return <span className="text-xs text-brand-600">{file.progress ?? 0}%</span>
-      case 'success': return <span className="text-xs text-neutral-400">{formatFileSize(file.fileSizeBytes)}</span>
+      case 'success': return <span className="text-xs text-neutral-500">{formatFileSize(file.fileSizeBytes)}</span>
       case 'failed': return <span className="text-xs text-error-600">{file.errorMessage ?? 'Upload failed'}</span>
       case 'scanning': return <span className="text-xs text-neutral-500">Scanning…</span>
       case 'scan_failed': return <span className="text-xs text-error-600">Virus scan failed</span>
@@ -215,7 +215,7 @@ export function AttachmentList({
       )}
 
       {files.length >= maxFiles && !readOnly && (
-        <p className="text-xs text-neutral-400">Maximum {maxFiles} files reached.</p>
+        <p className="text-xs text-neutral-500">Maximum {maxFiles} files reached.</p>
       )}
     </div>
   )

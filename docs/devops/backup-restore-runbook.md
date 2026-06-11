@@ -250,6 +250,31 @@ echo "Secret inventory uploaded. Count: $(cat /tmp/secret-inventory-$(date +%Y%m
 
 ## 5. Quarterly Drill Procedure
 
+### Automated drill script (NEW-D05)
+
+The PITR component of the quarterly drill is scripted in `infra/scripts/pitr-drill.sh`.
+Run it first; then complete GCS / Pub/Sub / Secret Manager sections manually (Sections 2–4 above).
+
+```bash
+# Prerequisites
+gcloud auth login
+# (or: export GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa-key.json)
+
+export GCP_PROJECT_ID=snapaccount-staging
+bash infra/scripts/pitr-drill.sh
+
+# Output files
+#   /tmp/pitr-drill-<TIMESTAMP>.log      — full execution log
+#   /tmp/pitr-drill-<TIMESTAMP>-result.md — scoring template (pre-filled from script)
+```
+
+**BLOCKER (NEW-D05):** The script was authored but not yet executed because `gcloud` is not
+authenticated in the current environment. The first operator to run a quarterly drill must:
+1. `gcloud auth login` (or configure ADC via a service account with `roles/cloudsql.admin` +
+   `roles/cloudsql.client` + `roles/storage.objectAdmin` on `snapaccount-staging`).
+2. Run the script.
+3. File the result in `docs/devops/drill-reports/YYYY-MM-DD.md`.
+
 ### Scheduling
 
 Drills are performed in the first working week of each quarter:
@@ -331,6 +356,8 @@ ACTION ITEMS:
 
 ## Related files
 
+- `infra/scripts/pitr-drill.sh` — automated PITR drill script (NEW-D05)
+- `docs/devops/drill-reports/` — filed quarterly drill reports (create directory on first drill)
 - `infra/setup.sh` — Cloud SQL backup config (Step 5), GCS lifecycle (Step 7), Pub/Sub retention (Step 8), Secret Manager (Step 9)
 - `docs/devops/loan-package-bucket-lifecycle.md` — Loan packages bucket lifecycle and Bucket Lock decision
 - `docs/devops/staging-to-prod-promotion.md` — Staging to production promotion checklist

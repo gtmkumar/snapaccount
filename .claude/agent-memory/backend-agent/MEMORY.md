@@ -16,3 +16,9 @@
 - [Task #22 — Social Firebase Sign-In](project_task22_social_firebase.md) — POST /auth/social/firebase (Google/Apple); FirebaseTokenClaims DTO; IFirebaseAuthService extended; 367 tests pass.
 - [Task #24 — Gov Verification + Documents (Part A+B)](project_task24_gov_verification_documents.md) — Org toggle, 5 new endpoints, TanNumber VO, MockDocumentVerificationProvider (dual interface). 444 tests pass.
 - [Phase 7 Wave 1 — GAP fixes B1-B6](project_phase7_wave1.md) — Firebase revoke retry, RLS error log, JWT secret fail-fast, /auth/token/refresh-context, Callback KPI MV, consent locale. 575+35+90 tests green.
+- [Task B15/NEW-D03 — Document Review Loop](project_task_b15_document_review.md) — approve/reject/clarification/archive endpoints; 25 tests; DDL handoff for 3 new columns; accounting event publishing pattern.
+- [Live QA Web Sweep Fix Bundle (2026-06-11)](project_live_qa_web_sweep.md) — All 16 WEB-01..14 fixed: EF↔DB divergence sweep (8 services), RBAC 403 mapping, 7 EF smoke tests, DDL handoffs table.
+- [Mobile QA Close-Out — Loan Products + Consent Align (2026-06-11)](project_mobile_qa_closeout.md) — GET /loans/products + /{id} implemented; consent DTO additive alignment; 1185 unit tests passing.
+- [GAP-101 GSTN IMS Workflow (2026-06-11)](project_gap101_ims.md) — 3 entities, 8 CQRS handlers, 8 endpoints, 5 new perms, 59 new tests (103 total). DDL handoff for 3 tables. 3B lock is frontend-only (verified).
+- [Phase 7A AiService P7a (2026-06-11)](project_phase7a_aiservice.md) — GAP-030: extract/chat/RAG ingestion; MockAiProvider+TextRedactor+Sarvam; 61 tests; DDL handoff for ai.chunks/embeddings/interactions.
+- [Phase 7 Tasks #5/#14/#15 (2026-06-11)](project_phase7_tasks5_14_15.md) — MCA edit-log (GUC interceptor + 2 endpoints), IT Act 2025 act_version resolver, ChatService idempotency tests. 166 tests passing (+61).

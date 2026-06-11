@@ -237,9 +237,12 @@ public sealed class Callbacks : EndpointGroupBase
     }
 
     // GET /callbacks/kpi [Authorize] — GAP-012: real query over callback.kpi_daily_snapshot MV
+    // WEB-FIX (a): accepts "range" string param (7d/30d/90d) as well as legacy daysBack int.
+    //              When "range" is provided it takes precedence over daysBack.
     private static async Task<IResult> GetKpiSnapshot(
         ICurrentUser currentUser,
         ISender sender,
+        string? range = null,
         int daysBack = 30,
         CancellationToken ct = default)
     {
@@ -254,7 +257,17 @@ public sealed class Callbacks : EndpointGroupBase
                 "Complete business onboarding and call POST /auth/token/refresh-context first.",
                 statusCode: 422);
 
-        var clampedDays = Math.Clamp(daysBack, 1, 90);
+        // WEB-FIX: parse the range string to days; falls back to daysBack int for backward compat.
+        var resolvedDays = range?.ToLowerInvariant() switch
+        {
+            "7d"  => 7,
+            "30d" => 30,
+            "90d" => 90,
+            "fy"  => 365,
+            "24h" => 1,
+            _     => daysBack,
+        };
+        var clampedDays = Math.Clamp(resolvedDays, 1, 365);
         var result = await sender.Send(new GetKpiSnapshotQuery(orgId.Value, clampedDays), ct);
 
         return result.IsSuccess

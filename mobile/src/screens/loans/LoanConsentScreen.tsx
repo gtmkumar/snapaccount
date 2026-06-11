@@ -11,8 +11,9 @@
  *            loan.consent.signed, loan.consent.declined
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   Alert,
   Modal,
   NativeScrollEvent,
@@ -30,8 +31,13 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useBiometricGate } from '../../hooks/useBiometricGate';
 import type { RouteProp } from '@react-navigation/native';
-import { Colors } from '../../constants/colors';
+import {
+  createThemedStyles,
+  useTheme,
+  type ThemeTokens,
+} from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
+import { useScreenReaderEnabled } from '../../hooks/useScreenReaderEnabled';
 import {
   recordLoanConsent,
   getConsentCatalog,
@@ -85,6 +91,8 @@ const CONSENT_STEPS: {
 export function LoanConsentScreen({ navigation, route }: Props) {
   useSensitiveScreen();
   const { t } = useTranslation();
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { applicationId, userName = 'User', acctMask = 'XXXX', kfsId = '' } = route.params;
 
   const { trigger: triggerBiometric } = useBiometricGate();
@@ -94,6 +102,20 @@ export function LoanConsentScreen({ navigation, route }: Props) {
   const [biometricPassed, setBiometricPassed] = useState(false);
   const [showDeclineModal, setShowDeclineModal] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+
+  // A11Y CON-1 (Blocker): same screen-reader scroll-gate trap as KFS-1 — see
+  // useScreenReaderEnabled. The explicit reviewed-all affordance satisfies the
+  // gate per consent step; audit semantics (recordLoanConsent payload) unchanged.
+  const screenReaderEnabled = useScreenReaderEnabled();
+
+  const satisfyGateViaReader = useCallback(() => {
+    setHasScrolledToBottom((already) => {
+      if (!already) {
+        AccessibilityInfo.announceForAccessibility(t('mobile.a11y.gateUnlocked'));
+      }
+      return true;
+    });
+  }, [t]);
 
   // SEC-050: Fetch consent versions from backend catalog.
   // Falls back to FALLBACK_CONSENT_VERSION if endpoint not yet available (P6-HANDOFF-25).
@@ -195,7 +217,7 @@ export function LoanConsentScreen({ navigation, route }: Props) {
           hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.loan.consent.title')}</Text>
         <View style={{ width: 40 }} />
@@ -230,6 +252,22 @@ export function LoanConsentScreen({ navigation, route }: Props) {
         <Text style={styles.docBody}>
           {t(step.bodyKey, { acctMask })}
         </Text>
+
+        {/* A11Y CON-1: explicit reviewed-all affordance for screen-reader users
+            — last element of the consent document, satisfies the scroll-gate. */}
+        {screenReaderEnabled && !hasScrolledToBottom && (
+          <Pressable
+            style={styles.srGateBtn}
+            onPress={satisfyGateViaReader}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.a11y.reviewedAll')}
+            accessibilityHint={t('mobile.a11y.reviewedAllHint')}
+            testID="consent-sr-reviewed-all"
+          >
+            <Ionicons name="checkmark-done-outline" size={18} color={tokens.brandFg} />
+            <Text style={styles.srGateBtnText}>{t('mobile.a11y.reviewedAll')}</Text>
+          </Pressable>
+        )}
 
         {/* Extra padding to ensure scrollable */}
         <View style={{ height: 80 }} />
@@ -290,71 +328,90 @@ export function LoanConsentScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: tk.canvas },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: tk.raised,
+      borderBottomWidth: 1,
+      borderBottomColor: tk.border,
+    },
+    backBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: tk.sunken,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
 
-  docScroll: { flex: 1 },
-  docContent: { padding: 20, gap: 16 },
-  docHeader: { gap: 4 },
-  docTitle: { fontSize: 17, fontWeight: '800', color: Colors.neutral[900], letterSpacing: -0.2 },
-  docVersion: { fontSize: 12, color: Colors.neutral[400], fontWeight: '500' },
-  divider: { height: 1, backgroundColor: Colors.neutral[100] },
-  docBody: { fontSize: 14, color: Colors.neutral[700], lineHeight: 22 },
+    docScroll: { flex: 1 },
+    docContent: { padding: 20, gap: 16 },
+    docHeader: { gap: 4 },
+    docTitle: { fontSize: 17, fontWeight: '800', color: tk.textPrimary, letterSpacing: -0.2 },
+    // CON-5 (a11y): consent version/date carries legal meaning — textSecondary keeps ≥4.5:1.
+    docVersion: { fontSize: 12, color: tk.textSecondary, fontWeight: '500' },
+    divider: { height: 1, backgroundColor: tk.border },
+    docBody: { fontSize: 14, color: tk.textSecondary, lineHeight: 22 },
 
-  // Modals
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: Colors.surface.overlay,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    backgroundColor: Colors.surface.default,
-    borderRadius: 20,
-    padding: 24,
-    width: '100%',
-    gap: 16,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: Colors.neutral[900] },
-  modalBody: { fontSize: 14, color: Colors.neutral[600], lineHeight: 21 },
-  modalActions: { flexDirection: 'row', gap: 10 },
-  modalCancelBtn: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCancelText: { fontSize: 14, fontWeight: '600', color: Colors.neutral[600] },
-  modalConfirmBtn: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 12,
-    backgroundColor: Colors.error[600],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalConfirmText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
-});
+    // A11Y CON-1: screen-reader review affordance (≥44pt target).
+    srGateBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      minHeight: 48,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: tk.brand400,
+      backgroundColor: tk.brandTint,
+      paddingHorizontal: 16,
+      marginTop: 8,
+    },
+    srGateBtnText: { fontSize: 14, fontWeight: '700', color: tk.brandFg },
+
+    // Modals — scrim constant across themes (slate-900 @ 60%).
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(15, 23, 42, 0.6)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+    },
+    modalCard: {
+      backgroundColor: tk.raised,
+      borderRadius: 20,
+      padding: 24,
+      width: '100%',
+      gap: 16,
+    },
+    modalTitle: { fontSize: 18, fontWeight: '800', color: tk.textPrimary },
+    modalBody: { fontSize: 14, color: tk.textSecondary, lineHeight: 21 },
+    modalActions: { flexDirection: 'row', gap: 10 },
+    modalCancelBtn: {
+      flex: 1,
+      minHeight: 48,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: tk.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modalCancelText: { fontSize: 14, fontWeight: '600', color: tk.textSecondary },
+    modalConfirmBtn: {
+      flex: 1,
+      minHeight: 48,
+      borderRadius: 12,
+      backgroundColor: tk.errorCta,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modalConfirmText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  }),
+);

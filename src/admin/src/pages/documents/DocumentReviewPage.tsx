@@ -1,10 +1,11 @@
 /**
  * DocumentReviewPage — split-screen OCR review for a single document.
  *
- * CONTRACT GAPS (backend B15 — review-decision endpoints not yet implemented):
- *   - Approve & Process action: stubbed behind a clearly-marked disabled state
- *   - Reject action: stubbed behind a clearly-marked disabled state
- *   - Save Draft (persist corrections): stubbed (no PATCH /documents/{id}/fields endpoint)
+ * Review decisions (backend B15 — now wired):
+ *   POST /documents/{id}/approve              — no body, requires document.review
+ *   POST /documents/{id}/reject               — body { reason }, requires document.review
+ *   POST /documents/{id}/request-clarification — body { message }, requires document.review
+ *   POST /documents/{id}/archive              — no body, requires document.archive
  *
  * What IS wired to real APIs:
  *   - GET /documents/{id}          → full document detail + OCR fields
@@ -29,12 +30,24 @@ import {
   AlertCircle,
   Save,
   AlertTriangle,
+  HelpCircle,
+  Archive,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge, StatusBadge } from '@/components/ui/Badge'
 import { Toggle } from '@/components/ui/Toggle'
+import { Modal } from '@/components/ui/Modal'
 import { cn, getOcrConfidenceColor, getOcrConfidenceBg } from '@/lib/utils'
-import { getDocument, categorizeDocument, type OcrField } from '@/lib/documentApi'
+import {
+  getDocument,
+  categorizeDocument,
+  approveDocument,
+  rejectDocument,
+  requestDocumentClarification,
+  archiveDocument,
+  type OcrField,
+} from '@/lib/documentApi'
+import { Can } from '@/components/shared/Can'
 
 /** Normalise backend confidence: backend stores 0–1 float; display as 0–100. */
 function toPercent(confidence: number | null): number {
@@ -69,9 +82,19 @@ export default function DocumentReviewPage() {
   const [notes, setNotes] = useState('')
   const [flagCallback, setFlagCallback] = useState(false)
   const [flagOcrError, setFlagOcrError] = useState(false)
-  const [showRejectConfirm, setShowRejectConfirm] = useState(false)
   const [localFields, setLocalFields] = useState<EditableField[] | null>(null)
   const totalPages = 1
+
+  // Modal state
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectError, setRejectError] = useState<string | null>(null)
+
+  const [showClarifyModal, setShowClarifyModal] = useState(false)
+  const [clarifyMessage, setClarifyMessage] = useState('')
+  const [clarifyError, setClarifyError] = useState<string | null>(null)
+
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
 
   const { data: doc, isLoading, isError } = useQuery({
     queryKey: ['document', id],
@@ -108,6 +131,59 @@ export default function DocumentReviewPage() {
     onError: () => toast.error(t('common.loadError')),
   })
 
+  const approveMutation = useMutation({
+    mutationFn: () => approveDocument(id!),
+    onSuccess: () => {
+      toast.success(t('docReview.toast.approved'))
+      void queryClient.invalidateQueries({ queryKey: ['document', id] })
+      void queryClient.invalidateQueries({ queryKey: ['documents'] })
+    },
+    onError: () => toast.error(t('docReview.toast.actionFailed')),
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: (reason: string) => rejectDocument(id!, reason),
+    onSuccess: () => {
+      toast.success(t('docReview.toast.rejected'))
+      setShowRejectModal(false)
+      setRejectReason('')
+      setRejectError(null)
+      void queryClient.invalidateQueries({ queryKey: ['document', id] })
+      void queryClient.invalidateQueries({ queryKey: ['documents'] })
+    },
+    onError: () => toast.error(t('docReview.toast.actionFailed')),
+  })
+
+  const clarifyMutation = useMutation({
+    mutationFn: (message: string) => requestDocumentClarification(id!, message),
+    onSuccess: () => {
+      toast.success(t('docReview.toast.clarificationSent'))
+      setShowClarifyModal(false)
+      setClarifyMessage('')
+      setClarifyError(null)
+      void queryClient.invalidateQueries({ queryKey: ['document', id] })
+      void queryClient.invalidateQueries({ queryKey: ['documents'] })
+    },
+    onError: () => toast.error(t('docReview.toast.actionFailed')),
+  })
+
+  const archiveMutation = useMutation({
+    mutationFn: () => archiveDocument(id!),
+    onSuccess: () => {
+      toast.success(t('docReview.toast.archived'))
+      setShowArchiveConfirm(false)
+      void queryClient.invalidateQueries({ queryKey: ['document', id] })
+      void queryClient.invalidateQueries({ queryKey: ['documents'] })
+    },
+    onError: () => toast.error(t('docReview.toast.actionFailed')),
+  })
+
+  const isMutating =
+    approveMutation.isPending ||
+    rejectMutation.isPending ||
+    clarifyMutation.isPending ||
+    archiveMutation.isPending
+
   const lowConfidenceCount = fields.filter((f) => toPercent(f.confidence) < 80).length
 
   const overallPct = doc?.ocrConfidence != null ? toPercent(doc.ocrConfidence) : null
@@ -123,7 +199,35 @@ export default function DocumentReviewPage() {
     const remainingMins = mins % 60
     const timeStr = hours > 0 ? `${hours}h ${remainingMins}m` : `${mins}m`
     return t('docReview.slaRemaining', { time: timeStr })
-  }, [doc, t])
+  }, [doc])
+
+  // Reject modal submit handler
+  const handleRejectSubmit = () => {
+    if (!rejectReason.trim()) {
+      setRejectError(t('docReview.rejectModal.reasonRequired'))
+      return
+    }
+    if (rejectReason.length > 2000) {
+      setRejectError(t('docReview.rejectModal.reasonTooLong'))
+      return
+    }
+    setRejectError(null)
+    rejectMutation.mutate(rejectReason.trim())
+  }
+
+  // Clarify modal submit handler
+  const handleClarifySubmit = () => {
+    if (!clarifyMessage.trim()) {
+      setClarifyError(t('docReview.clarifyModal.messageRequired'))
+      return
+    }
+    if (clarifyMessage.length > 2000) {
+      setClarifyError(t('docReview.clarifyModal.messageTooLong'))
+      return
+    }
+    setClarifyError(null)
+    clarifyMutation.mutate(clarifyMessage.trim())
+  }
 
   if (isLoading) {
     return (
@@ -186,64 +290,46 @@ export default function DocumentReviewPage() {
             <span className="text-xs text-warning-600 font-medium">{slaLabel}</span>
           )}
 
-          {/* Save Draft — stubbed: no PATCH /documents/{id}/fields endpoint (TODO B15) */}
+          {/* Save Draft — stubbed: no PATCH /documents/{id}/fields endpoint */}
           <Button
             variant="secondary"
             size="sm"
             leftIcon={<Save className="h-4 w-4" />}
-            onClick={() => toast.info(t('docReview.approveDisabled'))}
-            title={t('docReview.approveDisabled')}
+            onClick={() => toast.info(t('docReview.saveDraft'))}
+            disabled={isMutating}
           >
             {t('docReview.saveDraft')}
           </Button>
 
-          {/* Approve — stubbed: no review-decision endpoint (TODO B15) */}
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Check className="h-4 w-4" />}
-            disabled
-            title={t('docReview.approveDisabled')}
-          >
-            {t('docReview.approve')}
-          </Button>
-
-          {/* Reject — stubbed: no review-decision endpoint (TODO B15) */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-error-600 hover:bg-error-50"
-            leftIcon={<X className="h-4 w-4" />}
-            disabled
-            title={t('docReview.approveDisabled')}
-          >
-            {t('docReview.reject')}
-          </Button>
-        </div>
-      </div>
-
-      {/* Inline rejection confirm — kept for future wiring */}
-      {showRejectConfirm && (
-        <div className="bg-red-50 border-b border-red-200 px-6 py-3 flex items-center justify-between shrink-0">
-          <span className="text-red-700 font-medium text-sm">
-            {t('docReview.rejectWarning')}
-          </span>
-          <div className="flex gap-2 ml-4">
-            <Button variant="secondary" size="sm" onClick={() => setShowRejectConfirm(false)}>
-              {t('docReview.cancelReject')}
+          {/* Approve — requires document.review */}
+          <Can permission="document.review">
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Check className="h-4 w-4" />}
+              disabled={isMutating}
+              loading={approveMutation.isPending}
+              onClick={() => approveMutation.mutate()}
+            >
+              {t('docReview.approve')}
             </Button>
+          </Can>
+
+          {/* Reject — requires document.review */}
+          <Can permission="document.review">
             <Button
               variant="ghost"
               size="sm"
-              className="bg-red-600 text-white hover:bg-red-700"
-              disabled
-              title={t('docReview.approveDisabled')}
+              className="text-error-600 hover:bg-error-50"
+              leftIcon={<X className="h-4 w-4" />}
+              disabled={isMutating}
+              onClick={() => setShowRejectModal(true)}
             >
-              {t('docReview.confirmReject')}
+              {t('docReview.reject')}
             </Button>
-          </div>
+          </Can>
         </div>
-      )}
+      </div>
 
       {/* Split panel */}
       <div className="flex flex-1 overflow-hidden">
@@ -343,15 +429,6 @@ export default function DocumentReviewPage() {
               <span className="flex items-center gap-1">
                 <span className="h-2 w-2 rounded-full bg-error-500" />
                 {t('docReview.confidence.low')}
-              </span>
-            </div>
-
-            {/* Contract gap notice */}
-            <div className="mt-3 p-2 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-700 flex gap-1.5 items-start">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>
-                {/* TODO B15: Approve/Reject disabled — review-decision endpoints pending */}
-                Approve &amp; Reject disabled pending backend B15
               </span>
             </div>
           </div>
@@ -461,7 +538,7 @@ export default function DocumentReviewPage() {
                   onClick={() => {
                     // Demonstration: categorize with a fixed category for now.
                     // In production this would open a category picker modal.
-                    toast.info(t('docReview.approveDisabled'))
+                    toast.info(t('docReview.saveDraft'))
                   }}
                 >
                   Categorize Document
@@ -472,38 +549,259 @@ export default function DocumentReviewPage() {
 
           {/* Action footer */}
           <div className="px-5 py-4 border-t border-neutral-200 space-y-2 shrink-0">
-            {/* TODO B15: Approve/Reject disabled — review-decision endpoints pending */}
-            <Button
-              variant="primary"
-              fullWidth
-              leftIcon={<Check className="h-4 w-4" />}
-              disabled
-              title={t('docReview.approveDisabled')}
-            >
-              {t('docReview.approve')}
-            </Button>
+            <Can permission="document.review">
+              <Button
+                variant="primary"
+                fullWidth
+                leftIcon={<Check className="h-4 w-4" />}
+                disabled={isMutating}
+                loading={approveMutation.isPending}
+                onClick={() => approveMutation.mutate()}
+              >
+                {t('docReview.approve')}
+              </Button>
+            </Can>
+
             <div className="grid grid-cols-2 gap-2">
+              {/* Save Draft — still stubbed (no PATCH endpoint) */}
               <Button
                 variant="secondary"
                 size="sm"
-                title={t('docReview.approveDisabled')}
-                onClick={() => toast.info(t('docReview.approveDisabled'))}
+                onClick={() => toast.info(t('docReview.saveDraft'))}
+                disabled={isMutating}
               >
                 {t('docReview.saveDraft')}
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-error-600 hover:bg-error-50"
-                disabled
-                title={t('docReview.approveDisabled')}
-              >
-                {t('docReview.reject')}
-              </Button>
+
+              <Can permission="document.review">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-error-600 hover:bg-error-50"
+                  leftIcon={<X className="h-4 w-4" />}
+                  disabled={isMutating}
+                  onClick={() => setShowRejectModal(true)}
+                >
+                  {t('docReview.reject')}
+                </Button>
+              </Can>
+            </div>
+
+            {/* Request Clarification + Archive in a second row */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <Can permission="document.review">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<HelpCircle className="h-4 w-4" />}
+                  disabled={isMutating}
+                  onClick={() => setShowClarifyModal(true)}
+                >
+                  {t('docReview.requestClarification')}
+                </Button>
+              </Can>
+
+              <Can permission="document.archive">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-neutral-600 hover:bg-neutral-100"
+                  leftIcon={<Archive className="h-4 w-4" />}
+                  disabled={isMutating}
+                  onClick={() => setShowArchiveConfirm(true)}
+                >
+                  {t('docReview.archive')}
+                </Button>
+              </Can>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Reject Modal */}
+      <Modal
+        open={showRejectModal}
+        onClose={() => {
+          if (rejectMutation.isPending) return
+          setShowRejectModal(false)
+          setRejectReason('')
+          setRejectError(null)
+        }}
+        title={t('docReview.rejectModal.title')}
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setShowRejectModal(false)
+                setRejectReason('')
+                setRejectError(null)
+              }}
+              disabled={rejectMutation.isPending}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="bg-error-600 text-white hover:bg-error-700"
+              loading={rejectMutation.isPending}
+              onClick={handleRejectSubmit}
+            >
+              {t('docReview.rejectModal.submit')}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <label
+            htmlFor="reject-reason"
+            className="block text-sm font-medium text-neutral-700"
+          >
+            {t('docReview.rejectModal.reasonLabel')}
+          </label>
+          <textarea
+            id="reject-reason"
+            value={rejectReason}
+            onChange={(e) => {
+              setRejectReason(e.target.value)
+              if (rejectError) setRejectError(null)
+            }}
+            rows={4}
+            maxLength={2000}
+            placeholder={t('docReview.rejectModal.reasonPlaceholder')}
+            className={cn(
+              'w-full rounded-lg border text-sm px-3 py-2',
+              'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none resize-none',
+              rejectError ? 'border-error-400 bg-error-50/20' : 'border-neutral-300',
+            )}
+            aria-invalid={!!rejectError}
+            aria-describedby={rejectError ? 'reject-error' : undefined}
+          />
+          <div className="flex items-center justify-between">
+            {rejectError ? (
+              <p id="reject-error" className="text-xs text-error-600">{rejectError}</p>
+            ) : (
+              <span />
+            )}
+            <span className="text-xs text-neutral-400 tabular-nums">
+              {rejectReason.length}/2000
+            </span>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Request Clarification Modal */}
+      <Modal
+        open={showClarifyModal}
+        onClose={() => {
+          if (clarifyMutation.isPending) return
+          setShowClarifyModal(false)
+          setClarifyMessage('')
+          setClarifyError(null)
+        }}
+        title={t('docReview.clarifyModal.title')}
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setShowClarifyModal(false)
+                setClarifyMessage('')
+                setClarifyError(null)
+              }}
+              disabled={clarifyMutation.isPending}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={clarifyMutation.isPending}
+              onClick={handleClarifySubmit}
+            >
+              {t('docReview.clarifyModal.submit')}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <label
+            htmlFor="clarify-message"
+            className="block text-sm font-medium text-neutral-700"
+          >
+            {t('docReview.clarifyModal.messageLabel')}
+          </label>
+          <textarea
+            id="clarify-message"
+            value={clarifyMessage}
+            onChange={(e) => {
+              setClarifyMessage(e.target.value)
+              if (clarifyError) setClarifyError(null)
+            }}
+            rows={4}
+            maxLength={2000}
+            placeholder={t('docReview.clarifyModal.messagePlaceholder')}
+            className={cn(
+              'w-full rounded-lg border text-sm px-3 py-2',
+              'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none resize-none',
+              clarifyError ? 'border-error-400 bg-error-50/20' : 'border-neutral-300',
+            )}
+            aria-invalid={!!clarifyError}
+            aria-describedby={clarifyError ? 'clarify-error' : undefined}
+          />
+          <div className="flex items-center justify-between">
+            {clarifyError ? (
+              <p id="clarify-error" className="text-xs text-error-600">{clarifyError}</p>
+            ) : (
+              <span />
+            )}
+            <span className="text-xs text-neutral-400 tabular-nums">
+              {clarifyMessage.length}/2000
+            </span>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Archive Confirm Modal */}
+      <Modal
+        open={showArchiveConfirm}
+        onClose={() => {
+          if (archiveMutation.isPending) return
+          setShowArchiveConfirm(false)
+        }}
+        title={t('docReview.archiveConfirmTitle')}
+        description={t('docReview.archiveConfirmDesc')}
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowArchiveConfirm(false)}
+              disabled={archiveMutation.isPending}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="bg-neutral-700 text-white hover:bg-neutral-800"
+              loading={archiveMutation.isPending}
+              onClick={() => archiveMutation.mutate()}
+            >
+              {t('docReview.archiveConfirm')}
+            </Button>
+          </>
+        }
+      >
+        {/* Description is shown via the modal's description prop */}
+        <span />
+      </Modal>
     </div>
   )
 }

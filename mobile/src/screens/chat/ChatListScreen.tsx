@@ -375,7 +375,7 @@ export function ChatListScreen({ navigation }: Props) {
               }}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              accessibilityLabel={t(`chat.list.filter.${f}`)}
+              accessibilityLabel={t(`mobile.chat.list.filter.${f}`)}
             >
               <Text
                 style={[
@@ -383,7 +383,7 @@ export function ChatListScreen({ navigation }: Props) {
                   { color: selected ? '#FFFFFF' : tokens.textSecondary },
                 ]}
               >
-                {t(`chat.list.filter.${f}`)}
+                {t(`mobile.chat.list.filter.${f}`)}
               </Text>
             </Pressable>
           );
@@ -402,7 +402,7 @@ export function ChatListScreen({ navigation }: Props) {
           </Text>
           <Pressable onPress={() => queryClient.invalidateQueries({ queryKey: ['chat-threads'] })}>
             <Text style={[styles.retryText, { color: tokens.brand500 }]}>
-              {t('common.retry')}
+              {t('mobile.common.retry')}
             </Text>
           </Pressable>
         </View>

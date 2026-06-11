@@ -31,63 +31,83 @@ export function DpoContactScreen({ navigation }: Props) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* NEW-W2-007 / TL-10: DPO not appointed — render the pending state
+            instead of presenting placeholder values as live contact details. */}
+        {PRIVACY_CONTACT.isPlaceholder && (
+          <View style={styles.pendingCard} accessibilityRole="text">
+            <Ionicons name="hourglass-outline" size={20} color={Colors.warning[700]} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pendingTitle}>{t('mobile.privacy.dpo.pendingTitle')}</Text>
+              <Text style={styles.pendingBody}>{t('mobile.privacy.dpo.pendingBody')}</Text>
+            </View>
+          </View>
+        )}
+
         <View style={styles.card}>
           <View style={styles.cardRow}>
             <Ionicons name="person-outline" size={18} color={Colors.neutral[500]} />
             <View style={styles.cardContent}>
               <Text style={styles.cardLabel}>{t('mobile.privacy.dpo.title')}</Text>
-              <Text style={styles.cardValue}>{PRIVACY_CONTACT.dpoName}</Text>
+              <Text style={styles.cardValue}>
+                {PRIVACY_CONTACT.isPlaceholder
+                  ? t('mobile.privacy.dpo.pendingShort')
+                  : PRIVACY_CONTACT.dpoName}
+              </Text>
             </View>
           </View>
 
           <View style={styles.divider} />
 
-          <View style={styles.cardRow}>
-            <Ionicons name="mail-outline" size={18} color={Colors.neutral[500]} />
-            <View style={styles.cardContent}>
-              <Text style={styles.cardLabel}>Email</Text>
-              <Text style={styles.cardValue}>{PRIVACY_CONTACT.dpoEmail}</Text>
-            </View>
-            <Pressable
-              style={styles.actionBtn}
-              onPress={() => void Linking.openURL(`mailto:${PRIVACY_CONTACT.dpoEmail}`)}
-              accessibilityRole="button"
-              accessibilityLabel={t('mobile.privacy.dpo.cta.email')}
-            >
-              <Text style={styles.actionBtnText}>{t('mobile.privacy.dpo.cta.email')}</Text>
-            </Pressable>
-          </View>
+          {!PRIVACY_CONTACT.isPlaceholder && (
+            <>
+              <View style={styles.cardRow}>
+                <Ionicons name="mail-outline" size={18} color={Colors.neutral[500]} />
+                <View style={styles.cardContent}>
+                  <Text style={styles.cardLabel}>{t('mobile.privacy.dpo.labels.email')}</Text>
+                  <Text style={styles.cardValue}>{PRIVACY_CONTACT.dpoEmail}</Text>
+                </View>
+                <Pressable
+                  style={styles.actionBtn}
+                  onPress={() => void Linking.openURL(`mailto:${PRIVACY_CONTACT.dpoEmail}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('mobile.privacy.dpo.cta.email')}
+                >
+                  <Text style={styles.actionBtnText}>{t('mobile.privacy.dpo.cta.email')}</Text>
+                </Pressable>
+              </View>
 
-          <View style={styles.cardRow}>
-            <Ionicons name="call-outline" size={18} color={Colors.neutral[500]} />
-            <View style={styles.cardContent}>
-              <Text style={styles.cardLabel}>Phone</Text>
-              <Text style={styles.cardValue}>{PRIVACY_CONTACT.dpoPhone}</Text>
-            </View>
-            <Pressable
-              style={styles.actionBtn}
-              onPress={() => void Linking.openURL(`tel:${PRIVACY_CONTACT.dpoPhone}`)}
-              accessibilityRole="button"
-              accessibilityLabel={t('mobile.privacy.dpo.cta.call')}
-            >
-              <Text style={styles.actionBtnText}>{t('mobile.privacy.dpo.cta.call')}</Text>
-            </Pressable>
-          </View>
+              <View style={styles.cardRow}>
+                <Ionicons name="call-outline" size={18} color={Colors.neutral[500]} />
+                <View style={styles.cardContent}>
+                  <Text style={styles.cardLabel}>{t('mobile.privacy.dpo.labels.phone')}</Text>
+                  <Text style={styles.cardValue}>{PRIVACY_CONTACT.dpoPhone}</Text>
+                </View>
+                <Pressable
+                  style={styles.actionBtn}
+                  onPress={() => void Linking.openURL(`tel:${PRIVACY_CONTACT.dpoPhone}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('mobile.privacy.dpo.cta.call')}
+                >
+                  <Text style={styles.actionBtnText}>{t('mobile.privacy.dpo.cta.call')}</Text>
+                </Pressable>
+              </View>
 
-          <View style={styles.divider} />
+              <View style={styles.divider} />
 
-          <View style={styles.cardRow}>
-            <Ionicons name="location-outline" size={18} color={Colors.neutral[500]} />
-            <View style={styles.cardContent}>
-              <Text style={styles.cardLabel}>Address (India)</Text>
-              <Text style={styles.cardValue}>{PRIVACY_CONTACT.indiaAddress}</Text>
-            </View>
-          </View>
+              <View style={styles.cardRow}>
+                <Ionicons name="location-outline" size={18} color={Colors.neutral[500]} />
+                <View style={styles.cardContent}>
+                  <Text style={styles.cardLabel}>{t('mobile.privacy.dpo.labels.address')}</Text>
+                  <Text style={styles.cardValue}>{PRIVACY_CONTACT.indiaAddress}</Text>
+                </View>
+              </View>
+            </>
+          )}
 
           <View style={styles.cardRow}>
             <Ionicons name="time-outline" size={18} color={Colors.neutral[500]} />
             <View style={styles.cardContent}>
-              <Text style={styles.cardLabel}>Business Hours</Text>
+              <Text style={styles.cardLabel}>{t('mobile.privacy.dpo.labels.hours')}</Text>
               <Text style={styles.cardValue}>{PRIVACY_CONTACT.businessHours}</Text>
             </View>
           </View>
@@ -131,6 +151,15 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
 
   scrollContent: { padding: 16, gap: 16, paddingBottom: 32 },
+
+  // NEW-W2-007: DPO appointment pending banner
+  pendingCard: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+    backgroundColor: Colors.warning[50], borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: Colors.warning[100],
+  },
+  pendingTitle: { fontSize: 14, fontWeight: '700', color: Colors.warning[800], marginBottom: 4 },
+  pendingBody: { fontSize: 13, color: Colors.warning[800], lineHeight: 20 },
 
   card: {
     backgroundColor: Colors.surface.default, borderRadius: 16, padding: 16, gap: 14,

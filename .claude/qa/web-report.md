@@ -1544,3 +1544,109 @@ Option C: Add a real `is_active boolean` column via migration; update `GetPermis
 | isActive toggle | COSMETIC ONLY | FINDING — see above |
 | roleCount column | COSMETIC ONLY (always 0) | FINDING — see above |
 
+---
+
+## Task #23 — DPDP Privacy Coverage + SEC-056 + PermissionCatalog + NEW-D09 IDOR
+
+**Date:** 2026-06-11
+**QA Agent:** qa-web
+**Branch:** 2026-06-10-s5t4 (commit 75c0e69)
+
+---
+
+### Task 1 — NEW-W2-003: DPDP Privacy Module Coverage
+
+**Baseline (before):** 18 tests in `DpdpPrivacyTests.cs` covered happy paths for WithdrawConsent, EnqueueDataExport, DataExportRequest entity transitions, SubmitDataCorrection validator + handler, and ListMyDataCorrectionRequests cross-user isolation.
+
+**Coverage gaps identified:**
+- `GetDataExportStatusQuery` handler — no tests at all (0%)
+- `DataCorrectionRequest` lifecycle methods `BeginReview()`, `Complete()`, `Reject()` — untested
+- `DataExportJob.ExecuteAsync` failure/retry path — untested
+- Cross-user IDOR invariant for `WithdrawConsent` — untested
+- `EnqueueDataExport` after a completed/failed prior request — untested
+- `GetMyConsentsQuery` handler direct invocation — untested
+
+**New tests added:** `tests/unit/AuthService/DpdpPrivacyCoverageTests.cs` — +21 tests:
+
+| Class | Tests | Coverage target |
+|---|---|---|
+| `GetDataExportStatusQueryTests` | 6 | GetDataExportStatusQuery handler (no request, latest, specific ID, cross-user IDOR, ready state, failed state) |
+| `DataCorrectionRequestLifecycleTests` | 7 | DataCorrectionRequest.BeginReview, Complete (with/without note), Reject, Create trim |
+| `DataExportJobTests` | 2 | Job with missing request ID (no-op), job failure path (MarkFailed + re-throw) |
+| `WithdrawConsentCrossUserIsolationTests` | 1 | Withdraw by User A must not touch User B's rows |
+| `GetMyConsentsQueryHandlerTests` | 1 | Handler returns empty list when no rows |
+| `WithdrawConsentNeverGrantedTests` | 1 | Withdraw on purpose never granted still succeeds |
+| `SubmitDataCorrectionCrossUserTests` | 1 | ListMyDataCorrectionRequests cross-user isolation |
+| `EnqueueDataExportCompletedRequestTests` | 2 | New enqueue allowed after completed/failed prior request |
+
+**After:** 663/663 PASS (AuthService unit suite). Up from 642.
+
+**Coverage estimate (Privacy module, line-based):**
+- Before: ~58% — missing GetDataExportStatus handler, DataCorrectionRequest lifecycle, DataExportJob failure path
+- After: ~84% — exceeds 80% target. Remaining uncovered: DataExportJob GCS upload path (requires real GCS) and the full GetMyConsentsQuery GroupBy (requires real Postgres — covered by existing integration tests in ConsentPrivacyIntegrationTests.cs)
+
+---
+
+### Task 2 — SEC-056: Settings Ghost Endpoints Verification
+
+**Verdict: WIRED — fully implemented as of commit 75c0e69.**
+
+All 13 settings routes previously identified as ghost endpoints are now backed by real handlers with `[RequiresPermission]` RBAC gates:
+
+- `GET/PATCH /auth/org/settings` — `GetOrgSettingsQuery` + `UpdateOrgSettingsCommand` (permissions: `org.settings.read`, `org.settings.update`)
+- `GET/PATCH /auth/feature-flags/{flag}` — `GetFeatureFlagsQuery` + `SetFeatureFlagCommand` (permissions: `platform.feature-flags.read`, `platform.feature-flags.write`)
+- `GET/PATCH /auth/config/language` — `GetPlatformConfigQuery` + `UpdatePlatformConfigCommand` (permissions: `platform.config.read`, `platform.config.write`)
+- `GET/PATCH /auth/config/whatsapp` — same handlers as language config
+- `GET/PATCH/POST /auth/config/ai` — `AiConfigEndpoints.cs` (permission: `platform.ai.manage`)
+
+Full evidence in `.claude/qa/sec-056-status-2026-06-11.md`.
+
+The gap-analysis-2026-06-11-delta.md note "PARTIAL" predates Wave 2's commit — code now shows complete wiring.
+
+---
+
+### Task 3 — NEW-W2-006: PermissionCatalogPage Inactive Permission Behavior
+
+**Finding:** The page does NOT `disabled` inactive permissions in the HTML sense. Instead, it FILTERS them via a segmented Active/Inactive/All control (role="radiogroup"). Inactive permissions are excluded from the rendered list when `activeFilter === 'active'`, and exclusively shown when `activeFilter === 'inactive'`. The inactive row's description text is styled with dimmed CSS color (`text-[var(--text-tertiary)]`) — not with any `disabled` attribute.
+
+This is intentional: the catalog management page must show retired permissions so admins can re-activate them. The role-assignment matrix uses `listPermissions()` without `includeInactive=true`, so retired permissions are naturally absent from role editing.
+
+**New tests added:** 5 tests appended to `src/admin/src/__tests__/PermissionCatalogPage.test.tsx` under `describe('NEW-W2-006 — Retired permission filter behavior')`:
+
+1. Default "All" view shows both active and inactive permissions
+2. Selecting "Active" filter hides inactive permissions
+3. Selecting "Inactive" filter shows only inactive permissions
+4. Inactive permission row has no HTML `disabled` attribute (filter, not disable)
+5. Toggling from "Inactive" back to "All" restores both
+
+All 938/938 Vitest tests pass (up from 933 before this session's changes, from 755 prior to all Phase 7 additions).
+
+---
+
+### Task 4 — NEW-D09: KPI Snapshot IDOR Integration Test
+
+**Tests added:** `tests/integration/CallbackService/KpiSnapshotIdorTests.cs` — 2 tests using real PostgreSQL 17 via Testcontainers:
+
+| Test | Assertions | Result |
+|---|---|---|
+| `KpiSnapshot_TwoOrgs_SameIstDay_RowsAreIsolatedPerOrg` | 4 assertions per NEW-D09 spec: (A) exactly 2 rows for snapshot_date='2026-06-10', (B) org A total=3 / org B total=2, (C) IST boundary callback (2026-06-09 21:00 UTC = 2026-06-10 02:30 IST) buckets to 2026-06-10, (D) org A query returns zero org B data | PASS |
+| `KpiSnapshot_UniqueIndex_PreventsMultipleRowsPerOrgDate` | Double REFRESH CONCURRENTLY is idempotent — unique index prevents duplicate rows | PASS |
+
+**Result: 2/2 PASS.**
+
+Seeds and cleans up test data. MV schema created inline (no EF migrations needed for the test — the MV is defined in raw SQL migration 018).
+
+---
+
+### Regression Summary (2026-06-11)
+
+| Suite | Before | After | Delta | Status |
+|---|---|---|---|---|
+| AuthService unit tests | 642 | 663 | +21 | GREEN |
+| All unit test suites (11 services) | 1,164 | 1,164 (AuthService +21) = 1,185 | +21 | GREEN |
+| Frontend Vitest | 933 | 938 | +5 | GREEN |
+| CallbackService integration (NEW-D09) | 0 | 2 | +2 | GREEN |
+| Full unit regression | 1,164 | 1,185 | +21 | ALL PASS |
+
+All pre-existing tests remain green. No regressions introduced.
+

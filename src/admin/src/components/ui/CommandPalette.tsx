@@ -13,7 +13,7 @@ import {
 import { useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Clock, Zap } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import { useCommandPalette } from '@/contexts/CommandPaletteContext'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
@@ -65,7 +65,6 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) {
-  const { t } = useTranslation()
   const { isOpen: ctxOpen, close: ctxClose, recentItems, addRecent } = useCommandPalette()
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -179,7 +178,7 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
             value={query}
             onChange={e => { setQuery(e.target.value); setSelectedIndex(0) }}
             onKeyDown={handleKeyDown}
-            placeholder={t('palette.placeholder', 'Search anything…')}
+            placeholder={t('palette.placeholder')}
             className="flex-1 text-base bg-transparent text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none"
           />
           <button
@@ -204,7 +203,7 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
                   : 'bg-[var(--surface-sunken)] text-[var(--text-secondary)] hover:bg-[var(--border-subtle)]'
               )}
             >
-              {f === 'all' ? t('palette.filter.all', 'All') : f}
+              {f === 'all' ? t('palette.filter.all') : f}
             </button>
           ))}
         </div>
@@ -222,7 +221,7 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
                 <div>
                   <div className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wide">
                     <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                    {t('palette.section.recent', 'Recent')}
+                    {t('palette.section.recent')}
                   </div>
                   {recentItems.slice(0, 5).map((item, i) => (
                     <ResultRow
@@ -243,7 +242,7 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
               <div>
                 <div className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wide">
                   <Zap className="h-3.5 w-3.5" aria-hidden="true" />
-                  {t('palette.section.actions', 'Suggested actions')}
+                  {t('palette.section.actions')}
                 </div>
                 {SUGGESTED_ACTIONS
                   .filter(a => !('adminOnly' in a && a.adminOnly) || user?.role === 'SUPER_ADMIN' || user?.role === 'OPERATIONS_MANAGER')
@@ -263,7 +262,7 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
 
               {recentItems.length === 0 && (
                 <div className="px-4 py-8 text-center text-sm text-[var(--text-tertiary)]">
-                  {t('palette.empty.placeholder', 'Type a name, PAN, GSTIN, or invoice ID to jump anywhere.')}
+                  {t('palette.empty.placeholder')}
                 </div>
               )}
             </>
@@ -275,7 +274,7 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
             </div>
           ) : displayItems.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-[var(--text-tertiary)]">
-              {t('palette.empty.noResults', `No matches for ${query}`)}
+              {t('palette.empty.noResults', { query })}
             </div>
           ) : (
             displayItems.map((item, i) => (
@@ -297,15 +296,15 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
         <div className="flex items-center gap-4 px-4 py-2 border-t border-[var(--border-subtle)] text-xs text-[var(--text-tertiary)]">
           <span>
             <kbd className="px-1 py-0.5 rounded bg-[var(--surface-sunken)] border border-[var(--border-default)] font-mono mr-1">↑↓</kbd>
-            {t('palette.hint.navigate', 'navigate')}
+            {t('palette.hint.navigate')}
           </span>
           <span>
             <kbd className="px-1 py-0.5 rounded bg-[var(--surface-sunken)] border border-[var(--border-default)] font-mono mr-1">↵</kbd>
-            {t('palette.hint.open', 'open')}
+            {t('palette.hint.open')}
           </span>
           <span>
             <kbd className="px-1 py-0.5 rounded bg-[var(--surface-sunken)] border border-[var(--border-default)] font-mono mr-1">esc</kbd>
-            {t('palette.hint.close', 'close')}
+            {t('palette.hint.close')}
           </span>
         </div>
       </div>

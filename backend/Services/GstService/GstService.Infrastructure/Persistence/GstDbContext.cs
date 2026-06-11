@@ -56,6 +56,17 @@ public class GstDbContext(DbContextOptions<GstDbContext> options)
     /// <inheritdoc />
     public DbSet<LutFiling> LutFilings => Set<LutFiling>();
 
+    // ── IMS (Invoice Management System) — GAP-101, mandatory 1 Apr 2026 ──────
+
+    /// <inheritdoc />
+    public DbSet<ImsInvoice> ImsInvoices => Set<ImsInvoice>();
+
+    /// <inheritdoc />
+    public DbSet<ImsActionLog> ImsActionLogs => Set<ImsActionLog>();
+
+    /// <inheritdoc />
+    public DbSet<Gstr1aAmendment> Gstr1aAmendments => Set<Gstr1aAmendment>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

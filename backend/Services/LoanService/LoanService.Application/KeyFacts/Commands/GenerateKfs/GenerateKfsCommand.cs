@@ -60,6 +60,7 @@ public sealed class GenerateKfsCommandHandler(
     {
         var orgId = currentUser.OrganizationId;
 
+        // Migration 066: assigned_bank_id confirmed. Include AssignedBank navigation.
         var app = await db.LoanApplications
             .Include(a => a.LoanProduct)
             .Include(a => a.AssignedBank)

@@ -51,12 +51,14 @@ public sealed class GetDlqQueryHandler(INotificationDbContext dbContext)
         if (!request.IncludeResolved) query = query.Where(d => !d.IsResolved);
 
         var total = await query.CountAsync(cancellationToken);
+        // SWEEP-FIX WEB-07: Locale is EF-ignored (no locale column in notification.dlq_items).
+        // Default to "en" in the projection.
         var items = await query
             .OrderByDescending(d => d.ExhaustedAt)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .Select(d => new DlqItemSummary(
-                d.Id, d.UserId, d.EventCode, d.Channel, d.Locale,
+                d.Id, d.UserId, d.EventCode, d.Channel, "en",
                 d.LastErrorMessage, d.RetryCount, d.ExhaustedAt, d.IsResolved))
             .ToListAsync(cancellationToken);
 

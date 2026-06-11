@@ -5,7 +5,10 @@
 
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { Colors } from '../../constants/colors';
+import {
+  createThemedStyles,
+  type ThemeTokens,
+} from '../../contexts/ThemeContext';
 
 interface CardProps {
   children: React.ReactNode;
@@ -30,6 +33,7 @@ export function Card({
   onPress,
   style,
 }: CardProps) {
+  const styles = useStyles();
   const containerStyle: ViewStyle[] = [
     styles.card,
     styles[`padding_${padding}`],
@@ -58,65 +62,49 @@ export function Card({
   return <View style={containerStyle}>{children}</View>;
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.surface.default,
-  },
-  // Padding
-  padding_none: {
-    padding: 0,
-  },
-  padding_sm: {
-    padding: 12,
-  },
-  padding_md: {
-    padding: 16,
-  },
-  padding_lg: {
-    padding: 24,
-  },
-  // Radius — more generous for premium feel
-  radius_md: {
-    borderRadius: 12,
-  },
-  radius_lg: {
-    borderRadius: 16,
-  },
-  radius_xl: {
-    borderRadius: 20,
-  },
-  // Shadows — refined, subtle, premium
-  shadow_sm: {
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  shadow_md: {
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  shadow_lg: {
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 8,
-  },
-  border: {
-    borderWidth: 1,
-    borderColor: Colors.neutral[200],
-  },
-  selected: {
-    borderWidth: 2,
-    borderColor: Colors.brand[500],
-  },
-  pressed: {
-    transform: [{ scale: 0.98 }],
-    shadowOpacity: 0.03,
-  },
-});
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: tk.raised,
+    },
+    // Padding
+    padding_none: {
+      padding: 0,
+    },
+    padding_sm: {
+      padding: 12,
+    },
+    padding_md: {
+      padding: 16,
+    },
+    padding_lg: {
+      padding: 24,
+    },
+    // Radius — more generous for premium feel
+    radius_md: {
+      borderRadius: 12,
+    },
+    radius_lg: {
+      borderRadius: 16,
+    },
+    radius_xl: {
+      borderRadius: 20,
+    },
+    // Shadows — named elevation tokens (design-elevation-spec §1.3)
+    shadow_sm: { ...tk.elevation1 },
+    shadow_md: { ...tk.elevation2 },
+    shadow_lg: { ...tk.elevation3 },
+    border: {
+      borderWidth: 1,
+      borderColor: tk.border,
+    },
+    selected: {
+      borderWidth: 2,
+      borderColor: tk.brand500,
+    },
+    pressed: {
+      transform: [{ scale: 0.98 }],
+      shadowOpacity: 0.03,
+    },
+  }),
+);

@@ -41,7 +41,7 @@ const STATUS_COLORS: Record<string, string> = {
   IN_PROGRESS: '#6366f1',   // brand-500
   FOLLOW_UP_NEEDED: '#8b5cf6', // accent-500
   ESCALATED_TO_CA: '#ef4444', // error-500
-  COMPLETED: '#22c55e',     // success-500
+  COMPLETED: '#10b981',     // success-500 (emerald — canonical S0 token)
   CANCELLED: '#9ca3af',     // neutral-400
 }
 
@@ -211,7 +211,7 @@ export default function CallbackKpiPage() {
               />
               <MetricCard
                 title={t('admin.callbacks.kpi.metric.slaCompliance')}
-                value={data.slaCompliance.toFixed(1)}
+                value={data.slaCompliance === 100 ? '100' : data.slaCompliance.toFixed(1)}
                 unit="%"
                 delta={Number(data.deltas.slaCompliance.toFixed(1))}
                 deltaSuffix=" pp"
@@ -285,7 +285,7 @@ export default function CallbackKpiPage() {
                       type="monotone"
                       dataKey="completed"
                       name={t('admin.callbacks.kpi.chart.seriesCompleted')}
-                      stroke="#22c55e"
+                      stroke="#10b981"
                       strokeWidth={2}
                     />
                   </AreaChart>
@@ -314,7 +314,7 @@ export default function CallbackKpiPage() {
                       {data.ttrHistogram.map((entry, index) => (
                         <Cell
                           key={`cell-${index}`}
-                          fill={entry.withinSla ? '#22c55e' : '#ef4444'}
+                          fill={entry.withinSla ? '#10b981' : '#ef4444'}
                         />
                       ))}
                     </Bar>

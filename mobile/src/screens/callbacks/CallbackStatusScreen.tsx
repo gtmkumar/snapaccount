@@ -57,6 +57,43 @@ const HERO_MAP: Record<CallbackStatus, HeroConfig> = {
   Cancelled: { icon: 'close-circle-outline', bg: Colors.neutral[100], iconColor: Colors.neutral[500] },
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Category label (AND-15)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The backend serializes CallbackCategory as the enum's numeric value in some
+// payloads (e.g. Gst → 1), so the raw `callback.category` cannot be rendered
+// directly. Map numeric IDs and string names onto localized labels.
+// Enum order mirrors backend CallbackService.Domain/Enums/CallbackCategory.cs.
+
+const CATEGORY_ID_TO_SLUG: Record<number, string> = {
+  0: 'general',
+  1: 'gst',
+  2: 'itr',
+  3: 'loan',
+  4: 'accounting',
+  5: 'subscription',
+  6: 'technical',
+};
+
+const KNOWN_CATEGORY_SLUGS = new Set(Object.values(CATEGORY_ID_TO_SLUG));
+
+function getCategoryLabel(
+  category: unknown,
+  t: (k: string) => string,
+): string {
+  const raw = category == null ? '' : String(category);
+  if (!raw) return '—';
+  const slug = /^\d+$/.test(raw)
+    ? CATEGORY_ID_TO_SLUG[Number(raw)]
+    : KNOWN_CATEGORY_SLUGS.has(raw.toLowerCase())
+      ? raw.toLowerCase()
+      : undefined;
+  // Unknown values (future categories) fall back to the raw string rather
+  // than a broken i18n key.
+  return slug ? t(`mobile.callback.status.category.${slug}`) : raw;
+}
+
 function formatISTTime(iso?: string): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -371,7 +408,7 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
           <Text style={styles.aboutTitle}>{t('mobile.callback.status.about.title')}</Text>
           <View style={styles.aboutRow}>
             <Text style={styles.aboutKey}>{t('mobile.callback.status.about.category')}</Text>
-            <Text style={styles.aboutVal}>{callback.category}</Text>
+            <Text style={styles.aboutVal}>{getCategoryLabel(callback.category, t)}</Text>
           </View>
           {callback.issueDescription && (
             <View style={styles.aboutRow}>

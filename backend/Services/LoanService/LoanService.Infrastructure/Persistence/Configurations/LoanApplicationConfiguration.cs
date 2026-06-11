@@ -31,7 +31,6 @@ public sealed class LoanApplicationConfiguration : IEntityTypeConfiguration<Loan
         // Indexes
         builder.HasIndex(x => x.OrgId);
         builder.HasIndex(x => x.Status);
-        builder.HasIndex(x => x.AssignedBankId);
         builder.HasIndex(x => x.SubmittedAt);
 
         // Global query filter for soft deletes
@@ -43,9 +42,13 @@ public sealed class LoanApplicationConfiguration : IEntityTypeConfiguration<Loan
             .HasForeignKey(x => x.LoanProductId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Migration 066: assigned_bank_id UUID nullable column confirmed in loan.applications.
+        // FK fk_loan_applications_assigned_bank → loan.partner_banks(id) also confirmed.
+        builder.Property(x => x.AssignedBankId).HasColumnName("assigned_bank_id");
         builder.HasOne(x => x.AssignedBank)
             .WithMany()
             .HasForeignKey(x => x.AssignedBankId)
-            .OnDelete(DeleteBehavior.SetNull);
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired(false);
     }
 }

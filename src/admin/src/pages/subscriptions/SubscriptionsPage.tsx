@@ -5,7 +5,7 @@
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import {
   Plus, TrendingUp, Users, AlertCircle, XCircle,
   Edit, Trash2, Activity, RefreshCw,
@@ -52,7 +52,6 @@ function MrrKpiCard({ label, value, sub, icon: Icon, color }: { label: string; v
 }
 
 export default function SubscriptionsPage() {
-  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [showCreatePlan, setShowCreatePlan] = useState(false)
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
@@ -73,7 +72,7 @@ export default function SubscriptionsPage() {
     mutationFn: ({ id, isActive, plan }: { id: string; isActive: boolean; plan: Plan }) =>
       updatePlan(id, { name: plan.name, priceInr: plan.priceInr, isActive }),
     onSuccess: () => {
-      toast.success(t('subscriptions.planUpdated', 'Plan updated'))
+      toast.success(t('subscriptions.planUpdated'))
       void queryClient.invalidateQueries({ queryKey: ['subscriptions', 'plans'] })
     },
   })
@@ -149,19 +148,19 @@ export default function SubscriptionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <PageHeader
-          title={t('subscriptions.title', 'Subscriptions')}
-          subtitle={t('subscriptions.subtitle', 'Manage plans, monitor MRR, and handle subscription lifecycle.')}
+          title={t('subscriptions.title')}
+          subtitle={t('subscriptions.subtitle')}
         />
         <Button variant="primary" onClick={() => setShowCreatePlan(true)}>
           <Plus className="h-4 w-4 mr-1" />
-          {t('subscriptions.newPlan', 'New Plan')}
+          {t('subscriptions.newPlan')}
         </Button>
       </div>
 
       <Tabs defaultTab="overview">
         <TabList>
-          <TabTrigger id="overview">{t('subscriptions.tab.overview', 'Overview')}</TabTrigger>
-          <TabTrigger id="plans">{t('subscriptions.tab.plans', 'Plans')}</TabTrigger>
+          <TabTrigger id="overview">{t('subscriptions.tab.overview')}</TabTrigger>
+          <TabTrigger id="plans">{t('subscriptions.tab.plans')}</TabTrigger>
         </TabList>
 
         <TabPanels className="mt-6">
@@ -175,25 +174,25 @@ export default function SubscriptionsPage() {
               ) : (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   <MrrKpiCard
-                    label={t('subscriptions.mrr', 'MRR')}
+                    label={t('subscriptions.mrr')}
                     value={`₹${formatIndianAmount(mrr?.totalMrr ?? 0)}`}
                     icon={TrendingUp}
                     color="bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400"
                   />
                   <MrrKpiCard
-                    label={t('subscriptions.active', 'Active')}
+                    label={t('subscriptions.active')}
                     value={String(mrr?.activeCount ?? 0)}
                     icon={Users}
                     color="bg-sky-100 text-sky-600 dark:bg-sky-950 dark:text-sky-400"
                   />
                   <MrrKpiCard
-                    label={t('subscriptions.pastDue', 'Past Due')}
+                    label={t('subscriptions.pastDue')}
                     value={String(mrr?.pastDueCount ?? 0)}
                     icon={AlertCircle}
                     color="bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400"
                   />
                   <MrrKpiCard
-                    label={t('subscriptions.cancelled', 'Cancelled')}
+                    label={t('subscriptions.cancelled')}
                     value={String(mrr?.cancelledCount ?? 0)}
                     icon={XCircle}
                     color="bg-rose-100 text-rose-600 dark:bg-rose-950 dark:text-rose-400"
@@ -204,7 +203,7 @@ export default function SubscriptionsPage() {
               <Card>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                    {t('subscriptions.mrrTrend', 'MRR Trend')}
+                    {t('subscriptions.mrrTrend')}
                   </h3>
                 </div>
                 <ErrorBoundary scope="pane">
@@ -224,7 +223,7 @@ export default function SubscriptionsPage() {
                 <EmptyState
                   variant="subscriptions"
                   size="md"
-                  primaryCta={{ label: t('subscriptions.createFirst', 'Create first plan'), onPress: () => setShowCreatePlan(true) }}
+                  primaryCta={{ label: t('subscriptions.createFirst'), onPress: () => setShowCreatePlan(true) }}
                 />
               ) : (
                 <DataTable
@@ -263,7 +262,6 @@ interface PlanDialogProps {
 }
 
 function PlanDialog({ open, plan, onClose, onSaved }: PlanDialogProps) {
-  const { t } = useTranslation()
   const [name, setName] = useState(plan?.name ?? '')
   const [tier, setTier] = useState<PlanTier>(plan?.tier ?? 'Starter')
   const [priceInr, setPriceInr] = useState(String(plan?.priceInr ?? ''))
@@ -273,19 +271,19 @@ function PlanDialog({ open, plan, onClose, onSaved }: PlanDialogProps) {
   const createMutation = useMutation({
     mutationFn: () => createPlan({ name, tier, billingCycle: 1, priceInr: Number(priceInr), trialDays: Number(trialDays) || undefined, description: description || undefined }),
     onSuccess: () => {
-      toast.success(t('subscriptions.planCreated', 'Plan created'))
+      toast.success(t('subscriptions.planCreated'))
       onSaved()
     },
-    onError: () => toast.error(t('subscriptions.planCreateError', 'Failed to create plan')),
+    onError: () => toast.error(t('subscriptions.planCreateError')),
   })
 
   const updateMutation = useMutation({
     mutationFn: () => updatePlan(plan!.planId, { name, priceInr: Number(priceInr), description: description || undefined, isActive: plan!.isActive }),
     onSuccess: () => {
-      toast.success(t('subscriptions.planUpdated', 'Plan updated'))
+      toast.success(t('subscriptions.planUpdated'))
       onSaved()
     },
-    onError: () => toast.error(t('subscriptions.planUpdateError', 'Failed to update plan')),
+    onError: () => toast.error(t('subscriptions.planUpdateError')),
   })
 
   const handleSave = () => {
@@ -298,7 +296,7 @@ function PlanDialog({ open, plan, onClose, onSaved }: PlanDialogProps) {
     <Dialog
       open={open}
       onClose={onClose}
-      title={plan ? t('subscriptions.editPlan', 'Edit Plan') : t('subscriptions.createPlan', 'Create Plan')}
+      title={plan ? t('subscriptions.editPlan') : t('subscriptions.createPlan')}
       size="lg"
       footer={
         <>
@@ -308,10 +306,10 @@ function PlanDialog({ open, plan, onClose, onSaved }: PlanDialogProps) {
             loading={createMutation.isPending || updateMutation.isPending}
             disabled={!name || !priceInr}
           >
-            {plan ? t('common.save', 'Save') : t('subscriptions.createPlan', 'Create Plan')}
+            {plan ? t('common.save') : t('subscriptions.createPlan')}
           </Button>
           <Button variant="ghost" onClick={onClose}>
-            {t('common.cancel', 'Cancel')}
+            {t('common.cancel')}
           </Button>
         </>
       }
@@ -319,7 +317,7 @@ function PlanDialog({ open, plan, onClose, onSaved }: PlanDialogProps) {
       <div className="space-y-4 py-2">
         <div>
           <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-            {t('subscriptions.planName', 'Plan Name')} *
+            {t('subscriptions.planName')} *
           </label>
           <input
             value={name}
@@ -332,7 +330,7 @@ function PlanDialog({ open, plan, onClose, onSaved }: PlanDialogProps) {
         {!plan && (
           <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-              {t('subscriptions.tier', 'Tier')} *
+              {t('subscriptions.tier')} *
             </label>
             <select
               value={tier}
@@ -346,7 +344,7 @@ function PlanDialog({ open, plan, onClose, onSaved }: PlanDialogProps) {
 
         <div>
           <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-            {t('subscriptions.priceInr', 'Price (₹/month)')} *
+            {t('subscriptions.priceInr')} *
           </label>
           <input
             type="number"
@@ -361,7 +359,7 @@ function PlanDialog({ open, plan, onClose, onSaved }: PlanDialogProps) {
         {!plan && (
           <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-              {t('subscriptions.trialDays', 'Trial Days')}
+              {t('subscriptions.trialDays')}
             </label>
             <input
               type="number"
@@ -376,7 +374,7 @@ function PlanDialog({ open, plan, onClose, onSaved }: PlanDialogProps) {
 
         <div>
           <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-            {t('subscriptions.description', 'Description')}
+            {t('subscriptions.description')}
           </label>
           <textarea
             value={description}

@@ -5,7 +5,11 @@
 
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { Colors } from '../../constants/colors';
+import {
+  createThemedStyles,
+  useTheme,
+  type ThemeTokens,
+} from '../../contexts/ThemeContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Generic Badge
@@ -22,6 +26,7 @@ interface BadgeProps {
 }
 
 export function Badge({ label, variant = 'default', size = 'md', style }: BadgeProps) {
+  const styles = useStyles();
   return (
     <View style={[styles.badge, styles[`badge_${variant}`], styles[`size_${size}`], style]}>
       <Text
@@ -76,32 +81,35 @@ export type LoanStatus =
 
 type AnyStatus = DocumentStatus | GstReturnStatus | ItrStatus | LoanStatus;
 
-const STATUS_CONFIG: Record<AnyStatus, { bg: string; text: string; label: string }> = {
-  // Document
-  UPLOADED: { bg: Colors.info[100], text: Colors.info[600], label: 'Uploaded' },
-  OCR_COMPLETE: { bg: Colors.brand[100], text: Colors.brand[600], label: 'OCR Complete' },
-  IN_REVIEW: { bg: Colors.warning[100], text: Colors.warning[600], label: 'In Review' },
-  PROCESSED: { bg: Colors.success[100], text: Colors.success[600], label: 'Processed' },
-  REJECTED: { bg: Colors.error[100], text: Colors.error[600], label: 'Rejected' },
-  // GST
-  DRAFT: { bg: Colors.neutral[100], text: Colors.neutral[600], label: 'Draft' },
-  PENDING_APPROVAL: { bg: Colors.warning[100], text: Colors.warning[600], label: 'Pending Approval' },
-  APPROVED: { bg: Colors.info[100], text: Colors.info[600], label: 'Approved' },
-  FILED: { bg: Colors.success[100], text: Colors.success[600], label: 'Filed' },
-  REVISION_NEEDED: { bg: Colors.error[100], text: Colors.error[600], label: 'Revision Needed' },
-  // ITR
-  USER_APPROVED: { bg: Colors.info[100], text: Colors.info[600], label: 'User Approved' },
-  FILING_IN_PROGRESS: { bg: Colors.brand[100], text: Colors.brand[600], label: 'Filing' },
-  E_VERIFIED: { bg: Colors.success[100], text: Colors.success[600], label: 'E-Verified' },
-  COMPLETED: { bg: Colors.success[100], text: Colors.success[600], label: 'Completed' },
-  // Loan
-  INITIATED: { bg: Colors.neutral[100], text: Colors.neutral[600], label: 'Initiated' },
-  DOCUMENTS_READY: { bg: Colors.info[100], text: Colors.info[600], label: 'Docs Ready' },
-  SUBMITTED: { bg: Colors.brand[100], text: Colors.brand[600], label: 'Submitted' },
-  UNDER_REVIEW: { bg: Colors.warning[100], text: Colors.warning[600], label: 'Under Review' },
-  ADDITIONAL_DOCS_NEEDED: { bg: Colors.warning[100], text: Colors.warning[600], label: 'Docs Needed' },
-  DISBURSED: { bg: Colors.success[100], text: Colors.success[600], label: 'Disbursed' },
-};
+/** Status → themed tint pair (contrast-gated in ThemeTokenContrast.test). */
+function statusConfig(tk: ThemeTokens): Record<AnyStatus, { bg: string; text: string; label: string }> {
+  return {
+    // Document
+    UPLOADED: { bg: tk.infoTint, text: tk.infoFg, label: 'Uploaded' },
+    OCR_COMPLETE: { bg: tk.brandTint, text: tk.brandFg, label: 'OCR Complete' },
+    IN_REVIEW: { bg: tk.warningTint, text: tk.warningFg, label: 'In Review' },
+    PROCESSED: { bg: tk.successTint, text: tk.successFg, label: 'Processed' },
+    REJECTED: { bg: tk.errorTint, text: tk.errorFg, label: 'Rejected' },
+    // GST
+    DRAFT: { bg: tk.sunken, text: tk.textSecondary, label: 'Draft' },
+    PENDING_APPROVAL: { bg: tk.warningTint, text: tk.warningFg, label: 'Pending Approval' },
+    APPROVED: { bg: tk.infoTint, text: tk.infoFg, label: 'Approved' },
+    FILED: { bg: tk.successTint, text: tk.successFg, label: 'Filed' },
+    REVISION_NEEDED: { bg: tk.errorTint, text: tk.errorFg, label: 'Revision Needed' },
+    // ITR
+    USER_APPROVED: { bg: tk.infoTint, text: tk.infoFg, label: 'User Approved' },
+    FILING_IN_PROGRESS: { bg: tk.brandTint, text: tk.brandFg, label: 'Filing' },
+    E_VERIFIED: { bg: tk.successTint, text: tk.successFg, label: 'E-Verified' },
+    COMPLETED: { bg: tk.successTint, text: tk.successFg, label: 'Completed' },
+    // Loan
+    INITIATED: { bg: tk.sunken, text: tk.textSecondary, label: 'Initiated' },
+    DOCUMENTS_READY: { bg: tk.infoTint, text: tk.infoFg, label: 'Docs Ready' },
+    SUBMITTED: { bg: tk.brandTint, text: tk.brandFg, label: 'Submitted' },
+    UNDER_REVIEW: { bg: tk.warningTint, text: tk.warningFg, label: 'Under Review' },
+    ADDITIONAL_DOCS_NEEDED: { bg: tk.warningTint, text: tk.warningFg, label: 'Docs Needed' },
+    DISBURSED: { bg: tk.successTint, text: tk.successFg, label: 'Disbursed' },
+  };
+}
 
 interface StatusBadgeProps {
   status: AnyStatus;
@@ -109,7 +117,8 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
-  const config = STATUS_CONFIG[status];
+  const { tokens } = useTheme();
+  const config = statusConfig(tokens)[status];
   if (!config) return null;
 
   return (
@@ -128,48 +137,50 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-  },
-  size_sm: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-  },
-  size_md: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  label_sm: {
-    fontSize: 9,
-  },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+    badge: {
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 4,
+      alignSelf: 'flex-start',
+    },
+    size_sm: {
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+    },
+    size_md: {
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+    },
+    label: {
+      fontSize: 10,
+      fontWeight: '600',
+      letterSpacing: 0.5,
+    },
+    label_sm: {
+      fontSize: 9,
+    },
 
-  // Variant backgrounds
-  badge_default: { backgroundColor: Colors.neutral[100] },
-  badge_brand: { backgroundColor: Colors.brand[100] },
-  badge_success: { backgroundColor: Colors.success[100] },
-  badge_warning: { backgroundColor: Colors.warning[100] },
-  badge_error: { backgroundColor: Colors.error[100] },
-  badge_info: { backgroundColor: Colors.info[100] },
-  badge_neutral: { backgroundColor: Colors.neutral[100] },
+    // Variant backgrounds — themed tint pairs
+    badge_default: { backgroundColor: tk.sunken },
+    badge_brand: { backgroundColor: tk.brandTint },
+    badge_success: { backgroundColor: tk.successTint },
+    badge_warning: { backgroundColor: tk.warningTint },
+    badge_error: { backgroundColor: tk.errorTint },
+    badge_info: { backgroundColor: tk.infoTint },
+    badge_neutral: { backgroundColor: tk.sunken },
 
-  // Variant text colors
-  label_default: { color: Colors.neutral[600] },
-  label_brand: { color: Colors.brand[600] },
-  label_success: { color: Colors.success[600] },
-  label_warning: { color: Colors.warning[600] },
-  label_error: { color: Colors.error[600] },
-  label_info: { color: Colors.info[600] },
-  label_neutral: { color: Colors.neutral[600] },
-});
+    // Variant text colors
+    label_default: { color: tk.textSecondary },
+    label_brand: { color: tk.brandFg },
+    label_success: { color: tk.successFg },
+    label_warning: { color: tk.warningFg },
+    label_error: { color: tk.errorFg },
+    label_info: { color: tk.infoFg },
+    label_neutral: { color: tk.textSecondary },
+  }),
+);
 
 const statusStyles = StyleSheet.create({
   badge: {

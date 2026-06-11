@@ -10,7 +10,7 @@
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import {
   AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
@@ -38,7 +38,6 @@ function formatTtr(seconds: number): string {
 const NOT_TRACKED = '—'
 
 export function KpiTab() {
-  const { t } = useTranslation()
   const [range, setRange] = useState<Range>('7d')
 
   const { data: kpi, isLoading: kpiLoading } = useQuery({
@@ -55,10 +54,10 @@ export function KpiTab() {
   })
 
   const rangeOptions: { value: Range; label: string }[] = [
-    { value: '24h', label: t('team.kpi.range.24h', 'Last 24h') },
-    { value: '7d', label: t('team.kpi.range.7d', 'Last 7 days') },
-    { value: '30d', label: t('team.kpi.range.30d', 'Last 30 days') },
-    { value: 'fy', label: t('team.kpi.range.fy', 'This FY') },
+    { value: '24h', label: t('team.kpi.range.24h') },
+    { value: '7d', label: t('team.kpi.range.7d') },
+    { value: '30d', label: t('team.kpi.range.30d') },
+    { value: 'fy', label: t('team.kpi.range.fy') },
   ]
 
   // Merge per-staff load with callback team performance (avg TTR, SLA %).
@@ -70,12 +69,12 @@ export function KpiTab() {
 
   const exportStaffCsv = () => {
     const csv = toCsv(staffRows, [
-      { header: t('team.kpi.staff.col.name', 'Name'), value: r => r.name },
-      { header: t('team.kpi.staff.col.role', 'Role'), value: r => r.roleDisplayName },
-      { header: t('team.kpi.staff.col.assigned', 'Open'), value: r => r.totalAssigned },
-      { header: t('team.kpi.staff.col.completed', 'Completed'), value: r => r.totalCompleted },
-      { header: t('team.kpi.staff.col.avgTtr', 'Avg TTR'), value: r => r.perf ? `${r.perf.avgTtrMinutes}m` : NOT_TRACKED },
-      { header: t('team.kpi.staff.col.sla', 'Callback SLA %'), value: r => r.perf ? r.perf.slaPercent.toFixed(1) : NOT_TRACKED },
+      { header: t('team.kpi.staff.col.name'), value: r => r.name },
+      { header: t('team.kpi.staff.col.role'), value: r => r.roleDisplayName },
+      { header: t('team.kpi.staff.col.assigned'), value: r => r.totalAssigned },
+      { header: t('team.kpi.staff.col.completed'), value: r => r.totalCompleted },
+      { header: t('team.kpi.staff.col.avgTtr'), value: r => r.perf ? `${r.perf.avgTtrMinutes}m` : NOT_TRACKED },
+      { header: t('team.kpi.staff.col.sla'), value: r => r.perf ? r.perf.slaPercent.toFixed(1) : NOT_TRACKED },
     ])
     downloadCsv(csvFilename('team-staff-kpis'), csv)
   }
@@ -87,7 +86,7 @@ export function KpiTab() {
         <select
           value={range}
           onChange={e => setRange(e.target.value as Range)}
-          aria-label={t('team.kpi.range.label', 'Date range')}
+          aria-label={t('team.kpi.range.label')}
           className="h-9 rounded-lg border border-[var(--border-default)] bg-[var(--surface-sunken)] text-sm px-3 text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
         >
           {rangeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -97,33 +96,33 @@ export function KpiTab() {
       {/* SLA compliance — only callback SLA is tracked today */}
       <div>
         <h3 className="text-sm font-semibold text-[var(--text-secondary)] mb-2">
-          {t('team.kpi.section.sla', 'SLA Compliance')}
+          {t('team.kpi.section.sla')}
         </h3>
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           <MetricCard
             color="success"
             loading={kpiLoading}
-            title={t('team.kpi.sla.callback', 'Callback Response SLA')}
+            title={t('team.kpi.sla.callback')}
             value={kpi ? `${kpi.slaCompliance.toFixed(1)}%` : NOT_TRACKED}
-            subtitle={t('team.kpi.target', 'Target 95%')}
+            subtitle={t('team.kpi.target')}
           />
           <MetricCard
             color="brand"
-            title={t('team.kpi.sla.docReview', 'Document Review SLA')}
+            title={t('team.kpi.sla.docReview')}
             value={NOT_TRACKED}
-            subtitle={t('team.kpi.notTracked', 'Not tracked yet')}
+            subtitle={t('team.kpi.notTracked')}
           />
           <MetricCard
             color="gst"
-            title={t('team.kpi.sla.gst', 'GST Filing SLA')}
+            title={t('team.kpi.sla.gst')}
             value={NOT_TRACKED}
-            subtitle={t('team.kpi.notTracked', 'Not tracked yet')}
+            subtitle={t('team.kpi.notTracked')}
           />
           <MetricCard
             color="itr"
-            title={t('team.kpi.sla.itr', 'ITR Verification SLA')}
+            title={t('team.kpi.sla.itr')}
             value={NOT_TRACKED}
-            subtitle={t('team.kpi.notTracked', 'Not tracked yet')}
+            subtitle={t('team.kpi.notTracked')}
           />
         </div>
       </div>
@@ -131,44 +130,44 @@ export function KpiTab() {
       {/* Callback KPIs — real data */}
       <div>
         <h3 className="text-sm font-semibold text-[var(--text-secondary)] mb-2">
-          {t('team.kpi.section.callback', 'Callback KPIs')}
+          {t('team.kpi.section.callback')}
         </h3>
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           <MetricCard
             color="warning"
             loading={kpiLoading}
-            title={t('team.kpi.callback.open', 'Open callbacks')}
+            title={t('team.kpi.callback.open')}
             value={kpi?.open ?? NOT_TRACKED}
           />
           <MetricCard
             color="success"
             loading={kpiLoading}
-            title={t('team.kpi.callback.completed', 'Completed')}
+            title={t('team.kpi.callback.completed')}
             value={kpi?.completed ?? NOT_TRACKED}
           />
           <MetricCard
             color="brand"
             loading={kpiLoading}
-            title={t('team.kpi.callback.avgTtr', 'Avg time to resolve')}
+            title={t('team.kpi.callback.avgTtr')}
             value={kpi ? formatTtr(kpi.avgTtrSeconds) : NOT_TRACKED}
           />
           <MetricCard
             color="itr"
-            title={t('team.kpi.callback.csat', 'Customer satisfaction')}
+            title={t('team.kpi.callback.csat')}
             value={NOT_TRACKED}
-            subtitle={t('team.kpi.notTracked', 'Not tracked yet')}
+            subtitle={t('team.kpi.notTracked')}
           />
         </div>
       </div>
 
       {/* Callback volume trend */}
       <Card>
-        <CardHeader title={t('team.kpi.chart.volume', 'Callback volume')} />
+        <CardHeader title={t('team.kpi.chart.volume')} />
         {kpiLoading ? (
           <div className="h-60 rounded skeleton-shimmer" />
         ) : kpi && kpi.dailyVolume.length > 0 ? (
           <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={kpi.dailyVolume} aria-label={t('team.kpi.chart.volume', 'Callback volume')}>
+            <AreaChart data={kpi.dailyVolume} aria-label={t('team.kpi.chart.volume')}>
               <defs>
                 <linearGradient id="team-kpi-requested" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
@@ -180,19 +179,19 @@ export function KpiTab() {
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />
               <Legend />
-              <Area type="monotone" dataKey="requested" name={t('team.kpi.chart.requested', 'Requested')} stroke="#6366f1" fill="url(#team-kpi-requested)" />
-              <Line type="monotone" dataKey="completed" name={t('team.kpi.chart.completedSeries', 'Completed')} stroke="#22c55e" strokeWidth={2} />
+              <Area type="monotone" dataKey="requested" name={t('team.kpi.chart.requested')} stroke="#6366f1" fill="url(#team-kpi-requested)" />
+              <Line type="monotone" dataKey="completed" name={t('team.kpi.chart.completedSeries')} stroke="#22c55e" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
-          <p className="text-sm text-[var(--text-tertiary)] py-8 text-center">{t('team.kpi.noData', 'No data for this range.')}</p>
+          <p className="text-sm text-[var(--text-tertiary)] py-8 text-center">{t('team.kpi.noData')}</p>
         )}
       </Card>
 
       {/* Individual staff KPI table */}
       <Card>
         <CardHeader
-          title={t('team.kpi.staff.title', 'Staff performance')}
+          title={t('team.kpi.staff.title')}
           actions={
             <Button
               variant="secondary"
@@ -201,7 +200,7 @@ export function KpiTab() {
               onClick={exportStaffCsv}
               disabled={staffRows.length === 0}
             >
-              {t('team.kpi.export', 'Export CSV')}
+              {t('team.kpi.export')}
             </Button>
           }
         />
@@ -209,19 +208,19 @@ export function KpiTab() {
           {gridLoading ? (
             <div className="h-32 rounded skeleton-shimmer" />
           ) : staffRows.length === 0 ? (
-            <p className="text-sm text-[var(--text-tertiary)] py-4 text-center">{t('team.kpi.staff.empty', 'No staff data.')}</p>
+            <p className="text-sm text-[var(--text-tertiary)] py-4 text-center">{t('team.kpi.staff.empty')}</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm" aria-label={t('team.kpi.staff.title', 'Staff performance')}>
+              <table className="w-full text-sm" aria-label={t('team.kpi.staff.title')}>
                 <thead>
                   <tr className="border-b border-[var(--border-subtle)]">
                     {[
-                      t('team.kpi.staff.col.name', 'Name'),
-                      t('team.kpi.staff.col.role', 'Role'),
-                      t('team.kpi.staff.col.assigned', 'Open'),
-                      t('team.kpi.staff.col.completed', 'Completed'),
-                      t('team.kpi.staff.col.avgTtr', 'Avg TTR'),
-                      t('team.kpi.staff.col.sla', 'Callback SLA %'),
+                      t('team.kpi.staff.col.name'),
+                      t('team.kpi.staff.col.role'),
+                      t('team.kpi.staff.col.assigned'),
+                      t('team.kpi.staff.col.completed'),
+                      t('team.kpi.staff.col.avgTtr'),
+                      t('team.kpi.staff.col.sla'),
                     ].map(h => (
                       <th key={h} scope="col" className="px-3 py-2 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
                         {h}

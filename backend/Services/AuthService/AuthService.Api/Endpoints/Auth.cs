@@ -109,7 +109,7 @@ public sealed class Auth : EndpointGroupBase
         groupBuilder.MapGet("/me/menu", static async (ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetMyMenuQuery(), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
         }).RequireAuthorization();
 
         // GET /auth/me/preferences — current preferences (defaults when no row exists yet)
@@ -127,18 +127,20 @@ public sealed class Auth : EndpointGroupBase
 
         // GET /auth/admin/team-members?role= — operational team list for admin widgets
         // (?role=CA used by the GST filing-queue assign-to dropdown)
+        // WEB-09/WEB-11 FIX: use ToHttpResult() so Forbidden → 403 (not 500 via Problem).
         groupBuilder.MapGet("/admin/team-members", static async (string? role, ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetTeamMembersQuery(role), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
         }).RequireAuthorization();
 
         // GET /auth/admin/staff?role= — SnapAccount internal-staff list (Team › Staff, Screen 87)
         // Richer than /admin/team-members: includes email, status, joined + last-active.
+        // WEB-09/WEB-11 FIX: use ToHttpResult() so Forbidden → 403 (not 500 via Problem).
         groupBuilder.MapGet("/admin/staff", static async (string? role, ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetStaffListQuery(role), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
         }).RequireAuthorization();
 
         // GET /auth/admin/audit-events?limit=N&actorUserId= — cross-service audit tail
@@ -146,29 +148,27 @@ public sealed class Auth : EndpointGroupBase
             int? limit, Guid? actorUserId, ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetAuditEventsQuery(limit ?? 20, actorUserId), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
         }).RequireAuthorization();
 
         // GET /auth/admin/users?page=&pageSize=&search=&isActive=&userType= — paginated CUSTOMER list
         // (excludes internal staff; userType filters BUSINESS_OWNER|EMPLOYEE within customers)
+        // WEB-09 FIX: use ToHttpResult() so Forbidden → 403 (not 400 via BadRequest).
         groupBuilder.MapGet("/admin/users", static async (
             int? page, int? pageSize, string? search, bool? isActive, string? userType,
             ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(
                 new ListUsersQuery(page ?? 1, pageSize ?? 20, search, isActive, userType), ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
         }).RequireAuthorization();
 
         // GET /auth/admin/users/{id} — admin per-user detail (profile + business)
+        // WEB-09 FIX: use ToHttpResult() for correct status code mapping including Forbidden → 403.
         groupBuilder.MapGet("/admin/users/{id:guid}", static async (Guid id, ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetUserDetailQuery(id), ct);
-            return result.IsSuccess
-                ? Results.Ok(result.Value)
-                : result.Error.Type == ErrorType.NotFound
-                    ? Results.NotFound(new { error = result.Error.Message })
-                    : Results.Problem(result.Error.Message);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
         }).RequireAuthorization();
     }
 

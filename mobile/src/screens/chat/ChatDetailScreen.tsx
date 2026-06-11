@@ -52,6 +52,7 @@ import {
   type ChatThread,
 } from '../../api/chat';
 import { Colors } from '../../constants/colors';
+import { newClientMessageId } from '../../lib/ids';
 import { useHaptics } from '../../hooks/useHaptics';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
@@ -67,9 +68,11 @@ interface BubbleProps {
   message: ChatMessage;
   isSelf: boolean;
   showAvatar: boolean;
+  /** NEW-D08: tapping a failed bubble retries the send with the SAME clientMessageId. */
+  onRetry?: (message: ChatMessage) => void;
 }
 
-function ChatBubble({ message, isSelf, showAvatar }: BubbleProps) {
+function ChatBubble({ message, isSelf, showAvatar, onRetry }: BubbleProps) {
   const { tokens } = useTheme();
   const { t } = useTranslation();
 
@@ -85,7 +88,10 @@ function ChatBubble({ message, isSelf, showAvatar }: BubbleProps) {
     minute: '2-digit',
   });
 
-  const accessLabel = `${isSelf ? t('mobile.chat.detail.bubble.you') : message.senderUserId}, ${timeStr}: ${message.body}`;
+  const isFailed = message.localStatus === 'failed';
+  const accessLabel = `${isSelf ? t('mobile.chat.detail.bubble.you') : message.senderUserId}, ${timeStr}: ${message.body}${
+    isFailed ? `. ${t('mobile.chat.mobile.failed.tapRetry')}` : ''
+  }`;
 
   return (
     <View
@@ -111,9 +117,16 @@ function ChatBubble({ message, isSelf, showAvatar }: BubbleProps) {
             : [styles.bubbleOther, { backgroundColor: tokens.sunken, borderColor: tokens.border }],
           message.localStatus === 'failed' && styles.bubbleFailed,
         ]}
+        onPress={isFailed && onRetry ? () => onRetry(message) : undefined}
+        testID={isFailed ? `chat-bubble-retry-${message.clientMessageId ?? message.messageId}` : undefined}
         accessible
+        accessibilityRole={isFailed ? 'button' : undefined}
         accessibilityLabel={accessLabel}
-        accessibilityHint={t('mobile.chat.detail.bubble.longPressHint')}
+        accessibilityHint={
+          isFailed
+            ? t('mobile.chat.mobile.failed.tapRetry')
+            : t('mobile.chat.detail.bubble.longPressHint')
+        }
       >
         <Text
           style={[
@@ -147,6 +160,11 @@ function ChatBubble({ message, isSelf, showAvatar }: BubbleProps) {
             />
           )}
         </View>
+        {isFailed && (
+          <Text style={[styles.bubbleFailedCaption, { color: isSelf ? '#FFE4E6' : tokens.errorFg }]}>
+            {t('mobile.chat.mobile.failed.tapRetry')}
+          </Text>
+        )}
       </Pressable>
     </View>
   );
@@ -309,11 +327,48 @@ export function ChatDetailScreen() {
   );
 
   // ── Send message ───────────────────────────────────────────────────────────
+  // NEW-D08: `clientMessageId` is a client-generated UUID created ONCE per
+  // logical message and persisted in the optimistic message state. A retry of
+  // a failed send MUST reuse the same id — that is the backend dedupe key.
+  const performSend = useCallback(
+    async (body: string, clientMessageId: string) => {
+      try {
+        const sent = await sendMessage(threadId, {
+          body,
+          clientMessageId,
+        });
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.clientMessageId === clientMessageId
+              ? { ...sent, clientMessageId, localStatus: 'sent' as const }
+              : m,
+          ),
+        );
+        haptics.success();
+        AccessibilityInfo.announceForAccessibility(
+          t('mobile.chat.detail.sent.accessibility'),
+        );
+      } catch {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.clientMessageId === clientMessageId
+              ? { ...m, localStatus: 'failed' as const }
+              : m,
+          ),
+        );
+        haptics.error();
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [threadId, haptics, t],
+  );
+
   const handleSend = useCallback(async () => {
     const text = composerText.trim();
     if (!text || isSending) return;
 
-    const clientMessageId = `local_${Date.now()}`;
+    const clientMessageId = newClientMessageId();
     const optimisticMsg: ChatMessage = {
       messageId: clientMessageId,
       threadId,
@@ -338,35 +393,26 @@ export function ChatDetailScreen() {
       return;
     }
 
-    try {
-      const sent = await sendMessage(threadId, {
-        body: text,
-        clientMessageId,
-      });
+    await performSend(text, clientMessageId);
+  }, [composerText, isSending, isOffline, threadId, performSend]);
+
+  // ── Retry failed send (reuses the persisted clientMessageId — dedupe point) ─
+  const handleRetry = useCallback(
+    async (failed: ChatMessage) => {
+      const clientMessageId = failed.clientMessageId;
+      if (!clientMessageId || isSending) return;
       setMessages((prev) =>
         prev.map((m) =>
           m.clientMessageId === clientMessageId
-            ? { ...sent, localStatus: 'sent' as const }
+            ? { ...m, localStatus: 'sending' as const }
             : m,
         ),
       );
-      haptics.success();
-      AccessibilityInfo.announceForAccessibility(
-        t('mobile.chat.detail.sent.accessibility'),
-      );
-    } catch {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.clientMessageId === clientMessageId
-            ? { ...m, localStatus: 'failed' as const }
-            : m,
-        ),
-      );
-      haptics.error();
-    } finally {
-      setIsSending(false);
-    }
-  }, [composerText, isSending, isOffline, threadId, haptics, t]);
+      setIsSending(true);
+      await performSend(failed.body, clientMessageId);
+    },
+    [isSending, performSend],
+  );
 
   // ── Scroll to bottom ───────────────────────────────────────────────────────
   const scrollToBottom = useCallback(() => {
@@ -390,10 +436,15 @@ export function ChatDetailScreen() {
       const prevMsg = messages[index - 1];
       const showAvatar = !isSelf && prevMsg?.senderUserId !== item.senderUserId;
       return (
-        <ChatBubble message={item} isSelf={isSelf} showAvatar={showAvatar} />
+        <ChatBubble
+          message={item}
+          isSelf={isSelf}
+          showAvatar={showAvatar}
+          onRetry={handleRetry}
+        />
       );
     },
-    [messages],
+    [messages, handleRetry],
   );
 
   const isLoading = threadLoading || messagesLoading;
@@ -669,6 +720,7 @@ const styles = StyleSheet.create({
   bubbleSelf: { borderBottomRightRadius: 4 },
   bubbleOther: { borderBottomLeftRadius: 4, borderWidth: StyleSheet.hairlineWidth },
   bubbleFailed: { borderWidth: 1, borderColor: Colors.error[400] },
+  bubbleFailedCaption: { fontSize: 11, fontWeight: '600', marginTop: 4 },
   bubbleText: { fontSize: 14, lineHeight: 20 },
   bubbleMeta: {
     flexDirection: 'row',

@@ -1,6 +1,22 @@
 # SnapAccount — Orchestrator Status
 
-## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 1 COMPLETE — ACCEPTED 2026-06-10)
+## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 3 LIVE-TEST CYCLE COMPLETE — 2026-06-11)
+
+### Phase 7 Wave 4 — Regulatory & platform build wave (2026-06-11, same session, COMPLETE & live-verified)
+
+Team-lead approved dispatch ("2"). Delivered and verified live on the running stack:
+- **GSTN IMS (GAP-101)**: full backend (3 entities, 8 endpoints, deterministic mock GSTN client, GSTR-1A, deemed-acceptance command) + migration 074 (tables, RLS, append-only action log) + 5 permissions seeded. Live: sync→8 mock invoices→summary with 2B deadline. Remaining: UI (task #32), Hangfire wiring, 3B-block verification vs primary advisory.
+- **AI Service P7a (GAP-030)**: /ai/extract + org-scoped /ai/chat (mock-first, PAN/Aadhaar/card redaction, daily token budgets, Sarvam Indic routing) + RAG ingestion subscriber + migration 075 (chunks/embeddings FLOAT4[]→P7b pgvector/interactions). 61 tests. Follow-ups in #31.
+- **MCA edit-log (GAP-100)**: migration 071 (append-only, trigger-enforced immutability incl. SUPER_ADMIN, auto-capture on 4 accounting tables) + GUC interceptor + auditor endpoints + permission 076. Live-verified. UI: #33.
+- **IT Act 2025 (GAP-102)**: migration 072 (act_version/tax_year + section mapping) + resolver fallback logic + actVersion DTO fields. Regression found in live verify (10 wrong EF mappings on TaxSlabVersion/DeductionSection) — fixed, EfSmoke hardened from AnyAsync to full projections (closes the convention-divergence blind spot).
+- **Chat idempotency (NEW-D08)**: closed end-to-end (backend dedupe + mobile UUID with retry-reuse).
+- **Design elevation (#26, partial)**: admin S0 canonical tokens; mobile tinted-surface ThemeTokens + 6 regulated screens dark-mode migrated with both-mode contrast gate tests; 58 screens remain.
+- **Callback MV vocab (073)**: counts now real.
+- Backend suite ~1,250+ green across services; mobile jest 521/521; admin vitest 941/941. Migrations 071–076 all applied + scratch-replayed.
+
+### Phase 7 Wave 3 — Live test → fix → retest cycle (2026-06-11 session)
+
+Full record: **`live-test-verification-2026-06-11.md`**. Summary: task board rebuilt (30 tasks); qa-web API sweep found 16 failing endpoints (systemic EF↔DB divergence + RBAC status bugs) — ALL fixed across 3 backend rounds + migrations 065–069 and re-verified live (API + Playwright browser pass); EfSmoke suites (35) added, backend 1,143 tests green; B15 document review loop delivered end-to-end (backend+DB+frontend); a11y spec + 2 regulatory blockers fixed (SR-accessible KFS/consent gates); design-elevation spec (S0–S7) ready; single i18n runtime (1611-key en/hi/bn parity + CI gate); Settings real subscription stats; endpoints.md regenerated; AI architecture decided; Android live sweep done (11 findings, fixes dispatched; jest baseline 438/438). Remaining: iOS sweep, IMS/MCA/IT-Act/AI-P7a builds, TL queue (see task board).
 
 ### Phase 7 Wave 1 — COMPLETE & VERIFIED (2026-06-10 17:30 IST)
 
@@ -22,6 +38,10 @@ All four Wave 1 dispatches accepted after independent orchestrator verification 
 - Clients must call `POST /auth/token/refresh-context` after org creation to close BUG-5 end-to-end → mobile M-slot + frontend (Wave 2).
 - notification_event seeder try/catch band-aid (PR #19) can be removed now that 060 is verified → backend (Wave 2/3).
 - Mobile Jest infra debt (nativewind/TurboModuleRegistry, 23 pre-existing failing suites) → qa-mobile (Wave 4).
+
+### Phase 7 Wave 2 — COMPLETE & CODE-VERIFIED (2026-06-11 review)
+
+Wave 2 (incl. batch 2) landed as commit `75c0e69` on branch `2026-06-10-s5t4` and was independently code-verified 2026-06-11: B7 DPDP privacy stack (entities + Privacy.cs + migration 062 + tests), B8 RBI KFS + cooling-off (migration 063 + mobile KeyFactsStatementScreen), B9 Razorpay client + usage metering (migration 064; Mock default in DI — production activation runbook needed), B10/B12 done, B11 spot-verified (SEC-056 endpoint wiring still partial), M2/M3/M4 delivered (Privacy Center + biometric step-up live), D4 CI migration-replay + healthz jobs, D5 scheduler matrix incl. KPI MV refresh. Full verification + 22 new findings + 12 new regulatory gaps (GAP-100..111): **`gap-analysis-2026-06-11-delta.md`**. Wave 3 recommendation in that doc §E; per-agent tasks created on the session task board 2026-06-11.
 
 ### Phase 7 Wave 2 — DISPATCHED (2026-06-10 20:55 IST, team-lead pre-approved autonomous continuation)
 

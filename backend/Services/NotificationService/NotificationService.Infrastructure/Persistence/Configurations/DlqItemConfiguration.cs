@@ -6,15 +6,20 @@ using SnapAccount.Shared.Infrastructure.Persistence;
 namespace NotificationService.Infrastructure.Persistence.Configurations;
 
 /// <summary>
-/// Maps <see cref="DlqItem"/> to <c>notification.dlq_items</c> (created by SQL
-/// migration 017, EF-aligned by migration 060).
+/// Maps <see cref="DlqItem"/> to <c>notification.dlq_items</c>.
 ///
-/// Column reconciliation:
-///   EventCode → event_type, LastErrorMessage → failure_reason,
-///   ExhaustedAt → last_failed_at.
-///   OriginalPayload → original_payload (plain-text column added by 060; the JSONB
-///   payload column is left untouched), IsResolved → is_resolved (added by 060),
-///   Locale → locale (added by 060).
+/// SWEEP-FIX WEB-07: DB column reconciliation against actual notification.dlq_items schema:
+///   EventCode   → event_type          ✓ (was correct)
+///   Channel     → channel             ✓ (was correct)
+///   LastErrorMessage → failure_reason ✓ (was correct)
+///   RetryCount  → retry_count         ✓ (was correct)
+///   ExhaustedAt → last_failed_at      ✓ (was correct)
+///   IsResolved (bool) → resolution_status (varchar OPEN/REQUEUED/ACKNOWLEDGED/DROPPED):
+///     false = 'OPEN', true = 'ACKNOWLEDGED'. Uses value converter.
+///
+/// Removed mappings (columns do not exist in DB):
+///   Locale       (no locale column — use 'en' default in entity; not persisted)
+///   OriginalPayload (no original_payload column — DB has payload jsonb instead)
 /// </summary>
 public sealed class DlqItemConfiguration : IEntityTypeConfiguration<DlqItem>
 {
@@ -32,12 +37,24 @@ public sealed class DlqItemConfiguration : IEntityTypeConfiguration<DlqItem>
             .HasConversion(new UpperSnakeEnumConverter<NotificationChannel>())
             .HasMaxLength(30).IsRequired();
 
-        builder.Property(d => d.Locale).HasColumnName("locale").HasMaxLength(20).IsRequired();
-        builder.Property(d => d.OriginalPayload).HasColumnName("original_payload");
+        // SWEEP-FIX WEB-07: Locale and OriginalPayload have no DB columns — ignore.
+        builder.Ignore(d => d.Locale);
+        builder.Ignore(d => d.OriginalPayload);
+
         builder.Property(d => d.LastErrorMessage).HasColumnName("failure_reason").IsRequired();
         builder.Property(d => d.RetryCount).HasColumnName("retry_count");
         builder.Property(d => d.ExhaustedAt).HasColumnName("last_failed_at").IsRequired();
-        builder.Property(d => d.IsResolved).HasColumnName("is_resolved").IsRequired();
+
+        // SWEEP-FIX WEB-07: resolution_status is VARCHAR (OPEN/REQUEUED/ACKNOWLEDGED/DROPPED).
+        // Map bool IsResolved to the varchar using a value converter:
+        //   false → 'OPEN', true → 'ACKNOWLEDGED'.
+        builder.Property(d => d.IsResolved)
+            .HasColumnName("resolution_status")
+            .HasMaxLength(30)
+            .IsRequired()
+            .HasConversion(
+                b => b ? "ACKNOWLEDGED" : "OPEN",
+                s => s == "ACKNOWLEDGED" || s == "DROPPED");
 
         builder.Property(d => d.CreatedAt).HasColumnName("created_at");
         builder.Property(d => d.UpdatedAt).HasColumnName("updated_at");

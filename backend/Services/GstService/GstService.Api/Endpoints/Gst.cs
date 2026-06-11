@@ -203,11 +203,14 @@ public sealed class Gst : EndpointGroupBase
             : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
     }
 
+    // WEB-10 FIX: organizationId is now nullable — missing param returns 400 (not 500 binding error).
     private static async Task<IResult> ListGstReturns(
-        ISender sender, Guid organizationId, string? status = null, string? returnType = null, int page = 1, int pageSize = 20)
+        ISender sender, Guid? organizationId = null, string? status = null, string? returnType = null, int page = 1, int pageSize = 20)
     {
-        var result = await sender.Send(new ListGstReturnsQuery(organizationId, status, returnType, page, pageSize));
-        return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+        if (!organizationId.HasValue)
+            return Results.BadRequest(new { error = "organizationId query parameter is required.", code = "GST.MissingOrganizationId" });
+        var result = await sender.Send(new ListGstReturnsQuery(organizationId.Value, status, returnType, page, pageSize));
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
     }
 
     private static async Task<IResult> GetGstReturn(Guid id, ISender sender)
@@ -256,18 +259,24 @@ public sealed class Gst : EndpointGroupBase
     }
 
     private static async Task<IResult> ListReturnInvoices(
-        Guid id, ISender sender, Guid organizationId, int page = 1, int pageSize = 50)
+        Guid id, ISender sender, Guid? organizationId, int page = 1, int pageSize = 50)
     {
-        var result = await sender.Send(new ListReturnInvoicesQuery(id, organizationId, page, pageSize));
+        // SWEEP-B FIX: organizationId is nullable — missing query param returns 400, not 500 binding error.
+        if (!organizationId.HasValue)
+            return Results.BadRequest(new { error = "organizationId query parameter is required.", code = "GST.MissingOrganizationId" });
+        var result = await sender.Send(new ListReturnInvoicesQuery(id, organizationId.Value, page, pageSize));
         return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
     }
 
     // ── Invoice handlers ──────────────────────────────────────────────────────
 
     private static async Task<IResult> ListGstInvoices(
-        ISender sender, Guid organizationId, string? invoiceType = null, string? status = null, int page = 1, int pageSize = 20)
+        ISender sender, Guid? organizationId, string? invoiceType = null, string? status = null, int page = 1, int pageSize = 20)
     {
-        var result = await sender.Send(new ListGstInvoicesQuery(organizationId, invoiceType, status, page, pageSize));
+        // SWEEP-B FIX: organizationId is nullable — missing query param returns 400, not 500 binding error.
+        if (!organizationId.HasValue)
+            return Results.BadRequest(new { error = "organizationId query parameter is required.", code = "GST.MissingOrganizationId" });
+        var result = await sender.Send(new ListGstInvoicesQuery(organizationId.Value, invoiceType, status, page, pageSize));
         return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
     }
 
@@ -296,9 +305,12 @@ public sealed class Gst : EndpointGroupBase
     }
 
     private static async Task<IResult> GetItcMismatches(
-        ISender sender, Guid organizationId, string? status = "OPEN")
+        ISender sender, Guid? organizationId, string? status = "OPEN")
     {
-        var result = await sender.Send(new GetItcMismatchesQuery(organizationId, status));
+        // SWEEP-B FIX: organizationId is nullable — missing query param returns 400, not 500 binding error.
+        if (!organizationId.HasValue)
+            return Results.BadRequest(new { error = "organizationId query parameter is required.", code = "GST.MissingOrganizationId" });
+        var result = await sender.Send(new GetItcMismatchesQuery(organizationId.Value, status));
         return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
     }
 
@@ -313,8 +325,10 @@ public sealed class Gst : EndpointGroupBase
 
     // ── Notice handlers ───────────────────────────────────────────────────────
 
+    // WEB-FIX: organizationId is now nullable — when absent the handler defaults to
+    // ICurrentUser.OrganizationId (so the admin GST Notices page works without passing it explicitly).
     private static async Task<IResult> ListNotices(
-        ISender sender, Guid organizationId, string? status = null, int page = 1, int pageSize = 20)
+        ISender sender, Guid? organizationId = null, string? status = null, int page = 1, int pageSize = 20)
     {
         var result = await sender.Send(new ListNoticesQuery(organizationId, status, page, pageSize));
         return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });

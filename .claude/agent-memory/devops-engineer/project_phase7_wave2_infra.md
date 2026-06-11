@@ -31,3 +31,22 @@ Phase 7 Wave 2 completed 2026-06-10. Key facts:
 **GCS Bucket Lock (TL-6):** Script at infra/gcs-bucket-lock.sh. Requires APPROVED_BY + APPROVAL_TICKET env vars + typing 'LOCK-CONFIRMED'. IRREVERSIBLE.
 
 **HSN/SAC data:** ~12k rows from CBIC, load runbook at docs/devops/hsn-sac-dataset-load-runbook.md. Blocked on staging DB access (team lead must grant). ON CONFLICT clause uses `code WHERE deleted_at IS NULL` partial unique index.
+
+**NEW-D07 Razorpay webhook secret (2026-06-11):**
+- Secret name: `razorpay-webhook-secret`, env var: `RAZORPAY_WEBHOOK_SECRET`
+- Provisioned as Section 9 in `infra/secret-manager-external-deps.sh`
+- WITHOUT it: `POST /subscriptions/webhooks/razorpay` returns 503 (fail-closed, by design in RazorpayWebhook.cs)
+- Obtain from: Razorpay Dashboard → Account & Settings → Webhooks → Edit → Secret
+- Documented in: `docs/devops/subscription-razorpay-setup.md`, `docs/devops/external-deps-secret-mapping.md`
+- DI fact: MockRazorpayClient is ALWAYS the startup default. Switch to RazorpayHttpClient is runtime-only (admin calls PATCH /subscriptions/config/razorpay with IsEnabled=true). No Dockerfile change needed.
+
+**NEW-D17 CI font verify job (2026-06-11):**
+- Job `report-font-verify` added to `.github/workflows/ci.yml`
+- Builds ReportService image, runs `docker run --entrypoint sh` to verify 8 font files at `/app/fonts/`
+- Also runs a dotnet QuestPDF font-registration smoke test (in-process, not container) using QUESTPDF_FONTS_PATH env var
+- Separate from docker-smoke-test matrix to avoid matrix overhead for one-service concern
+
+**NEW-D05/D06 SLO + PITR (2026-06-11):**
+- PITR drill: `infra/scripts/pitr-drill.sh` (executable, bash -n verified). BLOCKER: gcloud not authenticated locally; first operator must `gcloud auth login` before running.
+- SLO alerts: `infra/monitoring-alert-policies.sh` — 12 services × 2 alert types + 2 Pub/Sub lag alerts = 26 alert policies total. Uses `gcloud alpha monitoring policies` API. Idempotent (delete + recreate by display name).
+- SLO data source: `docs/devops/observability-slos.md` (all thresholds preserved verbatim).

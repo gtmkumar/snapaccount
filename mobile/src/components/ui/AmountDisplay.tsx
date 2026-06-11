@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { Platform, StyleSheet, Text, TextStyle, View } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useTheme } from '../../contexts/ThemeContext';
 import { formatINR, formatINRCompact } from '../../lib/utils';
 
 type AmountFormat = 'full' | 'compact' | 'symbol-only';
@@ -32,6 +32,7 @@ export function AmountDisplay({
   colorCode = false,
   style,
 }: AmountDisplayProps) {
+  const { tokens } = useTheme();
   const rupeeAmount = unit === 'paise' ? amount / 100 : amount;
 
   // Determine sign
@@ -48,10 +49,10 @@ export function AmountDisplay({
     formatted = formatINR(Math.abs(rupeeAmount));
   }
 
-  // Color coding
-  let textColor: string = Colors.neutral[900];
+  // Color coding — themed: profit/refund vs loss/owed stay ≥4.5:1 in dark too
+  let textColor: string = tokens.textPrimary;
   if (colorCode) {
-    textColor = rupeeAmount >= 0 ? Colors.positive : Colors.negative;
+    textColor = rupeeAmount >= 0 ? tokens.successFg : tokens.errorFg;
   }
 
   return (
@@ -78,7 +79,6 @@ const styles = StyleSheet.create({
   base: {
     fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
     fontWeight: '600',
-    color: Colors.neutral[900],
   },
   size_sm: {
     fontSize: 14,

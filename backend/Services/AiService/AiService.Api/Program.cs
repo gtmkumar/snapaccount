@@ -24,12 +24,8 @@ try
         .WriteTo.Console()
         .Enrich.WithProperty("Service", "AiService"));
 
-    // MediatR — AiService has no Application layer commands yet, but the shared
-    // DispatchDomainEventsInterceptor (registered by AddAiInfrastructure) requires IMediator.
-    // Scan the Infrastructure assembly so the registration is non-empty.
-    builder.Services.AddMediatR(cfg =>
-        cfg.RegisterServicesFromAssembly(typeof(AiService.Infrastructure.DependencyInjection).Assembly));
-
+    // AddAiInfrastructure now calls AddAiApplicationServices internally,
+    // which registers MediatR + FluentValidation from the Application assembly.
     builder.Services.AddAiInfrastructure(builder.Configuration);
 
     builder.Services.AddOpenApi();

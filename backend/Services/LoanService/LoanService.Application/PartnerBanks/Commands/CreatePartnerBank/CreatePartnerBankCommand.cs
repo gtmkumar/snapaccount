@@ -58,12 +58,14 @@ public sealed class CreatePartnerBankCommandHandler(
         CreatePartnerBankCommand request,
         CancellationToken cancellationToken)
     {
-        byte[]? encryptedConfig = null;
+        string? encryptedConfig = null;
         if (!string.IsNullOrEmpty(request.ApiConfigJson) && !string.IsNullOrEmpty(request.ApiConfigKeyRef))
         {
-            // P6-HANDOFF-27: AES-GCM envelope encryption via ICredentialEncryptionService
-            encryptedConfig = await credentialEncryption.EncryptAsync(
+            // P6-HANDOFF-27: AES-GCM envelope encryption via ICredentialEncryptionService.
+            // SWEEP-FIX WEB-03: ApiConfigEncrypted is string? (jsonb in DB) — convert byte[] to Base64.
+            var encryptedBytes = await credentialEncryption.EncryptAsync(
                 request.ApiConfigJson, request.ApiConfigKeyRef, cancellationToken);
+            encryptedConfig = Convert.ToBase64String(encryptedBytes);
         }
 
         var bank = new PartnerBank

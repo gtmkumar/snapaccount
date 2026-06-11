@@ -4,34 +4,60 @@ description: Current phase, test baseline, known pre-existing failures, and key 
 type: project
 ---
 
-Phase 6F COMPLETE as of 2026-04-25. Live smoke re-test run 2026-06-06 (Session 2) — BUG-1/3/4 FIXED and verified. New BUG-5 found (Team invite 409 after fresh onboarding).
+Phase 7 Wave 1+2 complete on branch `2026-06-10-s5t4`. Live Android sweep (2026-06-11) + iOS sweep (task #22, 2026-06-11) both complete. 438/438 Jest tests passing.
 
-**Why:** Phase 6F is the final phase covering tracks F2 (Chat/SignalR) and F4 (Theme/Haptics/NetworkQuality).
+**Why:** Phase 7 Wave 2 includes DPDP privacy stack, RBI KFS, Razorpay, migrations 062-064. BUG-5 (team invite 409) still open. AND-08 startup crash Android-only still open.
 
-**How to apply:** Next phase (7+) starts with 323 total tests, 319 passing. The 4 LoanPackagePreviewScreen failures are pre-existing watermark matcher bugs — not regressions. Do not attempt to fix in QA agent.
+**How to apply:** Jest baseline is 438 passing (47 suites). iOS sweep is PASS. Android is CONDITIONAL PASS (AND-08 crash + Metro cache issues).
 
 ## Jest baseline per phase
 - Phase 6A/6E: 153 → 204 → 235 passing
 - Phase 6B/6D: 235 → ~270 (estimate)
 - Phase 6F: 323 total, 319 passing (4 pre-existing LoanPackagePreview failures)
+- Phase 7 Wave 1+2: 438 total, 438 passing
 
 ## Known pre-existing failures
-- `LoanPackagePreviewScreen.test.tsx` — 4 tests: watermark test calls `.toMatch()` on array (icon + Text children array). Filed as pre-existing. Do not count as regression.
+- `LoanPackagePreviewScreen.test.tsx` — 4 tests: watermark test calls `.toMatch()` on array (icon + Text children array). Filed as pre-existing. Resolved in Phase 7 baseline.
 
-## iOS Simulator (2026-06-06 live test)
-- Simulator available and working: iPhone 17 Pro iOS 26.5 (UDID: 17BF04F0-A5F0-4C76-80FA-05FB8204FE4C)
-- mcp__ios-simulator__* tools work. Use AX tree coordinates (ui_describe_all) for taps — not screenshot pixel estimates.
-- Hardware keyboard suppresses software keyboard; use software keyboard toggle via AppleScript or simulate via keystroke injection.
+## iOS Simulator (2026-06-11 live sweep — task #22)
+- Simulator: iPhone 17 Pro iOS 26.5 (UDID: 17BF04F0-A5F0-4C76-80FA-05FB8204FE4C)
+- Build: `npx expo run:ios --device 17BF04F0-A5F0-4C76-80FA-05FB8204FE4C` (required for SecureStore)
+- Metro: must use `--reset-cache` when i18n en.json changes — Metro caches JSON assets separately from JS modules
 - App bundle ID: com.snapaccount.app
-- Metro on localhost:8081, AuthService on localhost:5101 (LOCAL_AUTH mode), OTPs logged to /tmp/authsvc.log
+- OTP for 9111222333 in Aspire logs: `/var/folders/pd/qb9jqwgs5tlfjsws71dlxycr0000gn/T/aspire.DOQOan/auth-service-sdmrcjqk_out_b85fb3f1-69af-4b73-80ea-92811ce1dbd6`
+- iOS does NOT apply FLAG_SECURE — all screen content visible in screenshots (unlike Android)
+- Dynamic Island (iPhone 17 Pro): content renders correctly below capsule
+- Safe area handling: confirmed working
+
+## iOS Sweep Results (2026-06-11, task #22)
+All 10 AND-XX items PASS on iOS:
+- AND-02 (icons): PASS
+- AND-03 (GST card): PASS  
+- AND-04 (filenames): PASS (visually confirmed, no FLAG_SECURE)
+- AND-08 (Privacy Center crash): PASS — NO CRASH on iOS; graceful degradation banner shown
+- AND-09: NOT TRIGGERED — Privacy Center stable on iOS
+- AND-10 (chat filter chips): PASS — after Metro --reset-cache
+- AND-11 (Language & Notifications title): PASS — after Metro --reset-cache
+- AND-13 (subtitle wrap): PASS
+- AND-14 (profile card tappable): PASS
+- AND-15 (callback category): PASS — "GST Filing" shown
+
+New iOS bugs found:
+- IOS-01 (Medium): Consent summary degradation banner always shows — backend returns `Consents` (PascalCase) but mobile expects `items`. Both platforms affected.
+- IOS-02 (Medium): Loan products API error for test account. Both platforms affected.
+- IOS-03 (Low): DPO section partially hidden behind tab bar in Privacy Center.
 
 ## Critical Bugs Found (2026-06-06 smoke test) — task IDs
-- BUG-1 (Task #12): PUT /auth/profile 500 for all new users — DbUpdateConcurrencyException in UserRepository.UpdateAsync. Blocks ALL onboarding completion. FIXED (verified 2026-06-06 Session 2).
-- BUG-2 (Task #13): Team tile never shown — downstream of BUG-1, no BUSINESS_OWNER user can exist. FIXED (verified 2026-06-06 Session 2 — Team tile shown after BUG-1 fix).
-- BUG-3 (Task #14): Deep link snapaccount://invite/:token crashes app — React Navigation duplicate pattern conflict. FIXED (verified 2026-06-06 Session 2 — AcceptInvite screen opens without crash).
-- BUG-4 (Task #15): ProfileScreen Sign Out button unreachable — ScrollView missing paddingBottom to clear tab bar. FIXED (verified 2026-06-06 Session 2 — Sign Out reachable and functional).
-- BUG-5 (NEW, 2026-06-06 Session 2): POST /auth/team/invite returns 409 "Org.InvalidContext" immediately after business onboarding. Session JWT issued at OTP login does not carry OrganizationId (org created during wizard after JWT issued). OrgContextGuard.ValidateAsync rejects POST CreateInvitation. GET /auth/team/invites works because it resolves orgId from DB. Fix: refresh/reissue session JWT after markAuthenticated() in BusinessProfileWizardScreen. Severity: High. Workaround: re-login after onboarding.
+- BUG-1 (Task #12): PUT /auth/profile 500 — FIXED
+- BUG-2 (Task #13): Team tile never shown — FIXED
+- BUG-3 (Task #14): Deep link crash — FIXED
+- BUG-4 (Task #15): Sign Out unreachable — FIXED
+- BUG-5 (NEW, 2026-06-06): POST /auth/team/invite returns 409 "Org.InvalidContext" — session JWT missing orgId after fresh onboarding. OPEN. Severity: High. Workaround: re-login.
+- AND-08 (NEW, 2026-06-11): Startup `TypeError: Cannot read property 'filter' of undefined` on Android only. NOT PrivacyCenterScreen — separate component mounting at app startup (tab-bar level or global hook). ScreenErrorBoundary fix is correct for Privacy Center but startup error must be traced separately. OPEN. Critical/Android-only.
+
+## Metro Cache Pattern (critical knowledge)
+Metro Fast Refresh updates JS modules but does NOT serve updated JSON assets. When en.json changes (i18n keys added/changed), must restart Metro with `--reset-cache`. Running `npx expo start --reset-cache --port 8081` serves fresh bundle with all new keys. Without this, i18n key changes are invisible at runtime even though Fast Refresh runs.
 
 ## Expo Go
-- `import '../../src/i18n'` at top of test files loads real translations. `t('mobile.chat.list.empty')` returns actual English string, not key.
-- Keys under `mobile.*` namespace resolve correctly. Keys without `mobile.` prefix (e.g. `chat.list.filter.gst`) return the key itself as fallback — useful for `getByLabelText`.
+- `import '../../src/i18n'` at top of test files loads real translations.
+- Keys under `mobile.*` namespace resolve correctly. Keys without `mobile.` prefix return the key itself as fallback.

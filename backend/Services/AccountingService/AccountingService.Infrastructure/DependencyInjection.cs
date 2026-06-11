@@ -2,6 +2,7 @@ using AccountingService.Application.Common.Interfaces;
 using AccountingService.Application.Interfaces;
 using AccountingService.Infrastructure.Messaging;
 using AccountingService.Infrastructure.Persistence;
+using AccountingService.Infrastructure.Persistence.Interceptors;
 using AccountingService.Infrastructure.Persistence.Repositories;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
@@ -35,6 +36,9 @@ public static class DependencyInjection
         // JT pattern: register interceptors as scoped ISaveChangesInterceptor
         services.AddScoped<ISaveChangesInterceptor, AuditableEntityInterceptor>();
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
+        // GAP-100: MCA edit-log GUC interceptor — sets app.current_user_id before every write
+        // so the DB-level AFTER trigger captures who made the change.
+        services.AddScoped<ISaveChangesInterceptor, McaEditLogGucInterceptor>();
         services.AddSingleton(TimeProvider.System);
 
         // EF Core — schema isolated to 'accounting.*'

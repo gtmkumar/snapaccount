@@ -110,7 +110,9 @@ export function ProfileScreen({ navigation }: Props) {
           {user?.userType && (
             <View style={styles.userTypePill}>
               <Text style={styles.userTypeText}>
-                {user.userType === 'business_owner' ? 'Business Owner' : 'Employee'}
+                {user.userType === 'business_owner'
+                  ? t('mobile.profile.org.businessOwner')
+                  : t('mobile.profile.org.employee')}
               </Text>
             </View>
           )}
@@ -124,7 +126,7 @@ export function ProfileScreen({ navigation }: Props) {
                 <Ionicons name="business" size={18} color={Colors.brand[500]} />
               </View>
               <View style={styles.orgInfo}>
-                <Text style={styles.orgCardTitle}>Current Organization</Text>
+                <Text style={styles.orgCardTitle}>{t('mobile.profile.org.currentOrg')}</Text>
                 <Text style={styles.orgName}>{currentOrganization.name}</Text>
               </View>
             </View>
@@ -140,17 +142,20 @@ export function ProfileScreen({ navigation }: Props) {
         {/* Menu items */}
         <Card shadow="sm" padding="none" style={styles.menuCard}>
           {([
-            // Edit Business — hidden until a business edit mode is implemented
+            // Task #18 (GAP-060rem): Edit Business / Billing / Help now route to real screens
+            { label: t('mobile.profile.menu.editBusiness'), icon: 'business-outline', color: Colors.brand[600], route: 'EditBusiness' },
             { label: t('mobile.profile.menu.identityDocuments'), icon: 'document-attach-outline', color: Colors.accent[600], route: 'IdentityDocuments' },
             { label: t('mobile.profile.menu.manageDevices'), icon: 'phone-portrait-outline', color: Colors.info[500], route: 'Devices' },
-            { label: t('mobile.profile.menu.language'), icon: 'language-outline', color: Colors.accent[500], route: 'NotificationPreferences' },
-            { label: t('mobile.profile.menu.notifications'), icon: 'notifications-outline', color: Colors.warning[500], route: 'NotificationPreferences' },
-            // Billing — disabled until Subscription screen (M6) lands; tap is a no-op
-            { label: t('mobile.profile.menu.billing'), icon: 'card-outline', color: Colors.success[500], disabled: true },
-            // Help — routes to the Chat/CA support flow
-            { label: t('mobile.profile.menu.help'), icon: 'help-circle-outline', color: Colors.neutral[500], route: 'Chat' },
+            // AND-11: both entries intentionally open the combined
+            // language + notification preferences screen (now titled
+            // "Language & Notifications"); distinct testIDs since the route
+            // is shared.
+            { label: t('mobile.profile.menu.language'), icon: 'language-outline', color: Colors.accent[500], route: 'NotificationPreferences', testID: 'profile-menu-language' },
+            { label: t('mobile.profile.menu.notifications'), icon: 'notifications-outline', color: Colors.warning[500], route: 'NotificationPreferences', testID: 'profile-menu-notifications' },
+            { label: t('mobile.profile.menu.billing'), icon: 'card-outline', color: Colors.success[500], route: 'Billing' },
+            { label: t('mobile.profile.menu.help'), icon: 'help-circle-outline', color: Colors.neutral[500], route: 'Help' },
             { label: t('mobile.profile.menu.about'), icon: 'information-circle-outline', color: Colors.neutral[500] },
-          ] as { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string; route?: keyof MoreStackParamList; disabled?: boolean }[]).map((item, idx, arr) => (
+          ] as { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string; route?: keyof MoreStackParamList; disabled?: boolean; testID?: string }[]).map((item, idx, arr) => (
             <Pressable
               key={item.label}
               style={[
@@ -159,10 +164,14 @@ export function ProfileScreen({ navigation }: Props) {
                 item.disabled && styles.menuItemDisabled,
               ]}
               disabled={item.disabled}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              accessibilityState={{ disabled: !!item.disabled }}
               onPress={() => {
                 if (item.disabled || !item.route) return;
                 navigation.navigate(item.route as 'Devices');
               }}
+              testID={item.testID ?? `profile-menu-${item.route ?? 'about'}`}
             >
               <View style={[styles.menuItemIconWrap, { backgroundColor: item.color + '12' }]}>
                 <Ionicons name={item.icon} size={18} color={item.color} />
@@ -232,10 +241,11 @@ const styles = StyleSheet.create({
   orgHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
   orgIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.brand[50], alignItems: 'center', justifyContent: 'center' },
   orgInfo: { flex: 1 },
-  orgCardTitle: { fontSize: 11, color: Colors.neutral[400], textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  // X-1 (a11y): meaningful labels must be ≥ neutral[500] on light surfaces.
+  orgCardTitle: { fontSize: 11, color: Colors.neutral[500], textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
   orgName: { fontSize: 16, fontWeight: '700', color: Colors.neutral[900] },
   gstinRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.neutral[100] },
-  gstinLabel: { fontSize: 12, color: Colors.neutral[400] },
+  gstinLabel: { fontSize: 12, color: Colors.neutral[500] },
   orgGstin: { fontSize: 13, color: Colors.neutral[600], fontFamily: Platform.OS === 'ios' ? 'SF Mono' : 'monospace', fontWeight: '500' },
 
   // Menu

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   CreditCard,
   MessageCircle,
@@ -12,12 +13,18 @@ import {
   User,
   Monitor,
   ShieldCheck,
+  ExternalLink,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { cn } from '@/lib/utils'
+import { formatIndianAmount } from '@/lib/utils'
+import { getMrrDashboard, listPlans } from '@/lib/subscriptionApi'
+import { t } from '@/i18n'
+import { useNavigate } from 'react-router'
 import { PaymentGatewaySettings } from './sections/PaymentGatewaySettings'
 import { WhatsAppSettings } from './sections/WhatsAppSettings'
 import { AiModelSettings } from './sections/AiModelSettings'
@@ -66,37 +73,105 @@ const navItems: NavItem[] = [
   { id: 'two-fa', label: 'Two-Factor Authentication', icon: ShieldCheck, group: 'Account' },
 ]
 
-const sectionComponents: Record<SettingSection, ReactNode> = {
-  'payment-gateway': <PaymentGatewaySettings />,
-  'whatsapp': <WhatsAppSettings />,
-  'ai-model': <AiModelSettings />,
-  'language': <LanguageSettings />,
-  'partner-banks': <PartnerBanksSettings />,
-  'tally': <TallySettings />,
-  'preferences': <UserPreferencesSettings />,
-  'devices': <DevicesSettings />,
-  'two-fa': <TwoFaSettings />,
-  'subscriptions': (
+const SECTION_COMPONENT_MAP: Record<SettingSection, () => ReactNode> = {
+  'payment-gateway': () => <PaymentGatewaySettings />,
+  'whatsapp': () => <WhatsAppSettings />,
+  'ai-model': () => <AiModelSettings />,
+  'language': () => <LanguageSettings />,
+  'partner-banks': () => <PartnerBanksSettings />,
+  'tally': () => <TallySettings />,
+  'preferences': () => <UserPreferencesSettings />,
+  'devices': () => <DevicesSettings />,
+  'two-fa': () => <TwoFaSettings />,
+  'subscriptions': () => <SubscriptionTiersSettings />,
+  'feature-flags': () => <FeatureFlagsSettings />,
+  'notifications': () => <NotificationSettings />,
+}
+
+// ── Subscription Tiers Settings (wired to real backend) ─────────────────────
+function SubscriptionTiersSettings() {
+  const navigate = useNavigate()
+
+  const { data: mrr, isLoading: mrrLoading } = useQuery({
+    queryKey: ['subscriptions', 'mrr'],
+    queryFn: getMrrDashboard,
+    staleTime: 60_000,
+  })
+
+  const { data: plans, isLoading: plansLoading } = useQuery({
+    queryKey: ['subscriptions', 'plans'],
+    queryFn: listPlans,
+    staleTime: 60_000,
+  })
+
+  const isLoading = mrrLoading || plansLoading
+  const activePlans = plans?.filter(p => p.isActive) ?? []
+
+  return (
     <div className="space-y-5">
-      <h2 className="text-xl font-semibold text-neutral-900">Subscription Plans</h2>
-      <p className="text-neutral-500">Manage subscription tiers, pricing, and feature limits</p>
-      <Button variant="primary">Go to Plan Configuration</Button>
-      <div className="grid grid-cols-3 gap-4 mt-4">
-        {[
-          { label: 'Total Plans', value: '4' },
-          { label: 'Active Subscribers', value: '1,247' },
-          { label: 'MRR', value: '₹8.4L' },
-        ].map((stat) => (
-          <Card key={stat.label} className="text-center">
-            <p className="text-2xl font-bold text-neutral-900 tabular-nums">{stat.value}</p>
-            <p className="text-sm text-neutral-500 mt-1">{stat.label}</p>
-          </Card>
-        ))}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-[var(--text-primary)]">
+            {t('settings.subscriptions.title')}
+          </h2>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">
+            {t('settings.subscriptions.subtitle')}
+          </p>
+        </div>
+        <Button variant="primary" onClick={() => void navigate('/subscriptions')}>
+          <ExternalLink className="h-4 w-4 mr-1.5" aria-hidden="true" />
+          {t('settings.subscriptions.cta')}
+        </Button>
       </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-3 gap-4">
+          {[1, 2, 3].map(i => <Skeleton key={i} variant="card" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          <Card className="text-center py-4">
+            <p className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+              {activePlans.length}
+            </p>
+            <p className="text-sm text-[var(--text-secondary)] mt-1">
+              {t('settings.subscriptions.totalPlans')}
+            </p>
+          </Card>
+          <Card className="text-center py-4">
+            <p className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+              {mrr?.activeCount ?? 0}
+            </p>
+            <p className="text-sm text-[var(--text-secondary)] mt-1">
+              {t('settings.subscriptions.activeSubscribers')}
+            </p>
+          </Card>
+          <Card className="text-center py-4">
+            <p className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+              ₹{formatIndianAmount(mrr?.totalMrr ?? 0)}
+            </p>
+            <p className="text-sm text-[var(--text-secondary)] mt-1">
+              {t('settings.subscriptions.mrr')}
+            </p>
+          </Card>
+        </div>
+      )}
+
+      {!isLoading && activePlans.length === 0 && (
+        <div className="rounded-xl border border-dashed border-[var(--border-default)] p-8 text-center">
+          <p className="text-sm font-medium text-[var(--text-primary)]">
+            {t('subscriptions.noPlans')}
+          </p>
+          <p className="text-xs text-[var(--text-tertiary)] mt-1">
+            {t('subscriptions.noPlansDesc')}
+          </p>
+          <Button variant="secondary" className="mt-4" onClick={() => void navigate('/subscriptions')}>
+            {t('subscriptions.createFirst')}
+          </Button>
+        </div>
+      )}
     </div>
-  ),
-  'feature-flags': <FeatureFlagsSettings />,
-  'notifications': <NotificationSettings />,
+  )
 }
 
 export default function SettingsPage() {
@@ -167,7 +242,7 @@ export default function SettingsPage() {
 
         {/* Right content */}
         <div className="flex-1 min-w-0">
-          {sectionComponents[activeSection] ?? (
+          {SECTION_COMPONENT_MAP[activeSection]?.() ?? (
             <div className="text-center py-12 text-neutral-400">
               <p>Select a settings section</p>
             </div>

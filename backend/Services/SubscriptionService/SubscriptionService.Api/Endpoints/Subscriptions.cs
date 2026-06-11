@@ -132,8 +132,10 @@ public sealed class Subscriptions : EndpointGroupBase
 
     // ── Handlers ──────────────────────────────────────────────────────────────
 
+    // BINDING-FIX: includeInactive was a required bool causing 500 when not supplied.
+    // Default false — public listing shows only active plans; admins opt-in with ?includeInactive=true.
     private static async Task<IResult> ListPlans(
-        bool includeInactive, ISender sender, CancellationToken ct)
+        ISender sender, CancellationToken ct, bool includeInactive = false)
     {
         var result = await sender.Send(new ListPlansQuery(includeInactive), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);

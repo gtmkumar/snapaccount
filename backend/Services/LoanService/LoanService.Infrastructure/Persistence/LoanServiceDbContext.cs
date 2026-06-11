@@ -48,5 +48,13 @@ public class LoanServiceDbContext(DbContextOptions<LoanServiceDbContext> options
         modelBuilder.HasDefaultSchema("loan");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(LoanServiceDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
+
+        // SWEEP-FIX: loan.consents has NO deleted_at column (immutable 7-year retention table,
+        // protected by DB trigger trg_consents_no_delete). Remove the global soft-delete filter
+        // that BaseDbContext.OnModelCreating applies to all BaseAuditableEntity subtypes AFTER
+        // ApplyConfigurationsFromAssembly runs (base overwrites the HasQueryFilter(c => true) set
+        // in ConsentConfiguration). HasQueryFilter(null) removes the filter entirely.
+        // DDL HANDOFF: db-engineer should NOT add deleted_at to loan.consents per RBI retention rules.
+        modelBuilder.Entity<Consent>().HasQueryFilter(null!);
     }
 }

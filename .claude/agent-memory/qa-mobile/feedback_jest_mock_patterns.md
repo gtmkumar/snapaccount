@@ -225,6 +225,71 @@ RNTL v13 uses `getByLabelText` / `queryByLabelText`. The old `getByAccessibility
 
 ---
 
+## ES module default export mocking — __esModule: true is REQUIRED
+
+When mocking a module that uses `export default someObject` (ES module default), you MUST include `__esModule: true` in the factory return. Without it, Babel's `_interopRequireDefault` wraps the object in an extra `{ default: ... }` layer, causing `_api.default.X is not a function` errors inside the component.
+
+**Root cause:** The mock factory returns `{ default: { get: fn } }`. Without `__esModule: true`, Babel's interop sees a CJS module and wraps it: `{ default: { default: { get: fn } } }`. The component's `import apiClient from '...'` resolves to `{ default: { get: fn } }` (the outer wrapper's `.default`) instead of `{ get: fn }`.
+
+**Broken approach:**
+```ts
+jest.mock('../../src/lib/api', () => ({
+  default: { get: (...args) => mockApiGet(...args) },
+  apiClient: { get: (...args) => mockApiGet(...args) },
+}));
+```
+The queryFn throws `_api.default.get is not a function`. TanStack Query catches it silently. `returns` stays `[]`. Wrong navigation target.
+
+**Working approach:**
+```ts
+jest.mock('../../src/lib/api', () => {
+  const mockClient = { get: (...args: unknown[]) => mockApiGet(...args) };
+  return {
+    __esModule: true,
+    default: mockClient,
+    apiClient: mockClient,
+  };
+});
+```
+
+**Why:** `__esModule: true` tells Babel NOT to double-wrap. The default export resolves directly.
+
+**Symptom pattern to watch for:** If a TanStack Query `queryFn` calls `apiClient.get(...)` and `mockApiGet` shows 0 calls despite mock setup + the query enters `error` state with `error: {}` (empty error object deserialized from `TypeError`) — this is the `__esModule: true` bug.
+
+**How to apply:** All mocks for `src/lib/api` and any ES module default export mock in test files.
+
+---
+
+## TanStack Query v5 + notifyManager — synchronous scheduler for tests
+
+In TQ v5, the default scheduler is `setTimeout(cb, 0)` (`defaultScheduler`). In Jest (no fake timers), this means `act(async () => { await Promise.resolve(); })` is NOT sufficient to flush query result notifications — the setTimeout fires after the microtask queue but within the same event loop tick, which doesn't happen inside a single `act()`.
+
+**Symptom:** `findByText('loaded content')` times out even though `mockApiGet.mockResolvedValue(data)` is set correctly.
+
+**Working approach for "data loads → interaction" tests:**
+```ts
+import { notifyManager } from '@tanstack/react-query';
+
+beforeEach(() => {
+  notifyManager.setScheduler((cb) => cb()); // synchronous — notifications fire immediately
+});
+afterEach(() => {
+  notifyManager.setScheduler((cb) => setTimeout(cb, 0)); // restore default
+});
+
+// In the test:
+await act(async () => { /* intentionally empty — drains microtask queue */ });
+// Component now has real data; proceed with interactions
+```
+
+**Why:** With synchronous scheduler, TQ fires state notifications in the same synchronous call stack as the queryFn resolution. One `act(async () => {})` is then sufficient to drain the chain.
+
+**Do NOT use** `findByText(...)` to wait for data from a query with `placeholderData: []` — in TQ v5 `placeholderData` sets `status: 'success'` immediately so `isLoading = false` from the first render, and the empty-state renders instead of skeleton. The real data only appears AFTER the queryFn resolves.
+
+**How to apply:** All tests that need to verify component behavior AFTER async query data loads (not just the loading state).
+
+---
+
 ## 2-stage biometric Alert (view-time + submit-time) — counting call order
 
 For screens with two separate biometric Alert challenges (LoanPackagePreviewScreen pattern), use a `callCount` array that pushes the title of each Alert call. Assert `alertCalls[0]` === view-time key and `alertCalls[1]` === submit-time key. Do NOT assert `callCount >= 2` without driving the submit flow — the second Alert only fires after user presses "Submit" then confirms the modal.

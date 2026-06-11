@@ -1,5 +1,7 @@
 # Phase 7 Task Board — Index
 
+> **⚠️ UPDATE 2026-06-11:** Waves 1–2 are COMPLETE and code-verified. Current state + 34 new findings: `.claude/orchestrator/gap-analysis-2026-06-11-delta.md` (Wave 3 dispatch recommendation in §E; 19 new tracked tasks created on the session task board with owners). New regulatory items GAP-100..111 (MCA edit log, GSTN IMS mandatory, IT Act 2025, accessibility mandate, invoicing/UPI product decision) supersede parts of the wave plan below.
+
 > Source: `.claude/orchestrator/gap-analysis-2026-06-10.md` (read it first — every task below references a GAP-xxx item with full Issue/Impact/Solution detail)
 > Created: 2026-06-10 by orchestrator review
 > Rules: strict file ownership per `CLAUDE.md`; all agents report to orchestrator via SendMessage; visual QA screenshots required for every new UI surface; integration tests hit real Postgres.

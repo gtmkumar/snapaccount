@@ -368,6 +368,11 @@ function QuickActionBtn({
   onPress: () => void;
   gradient: readonly [string, string, ...string[]];
 }) {
+  // AND-02: the icon was nested in an absolute-fill sibling of the
+  // LinearGradient inside an overflow:hidden wrapper — on Android the glyph
+  // was not painted (empty grey box). Render the icon as a normal centered
+  // child above the gradient, with a solid fallback background so the tile
+  // is never blank even if the native gradient view fails to draw.
   return (
     <Pressable
       style={styles.quickActionBtn}
@@ -375,16 +380,14 @@ function QuickActionBtn({
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <View style={styles.quickActionIconWrap}>
+      <View style={[styles.quickActionIconWrap, { backgroundColor: gradient[0] }]}>
         <LinearGradient
           colors={gradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.quickActionGradient}
         />
-        <View style={styles.quickActionIconInner}>
-          <Ionicons name={iconName} size={22} color={Colors.neutral[0]} />
-        </View>
+        <Ionicons name={iconName} size={22} color={Colors.neutral[0]} />
       </View>
       <Text style={styles.quickActionLabel}>{label}</Text>
     </Pressable>
@@ -626,15 +629,11 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 18,
     overflow: 'hidden',
-    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickActionGradient: {
     ...StyleSheet.absoluteFillObject,
-  },
-  quickActionIconInner: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   quickActionLabel: {
     fontSize: 12,

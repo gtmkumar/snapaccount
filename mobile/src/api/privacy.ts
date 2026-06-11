@@ -128,13 +128,98 @@ export interface SubmitCorrectionBody {
 // Consent endpoints
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Consents response normalization (IOS-01 / AND-08)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The AuthService GetMyConsentsQuery returns
+//   GetMyConsentsResult(IReadOnlyList<ConsentEntry> Consents)
+//   ConsentEntry(Purpose, PurposeDescription, Status, NoticeVersion, ActionAt, Locale)
+// which serializes the envelope as `consents` (or PascalCase `Consents`) — NOT
+// the `items` the mobile expects — and each entry uses `purpose`/`actionAt`/…
+// rather than the mobile `purposeCode`/`grantedAt`/… field names. Without
+// normalization the consent summary is always treated as empty (degradation
+// banner) and an unguarded `.filter()` on a missing `items` array can crash.
+// Same defensive pattern as DocumentListScreen.normalizeDocument (AND-04).
+
+/** Raw consent entry — accepts both backend and mobile-native field names. */
+interface RawConsentEntry {
+  // mobile-native names (in case the backend ever aligns)
+  purposeCode?: string;
+  purposeLabel?: string;
+  description?: string;
+  status?: string;
+  grantedAt?: string;
+  consentTextVersion?: string;
+  withdrawnAt?: string | null;
+  withdrawConsequence?: string | null;
+  isRegrantable?: boolean;
+  // backend ConsentEntry names (camelCased by System.Text.Json)
+  purpose?: string;
+  purposeDescription?: string;
+  noticeVersion?: string;
+  actionAt?: string;
+  locale?: string;
+}
+
+/** Humanize a SCREAMING_SNAKE purpose code into a readable label fallback. */
+function humanizePurpose(code: string): string {
+  if (!code) return '';
+  return code
+    .toLowerCase()
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/** Map a raw consent entry (either casing/shape) onto the mobile UserConsent. */
+function normalizeConsent(raw: RawConsentEntry): UserConsent {
+  const purposeCode = raw.purposeCode ?? raw.purpose ?? '';
+  const status: ConsentStatus =
+    String(raw.status ?? 'GRANTED').toUpperCase() === 'WITHDRAWN'
+      ? 'WITHDRAWN'
+      : 'GRANTED';
+  const actionAt = raw.actionAt ?? '';
+  return {
+    purposeCode,
+    purposeLabel: raw.purposeLabel ?? humanizePurpose(purposeCode),
+    description: raw.description ?? raw.purposeDescription ?? '',
+    status,
+    grantedAt: raw.grantedAt ?? actionAt,
+    consentTextVersion: raw.consentTextVersion ?? raw.noticeVersion ?? '',
+    withdrawnAt:
+      raw.withdrawnAt ?? (status === 'WITHDRAWN' ? actionAt || null : null),
+    withdrawConsequence: raw.withdrawConsequence ?? null,
+    isRegrantable: raw.isRegrantable,
+  };
+}
+
+/**
+ * Extract the consent array from whatever envelope the backend sent.
+ * Accepts a bare array, `{ items }`, `{ consents }`, or PascalCase `{ Consents }`.
+ */
+function extractConsentArray(body: unknown): RawConsentEntry[] {
+  if (Array.isArray(body)) return body as RawConsentEntry[];
+  if (body && typeof body === 'object') {
+    const obj = body as Record<string, unknown>;
+    const candidate = obj.items ?? obj.consents ?? obj.Consents;
+    if (Array.isArray(candidate)) return candidate as RawConsentEntry[];
+  }
+  return [];
+}
+
 /**
  * List the authenticated user's consent records, one per processing purpose.
  * GET /auth/me/consents
+ *
+ * The response is normalized to always expose a `{ items: UserConsent[] }`
+ * shape regardless of the backend envelope casing (`items`/`consents`/`Consents`)
+ * or per-entry field names — see normalizeConsent above (IOS-01 / AND-08).
  */
 export async function getMyConsents(): Promise<GetConsentsResponse> {
-  const res = await apiClient.get<GetConsentsResponse>('/auth/me/consents');
-  return res.data;
+  const res = await apiClient.get<unknown>('/auth/me/consents');
+  return { items: extractConsentArray(res.data).map(normalizeConsent) };
 }
 
 /**

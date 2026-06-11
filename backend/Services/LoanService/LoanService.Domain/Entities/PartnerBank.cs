@@ -21,8 +21,13 @@ public class PartnerBank : BaseAuditableEntity
     /// <summary>Primary contact email for EmailPartnerBankAdapter submissions.</summary>
     public string? ContactEmail { get; set; }
 
-    /// <summary>AES-GCM encrypted API configuration JSON (for RestPartnerBankAdapter).</summary>
-    public byte[]? ApiConfigEncrypted { get; set; }
+    /// <summary>
+    /// API configuration stored as encrypted JSON text in a jsonb column.
+    /// P6-HANDOFF-27: stored as jsonb in DB — not bytea. The JSON value contains the
+    /// AES-GCM ciphertext envelope; decryption is via ICredentialEncryptionService.
+    /// SWEEP-FIX WEB-03: property type changed from byte[] to string to match DB jsonb type.
+    /// </summary>
+    public string? ApiConfigEncrypted { get; set; }
 
     /// <summary>GCP Secret Manager key reference for decrypting ApiConfigEncrypted.</summary>
     public string? ApiConfigKeyRef { get; set; }

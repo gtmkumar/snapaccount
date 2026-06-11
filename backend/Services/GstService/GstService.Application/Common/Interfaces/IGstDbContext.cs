@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GstService.Application.Common.Interfaces;
 
+
 /// <summary>
 /// Application-layer abstraction over the gst schema database context.
 /// Query handlers depend on this interface for direct LINQ projection (Jason Taylor pattern).
@@ -52,6 +53,26 @@ public interface IGstDbContext
 
     /// <summary>LUT filings (Letter of Undertaking for zero-rated exports) in <c>gst.lut_filings</c>.</summary>
     DbSet<LutFiling> LutFilings { get; }
+
+    // ── IMS (Invoice Management System) — mandatory from 1 Apr 2026 ──────────
+
+    /// <summary>
+    /// IMS inward invoices (supplier-reported, pending taxpayer action) in <c>gst.ims_invoices</c>.
+    /// GAP-101: mandatory for regular filers from 1 Apr 2026.
+    /// </summary>
+    DbSet<ImsInvoice> ImsInvoices { get; }
+
+    /// <summary>
+    /// Append-only action log for IMS invoice state transitions in <c>gst.ims_action_logs</c>.
+    /// 7-year retention; never deleted.
+    /// </summary>
+    DbSet<ImsActionLog> ImsActionLogs { get; }
+
+    /// <summary>
+    /// GSTR-1A amendments (only way to correct GSTR-3B Table 3 after filing) in <c>gst.gstr1a_amendments</c>.
+    /// GAP-101: required because GSTR-3B Table 3 is hard-locked post-1-Apr-2026.
+    /// </summary>
+    DbSet<Gstr1aAmendment> Gstr1aAmendments { get; }
 
     /// <summary>Persists changes to the gst schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);

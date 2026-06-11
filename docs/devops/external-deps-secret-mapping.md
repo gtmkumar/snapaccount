@@ -54,8 +54,9 @@ the consuming service reads, and the service + code location that reads the key.
 | `gcs-documents-bucket` | `GCS_BUCKET_NAME` | `configuration["GCS:DocumentsBucket"]` | DocumentService | GCS bucket for user-uploaded documents |
 | `gcs-loan-packages-bucket` | `GCS_LOAN_PACKAGES_BUCKET` | `configuration["GCS_LOAN_PACKAGES_BUCKET"]` | LoanService, ReportService | GCS bucket for loan packages |
 | `google-document-ai-config` | `GOOGLE_DOCUMENT_AI_CONFIG` | `configuration["GOOGLE_DOCUMENT_AI_CONFIG"]` | DocumentService, ItrService | JSON blob: processor IDs per document type |
-| `razorpay-key-id` | `RAZORPAY_KEY_ID` | `configuration["Razorpay:KeyId"]` | SubscriptionService | Razorpay API key ID |
-| `razorpay-key-secret` | `RAZORPAY_KEY_SECRET` | `configuration["Razorpay:KeySecret"]` | SubscriptionService | Razorpay API key secret |
+| `razorpay-key-id` | `RAZORPAY_KEY_ID` | `configuration["Razorpay:KeyId"]` | SubscriptionService | Razorpay API key ID — outbound auth for order/plan/subscription API calls |
+| `razorpay-key-secret` | `RAZORPAY_KEY_SECRET` | `configuration["Razorpay:KeySecret"]` | SubscriptionService | Razorpay API key secret — outbound auth. **Never logged** |
+| `razorpay-webhook-secret` | `RAZORPAY_WEBHOOK_SECRET` | `configuration["RAZORPAY_WEBHOOK_SECRET"]` | SubscriptionService | HMAC-SHA256 webhook signing secret (inbound events from Razorpay). SEC-051. Obtain from: Razorpay Dashboard → Account & Settings → Webhooks → Edit → Secret. **BLOCKER (NEW-D07): absent = all webhooks silently fail with 503** |
 | `sarvam-ai-api-key` | `SARVAM_AI_API_KEY` | `configuration["SarvamAi:ApiKey"]` | AiService | Sarvam AI API key for Indian language NLP |
 
 ---
@@ -71,6 +72,7 @@ the consuming service reads, and the service + code location that reads the key.
 | MSG91 DLT registration | 2–3 business days | Pending | P6-FLAG-05 | Register sender ID at msg91.com/dlt; register every SMS template |
 | SendGrid SPF/DKIM DNS | 24–48h DNS propagation | Pending | P6-FLAG-06 | DNS changes on snapaccount.in; verify in SendGrid Console |
 | Firebase service-account rotation | Immediate after team lead authorization | Pending | GAP-001 | Rotate exposed key; update firebase-admin-json + firebase-service-account-json |
+| Razorpay webhook secret | Immediate (self-serve in dashboard) | Pending | NEW-D07 | Team lead obtains from Razorpay Dashboard → Account & Settings → Webhooks → Edit → Secret; then: `printf '%s' '<secret>' \| gcloud secrets versions add razorpay-webhook-secret --data-file=-` |
 | ICICI Bank API agreement | 2–4 weeks | Pending | P6-FLAG-08 | Legal agreement with ICICI Business Banking API team |
 | HDFC Bank API agreement | 2–4 weeks | Pending | P6-FLAG-08 | Legal agreement with HDFC SmartHub API team |
 

@@ -20,7 +20,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Colors } from '../../constants/colors';
+import {
+  createThemedStyles,
+  useTheme,
+  type ThemeTokens,
+} from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { listLoanProducts, type LoanProduct } from '../../api/loans';
 import { LoanProductCard } from '../../components/loans/LoanProductCard';
@@ -34,6 +38,8 @@ type SortOption = 'LOWEST_INTEREST' | 'HIGHEST_AMOUNT' | 'SHORTEST_TENURE';
 export function LoanHubScreen({ navigation }: Props) {
   useSensitiveScreen();
   const { t } = useTranslation();
+  const { tokens } = useTheme();
+  const styles = useStyles();
 
   const [sortBy, setSortBy] = useState<SortOption>('LOWEST_INTEREST');
   const [eligibilityChecked] = useState(false);
@@ -77,7 +83,7 @@ export function LoanHubScreen({ navigation }: Props) {
       <SafeAreaView style={styles.container}>
         {renderHeader()}
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.loan} />
+          <ActivityIndicator size="large" color={tokens.loanAccent} />
         </View>
       </SafeAreaView>
     );
@@ -88,7 +94,7 @@ export function LoanHubScreen({ navigation }: Props) {
       <SafeAreaView style={styles.container}>
         {renderHeader()}
         <View style={styles.centered}>
-          <Ionicons name="alert-circle-outline" size={40} color={Colors.error[400]} />
+          <Ionicons name="alert-circle-outline" size={40} color={tokens.errorFg} />
           <Text style={styles.errorText}>{t('mobile.loan.hub.error')}</Text>
           <Pressable style={styles.retryBtn} onPress={() => void refetch()}>
             <Text style={styles.retryText}>{t('mobile.common.retry')}</Text>
@@ -107,11 +113,11 @@ export function LoanHubScreen({ navigation }: Props) {
           hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.loan.hub.title')}</Text>
         <Pressable style={styles.helpBtn} hitSlop={8} accessibilityLabel="Help">
-          <Ionicons name="help-circle-outline" size={22} color={Colors.neutral[500]} />
+          <Ionicons name="help-circle-outline" size={22} color={tokens.textSecondary} />
         </Pressable>
       </View>
     );
@@ -130,7 +136,7 @@ export function LoanHubScreen({ navigation }: Props) {
           <RefreshControl
             refreshing={isRefetching}
             onRefresh={() => void refetch()}
-            tintColor={Colors.loan}
+            tintColor={tokens.loanAccent}
           />
         }
         ListHeaderComponent={
@@ -138,7 +144,7 @@ export function LoanHubScreen({ navigation }: Props) {
             {/* Hero */}
             <View style={styles.hero}>
               <View style={styles.heroIconWrap}>
-                <Ionicons name="business" size={22} color={Colors.loan} />
+                <Ionicons name="business" size={22} color={tokens.loanAccent} />
               </View>
               <Text style={styles.heroTitle}>{t('mobile.loan.hub.hero.title')}</Text>
               <Text style={styles.heroBody}>{t('mobile.loan.hub.hero.body')}</Text>
@@ -152,7 +158,7 @@ export function LoanHubScreen({ navigation }: Props) {
                 accessibilityRole="button"
                 accessibilityLabel={t('mobile.loan.hub.eligibilityTeaser.title')}
               >
-                <Ionicons name="sparkles" size={18} color={Colors.loan} />
+                <Ionicons name="sparkles" size={18} color={tokens.loanAccent} />
                 <View style={styles.teaserTextWrap}>
                   <Text style={styles.teaserTitle}>
                     {t('mobile.loan.hub.eligibilityTeaser.title')}
@@ -162,7 +168,7 @@ export function LoanHubScreen({ navigation }: Props) {
                   <Text style={styles.teaserCtaText}>
                     {t('mobile.loan.hub.eligibilityTeaser.cta')}
                   </Text>
-                  <Ionicons name="arrow-forward" size={14} color={Colors.loan} />
+                  <Ionicons name="arrow-forward" size={14} color={tokens.loanAccent} />
                 </View>
               </Pressable>
             )}
@@ -193,14 +199,14 @@ export function LoanHubScreen({ navigation }: Props) {
         }
         ListEmptyComponent={
           <View style={styles.centered}>
-            <Ionicons name="business-outline" size={40} color={Colors.neutral[300]} />
+            <Ionicons name="business-outline" size={40} color={tokens.textTertiary} />
             <Text style={styles.emptyTitle}>{t('mobile.loan.hub.empty.title')}</Text>
             <Text style={styles.emptyBody}>{t('mobile.loan.hub.empty.body')}</Text>
           </View>
         }
         ListFooterComponent={
           <View style={styles.footer}>
-            <Ionicons name="information-circle-outline" size={14} color={Colors.neutral[400]} />
+            <Ionicons name="information-circle-outline" size={14} color={tokens.textTertiary} />
             <Text style={styles.footerText}>
               {t('mobile.loan.hub.disclaimer.indicativeRates')}
             </Text>
@@ -225,159 +231,162 @@ export function LoanHubScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.neutral[900],
-    letterSpacing: -0.2,
-  },
-  helpBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  listContent: { padding: 16, gap: 0, paddingBottom: 32 },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 12,
-  },
-  errorText: { fontSize: 14, color: Colors.neutral[600], textAlign: 'center' },
-  retryBtn: {
-    backgroundColor: Colors.loan,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  retryText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: tk.canvas },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: tk.raised,
+      borderBottomWidth: 1,
+      borderBottomColor: tk.border,
+    },
+    backBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: tk.sunken,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: tk.textPrimary,
+      letterSpacing: -0.2,
+    },
+    helpBtn: {
+      width: 40,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    listContent: { padding: 16, gap: 0, paddingBottom: 32 },
+    centered: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 32,
+      gap: 12,
+    },
+    errorText: { fontSize: 14, color: tk.textSecondary, textAlign: 'center' },
+    retryBtn: {
+      backgroundColor: tk.loanAccent,
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 10,
+    },
+    retryText: { fontSize: 14, fontWeight: '700', color: tk.textOnBrand },
 
-  // Hero
-  hero: {
-    backgroundColor: Colors.surface.default,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: Colors.neutral[100],
-  },
-  heroIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: Colors.accent[50],
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  heroTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: Colors.neutral[900],
-    letterSpacing: -0.3,
-  },
-  heroBody: {
-    fontSize: 13,
-    color: Colors.neutral[500],
-    lineHeight: 19,
-  },
+    // Hero
+    hero: {
+      backgroundColor: tk.raised,
+      borderRadius: 16,
+      padding: 20,
+      marginBottom: 12,
+      gap: 8,
+      borderWidth: 1,
+      borderColor: tk.border,
+    },
+    heroIconWrap: {
+      width: 44,
+      height: 44,
+      borderRadius: 14,
+      backgroundColor: tk.loanAccent + '15',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 4,
+    },
+    heroTitle: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: tk.textPrimary,
+      letterSpacing: -0.3,
+    },
+    heroBody: {
+      fontSize: 13,
+      color: tk.textSecondary,
+      lineHeight: 19,
+    },
 
-  // Eligibility teaser
-  eligibilityTeaser: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: Colors.accent[50],
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.accent[100],
-  },
-  teaserTextWrap: { flex: 1 },
-  teaserTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.accent[700],
-  },
-  teaserCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  teaserCtaText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.loan,
-  },
+    // Eligibility teaser — warm loan-module tint, legible in both modes
+    eligibilityTeaser: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: tk.loanAccent + '15',
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: tk.loanAccent + '33',
+    },
+    teaserTextWrap: { flex: 1 },
+    teaserTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: tk.loanAccent,
+    },
+    teaserCta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    teaserCtaText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: tk.loanAccent,
+    },
 
-  // Sort bar
-  sortBar: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-    flexWrap: 'wrap',
-  },
-  sortChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.neutral[100],
-    minHeight: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sortChipActive: {
-    backgroundColor: Colors.loan,
-  },
-  sortChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.neutral[600],
-  },
-  sortChipTextActive: {
-    color: '#FFFFFF',
-  },
+    // Sort bar
+    sortBar: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 14,
+      flexWrap: 'wrap',
+    },
+    sortChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: tk.sunken,
+      minHeight: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sortChipActive: {
+      backgroundColor: tk.loanAccent,
+    },
+    sortChipText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: tk.textSecondary,
+    },
+    sortChipTextActive: {
+      color: tk.textOnBrand,
+    },
 
-  // Empty
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: Colors.neutral[700] },
-  emptyBody: { fontSize: 14, color: Colors.neutral[500], textAlign: 'center' },
+    // Empty
+    emptyTitle: { fontSize: 17, fontWeight: '700', color: tk.textPrimary },
+    emptyBody: { fontSize: 14, color: tk.textSecondary, textAlign: 'center' },
 
-  // Footer
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-    paddingTop: 8,
-    paddingHorizontal: 4,
-  },
-  footerText: {
-    flex: 1,
-    fontSize: 11,
-    color: Colors.neutral[400],
-    lineHeight: 16,
-  },
-});
+    // Footer
+    footer: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 6,
+      paddingTop: 8,
+      paddingHorizontal: 4,
+    },
+    // Disclaimer carries legal meaning — textSecondary keeps ≥4.5:1 (a11y §4).
+    footerText: {
+      flex: 1,
+      fontSize: 11,
+      color: tk.textSecondary,
+      lineHeight: 16,
+    },
+  }),
+);

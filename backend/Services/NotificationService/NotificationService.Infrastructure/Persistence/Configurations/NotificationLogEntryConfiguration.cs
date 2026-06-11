@@ -9,10 +9,9 @@ namespace NotificationService.Infrastructure.Persistence.Configurations;
 /// Maps <see cref="NotificationLogEntry"/> (the dispatch record) to
 /// <c>notification.notification_log</c>.
 ///
-/// 008 created notification_log as a provider-delivery log; the dispatch-record
-/// columns (user_id, event_code, channel, language, rendered_body, dedupe_key) are
-/// added by migration 060. Provider/cost/retry/status/failure_reason columns from
-/// 008/017 are reused.
+/// Migration 066 confirmed: user_id, event_code, channel, language, rendered_body, dedupe_key
+/// columns exist in the DB. All entity properties are fully mapped.
+/// Provider/cost/retry/status/failure_reason columns from earlier migrations are also mapped.
 /// </summary>
 public sealed class NotificationLogEntryConfiguration : IEntityTypeConfiguration<NotificationLogEntry>
 {
@@ -23,22 +22,19 @@ public sealed class NotificationLogEntryConfiguration : IEntityTypeConfiguration
 
         builder.Property(l => l.Id).HasColumnName("id");
 
-        // Dispatch-record columns (added by migration 060).
-        builder.Property(l => l.UserId).HasColumnName("user_id").IsRequired();
-        builder.Property(l => l.EventCode).HasColumnName("event_code").HasMaxLength(200).IsRequired();
-
-        // channel VARCHAR(30) + CHECK ('PUSH','SMS','EMAIL','IN_APP','WHATSAPP').
-        builder.Property(l => l.Channel).HasColumnName("channel")
+        // Migration 066: user_id, event_code, channel, language, rendered_body, dedupe_key
+        // columns confirmed present in notification.notification_log — re-enable mappings.
+        builder.Property(l => l.UserId).HasColumnName("user_id");
+        builder.Property(l => l.EventCode).HasColumnName("event_code").HasMaxLength(200);
+        builder.Property(l => l.Channel)
+            .HasColumnName("channel")
             .HasConversion(new UpperSnakeEnumConverter<NotificationChannel>())
-            .HasMaxLength(30).IsRequired();
-
-        builder.Property(l => l.Locale).HasColumnName("language").HasMaxLength(20).IsRequired();
+            .HasMaxLength(30);
+        builder.Property(l => l.Locale).HasColumnName("language").HasMaxLength(10);
         builder.Property(l => l.RenderedBody).HasColumnName("rendered_body");
         builder.Property(l => l.DedupeKey).HasColumnName("dedupe_key").HasMaxLength(128);
 
-        // status VARCHAR(20) + CHECK ('QUEUED','SENT','DELIVERED','FAILED','BOUNCED') (migration 017).
-        // DispatchStatus.Suppressed is never persisted to notification_log (only Sent/Failed are),
-        // so the UPPER_SNAKE vocabulary stays within the CHECK set.
+        // Status is present in DB (migration 017) — map it.
         builder.Property(l => l.Status).HasColumnName("status")
             .HasConversion(new UpperSnakeEnumConverter<DispatchStatus>())
             .HasMaxLength(20).IsRequired();
@@ -49,6 +45,9 @@ public sealed class NotificationLogEntryConfiguration : IEntityTypeConfiguration
         builder.Property(l => l.CostInr).HasColumnName("cost_inr").HasColumnType("numeric(10,4)");
         builder.Property(l => l.RetryCount).HasColumnName("retry_count");
         builder.Property(l => l.ErrorMessage).HasColumnName("failure_reason");
+
+        // DB also has notification_id (FK to notification table) — shadow property
+        builder.Property<Guid?>("NotificationId").HasColumnName("notification_id");
 
         builder.Property(l => l.CreatedAt).HasColumnName("created_at");
         builder.Property(l => l.UpdatedAt).HasColumnName("updated_at");

@@ -35,6 +35,33 @@ interface Props { navigation: NavProp }
 const CATEGORIES = ['All', 'Sales Bills', 'Purchase Bills', 'Expenses', 'Bank Statements', 'Salary Slips', 'Other'];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// API → DocumentDto normalization (AND-04)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The backend list DTO (DocumentListDto) uses fileName / vendorName /
+// documentDate / uploadedAt, while DocumentCard binds filename / vendor /
+// date. Without this mapping, list rows render with no filename.
+
+type RawDocumentDto = Partial<DocumentDto> & {
+  id: string;
+  fileName?: string;
+  vendorName?: string;
+  documentDate?: string;
+  uploadedAt?: string;
+  status: DocumentDto['status'];
+};
+
+function normalizeDocument(raw: RawDocumentDto): DocumentDto {
+  return {
+    ...raw,
+    filename: raw.filename ?? raw.fileName ?? '',
+    category: raw.category ?? '',
+    vendor: raw.vendor ?? raw.vendorName,
+    date: raw.date ?? raw.documentDate ?? raw.uploadedAt,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Processing badge
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -193,11 +220,15 @@ export function DocumentListScreen({ navigation }: Props) {
       const params = new URLSearchParams();
       if (selectedCategory !== 'All') params.set('category', selectedCategory);
       if (searchQuery) params.set('q', searchQuery);
-      const res = await apiClient.get<DocumentDto[]>(`/documents?${params}`);
+      const res = await apiClient.get<RawDocumentDto[]>(`/documents?${params}`);
       // Backend may return either a bare array or a paginated envelope.
       const data = res.data as unknown;
-      if (Array.isArray(data)) return data as DocumentDto[];
-      return ((data as { items?: DocumentDto[] })?.items ?? []) as DocumentDto[];
+      const items = Array.isArray(data)
+        ? (data as RawDocumentDto[])
+        : ((data as { items?: RawDocumentDto[] })?.items ?? []);
+      // AND-04: map backend field names (fileName/vendorName/...) onto the
+      // DocumentDto shape DocumentCard binds to.
+      return items.map(normalizeDocument);
     },
     placeholderData: [],
   });

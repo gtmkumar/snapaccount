@@ -61,9 +61,16 @@ export function MoreScreen({ navigation }: Props) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* User summary */}
-        <Card shadow="sm" style={styles.userCard}>
-          <View style={styles.userRow}>
+        {/* User summary — AND-14: the whole card is one ≥44pt touch target
+            (previously only the small chevron Pressable navigated). */}
+        <Card shadow="sm" padding="none" style={styles.userCard}>
+          <Pressable
+            style={styles.userRow}
+            onPress={() => navigation.navigate('Profile')}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.more.profileSettings')}
+            testID="more-profile-card"
+          >
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
                 {(user?.name ?? 'U').charAt(0).toUpperCase()}
@@ -73,13 +80,11 @@ export function MoreScreen({ navigation }: Props) {
               <Text style={styles.userName}>{user?.name ?? t('mobile.more.defaultUserName')}</Text>
               <Text style={styles.userPhone}>{normalizePhone(user?.phone)}</Text>
             </View>
-            <Pressable
-              style={styles.editBtn}
-              onPress={() => navigation.navigate('Profile')}
-            >
+            {/* Decorative affordance only — the row itself is the button */}
+            <View style={styles.editBtn}>
               <Ionicons name="chevron-forward" size={20} color={Colors.neutral[400]} />
-            </Pressable>
-          </View>
+            </View>
+          </Pressable>
         </Card>
 
         {/* Menu grid */}
@@ -94,7 +99,9 @@ export function MoreScreen({ navigation }: Props) {
                 <Ionicons name={item.icon} size={24} color={item.color} />
               </View>
               <Text style={styles.gridLabel}>{item.label}</Text>
-              <Text style={styles.gridDesc} numberOfLines={1}>{item.desc}</Text>
+              {/* AND-13: allow the subtitle to wrap to 2 lines instead of
+                  truncating mid-word (hi/bn strings are longer than en). */}
+              <Text style={styles.gridDesc} numberOfLines={2}>{item.desc}</Text>
             </Pressable>
           ))}
         </View>
@@ -120,8 +127,9 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingVertical: 14, backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100] },
   headerTitle: { fontSize: 22, fontWeight: '800', color: Colors.neutral[900], letterSpacing: -0.3 },
   scrollContent: { padding: 16, gap: 16 },
-  userCard: { padding: 16 },
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  userCard: { overflow: 'hidden' },
+  // AND-14: padding lives on the Pressable so the full card area is tappable
+  userRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, minHeight: 56 },
   avatar: { width: 52, height: 52, borderRadius: 16, backgroundColor: Colors.brand[500], alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 20, fontWeight: '700', color: Colors.neutral[0] },
   userInfo: { flex: 1 },
@@ -142,7 +150,7 @@ const styles = StyleSheet.create({
   },
   gridIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   gridLabel: { fontSize: 15, fontWeight: '700', color: Colors.neutral[900], marginBottom: 4, letterSpacing: -0.2 },
-  gridDesc: { fontSize: 12, color: Colors.neutral[500] },
+  gridDesc: { fontSize: 12, color: Colors.neutral[500], lineHeight: 16 },
   joinRow: {
     flexDirection: 'row',
     alignItems: 'center',

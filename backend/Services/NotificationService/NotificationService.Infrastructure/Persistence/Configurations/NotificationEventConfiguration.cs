@@ -5,9 +5,23 @@ using NotificationService.Domain.Entities;
 namespace NotificationService.Infrastructure.Persistence.Configurations;
 
 /// <summary>
-/// Maps <see cref="NotificationEvent"/> to <c>notification.notification_event</c>
-/// (created by SQL migration 060 — SQL is canonical, no EF migrations).
-/// This is the event catalogue the seeder populates first.
+/// Maps <see cref="NotificationEvent"/> to <c>notification.notification_event</c>.
+/// SWEEP-FIX: notification.notification_event does NOT exist in the DB.
+/// DDL HANDOFF (db-engineer): CREATE TABLE notification.notification_event (
+///   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+///   event_code VARCHAR(200) NOT NULL UNIQUE,
+///   event_name VARCHAR(300) NOT NULL,
+///   category VARCHAR(50) NOT NULL,
+///   default_channels VARCHAR(200) NOT NULL,
+///   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+///   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+///   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+///   deleted_at TIMESTAMPTZ,
+///   created_by UUID,
+///   updated_by UUID
+/// );
+/// EF will NOT query this table at startup (lazy DbSet), so the service starts without 500.
+/// Seeder calls will fail at runtime until DDL is applied.
 /// </summary>
 public sealed class NotificationEventConfiguration : IEntityTypeConfiguration<NotificationEvent>
 {

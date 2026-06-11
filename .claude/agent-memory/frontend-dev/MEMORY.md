@@ -13,3 +13,6 @@
 - [Task #20 Auth Features](project_task20_auth_features.md) — user prefs, devices, forgot/reset password, 2FA TOTP; qrcode.react QRCodeSVG; Badge uses variant not color; 864 tests
 - [i18n pattern — @/i18n not react-i18next](feedback_i18n_pattern.md) — use custom t() from @/i18n; react-i18next not initialized in tests; status enums need .toLowerCase() for key lookup
 - [Test QueryClient staleTime:Infinity](feedback_test_queryclient.md) — React 19 double-mount causes 2 fetches; staleTime:Infinity prevents; prefer toHaveBeenCalled() over CalledTimes(1)
+- [Task #2 B15 wire + WEB-13/16 fixes](project_task2_b15_wire.md) — approve/reject/clarify/archive wired; common.previous→common.prev; listGstReturns orgId required; 923 tests
+- [Task #11/#12 completion](project_task11_12_completion.md) — subscription stats wired; react-i18next removed; 14 files migrated; 1611-key parity; 928 tests, 0 lint errors
+- [Task #26/#30 design elevation S0 + slaCompliance ratio fix](project_task26_30_design_elevation.md) — S0 canonical tokens (Emerald success, Orange accent, radius-sm 6px, color-loan EA580C); slaCompliance 0..1→% conversion; 941 tests

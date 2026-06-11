@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useKeyboardShortcuts } from '@/contexts/KeyboardShortcutsContext'
 import { useAuth } from '@/hooks/useAuth'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import { Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -84,7 +84,6 @@ const SHORTCUT_SECTIONS: ShortcutSection[] = [
 export function KeyboardShortcutsOverlay() {
   const { isCheatSheetOpen, closeCheatSheet } = useKeyboardShortcuts()
   const { user } = useAuth()
-  const { t } = useTranslation()
   const [filter, setFilter] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -116,7 +115,7 @@ export function KeyboardShortcutsOverlay() {
       className="fixed inset-0 z-50 flex items-center justify-center"
       role="dialog"
       aria-modal="true"
-      aria-label={t('shortcuts.title', 'Keyboard shortcuts')}
+      aria-label={t('shortcuts.title')}
     >
       <div
         className="absolute inset-0 bg-[var(--surface-overlay)]"
@@ -134,7 +133,7 @@ export function KeyboardShortcutsOverlay() {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-              {t('shortcuts.title', 'Keyboard shortcuts')}
+              {t('shortcuts.title')}
             </h2>
             <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
               Showing for: <span className="font-medium">{roleLabel}</span>
@@ -158,7 +157,7 @@ export function KeyboardShortcutsOverlay() {
               type="text"
               value={filter}
               onChange={e => setFilter(e.target.value)}
-              placeholder={t('shortcuts.filter.placeholder', 'Filter shortcuts…')}
+              placeholder={t('shortcuts.filter.placeholder')}
               className="flex-1 text-sm bg-transparent text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none"
             />
           </div>
@@ -170,7 +169,7 @@ export function KeyboardShortcutsOverlay() {
             {filteredSections.map(section => (
               <div key={section.i18nKey}>
                 <h3 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide mb-3">
-                  {t(section.i18nKey, section.title)}
+                  {t(section.i18nKey)}
                 </h3>
                 <div className="space-y-2">
                   {section.rows.map((row, i) => (

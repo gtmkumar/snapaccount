@@ -7,7 +7,7 @@ import { type ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { useAuth, type AdminRole } from '@/hooks/useAuth'
 import { usePermission } from '@/hooks/usePermission'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import { Lock } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 
@@ -72,7 +72,6 @@ const ROLE_LABELS: Record<AdminRole, string> = {
 }
 
 export function ForbiddenPage() {
-  const { t } = useTranslation()
   const { user } = useAuth()
   const roleLabel = user ? ROLE_LABELS[user.role] : ''
 
@@ -94,25 +93,25 @@ export function ForbiddenPage() {
           tabIndex={-1}
           autoFocus
         >
-          {t('403.heading', "You don't have access to this page")}
+          {t('403.heading')}
         </h1>
 
         <p className="text-[var(--text-secondary)] mb-8">
-          {t('403.body', `Your role (${roleLabel}) doesn't include this area. If you believe this is a mistake, contact your administrator.`)}
+          {t('403.body', { role: roleLabel })}
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button variant="primary" onClick={() => { window.location.href = '/dashboard' }}>
-            {t('403.cta.dashboard', 'Go to dashboard')}
+            {t('403.cta.dashboard')}
           </Button>
           <Button variant="ghost" onClick={() => { window.location.href = 'mailto:admin@snapaccount.in' }}>
-            {t('403.cta.contactAdmin', 'Contact admin')}
+            {t('403.cta.contactAdmin')}
           </Button>
         </div>
 
         <p className="mt-6 text-sm text-[var(--text-tertiary)]">
           <a href="/logout?next=/login" className="text-[var(--text-link)] hover:underline">
-            {t('403.cta.signInAs', 'Sign in as a different user')}
+            {t('403.cta.signInAs')}
           </a>
         </p>
       </div>

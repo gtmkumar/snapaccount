@@ -155,7 +155,7 @@ export function HsnSacTypeahead({
           )}
 
           {!isFetching && query.length < 2 && (
-            <li className="px-4 py-3 text-sm text-neutral-400">
+            <li className="px-4 py-3 text-sm text-neutral-500">
               {t('admin.gst.invoice.hsnSac.typeToSearch')}
             </li>
           )}

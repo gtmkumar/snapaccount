@@ -13,9 +13,11 @@
  *   GET    /documents/admin/activity        — daily activity series
  *   GET    /documents/admin/users/{userId}/documents — user docs
  *
- * Contract gaps (no backend endpoint exists — stubbed in UI):
- *   - Approve / Reject review decisions  → TODO B15: review-decision endpoints
- *   - Archive document                   → TODO B15: ArchiveDocumentCommand has no HTTP route
+ * Review-decision endpoints (B15 — backend now implemented):
+ *   POST   /documents/{id}/approve              — approve (requires document.review)
+ *   POST   /documents/{id}/reject               — reject with reason (requires document.review)
+ *   POST   /documents/{id}/request-clarification — ask user for clarification (requires document.review)
+ *   POST   /documents/{id}/archive              — archive (requires document.archive)
  */
 import { z } from 'zod'
 import api from './api'
@@ -179,4 +181,56 @@ export async function getDocumentActivity(range: '7D' | '30D' | '90D' = '7D'): P
 export async function getAdminUserDocuments(userId: string, limit = 20): Promise<DocumentListItem[]> {
   const res = await api.get(`/documents/admin/users/${userId}/documents`, { params: { limit } })
   return z.array(DocumentListItemSchema).parse(res.data)
+}
+
+// ---------------------------------------------------------------------------
+// Review-decision API responses (B15)
+// ---------------------------------------------------------------------------
+
+/** Standard message response for review-decision endpoints */
+const ReviewDecisionResponseSchema = z.object({
+  message: z.string(),
+})
+export type ReviewDecisionResponse = z.infer<typeof ReviewDecisionResponseSchema>
+
+/**
+ * POST /documents/{id}/approve
+ * Transitions the document to Approved status. Requires document.review permission.
+ */
+export async function approveDocument(documentId: string): Promise<ReviewDecisionResponse> {
+  const res = await api.post(`/documents/${documentId}/approve`)
+  return ReviewDecisionResponseSchema.parse(res.data)
+}
+
+/**
+ * POST /documents/{id}/reject
+ * Rejects the document with a mandatory reason (≤2000 chars). Requires document.review permission.
+ */
+export async function rejectDocument(
+  documentId: string,
+  reason: string,
+): Promise<ReviewDecisionResponse> {
+  const res = await api.post(`/documents/${documentId}/reject`, { reason })
+  return ReviewDecisionResponseSchema.parse(res.data)
+}
+
+/**
+ * POST /documents/{id}/request-clarification
+ * Sends a clarification request back to the user. Requires document.review permission.
+ */
+export async function requestDocumentClarification(
+  documentId: string,
+  message: string,
+): Promise<ReviewDecisionResponse> {
+  const res = await api.post(`/documents/${documentId}/request-clarification`, { message })
+  return ReviewDecisionResponseSchema.parse(res.data)
+}
+
+/**
+ * POST /documents/{id}/archive
+ * Archives the document. Requires document.archive permission.
+ */
+export async function archiveDocument(documentId: string): Promise<ReviewDecisionResponse> {
+  const res = await api.post(`/documents/${documentId}/archive`)
+  return ReviewDecisionResponseSchema.parse(res.data)
 }

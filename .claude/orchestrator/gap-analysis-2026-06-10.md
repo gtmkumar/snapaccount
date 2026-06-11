@@ -1,5 +1,7 @@
 # SnapAccount — Comprehensive Gap Analysis & Review
 
+> **⚠️ ADDENDUM 2026-06-11:** See `gap-analysis-2026-06-11-delta.md` for the current state. Code-verified CLOSED since this document: GAP-003, 004, 005, 007, 010, 011, 012, 040, 070, 061 (Wave 1) and GAP-020/021 backend halves, B7–B12, M2–M4, D4–D5 (Wave 2). GAP-060 partial (ProfileScreen stubs remain). The delta adds 22 new sweep findings (NEW-Dxx / NEW-W2-xxx) and 12 new regulatory/industry gaps (GAP-100..111), three with regulatory clocks already running (IMS mandatory Apr 2026, accessibility mandate, IT Act 2025 cutover).
+
 > Produced by: Orchestrator (Post-Phase-6 / Pre-Phase-7 Review)
 > Date: 2026-06-10
 > Inputs: `SnapAccount_Complete_Project_Plan.md` (v2.0), `SnapAccount_User_Hierarchy.md`, `project-brief.md`, all `docs/`, all handoffs in `.claude/orchestrator/`, all QA reports in `.claude/qa/`, `docs/security/security-report.md` (authoritative security baseline), live-smoke audit `.claude/screenshots/live-2026-06-06/`, code-verified audits of `backend/`, `src/admin/`, `mobile/`, and external research (Indian SME accounting market benchmarks, DPDP Rules 2025, RBI Digital Lending 2025, CERT-In directions).

@@ -306,9 +306,44 @@ annotate "loan-credential-master-key" "(resolved via Secret Manager, not env var
     "CredentialEncryptionService (envelope encryption for per-bank configs)" "LoanService"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Section 9: Consent HMAC Key (LoanService — P6-HANDOFF-26)
+# Section 9: Razorpay Webhook Secret (SubscriptionService — NEW-D07)
+#
+# The Razorpay webhook secret is the HMAC-SHA256 signing key that Razorpay uses
+# to sign every webhook payload it sends to POST /subscriptions/webhooks/razorpay.
+#
+# Code reference:
+#   SubscriptionService.Api/Endpoints/RazorpayWebhook.cs
+#     var secret = configuration["RAZORPAY_WEBHOOK_SECRET"];
+#   The endpoint reads this key at request time and uses CryptographicOperations.
+#   FixedTimeEquals (SEC-051) to compare against X-Razorpay-Signature header.
+#
+# Why this is separate from razorpay-key-id / razorpay-key-secret:
+#   - key-id + key-secret authenticate outbound API calls (order creation, plan sync).
+#   - webhook-secret authenticates INBOUND events from Razorpay.
+#   - They are rotated independently: the webhook secret is rotated in the
+#     Razorpay Dashboard → Webhooks → Edit; the key-id/secret in Account → API Keys.
+#
+# ⚠ BLOCKER (NEW-D07): Disbursement webhooks silently reject with 503 if this
+#   secret is absent (fail-closed) or 401 if set to the wrong value.
+#   Provision this secret BEFORE enabling the subscription webhook URL in the
+#   Razorpay Dashboard.
 # ─────────────────────────────────────────────────────────────────────────────
-section "9. Consent HMAC Key (LoanService — P6-HANDOFF-26)"
+section "9. Razorpay Webhook Secret (SubscriptionService — NEW-D07)"
+
+log "WARNING: RAZORPAY_WEBHOOK_SECRET must be provisioned BEFORE registering the webhook"
+log "  URL in the Razorpay Dashboard. Without it, all webhook calls return 503."
+log "  Obtain from: Razorpay Dashboard → Account & Settings → Webhooks → Edit → Secret"
+log "  See also: docs/devops/subscription-razorpay-setup.md"
+
+create_secret "razorpay-webhook-secret" \
+    "HMAC-SHA256 webhook signing secret from Razorpay Dashboard → Webhooks → Edit → Secret. Mount as RAZORPAY_WEBHOOK_SECRET on subscription-service. SEC-051."
+annotate "razorpay-webhook-secret" "RAZORPAY_WEBHOOK_SECRET" \
+    "configuration[\"RAZORPAY_WEBHOOK_SECRET\"] (RazorpayWebhook.cs endpoint)" "SubscriptionService"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 10: Consent HMAC Key (LoanService — P6-HANDOFF-26)
+# ─────────────────────────────────────────────────────────────────────────────
+section "10. Consent HMAC Key (LoanService — P6-HANDOFF-26)"
 
 create_secret "loan-consent-hmac-key" \
     "HMAC-SHA256 key for loan consent integrity (P6-HANDOFF-26 ConsentHmacKeyProvider). base64, 32 bytes."
@@ -365,6 +400,11 @@ echo "    openssl rand -base64 64 | gcloud secrets versions add jwt-secret-key  
 echo ""
 echo "  PAN encryption:"
 echo "    openssl rand -base64 32 | gcloud secrets versions add pan-encryption-key --data-file=-"
+echo ""
+echo "  Razorpay webhook secret (NEW-D07 — HIGH PRIORITY: without this, all Razorpay webhooks return 503):"
+echo "    Obtain from: Razorpay Dashboard → Account & Settings → Webhooks → Edit → Secret"
+echo "    printf '%s' '<webhook-secret-from-dashboard>' | gcloud secrets versions add razorpay-webhook-secret --data-file=-"
+echo "    See: docs/devops/subscription-razorpay-setup.md for full activation runbook."
 echo ""
 echo "  CLOUD RUN WIRING: After adding secret values, run:"
 echo "    bash infra/cloud-run-services.sh  (update secret mounts for all 12 services)"

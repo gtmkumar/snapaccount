@@ -50,6 +50,8 @@ public sealed class ListReportsQueryHandler(
         var page = Math.Max(1, request.Page);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
 
+        // SWEEP-FIX WEB-06: Format is ignored (no column in report.report). Return "PDF" as
+        // default until DDL handoff adds the column to the table.
         var jobs = await query
             .OrderByDescending(j => j.CreatedAt)
             .Skip((page - 1) * pageSize)
@@ -57,7 +59,7 @@ public sealed class ListReportsQueryHandler(
             .Select(j => new ReportJobSummaryDto(
                 j.Id,
                 j.ReportType.ToString(),
-                j.Format.ToString(),
+                "PDF",          // Format — no DB column yet; defaulting to PDF
                 j.Status.ToString(),
                 j.FinancialYear,
                 j.PageCount,

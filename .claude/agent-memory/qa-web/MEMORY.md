@@ -2,3 +2,5 @@
 - [QA Phase 6F FINAL State](project_phase6_state.md) — Phase 6F QA COMPLETE (2026-04-25): 677/677 Vitest PASS (+192 tests); ChatService+SubscriptionService integration scaffolds compile clean (P6-INT-02)
 - [Module 1 RBAC State](project_module1_rbac_state.md) — Module 1 Auth/RBAC QA FINAL (2026-05-29): 721/721 Vitest PASS (+44), 428/428 unit PASS, 20/20 RBAC integration PASS; BUG-RBAC-E2E-001 filed
 - [No alert() dialogs](feedback_no_alert_dialogs.md) — Team lead rejected native alert()/confirm() on financial platform; require in-app toast/modal
+- [Live Sweep 2026-06-11](project_live_sweep_2026_06_11.md) — 16/46 endpoints FAIL; 3 EF mismatch patterns; RBAC returns 400/500 not 403; report at .claude/qa/live-web-sweep-2026-06-11.md
+- [Task #23 State](project_task23_state.md) — DPDP +21 unit tests (84% coverage), SEC-056 WIRED, PermissionCatalog filters (not disables) inactive, NEW-D09 IDOR 2/2 PASS; InMemory EF CreatedAt gotcha documented

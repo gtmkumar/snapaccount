@@ -187,3 +187,46 @@ export async function refreshContext(): Promise<RefreshContextResponse> {
   const res = await apiClient.post<RefreshContextResponse>('/auth/token/refresh-context');
   return res.data;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Org settings (Task #18 / GAP-060rem — Edit Business)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Shape returned by GET /auth/org/settings (SEC-056 self-service settings). */
+export interface OrgSettings {
+  name: string;
+  gstin?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  logoUrl?: string | null;
+  addressLine1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+}
+
+/**
+ * Mutable subset accepted by PATCH /auth/org/settings.
+ * NOTE (backend contract): name + GSTIN are NOT mutable through this
+ * endpoint — only address/logo fields. The Edit Business screen renders
+ * name/GSTIN read-only until a dedicated endpoint exists.
+ */
+export interface OrgSettingsPatch {
+  logoUrl?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+}
+
+/** GET /auth/org/settings — current org's self-service settings. */
+export async function getOrgSettings(): Promise<OrgSettings> {
+  const res = await apiClient.get<OrgSettings>('/auth/org/settings');
+  return res.data;
+}
+
+/** PATCH /auth/org/settings — update mutable org settings (204 No Content). */
+export async function patchOrgSettings(patch: OrgSettingsPatch): Promise<void> {
+  await apiClient.patch('/auth/org/settings', patch);
+}

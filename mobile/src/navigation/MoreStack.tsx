@@ -14,11 +14,19 @@ import { TeamScreen } from '../screens/team/TeamScreen';
 import { AcceptInviteScreen } from '../screens/auth/AcceptInviteScreen';
 // Phase 7 Wave 2: Privacy Center screens (GAP-020 / M3b)
 import { PrivacyCenterScreen } from '../screens/profile/PrivacyCenterScreen';
+// Task #18 (GAP-060rem): real Billing / Help / Edit Business destinations
+import { BillingScreen } from '../screens/profile/BillingScreen';
+import { HelpScreen } from '../screens/profile/HelpScreen';
+import { EditBusinessScreen } from '../screens/profile/EditBusinessScreen';
 import { MyConsentsScreen } from '../screens/profile/MyConsentsScreen';
 import { DataExportScreen } from '../screens/profile/DataExportScreen';
 import { CorrectionRequestScreen } from '../screens/profile/CorrectionRequestScreen';
 import { MyCorrectionsScreen } from '../screens/profile/MyCorrectionsScreen';
 import { DpoContactScreen } from '../screens/profile/DpoContactScreen';
+// AND-09: screen-level error boundary — a render crash inside one of the
+// newer screens must show an in-app fallback (retry/back) instead of the
+// red-screen overlay that ejects the user from the app on Android BACK.
+import { withScreenErrorBoundary } from '../components/shared/ScreenErrorBoundary';
 import type { CtaCategory, LinkedEntity } from '../components/callbacks/RequestCallbackCta';
 
 export type MoreStackParamList = {
@@ -54,9 +62,29 @@ export type MoreStackParamList = {
   CorrectionRequest: undefined;
   MyCorrections: undefined;
   DpoContact: undefined;
+  // Task #18 (GAP-060rem): Profile menu destinations
+  /** Current subscription + invoices (GET /subscriptions/me, /subscriptions/invoices) */
+  Billing: undefined;
+  /** Help & Support hub — Expert Chat + Request Callback */
+  Help: undefined;
+  /** Edit business details (GET/PATCH /auth/org/settings) */
+  EditBusiness: undefined;
 };
 
 const Stack = createNativeStackNavigator<MoreStackParamList>();
+
+// AND-09: wrap the Phase-7 screens (and other newly added destinations) in a
+// screen-level error boundary. Wrapped once at module scope so the component
+// identity is stable across renders.
+const SafePrivacyCenterScreen = withScreenErrorBoundary(PrivacyCenterScreen);
+const SafeMyConsentsScreen = withScreenErrorBoundary(MyConsentsScreen);
+const SafeDataExportScreen = withScreenErrorBoundary(DataExportScreen);
+const SafeCorrectionRequestScreen = withScreenErrorBoundary(CorrectionRequestScreen);
+const SafeMyCorrectionsScreen = withScreenErrorBoundary(MyCorrectionsScreen);
+const SafeDpoContactScreen = withScreenErrorBoundary(DpoContactScreen);
+const SafeBillingScreen = withScreenErrorBoundary(BillingScreen);
+const SafeHelpScreen = withScreenErrorBoundary(HelpScreen);
+const SafeEditBusinessScreen = withScreenErrorBoundary(EditBusinessScreen);
 
 export function MoreStack() {
   return (
@@ -82,12 +110,16 @@ export function MoreStack() {
       <Stack.Screen name="Team" component={TeamScreen} />
       <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
       {/* Phase 7 Wave 2: Privacy Center (DPDP Act 2023 / GAP-020) */}
-      <Stack.Screen name="PrivacyCenter" component={PrivacyCenterScreen} />
-      <Stack.Screen name="MyConsents" component={MyConsentsScreen} />
-      <Stack.Screen name="DataExport" component={DataExportScreen} />
-      <Stack.Screen name="CorrectionRequest" component={CorrectionRequestScreen} />
-      <Stack.Screen name="MyCorrections" component={MyCorrectionsScreen} />
-      <Stack.Screen name="DpoContact" component={DpoContactScreen} />
+      <Stack.Screen name="PrivacyCenter" component={SafePrivacyCenterScreen} />
+      <Stack.Screen name="MyConsents" component={SafeMyConsentsScreen} />
+      <Stack.Screen name="DataExport" component={SafeDataExportScreen} />
+      <Stack.Screen name="CorrectionRequest" component={SafeCorrectionRequestScreen} />
+      <Stack.Screen name="MyCorrections" component={SafeMyCorrectionsScreen} />
+      <Stack.Screen name="DpoContact" component={SafeDpoContactScreen} />
+      {/* Task #18 (GAP-060rem): Billing / Help / Edit Business */}
+      <Stack.Screen name="Billing" component={SafeBillingScreen} />
+      <Stack.Screen name="Help" component={SafeHelpScreen} />
+      <Stack.Screen name="EditBusiness" component={SafeEditBusinessScreen} />
     </Stack.Navigator>
   );
 }

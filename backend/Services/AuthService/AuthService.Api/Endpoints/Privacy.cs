@@ -7,6 +7,7 @@ using AuthService.Application.Privacy.Queries.ListMyDataCorrectionRequests;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using SnapAccount.Shared.Api;
+using SnapAccount.Shared.Domain;
 
 namespace AuthService.Api.Endpoints;
 
@@ -95,7 +96,14 @@ public sealed class Privacy : EndpointGroupBase
     private static async Task<IResult> GetDataExportStatus(ISender mediator, Guid? requestId = null)
     {
         var result = await mediator.Send(new GetDataExportStatusQuery(requestId));
-        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
+        if (result.IsSuccess)
+            return Results.Ok(result.Value);
+
+        // "No export job yet" is a normal state — surface it as 404 so clients can
+        // distinguish it from a server error (mobile getDataExportStatus treats 404 as null).
+        return result.Error.Type == ErrorType.NotFound
+            ? Results.NotFound()
+            : Results.Problem(result.Error.Message);
     }
 
     private static async Task<IResult> SubmitDataCorrectionRequest(

@@ -5,7 +5,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import {
   ArrowLeft, Send, Paperclip, CheckCheck, MoreHorizontal,
   UserPlus, CheckCircle, AlertTriangle, RefreshCw,
@@ -35,7 +35,6 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function ChatThreadDetailPage() {
   const { threadId } = useParams<{ threadId: string }>()
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuth()
@@ -112,13 +111,13 @@ export default function ChatThreadDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['chat', 'messages', threadId] })
       scrollToBottom()
     },
-    onError: () => toast.error(t('chat.thread.send.error', 'Failed to send message')),
+    onError: () => toast.error(t('chat.thread.send.error')),
   })
 
   const resolveMutation = useMutation({
     mutationFn: () => resolveThread(threadId!),
     onSuccess: () => {
-      toast.success(t('chat.thread.resolved', 'Thread resolved'))
+      toast.success(t('chat.thread.resolved'))
       void queryClient.invalidateQueries({ queryKey: ['chat', 'thread', threadId] })
     },
   })
@@ -126,7 +125,7 @@ export default function ChatThreadDetailPage() {
   const escalateMutation = useMutation({
     mutationFn: () => escalateThread(threadId!),
     onSuccess: () => {
-      toast.success(t('chat.thread.escalated', 'Thread escalated'))
+      toast.success(t('chat.thread.escalated'))
       void queryClient.invalidateQueries({ queryKey: ['chat', 'thread', threadId] })
     },
   })
@@ -134,7 +133,7 @@ export default function ChatThreadDetailPage() {
   const reopenMutation = useMutation({
     mutationFn: () => reopenThread(threadId!),
     onSuccess: () => {
-      toast.success(t('chat.thread.reopened', 'Thread reopened'))
+      toast.success(t('chat.thread.reopened'))
       void queryClient.invalidateQueries({ queryKey: ['chat', 'thread', threadId] })
     },
   })
@@ -172,7 +171,7 @@ export default function ChatThreadDetailPage() {
       <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[var(--border-subtle)]">
         <button
           onClick={() => navigate('/chat')}
-          aria-label={t('common.back', 'Back')}
+          aria-label={t('common.back')}
           className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-sunken)] transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -181,7 +180,7 @@ export default function ChatThreadDetailPage() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-base font-semibold text-[var(--text-primary)] truncate">
-              {thread?.subject ?? t('chat.thread.noSubject', 'Thread')}
+              {thread?.subject ?? t('chat.thread.noSubject')}
             </h1>
             {thread?.status && (
               <span className={cn('px-1.5 py-0.5 rounded text-xs font-medium shrink-0', STATUS_COLORS[thread.status])}>
@@ -203,7 +202,7 @@ export default function ChatThreadDetailPage() {
         <DropdownMenu
           trigger={
             <button
-              aria-label={t('common.actions', 'Actions')}
+              aria-label={t('common.actions')}
               className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-sunken)] transition-colors"
             >
               <MoreHorizontal className="h-4 w-4" />
@@ -212,22 +211,22 @@ export default function ChatThreadDetailPage() {
         >
           {thread?.status !== 'resolved' && (
             <DropdownMenuItem onClick={() => resolveMutation.mutate()} icon={<CheckCircle className="h-4 w-4" />}>
-              {t('chat.thread.action.resolve', 'Mark resolved')}
+              {t('chat.thread.action.resolve')}
             </DropdownMenuItem>
           )}
           {thread?.status !== 'escalated' && (
             <DropdownMenuItem onClick={() => escalateMutation.mutate()} icon={<AlertTriangle className="h-4 w-4" />}>
-              {t('chat.thread.action.escalate', 'Escalate')}
+              {t('chat.thread.action.escalate')}
             </DropdownMenuItem>
           )}
           {(thread?.status === 'resolved' || thread?.status === 'escalated') && (
             <DropdownMenuItem onClick={() => reopenMutation.mutate()} icon={<RefreshCw className="h-4 w-4" />}>
-              {t('chat.thread.action.reopen', 'Reopen')}
+              {t('chat.thread.action.reopen')}
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem icon={<UserPlus className="h-4 w-4" />}>
-            {t('chat.thread.action.assign', 'Assign to agent')}
+            {t('chat.thread.action.assign')}
           </DropdownMenuItem>
         </DropdownMenu>
       </div>
@@ -238,7 +237,7 @@ export default function ChatThreadDetailPage() {
           <Skeleton variant="list" />
         ) : messages.length === 0 ? (
           <div className="flex items-center justify-center h-32 text-sm text-[var(--text-tertiary)]">
-            {t('chat.thread.empty', 'No messages yet. Start the conversation.')}
+            {t('chat.thread.empty')}
           </div>
         ) : (
           messages.map(msg => (
@@ -274,7 +273,7 @@ export default function ChatThreadDetailPage() {
         <div className="border-t border-[var(--border-subtle)] pt-3">
           <div className="flex items-end gap-2">
             <button
-              aria-label={t('chat.thread.attach', 'Attach file')}
+              aria-label={t('chat.thread.attach')}
               className="p-2 rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--surface-sunken)] transition-colors shrink-0"
             >
               <Paperclip className="h-4 w-4" />
@@ -285,7 +284,7 @@ export default function ChatThreadDetailPage() {
               value={messageText}
               onChange={e => { setMessageText(e.target.value); handleTyping() }}
               onKeyDown={handleKeyDown}
-              placeholder={t('chat.thread.placeholder', 'Type a message… (Enter to send, Shift+Enter for new line)')}
+              placeholder={t('chat.thread.placeholder')}
               rows={1}
               className={cn(
                 'flex-1 resize-none rounded-xl px-3 py-2 text-sm',
@@ -303,14 +302,14 @@ export default function ChatThreadDetailPage() {
               onClick={handleSend}
               disabled={!messageText.trim() || sendMutation.isPending}
               loading={sendMutation.isPending}
-              aria-label={t('chat.thread.send', 'Send message')}
+              aria-label={t('chat.thread.send')}
               className="shrink-0"
             >
               <Send className="h-4 w-4" />
             </Button>
           </div>
           <p className="text-xs text-[var(--text-tertiary)] mt-1 ml-10">
-            {t('chat.thread.hint', 'Enter to send · Shift+Enter for new line')}
+            {t('chat.thread.hint')}
           </p>
         </div>
       )}

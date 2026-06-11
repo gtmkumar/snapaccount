@@ -39,6 +39,7 @@
       "^expo-device$": "<rootDir>/src/__mocks__/expoDevice.ts",
       "^expo-notifications$": "<rootDir>/src/__mocks__/expoNotifications.ts",
       "^expo-haptics$": "<rootDir>/src/__mocks__/expoHaptics.ts",
+      "^expo-crypto$": "<rootDir>/src/__mocks__/expoCrypto.ts",
       "^@microsoft/signalr$": "<rootDir>/src/__mocks__/signalr.ts",
       "^expo-task-manager$": "<rootDir>/src/__mocks__/expoTaskManager.ts",
       "^expo-background-fetch$": "<rootDir>/src/__mocks__/expoBackgroundFetch.ts",
@@ -49,8 +50,10 @@
       "^react-native-safe-area-context$": "<rootDir>/src/__mocks__/reactNativeSafeAreaContext.js",
       "^react-native/src/private/featureflags/specs/NativeReactNativeFeatureFlags$": "<rootDir>/src/__mocks__/nativeFeatureFlags.js",
       "^react-native/src/private/featureflags/ReactNativeFeatureFlagsBase$": "<rootDir>/src/__mocks__/nativeFeatureFlags.js",
-      "^react-native/src/private/featureflags/ReactNativeFeatureFlags$": "<rootDir>/src/__mocks__/nativeFeatureFlags.js"
-    }
+      "^react-native/src/private/featureflags/ReactNativeFeatureFlags$": "<rootDir>/src/__mocks__/nativeFeatureFlags.js",
+      "^nativewind/jsx-runtime$": "react/jsx-runtime"
+    },
+    "resolver": "react-native-worklets/jest/resolver.js"
   },
   "dependencies": {
     "@expo/config-plugins": "^56.0.8",

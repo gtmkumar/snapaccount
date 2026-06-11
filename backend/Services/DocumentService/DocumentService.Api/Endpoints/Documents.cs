@@ -1,7 +1,11 @@
 using DocumentService.Application.Admin.Queries.GetUserDocuments;
 using DocumentService.Application.Dashboard.Queries.GetActivity;
 using DocumentService.Application.Dashboard.Queries.GetDashboardStats;
+using DocumentService.Application.Documents.Commands.ApproveDocument;
+using DocumentService.Application.Documents.Commands.ArchiveDocument;
 using DocumentService.Application.Documents.Commands.CategorizeDocument;
+using DocumentService.Application.Documents.Commands.RejectDocument;
+using DocumentService.Application.Documents.Commands.RequestClarification;
 using DocumentService.Application.Documents.Commands.RequestOcr;
 using DocumentService.Application.Documents.Commands.ShareDocument;
 using DocumentService.Application.Documents.Commands.UploadDocument;
@@ -49,6 +53,26 @@ public sealed class Documents : EndpointGroupBase
         // POST /documents/{id}/ocr — AI endpoint: 20 req/min rate limit (cost guardrail)
         groupBuilder.MapPost("/{id:guid}/ocr", RequestOcr)
             .RequireAuthorization().RequireRateLimiting("ai").WithName("RequestOcr");
+
+        // POST /documents/{id}/approve — operator approves a reviewed document (document.review permission)
+        groupBuilder.MapPost("/{id:guid}/approve", ApproveDocument)
+            .RequireAuthorization().RequireRateLimiting("standard").WithName("ApproveDocument")
+            .WithSummary("Approve a reviewed document and emit the accounting pipeline event.");
+
+        // POST /documents/{id}/reject — operator rejects a document with a mandatory reason
+        groupBuilder.MapPost("/{id:guid}/reject", RejectDocument)
+            .RequireAuthorization().RequireRateLimiting("standard").WithName("RejectDocument")
+            .WithSummary("Reject a document with a mandatory reason. Body: { reason }.");
+
+        // POST /documents/{id}/request-clarification — operator requests more info from the owner
+        groupBuilder.MapPost("/{id:guid}/request-clarification", RequestDocumentClarification)
+            .RequireAuthorization().RequireRateLimiting("standard").WithName("RequestDocumentClarification")
+            .WithSummary("Request clarification from the document owner. Body: { message }.");
+
+        // POST /documents/{id}/archive — moves a document to ARCHIVED status
+        groupBuilder.MapPost("/{id:guid}/archive", ArchiveDocument)
+            .RequireAuthorization().RequireRateLimiting("standard").WithName("ArchiveDocument")
+            .WithSummary("Archive a document (status → ARCHIVED). Idempotent.");
 
         // GET /documents/admin/dashboard-stats — admin-only count for cross-service dashboard
         groupBuilder.MapGet("/admin/dashboard-stats", static async (ISender sender, CancellationToken ct) =>
@@ -149,6 +173,39 @@ public sealed class Documents : EndpointGroupBase
             : MapError(result.Error);
     }
 
+    private static async Task<IResult> ApproveDocument(Guid id, ISender sender)
+    {
+        var result = await sender.Send(new ApproveDocumentCommand(id));
+        return result.IsSuccess
+            ? Results.Ok(new { message = "Document approved." })
+            : MapError(result.Error);
+    }
+
+    private static async Task<IResult> RejectDocument(Guid id, RejectRequest req, ISender sender)
+    {
+        var result = await sender.Send(new RejectDocumentCommand(id, req.Reason));
+        return result.IsSuccess
+            ? Results.Ok(new { message = "Document rejected." })
+            : MapError(result.Error);
+    }
+
+    private static async Task<IResult> RequestDocumentClarification(
+        Guid id, ClarificationRequest req, ISender sender)
+    {
+        var result = await sender.Send(new RequestClarificationCommand(id, req.Message));
+        return result.IsSuccess
+            ? Results.Ok(new { message = "Clarification request recorded." })
+            : MapError(result.Error);
+    }
+
+    private static async Task<IResult> ArchiveDocument(Guid id, ISender sender)
+    {
+        var result = await sender.Send(new ArchiveDocumentCommand(id));
+        return result.IsSuccess
+            ? Results.Ok(new { message = "Document archived." })
+            : MapError(result.Error);
+    }
+
     private static IResult MapError(Error error) => error.Type switch
     {
         ErrorType.NotFound => Results.NotFound(new { error = error.Message, code = error.Code }),
@@ -167,3 +224,5 @@ internal record ShareRequest(
     Guid? SharedWith = null,
     string? ExternalEmail = null,
     DateTime? ExpiresAt = null);
+internal record RejectRequest(string Reason);
+internal record ClarificationRequest(string Message);

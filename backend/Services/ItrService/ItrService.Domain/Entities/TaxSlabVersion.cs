@@ -44,5 +44,20 @@ public class TaxSlabVersion : BaseEntity
     /// <summary>Version effective until date (null = current).</summary>
     public DateOnly? EffectiveUntil { get; private set; }
 
+    // ── IT Act 2025 dimension (migration 072 / GAP-102) ──────────────────────
+
+    /// <summary>
+    /// Governing Income-tax Act for this slab version.
+    /// Allowed values: <c>IT_ACT_1961</c> (default) | <c>IT_ACT_2025</c>.
+    /// The 2025 Act applies from tax year 2026-27 onward, once its config rows are seeded.
+    /// </summary>
+    public string ActVersion { get; private set; } = "IT_ACT_1961";
+
+    /// <summary>
+    /// IT Act 2025 "tax year" terminology (e.g. "2026-27"), kept alongside
+    /// the existing <see cref="AssessmentYear"/> column for backward compatibility.
+    /// </summary>
+    public string? TaxYear { get; private set; }
+
     private TaxSlabVersion() { }
 }

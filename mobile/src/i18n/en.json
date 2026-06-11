@@ -157,6 +157,15 @@
           "editPhone": "Edit",
           "rescheduleTitle": "Reschedule",
           "rescheduleSubmit": "Confirm reschedule"
+        },
+        "category": {
+          "general": "General",
+          "gst": "GST Filing",
+          "itr": "ITR Filing",
+          "loan": "Loans",
+          "accounting": "Accounting",
+          "subscription": "Subscription & Billing",
+          "technical": "Technical Support"
         }
       }
     },
@@ -181,7 +190,11 @@
       "retry": "Retry",
       "save": "Save",
       "close": "Close",
-      "error": "Error"
+      "error": "Error",
+      "screenError": {
+        "title": "Something went wrong",
+        "body": "This screen hit an unexpected error. Try again, or go back to the previous screen."
+      }
     },
     "gst": {
       "notices": {
@@ -991,7 +1004,12 @@
         "errorTitle": "Could not delete account",
         "errorBody": "Something went wrong. Please try again or contact support if the issue persists."
       },
-      "title": "Profile"
+      "title": "Profile",
+      "org": {
+        "currentOrg": "Current Organization",
+        "businessOwner": "Business Owner",
+        "employee": "Employee"
+      }
     },
     "auth": {
       "common": {
@@ -1002,7 +1020,7 @@
         "loadError": "Could not load. Pull to refresh or try again."
       },
       "preferences": {
-        "title": "Notification Preferences",
+        "title": "Language & Notifications",
         "subtitle": "Choose how we keep you updated",
         "language": "Language",
         "channels": "Channels",
@@ -1232,7 +1250,9 @@
     },
     "kfs": {
       "title": "Key Facts Statement",
-      "verified": { "chip": "Verified" },
+      "verified": {
+        "chip": "Verified"
+      },
       "trust": {
         "banner": "Issued & digitally signed by SnapAccount · cannot be edited",
         "explainer": {
@@ -1334,7 +1354,8 @@
         "footer": {
           "policy": "Privacy Policy",
           "rights": "DPDP Rights"
-        }
+        },
+        "loadError": "We couldn't load your consent summary right now. All the privacy options below still work."
       },
       "consents": {
         "title": "My consents",
@@ -1447,7 +1468,17 @@
         "cta": {
           "call": "Call",
           "email": "Email",
-          "learnMore": "Learn more"
+          "learnMore": "Learn more",
+          "viewFull": "View full contact"
+        },
+        "pendingTitle": "DPO appointment pending",
+        "pendingBody": "Our Data Protection Officer contact will be published here soon. Until then, raise privacy requests from the Privacy Center — they reach the same team.",
+        "pendingShort": "DPO contact will be published soon",
+        "labels": {
+          "email": "Email",
+          "phone": "Phone",
+          "address": "Address (India)",
+          "hours": "Business Hours"
         }
       }
     },
@@ -1460,6 +1491,77 @@
         "cancel": "Cancel"
       },
       "error": "Authentication failed. Please try again."
+    },
+    "pan": {
+      "label": "PAN Number",
+      "hint": "Enter your 10 character PAN number",
+      "error": {
+        "length": "PAN must be 10 characters",
+        "format": "Invalid PAN format (e.g. ABCDE1234F)"
+      },
+      "valid": "PAN format valid",
+      "remaining": "{{count}} characters remaining"
+    },
+    "otp": {
+      "digitLabel": "OTP digit {{index}}",
+      "resend": "Resend OTP",
+      "resendIn": "Resend OTP in {{time}}",
+      "resendInLabel": "Resend OTP, available in {{time}}",
+      "resendAvailable": "You can now resend the OTP",
+      "resendMilestone": "Resend available in {{seconds}} seconds"
+    },
+    "a11y": {
+      "reviewedAll": "I have reviewed the full document",
+      "reviewedAllHint": "Double tap to confirm you have reviewed the document. This unlocks the acknowledgement checkbox.",
+      "gateUnlocked": "Acknowledgement unlocked. You can now select the confirmation checkbox.",
+      "scrollGateHint": "Scroll to the end to enable acceptance",
+      "scrollGateDisabled": "Disabled. Scroll to the end of the document to enable."
+    },
+    "billing": {
+      "title": "Subscription & Billing",
+      "currentPlan": "Current plan",
+      "status": "Status",
+      "price": "Price",
+      "cycle": "Billing cycle",
+      "period": "Current period",
+      "invoices": "Invoices",
+      "invoicesEmpty": "No invoices yet",
+      "invoiceTotal": "Total (incl. GST)",
+      "paidOn": "Paid on {{date}}",
+      "noPlan": {
+        "title": "No active subscription",
+        "body": "You are on the free tier. Paid plans will appear here once available."
+      },
+      "error": {
+        "title": "Couldn't load billing details",
+        "body": "Please check your connection and try again."
+      }
+    },
+    "help": {
+      "title": "Help & Support",
+      "intro": "Talk to a SnapAccount expert — chat instantly or get a call back.",
+      "chatCta": "Chat with an expert",
+      "chatBody": "Start a conversation with our CA support team.",
+      "callbackTitle": "Prefer a call?"
+    },
+    "editBusiness": {
+      "title": "Edit Business Details",
+      "readonlyNote": "Business name and GSTIN are verified details and can't be changed here. Contact support to update them.",
+      "name": "Business name",
+      "gstin": "GSTIN",
+      "address": "Registered address",
+      "addressLine1": "Address line 1",
+      "addressLine2": "Address line 2",
+      "city": "City",
+      "state": "State",
+      "pincode": "PIN code",
+      "pincodeError": "PIN code must be 6 digits",
+      "save": "Save changes",
+      "saved": "Business details updated",
+      "error": {
+        "load": "Couldn't load business details",
+        "save": "Couldn't save changes. Please try again."
+      }
     }
   }
 }

@@ -81,6 +81,8 @@ public static class DependencyInjection
             services.AddHttpClient<IGstnApiClient, ProductionGstnApiClient>();
             services.AddHttpClient<IIrpClient, ProductionIrpClient>();
             services.AddHttpClient<IEwbClient, ProductionEwbClient>();
+            // GAP-101: GSTN IMS production client (TODO: provision GSTN_IMS_SESSION_TOKEN via Secret Manager)
+            services.AddHttpClient<IImsGstnClient, ProductionImsGstnClient>();
         }
         else
         {
@@ -88,6 +90,8 @@ public static class DependencyInjection
             services.AddSingleton<IGstnApiClient, MockGstnApiClient>();
             services.AddSingleton<IIrpClient, MockIrpClient>();
             services.AddSingleton<IEwbClient, MockEwbClient>();
+            // GAP-101: GSTN IMS mock client — deterministic seeded invoices for dev/test
+            services.AddSingleton<IImsGstnClient, MockImsGstnClient>();
         }
 
         // GCS for notice attachments

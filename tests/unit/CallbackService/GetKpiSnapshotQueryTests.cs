@@ -21,30 +21,38 @@ namespace CallbackService.Tests;
 [Trait("Category", "Unit")]
 public sealed class GetKpiSnapshotQueryTests
 {
-    private static IQueryable<KpiDailySnapshot> BuildQueryable(IEnumerable<KpiDailySnapshot> data) =>
-        data.AsQueryable();
+    /// <summary>Generic helper — wraps any in-memory list as an async-queryable mock DbSet.</summary>
+    private static Mock<DbSet<T>> BuildDbSetMock<T>(IEnumerable<T> data) where T : class
+    {
+        var queryable = data.AsQueryable();
+        var dbSetMock = new Mock<DbSet<T>>();
+        dbSetMock.As<IAsyncEnumerable<T>>()
+                 .Setup(m => m.GetAsyncEnumerator(It.IsAny<CancellationToken>()))
+                 .Returns(new TestAsyncEnumerator<T>(queryable.GetEnumerator()));
+        dbSetMock.As<IQueryable<T>>()
+                 .Setup(m => m.Provider)
+                 .Returns(new TestAsyncQueryProvider<T>(queryable.Provider));
+        dbSetMock.As<IQueryable<T>>()
+                 .Setup(m => m.Expression).Returns(queryable.Expression);
+        dbSetMock.As<IQueryable<T>>()
+                 .Setup(m => m.ElementType).Returns(queryable.ElementType);
+        dbSetMock.As<IQueryable<T>>()
+                 .Setup(m => m.GetEnumerator()).Returns(queryable.GetEnumerator());
+        return dbSetMock;
+    }
 
-    private static ICallbackDbContext BuildContext(IEnumerable<KpiDailySnapshot> snapshots)
+    /// <summary>
+    /// Builds a mock <see cref="ICallbackDbContext"/> with the supplied snapshot and callback data.
+    /// <para>The handler now queries both <c>KpiSnapshots</c> (MV) and <c>Callbacks</c> (live rows),
+    /// so both must be set up — even if empty — to avoid ArgumentNullException.</para>
+    /// </summary>
+    private static ICallbackDbContext BuildContext(
+        IEnumerable<KpiDailySnapshot> snapshots,
+        IEnumerable<Callback>? callbacks = null)
     {
         var mock = new Mock<ICallbackDbContext>();
-
-        // Create a mock DbSet from in-memory IQueryable
-        var queryable = snapshots.AsQueryable();
-        var dbSetMock = new Mock<DbSet<KpiDailySnapshot>>();
-        dbSetMock.As<IAsyncEnumerable<KpiDailySnapshot>>()
-                 .Setup(m => m.GetAsyncEnumerator(It.IsAny<CancellationToken>()))
-                 .Returns(new TestAsyncEnumerator<KpiDailySnapshot>(queryable.GetEnumerator()));
-        dbSetMock.As<IQueryable<KpiDailySnapshot>>()
-                 .Setup(m => m.Provider)
-                 .Returns(new TestAsyncQueryProvider<KpiDailySnapshot>(queryable.Provider));
-        dbSetMock.As<IQueryable<KpiDailySnapshot>>()
-                 .Setup(m => m.Expression).Returns(queryable.Expression);
-        dbSetMock.As<IQueryable<KpiDailySnapshot>>()
-                 .Setup(m => m.ElementType).Returns(queryable.ElementType);
-        dbSetMock.As<IQueryable<KpiDailySnapshot>>()
-                 .Setup(m => m.GetEnumerator()).Returns(queryable.GetEnumerator());
-
-        mock.Setup(d => d.KpiSnapshots).Returns(dbSetMock.Object);
+        mock.Setup(d => d.KpiSnapshots).Returns(BuildDbSetMock(snapshots).Object);
+        mock.Setup(d => d.Callbacks).Returns(BuildDbSetMock(callbacks ?? []).Object);
         return mock.Object;
     }
 

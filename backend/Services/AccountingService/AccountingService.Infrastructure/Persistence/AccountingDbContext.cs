@@ -11,6 +11,7 @@ namespace AccountingService.Infrastructure.Persistence;
 /// Audit stamping and domain event dispatch are handled by registered
 /// <c>ISaveChangesInterceptor</c> instances.
 /// Phase 6A: added LedgerEntry, ChartOfAccount, JournalBatch, FiscalYearClose DbSets.
+/// Phase 7 / GAP-100: added EditLog DbSet (read-only; written by DB triggers).
 /// </summary>
 public class AccountingDbContext(DbContextOptions<AccountingDbContext> options)
     : BaseDbContext(options), IAccountingDbContext
@@ -43,6 +44,12 @@ public class AccountingDbContext(DbContextOptions<AccountingDbContext> options)
 
     /// <inheritdoc />
     public DbSet<FiscalYearClose> FiscalYearCloses => Set<FiscalYearClose>();
+
+    /// <summary>
+    /// MCA statutory edit log (migration 071). Read-only from the application perspective;
+    /// rows are written exclusively by DB-level AFTER triggers.
+    /// </summary>
+    public DbSet<EditLog> EditLogs => Set<EditLog>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -565,3 +565,160 @@ describe('isActive / roleCount — Increment 1.2 contract', () => {
     expect(withBoth.data?.roleCount).toBe(3)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NEW-W2-006 — Retired permission (is_active=false) filter behavior
+//
+// FINDING: PermissionCatalogPage does NOT render inactive permissions with an
+// HTML `disabled` attribute or aria-disabled. Instead, it FILTERS them from the
+// visible list via the Active/Inactive segmented control (role="radiogroup").
+//
+// When activeFilter === 'inactive': only is_active=false permissions are shown.
+// When activeFilter === 'active':   only is_active=true permissions are shown.
+// When activeFilter === 'all':      all permissions are shown (default).
+//
+// The inactive row's text is visually dimmed via CSS class
+// (text-[var(--text-tertiary)] applied when isInactive is true) — this is
+// handled client-side, not via an HTML disabled attribute.
+//
+// This is INTENTIONAL: the catalog page is the management screen where retired
+// permissions must still be visible so admins can re-activate or inspect them.
+// The role-assignment matrix (separate page) calls listPermissions() WITHOUT
+// includeInactive=true, so retired permissions never appear there.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('NEW-W2-006 — Retired permission filter behavior', () => {
+  let PermissionCatalogPage: typeof import('@/pages/roles/PermissionCatalogPage').default
+
+  // Catalog with one active and one inactive permission in the same module
+  const catalogWithInactive: rbacApi.PermissionModule[] = [
+    {
+      module: 'org',
+      displayName: 'Organization Management',
+      permissions: [
+        {
+          id: 'active-perm',
+          name: 'org.roles.read',
+          resource: 'org',
+          action: 'roles.read',
+          description: 'Read organisation roles',
+          isActive: true,
+          roleCount: 0,
+        },
+        {
+          id: 'retired-perm',
+          name: 'org.roles.legacy',
+          resource: 'org',
+          action: 'roles.legacy',
+          description: 'Legacy role access (retired)',
+          isActive: false,
+          roleCount: 0,
+        },
+      ],
+    },
+  ]
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    vi.spyOn(rbacApi, 'listPermissions').mockResolvedValue(catalogWithInactive)
+    vi.spyOn(rbacApi, 'createPermission').mockResolvedValue({
+      id: 'new', name: 'x.y', resource: 'x', action: 'y', isActive: true, roleCount: 0,
+    })
+    vi.spyOn(rbacApi, 'updatePermission').mockResolvedValue(undefined)
+    vi.spyOn(rbacApi, 'deletePermission').mockResolvedValue(undefined)
+
+    const mod = await import('@/pages/roles/PermissionCatalogPage')
+    PermissionCatalogPage = mod.default
+  })
+
+  function makeQCLocal() {
+    return new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: 0 },
+        mutations: { retry: false },
+      },
+    })
+  }
+
+  function wrapLocal(ui: React.ReactElement) {
+    return render(
+      <QueryClientProvider client={makeQCLocal()}>
+        <MemoryRouter>{ui}</MemoryRouter>
+      </QueryClientProvider>
+    )
+  }
+
+  it('default view (all) shows both active and inactive permissions', async () => {
+    wrapLocal(<PermissionCatalogPage />)
+    await waitFor(() => {
+      expect(screen.getByText('Read organisation roles')).toBeInTheDocument()
+      expect(screen.getByText('Legacy role access (retired)')).toBeInTheDocument()
+    })
+  })
+
+  it('selecting "Active" filter hides inactive permissions from the list', async () => {
+    wrapLocal(<PermissionCatalogPage />)
+    await waitFor(() => {
+      expect(screen.getByText('Read organisation roles')).toBeInTheDocument()
+    })
+
+    // Click the "Active" radio button
+    const activeRadio = screen.getByRole('radio', { name: /^Active$/i })
+    fireEvent.click(activeRadio)
+
+    await waitFor(() => {
+      expect(screen.getByText('Read organisation roles')).toBeInTheDocument()
+      expect(screen.queryByText('Legacy role access (retired)')).not.toBeInTheDocument()
+    })
+  })
+
+  it('selecting "Inactive" filter shows only inactive permissions', async () => {
+    wrapLocal(<PermissionCatalogPage />)
+    await waitFor(() => {
+      expect(screen.getByText('Read organisation roles')).toBeInTheDocument()
+    })
+
+    const inactiveRadio = screen.getByRole('radio', { name: /^Inactive$/i })
+    fireEvent.click(inactiveRadio)
+
+    await waitFor(() => {
+      // Only the inactive permission should be visible
+      expect(screen.queryByText('Read organisation roles')).not.toBeInTheDocument()
+      expect(screen.getByText('Legacy role access (retired)')).toBeInTheDocument()
+    })
+  })
+
+  it('inactive permission row is NOT rendered with html disabled attribute (it is filtered, not disabled)', async () => {
+    // FINDING: The page filters inactive permissions via activeFilter state.
+    // Inactive rows that ARE rendered (in "all" or "inactive" filter mode) do NOT
+    // have an html disabled attribute — they are fully interactive (toggle, edit, deactivate buttons).
+    // Visual differentiation is via CSS class (dimmed text color), not disabled state.
+    wrapLocal(<PermissionCatalogPage />)
+    await waitFor(() => {
+      expect(screen.getByText('Legacy role access (retired)')).toBeInTheDocument()
+    })
+
+    // The inactive permission's description text is rendered — it is visible and interactive
+    const inactiveText = screen.getByText('Legacy role access (retired)')
+    expect(inactiveText).toBeInTheDocument()
+    // No disabled attribute on the row container or the description span
+    expect(inactiveText).not.toHaveAttribute('disabled')
+    expect(inactiveText.closest('[disabled]')).toBeNull()
+  })
+
+  it('toggling from "Inactive" back to "All" shows both permissions again', async () => {
+    wrapLocal(<PermissionCatalogPage />)
+    await waitFor(() => screen.getByText('Read organisation roles'))
+
+    fireEvent.click(screen.getByRole('radio', { name: /^Inactive$/i }))
+    await waitFor(() =>
+      expect(screen.queryByText('Read organisation roles')).not.toBeInTheDocument()
+    )
+
+    fireEvent.click(screen.getByRole('radio', { name: /^All$/i }))
+    await waitFor(() => {
+      expect(screen.getByText('Read organisation roles')).toBeInTheDocument()
+      expect(screen.getByText('Legacy role access (retired)')).toBeInTheDocument()
+    })
+  })
+})

@@ -14,7 +14,11 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { Colors } from '../../constants/colors';
+import {
+  createThemedStyles,
+  useTheme,
+  type ThemeTokens,
+} from '../../contexts/ThemeContext';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md' | 'lg';
@@ -44,6 +48,8 @@ export function Button({
   onPress,
   ...rest
 }: ButtonProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const isDisabled = disabled || loading;
 
   // The visual styles (background, border, shadow) live on a plain inner View,
@@ -78,7 +84,13 @@ export function Button({
           {loading ? (
             <ActivityIndicator
               size="small"
-              color={variant === 'primary' || variant === 'danger' ? Colors.neutral[0] : Colors.brand[500]}
+              color={
+                variant === 'danger'
+                  ? '#FFFFFF'
+                  : variant === 'primary'
+                    ? tokens.textOnBrand
+                    : tokens.brand500
+              }
             />
           ) : (
             <View style={styles.content}>
@@ -103,150 +115,152 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  fullWidth: {
-    width: '100%',
-  },
-  content: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconLeft: {
-    marginRight: 8,
-  },
-  iconRight: {
-    marginLeft: 8,
-  },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+    base: {
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 48,
+    },
+    fullWidth: {
+      width: '100%',
+    },
+    content: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    iconLeft: {
+      marginRight: 8,
+    },
+    iconRight: {
+      marginLeft: 8,
+    },
 
-  // Sizes
-  size_sm: {
-    height: 36,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-  },
-  size_md: {
-    height: 48,
-    paddingHorizontal: 20,
-    borderRadius: 14,
-  },
-  size_lg: {
-    height: 56,
-    paddingHorizontal: 28,
-    borderRadius: 16,
-  },
+    // Sizes
+    size_sm: {
+      height: 36,
+      paddingHorizontal: 14,
+      borderRadius: 10,
+    },
+    size_md: {
+      height: 48,
+      paddingHorizontal: 20,
+      borderRadius: 14,
+    },
+    size_lg: {
+      height: 56,
+      paddingHorizontal: 28,
+      borderRadius: 16,
+    },
 
-  // Primary variant — gradient-like solid with subtle shadow
-  variant_primary: {
-    backgroundColor: Colors.brand[500],
-    shadowColor: Colors.brand[500],
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  variant_primary_pressed: {
-    backgroundColor: Colors.brand[600],
-    shadowOpacity: 0.15,
-    transform: [{ scale: 0.98 }],
-  },
-  variant_primary_disabled: {
-    backgroundColor: Colors.neutral[200],
-    shadowOpacity: 0,
-    elevation: 0,
-  },
+    // Primary variant — solid CTA fill (≥4.5:1 with textOnBrand in both modes)
+    variant_primary: {
+      backgroundColor: tk.brandCta,
+      shadowColor: tk.brandCta,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    variant_primary_pressed: {
+      backgroundColor: tk.brandCtaPressed,
+      shadowOpacity: 0.15,
+      transform: [{ scale: 0.98 }],
+    },
+    variant_primary_disabled: {
+      backgroundColor: tk.skeleton1,
+      shadowOpacity: 0,
+      elevation: 0,
+    },
 
-  // Secondary variant — clean outline
-  variant_secondary: {
-    backgroundColor: Colors.neutral[0],
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[300],
-  },
-  variant_secondary_pressed: {
-    backgroundColor: Colors.brand[50],
-    borderColor: Colors.brand[300],
-    transform: [{ scale: 0.98 }],
-  },
-  variant_secondary_disabled: {
-    borderColor: Colors.neutral[200],
-    backgroundColor: Colors.neutral[50],
-  },
+    // Secondary variant — clean outline
+    variant_secondary: {
+      backgroundColor: tk.raised,
+      borderWidth: 1.5,
+      borderColor: tk.border,
+    },
+    variant_secondary_pressed: {
+      backgroundColor: tk.brandTint,
+      borderColor: tk.brand400,
+      transform: [{ scale: 0.98 }],
+    },
+    variant_secondary_disabled: {
+      borderColor: tk.border,
+      backgroundColor: tk.sunken,
+    },
 
-  // Ghost variant
-  variant_ghost: {
-    backgroundColor: 'transparent',
-  },
-  variant_ghost_pressed: {
-    backgroundColor: Colors.brand[50],
-    transform: [{ scale: 0.98 }],
-  },
-  variant_ghost_disabled: {
-    backgroundColor: 'transparent',
-  },
+    // Ghost variant
+    variant_ghost: {
+      backgroundColor: 'transparent',
+    },
+    variant_ghost_pressed: {
+      backgroundColor: tk.brandTint,
+      transform: [{ scale: 0.98 }],
+    },
+    variant_ghost_disabled: {
+      backgroundColor: 'transparent',
+    },
 
-  // Danger variant
-  variant_danger: {
-    backgroundColor: Colors.error[500],
-    shadowColor: Colors.error[500],
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  variant_danger_pressed: {
-    backgroundColor: Colors.error[600],
-    shadowOpacity: 0.15,
-    transform: [{ scale: 0.98 }],
-  },
-  variant_danger_disabled: {
-    backgroundColor: Colors.neutral[200],
-    shadowOpacity: 0,
-    elevation: 0,
-  },
+    // Danger variant — errorCta keeps white label ≥4.5:1 in both modes
+    variant_danger: {
+      backgroundColor: tk.errorCta,
+      shadowColor: tk.errorCta,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    variant_danger_pressed: {
+      backgroundColor: tk.errorCta,
+      shadowOpacity: 0.15,
+      transform: [{ scale: 0.98 }],
+    },
+    variant_danger_disabled: {
+      backgroundColor: tk.skeleton1,
+      shadowOpacity: 0,
+      elevation: 0,
+    },
 
-  // Labels
-  label: {
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  label_sm: {
-    fontSize: 14,
-  },
-  label_md: {
-    fontSize: 16,
-  },
-  label_lg: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  label_primary: {
-    color: Colors.neutral[0],
-  },
-  label_primary_disabled: {
-    color: Colors.neutral[400],
-  },
-  label_secondary: {
-    color: Colors.neutral[800],
-  },
-  label_secondary_disabled: {
-    color: Colors.neutral[400],
-  },
-  label_ghost: {
-    color: Colors.brand[600],
-  },
-  label_ghost_disabled: {
-    color: Colors.neutral[400],
-  },
-  label_danger: {
-    color: Colors.neutral[0],
-  },
-  label_danger_disabled: {
-    color: Colors.neutral[400],
-  },
-});
+    // Labels
+    label: {
+      fontWeight: '600',
+      letterSpacing: 0.2,
+    },
+    label_sm: {
+      fontSize: 14,
+    },
+    label_md: {
+      fontSize: 16,
+    },
+    label_lg: {
+      fontSize: 17,
+      fontWeight: '700',
+    },
+    label_primary: {
+      color: tk.textOnBrand,
+    },
+    label_primary_disabled: {
+      color: tk.textDisabled,
+    },
+    label_secondary: {
+      color: tk.textPrimary,
+    },
+    label_secondary_disabled: {
+      color: tk.textDisabled,
+    },
+    label_ghost: {
+      color: tk.brandFg,
+    },
+    label_ghost_disabled: {
+      color: tk.textDisabled,
+    },
+    label_danger: {
+      color: '#FFFFFF',
+    },
+    label_danger_disabled: {
+      color: tk.textDisabled,
+    },
+  }),
+);

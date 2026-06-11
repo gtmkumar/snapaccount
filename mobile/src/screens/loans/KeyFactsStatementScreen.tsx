@@ -12,8 +12,9 @@
  * Biometric re-auth happens per-consent in LoanConsentScreen.
  */
 
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
+  AccessibilityInfo,
   Alert,
   FlatList,
   Linking,
@@ -34,11 +35,17 @@ import * as Haptics from 'expo-haptics';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 
-import { Colors } from '../../constants/colors';
+import {
+  createThemedStyles,
+  useTheme,
+  type ThemeTokens,
+} from '../../contexts/ThemeContext';
 import { getKfs, generateKfs } from '../../api/loans';
 import type { KfsParsed, KfsInstalment, KfsFee } from '../../api/loans';
 import { ScrollHintBanner } from '../../components/loans/ScrollHintBanner';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
+import { useScreenReaderEnabled } from '../../hooks/useScreenReaderEnabled';
+import { logger } from '../../lib/logger';
 import type { LoanStackParamList } from '../../navigation/LoanStack';
 
 type NavProp = NativeStackNavigationProp<LoanStackParamList, 'KeyFactsStatement'>;
@@ -93,12 +100,32 @@ function extractEmail(contact: string): string | null {
 export function KeyFactsStatementScreen({ navigation, route }: Props) {
   useSensitiveScreen();
   const { t } = useTranslation();
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { applicationId } = route.params;
 
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
   const [checked, setChecked] = useState(false);
   const [scheduleExpanded, setScheduleExpanded] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+
+  // A11Y KFS-1 (Blocker): screen-reader users traverse element-by-element and
+  // may never fire a visual onScroll to the bottom, leaving the legally
+  // required acknowledgement permanently locked. When a reader is active we
+  // additionally render an explicit "I have reviewed" affordance at the end
+  // of the document that satisfies the same gate. The visual scroll-gate and
+  // the ack record that gets written are unchanged.
+  const screenReaderEnabled = useScreenReaderEnabled();
+
+  const satisfyGateViaReader = useCallback(() => {
+    setHasScrolledToBottom((already) => {
+      if (!already) {
+        void Haptics.selectionAsync();
+        AccessibilityInfo.announceForAccessibility(t('mobile.a11y.gateUnlocked'));
+      }
+      return true;
+    });
+  }, [t]);
 
   // Fetch KFS
   const {
@@ -114,11 +141,18 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
     staleTime: 5 * 60 * 1000,
   });
 
+  // NEW-W2-005: surface fetch failures through structured logging.
+  useEffect(() => {
+    if (error) logger.error('kfs', 'getKfs failed', { applicationId, err: error });
+  }, [error, applicationId]);
+
   // Generate KFS (used when 404 — no KFS yet)
   const generateMutation = useMutation({
     mutationFn: () => generateKfs(applicationId),
     onSuccess: () => { void refetch(); },
-    onError: () => {
+    onError: (err: unknown) => {
+      // NEW-W2-005: structured logging instead of bare console.warn.
+      logger.error('kfs', 'generateKfs failed', { applicationId, err });
       Alert.alert(t('mobile.common.error'), t('mobile.kfs.error.offline'));
     },
   });
@@ -149,7 +183,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
       <SafeAreaView style={styles.container}>
         <KfsHeader navigation={navigation} verified={false} t={t} kfs={null} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.brand[600]} />
+          <ActivityIndicator size="large" color={tokens.brand500} />
           <Text style={styles.loadingText}>{t('mobile.kfs.state.preparing.body')}</Text>
         </View>
       </SafeAreaView>
@@ -162,7 +196,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
       <SafeAreaView style={styles.container}>
         <KfsHeader navigation={navigation} verified={false} t={t} kfs={null} />
         <View style={styles.errorContainer}>
-          <Ionicons name="wifi-outline" size={48} color={Colors.neutral[400]} />
+          <Ionicons name="wifi-outline" size={48} color={tokens.textTertiary} />
           <Text style={styles.errorTitle}>{t('mobile.kfs.error.offline')}</Text>
           <Pressable style={styles.retryBtn} onPress={() => void refetch()}>
             <Text style={styles.retryBtnText}>{t('mobile.kfs.cta.retry')}</Text>
@@ -178,7 +212,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
       <SafeAreaView style={styles.container}>
         <KfsHeader navigation={navigation} verified={false} t={t} kfs={null} />
         <View style={styles.errorContainer}>
-          <ActivityIndicator size="large" color={Colors.brand[500]} />
+          <ActivityIndicator size="large" color={tokens.brand500} />
           <Text style={styles.preparingTitle}>{t('mobile.kfs.state.preparing.title')}</Text>
           <Text style={styles.preparingBody}>{t('mobile.kfs.state.preparing.body')}</Text>
           <Pressable
@@ -199,8 +233,8 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
       <SafeAreaView style={styles.container}>
         <KfsHeader navigation={navigation} verified={false} t={t} kfs={null} />
         <View style={styles.errorContainer}>
-          <Ionicons name="shield-checkmark-outline" size={48} color={Colors.error[500]} />
-          <Text style={[styles.errorTitle, { color: Colors.error[700] }]}>
+          <Ionicons name="shield-checkmark-outline" size={48} color={tokens.errorFg} />
+          <Text style={[styles.errorTitle, { color: tokens.errorFg }]}>
             {t('mobile.kfs.error.integrity.title')}
           </Text>
           <Text style={styles.errorBody}>{t('mobile.kfs.error.integrity.body')}</Text>
@@ -218,7 +252,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
       <SafeAreaView style={styles.container}>
         <KfsHeader navigation={navigation} verified={false} t={t} kfs={null} />
         <View style={styles.errorContainer}>
-          <Ionicons name="warning-outline" size={48} color={Colors.warning[500]} />
+          <Ionicons name="warning-outline" size={48} color={tokens.warningFg} />
           <Text style={styles.errorTitle}>{t('mobile.kfs.error.malformed')}</Text>
           <Pressable style={styles.retryBtn} onPress={() => void refetch()}>
             <Text style={styles.retryBtnText}>{t('mobile.kfs.cta.retry')}</Text>
@@ -242,7 +276,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
 
       {/* Trust banner */}
       <View style={styles.trustBanner}>
-        <Ionicons name="lock-closed" size={14} color={Colors.brand[700]} />
+        <Ionicons name="lock-closed" size={14} color={tokens.brandFg} />
         <Text style={styles.trustBannerText}>{t('mobile.kfs.trust.banner')}</Text>
       </View>
 
@@ -318,7 +352,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
           <Ionicons
             name={scheduleExpanded ? 'chevron-up' : 'chevron-down'}
             size={18}
-            color={Colors.brand[600]}
+            color={tokens.brandFg}
           />
         </Pressable>
         {scheduleExpanded && (
@@ -328,7 +362,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
         {/* Cooling-off notice */}
         <View style={styles.coolingCard}>
           <View style={styles.coolingHeader}>
-            <Ionicons name="time-outline" size={18} color={Colors.warning[700]} />
+            <Ionicons name="time-outline" size={18} color={tokens.warningFg} />
             <Text style={styles.coolingTitle}>
               {t('mobile.kfs.coolingOff.title', { days: kfs.coolingOffDays })}
             </Text>
@@ -351,7 +385,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
                 accessibilityLabel={t('mobile.kfs.grievance.call')}
                 hitSlop={8}
               >
-                <Ionicons name="call-outline" size={16} color={Colors.brand[700]} />
+                <Ionicons name="call-outline" size={16} color={tokens.brandFg} />
                 <Text style={styles.contactBtnText}>{t('mobile.kfs.grievance.call')}</Text>
               </Pressable>
             )}
@@ -363,7 +397,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
                 accessibilityLabel={t('mobile.kfs.grievance.emailCta')}
                 hitSlop={8}
               >
-                <Ionicons name="mail-outline" size={16} color={Colors.brand[700]} />
+                <Ionicons name="mail-outline" size={16} color={tokens.brandFg} />
                 <Text style={styles.contactBtnText}>{t('mobile.kfs.grievance.emailCta')}</Text>
               </Pressable>
             )}
@@ -377,6 +411,23 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
           <Text style={styles.metaText}>{t('mobile.kfs.meta.issued', { dateTime: formatDateTime(kfs.generatedAt) })}</Text>
           <Text style={styles.metaText}>{t('mobile.kfs.meta.signature', { last8: kfs.signatureLast8 })}</Text>
         </View>
+
+        {/* A11Y KFS-1: explicit reviewed-all affordance for screen-reader users.
+            Last element of the document body — reaching and activating it
+            satisfies the same scroll-gate sighted users pass visually. */}
+        {screenReaderEnabled && !hasScrolledToBottom && (
+          <Pressable
+            style={styles.srGateBtn}
+            onPress={satisfyGateViaReader}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.a11y.reviewedAll')}
+            accessibilityHint={t('mobile.a11y.reviewedAllHint')}
+            testID="kfs-sr-reviewed-all"
+          >
+            <Ionicons name="checkmark-done-outline" size={18} color={tokens.brandFg} />
+            <Text style={styles.srGateBtnText}>{t('mobile.a11y.reviewedAll')}</Text>
+          </Pressable>
+        )}
 
         {/* Bottom padding */}
         <View style={{ height: 100 }} />
@@ -397,7 +448,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
           accessibilityLabel={t('mobile.kfs.ack.checkbox')}
         >
           <View style={[styles.checkbox, checked && styles.checkboxChecked, !hasScrolledToBottom && styles.checkboxDisabled]}>
-            {checked && <Ionicons name="checkmark" size={14} color="#fff" />}
+            {checked && <Ionicons name="checkmark" size={14} color={tokens.textOnBrand} />}
           </View>
           <Text style={[styles.checkboxLabel, !hasScrolledToBottom && styles.checkboxLabelDisabled]}>
             {t('mobile.kfs.ack.checkbox')}
@@ -411,7 +462,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
             accessibilityRole="button"
             accessibilityLabel={t('mobile.kfs.cta.downloadPdf')}
           >
-            <Ionicons name="download-outline" size={16} color={Colors.brand[700]} />
+            <Ionicons name="download-outline" size={16} color={tokens.brandFg} />
             <Text style={styles.downloadBtnText}>{t('mobile.kfs.cta.downloadPdf')}</Text>
           </Pressable>
 
@@ -430,7 +481,7 @@ export function KeyFactsStatementScreen({ navigation, route }: Props) {
             <Ionicons
               name="arrow-forward"
               size={16}
-              color={canContinue ? '#fff' : Colors.neutral[400]}
+              color={canContinue ? tokens.textOnBrand : tokens.textDisabled}
             />
           </Pressable>
         </View>
@@ -452,6 +503,8 @@ function KfsHeader({
   t: (key: string) => string;
   kfs: KfsParsed | null;
 }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.header}>
       <Pressable
@@ -460,7 +513,7 @@ function KfsHeader({
         accessibilityLabel={t('mobile.common.back')}
         hitSlop={8}
       >
-        <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+        <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
       </Pressable>
       <Text style={styles.headerTitle}>{t('mobile.kfs.title')}</Text>
       {verified && kfs ? (
@@ -475,7 +528,7 @@ function KfsHeader({
           accessibilityRole="button"
           accessibilityLabel={t('mobile.kfs.verified.chip')}
         >
-          <Ionicons name="lock-closed" size={12} color={Colors.success[700]} />
+          <Ionicons name="lock-closed" size={12} color={tokens.successFg} />
           <Text style={styles.verifiedChipText}>{t('mobile.kfs.verified.chip')}</Text>
         </Pressable>
       ) : (
@@ -494,6 +547,7 @@ function SnapshotRow({
   value: string;
   bold?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.snapshotRow} accessibilityRole="text">
       <Text style={styles.snapshotLabel}>{label}</Text>
@@ -503,6 +557,7 @@ function SnapshotRow({
 }
 
 function FeeRow({ fee }: { fee: KfsFee }) {
+  const styles = useStyles();
   return (
     <View style={styles.feeRow} accessibilityRole="text">
       <View style={styles.feeNameRow}>
@@ -520,6 +575,7 @@ function ScheduleTable({
   schedule: KfsInstalment[];
   t: (k: string, opts?: Record<string, unknown>) => string;
 }) {
+  const styles = useStyles();
   const renderItem = ({ item }: { item: KfsInstalment }) => (
     <View style={styles.scheduleRow} accessibilityRole="text">
       <Text style={[styles.scheduleCell, styles.scheduleCellNo]}>{item.emiNumber}</Text>
@@ -568,242 +624,258 @@ function ScheduleTable({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: tk.canvas },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.neutral[900] },
-  verifiedChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: Colors.success[50],
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    minHeight: 44,
-  },
-  verifiedChipText: { fontSize: 12, fontWeight: '700', color: Colors.success[700] },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: tk.raised,
+      borderBottomWidth: 1,
+      borderBottomColor: tk.border,
+    },
+    backBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: tk.sunken,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerTitle: { fontSize: 17, fontWeight: '700', color: tk.textPrimary },
+    verifiedChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: tk.successTint,
+      borderRadius: 20,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      minHeight: 44,
+    },
+    verifiedChipText: { fontSize: 12, fontWeight: '700', color: tk.successFg },
 
-  trustBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.brand[50],
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.brand[100],
-  },
-  trustBannerText: { fontSize: 12, color: Colors.brand[700], flex: 1, fontWeight: '500' },
+    trustBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: tk.brandTint,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: tk.brandTintBorder,
+    },
+    trustBannerText: { fontSize: 12, color: tk.brandFg, flex: 1, fontWeight: '500' },
 
-  scroll: { flex: 1 },
-  scrollContent: { padding: 16, gap: 16 },
+    scroll: { flex: 1 },
+    scrollContent: { padding: 16, gap: 16 },
 
-  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
-  loadingText: { fontSize: 14, color: Colors.neutral[600], textAlign: 'center' },
+    loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
+    loadingText: { fontSize: 14, color: tk.textSecondary, textAlign: 'center' },
 
-  errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
-  errorTitle: { fontSize: 16, fontWeight: '700', color: Colors.neutral[800], textAlign: 'center' },
-  errorBody: { fontSize: 14, color: Colors.neutral[600], textAlign: 'center', lineHeight: 22 },
-  retryBtn: {
-    backgroundColor: Colors.brand[600],
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  retryBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  preparingTitle: { fontSize: 16, fontWeight: '700', color: Colors.neutral[800], textAlign: 'center' },
-  preparingBody: { fontSize: 14, color: Colors.neutral[600], textAlign: 'center' },
+    errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
+    errorTitle: { fontSize: 16, fontWeight: '700', color: tk.textPrimary, textAlign: 'center' },
+    errorBody: { fontSize: 14, color: tk.textSecondary, textAlign: 'center', lineHeight: 22 },
+    retryBtn: {
+      backgroundColor: tk.brandCta,
+      borderRadius: 12,
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    retryBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
+    preparingTitle: { fontSize: 16, fontWeight: '700', color: tk.textPrimary, textAlign: 'center' },
+    preparingBody: { fontSize: 14, color: tk.textSecondary, textAlign: 'center' },
 
-  aprHero: {
-    backgroundColor: Colors.brand[50],
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.brand[100],
-    gap: 6,
-  },
-  aprLabel: { fontSize: 13, fontWeight: '600', color: Colors.brand[700], letterSpacing: 0.3, textTransform: 'uppercase' },
-  aprValue: { fontSize: 38, fontWeight: '800', color: Colors.brand[900], letterSpacing: -1 },
-  aprSuffix: { fontSize: 18, fontWeight: '600', color: Colors.brand[700] },
-  aprCaption: { fontSize: 13, color: Colors.brand[700], lineHeight: 20 },
+    // Regulated tint card: brandTint + brandFg pair is contrast-gated in both
+    // modes (design-elevation-spec §2.3); APR numeral uses display.hero (36/40/800).
+    aprHero: {
+      backgroundColor: tk.brandTint,
+      borderRadius: 16,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: tk.brandTintBorder,
+      gap: 6,
+    },
+    aprLabel: { fontSize: 13, fontWeight: '600', color: tk.brandFg, letterSpacing: 0.3, textTransform: 'uppercase' },
+    aprValue: { fontSize: 36, lineHeight: 40, fontWeight: '800', color: tk.brandFg, letterSpacing: -1 },
+    aprSuffix: { fontSize: 18, fontWeight: '600', color: tk.brandFg },
+    aprCaption: { fontSize: 13, color: tk.brandFg, lineHeight: 20 },
 
-  section: {
-    backgroundColor: Colors.surface.default,
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.neutral[900], marginBottom: 4 },
+    section: {
+      backgroundColor: tk.raised,
+      borderRadius: 16,
+      padding: 16,
+      gap: 12,
+      ...tk.elevation1,
+    },
+    sectionTitle: { fontSize: 15, fontWeight: '700', color: tk.textPrimary, marginBottom: 4 },
 
-  snapshotRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  snapshotLabel: { fontSize: 14, color: Colors.neutral[600], flex: 1, flexWrap: 'wrap', paddingRight: 8 },
-  snapshotValue: { fontSize: 14, fontWeight: '600', color: Colors.neutral[900], textAlign: 'right' },
-  snapshotValueBold: { fontWeight: '800', fontSize: 15 },
+    snapshotRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    snapshotLabel: { fontSize: 14, color: tk.textSecondary, flex: 1, flexWrap: 'wrap', paddingRight: 8 },
+    snapshotValue: { fontSize: 14, fontWeight: '600', color: tk.textPrimary, textAlign: 'right' },
+    snapshotValueBold: { fontWeight: '800', fontSize: 15 },
 
-  feeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  feeNameRow: { flex: 1, paddingRight: 8 },
-  feeName: { fontSize: 14, color: Colors.neutral[700] },
-  feeAmount: { fontSize: 14, fontWeight: '600', color: Colors.neutral[900] },
-  feeTotalRow: { borderTopWidth: 1, borderTopColor: Colors.neutral[100], paddingTop: 10, marginTop: 4 },
-  feeTotalLabel: { fontSize: 14, fontWeight: '700', color: Colors.neutral[900], flex: 1 },
-  feeTotalValue: { fontSize: 14, fontWeight: '800', color: Colors.neutral[900] },
+    feeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    feeNameRow: { flex: 1, paddingRight: 8 },
+    feeName: { fontSize: 14, color: tk.textSecondary },
+    feeAmount: { fontSize: 14, fontWeight: '600', color: tk.textPrimary },
+    feeTotalRow: { borderTopWidth: 1, borderTopColor: tk.border, paddingTop: 10, marginTop: 4 },
+    feeTotalLabel: { fontSize: 14, fontWeight: '700', color: tk.textPrimary, flex: 1 },
+    feeTotalValue: { fontSize: 14, fontWeight: '800', color: tk.textPrimary },
 
-  netCard: {
-    backgroundColor: Colors.success[50],
-    borderRadius: 16,
-    padding: 20,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: Colors.success[100],
-  },
-  netLabel: { fontSize: 13, fontWeight: '600', color: Colors.success[700], textTransform: 'uppercase', letterSpacing: 0.3 },
-  netAmount: { fontSize: 28, fontWeight: '800', color: Colors.success[700] },
-  netDerivation: { fontSize: 12, color: Colors.success[700] },
+    netCard: {
+      backgroundColor: tk.successTint,
+      borderRadius: 16,
+      padding: 20,
+      gap: 6,
+      borderWidth: 1,
+      borderColor: tk.successTintBorder,
+    },
+    netLabel: { fontSize: 13, fontWeight: '600', color: tk.successFg, textTransform: 'uppercase', letterSpacing: 0.3 },
+    netAmount: { fontSize: 28, lineHeight: 34, fontWeight: '800', color: tk.successFg },
+    netDerivation: { fontSize: 12, color: tk.successFg },
 
-  accordionToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surface.default,
-    borderRadius: 12,
-    padding: 16,
-    minHeight: 48,
-    borderWidth: 1,
-    borderColor: Colors.neutral[100],
-  },
-  accordionLabel: { fontSize: 14, fontWeight: '600', color: Colors.brand[700], flex: 1 },
+    accordionToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: tk.raised,
+      borderRadius: 12,
+      padding: 16,
+      minHeight: 48,
+      borderWidth: 1,
+      borderColor: tk.border,
+    },
+    accordionLabel: { fontSize: 14, fontWeight: '600', color: tk.brandFg, flex: 1 },
 
-  scheduleTable: { backgroundColor: Colors.surface.default, borderRadius: 12, overflow: 'hidden' },
-  scheduleHeader: { backgroundColor: Colors.neutral[50] },
-  scheduleRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: Colors.neutral[50] },
-  scheduleHeaderCell: { fontWeight: '700', color: Colors.neutral[700] },
-  scheduleCell: { fontSize: 11, color: Colors.neutral[800], paddingVertical: 8, paddingHorizontal: 4 },
-  scheduleCellNo: { width: 28, textAlign: 'center' },
-  scheduleCellDate: { flex: 1.8, textAlign: 'center' },
-  scheduleCellAmt: { flex: 1.3, textAlign: 'right' },
+    scheduleTable: { backgroundColor: tk.raised, borderRadius: 12, overflow: 'hidden' },
+    scheduleHeader: { backgroundColor: tk.sunken },
+    scheduleRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: tk.border },
+    scheduleHeaderCell: { fontWeight: '700', color: tk.textSecondary },
+    scheduleCell: { fontSize: 11, color: tk.textPrimary, paddingVertical: 8, paddingHorizontal: 4 },
+    scheduleCellNo: { width: 28, textAlign: 'center' },
+    scheduleCellDate: { flex: 1.8, textAlign: 'center' },
+    scheduleCellAmt: { flex: 1.3, textAlign: 'right' },
 
-  coolingCard: {
-    backgroundColor: Colors.warning[50],
-    borderRadius: 16,
-    padding: 16,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: Colors.warning[200],
-  },
-  coolingHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  coolingTitle: { fontSize: 14, fontWeight: '700', color: Colors.warning[900], flex: 1, flexWrap: 'wrap' },
-  coolingBody: { fontSize: 13, color: Colors.warning[800], lineHeight: 20 },
+    coolingCard: {
+      backgroundColor: tk.warningTint,
+      borderRadius: 16,
+      padding: 16,
+      gap: 8,
+      borderWidth: 1,
+      borderColor: tk.warningTintBorder,
+    },
+    coolingHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    coolingTitle: { fontSize: 14, fontWeight: '700', color: tk.warningFg, flex: 1, flexWrap: 'wrap' },
+    coolingBody: { fontSize: 13, color: tk.warningFg, lineHeight: 20 },
 
-  grievanceCard: {
-    backgroundColor: Colors.surface.default,
-    borderRadius: 16,
-    padding: 16,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: Colors.neutral[100],
-  },
-  grievanceTitle: { fontSize: 15, fontWeight: '700', color: Colors.neutral[900] },
-  grievanceContact: { fontSize: 13, color: Colors.neutral[700], lineHeight: 20 },
-  grievanceActions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  contactBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: Colors.brand[50],
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    minHeight: 44,
-  },
-  contactBtnText: { fontSize: 14, fontWeight: '600', color: Colors.brand[700] },
-  grievanceEscalation: { fontSize: 12, color: Colors.neutral[500], lineHeight: 18 },
+    grievanceCard: {
+      backgroundColor: tk.raised,
+      borderRadius: 16,
+      padding: 16,
+      gap: 8,
+      borderWidth: 1,
+      borderColor: tk.border,
+    },
+    grievanceTitle: { fontSize: 15, fontWeight: '700', color: tk.textPrimary },
+    grievanceContact: { fontSize: 13, color: tk.textSecondary, lineHeight: 20 },
+    grievanceActions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+    contactBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: tk.brandTint,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      minHeight: 44,
+    },
+    contactBtnText: { fontSize: 14, fontWeight: '600', color: tk.brandFg },
+    grievanceEscalation: { fontSize: 12, color: tk.textSecondary, lineHeight: 18 },
 
-  metaFooter: { gap: 4, paddingTop: 4 },
-  metaText: { fontSize: 11, color: Colors.neutral[400], lineHeight: 18 },
+    metaFooter: { gap: 4, paddingTop: 4 },
+    // KFS-6 (a11y): provenance text is legally relevant — textSecondary keeps ≥4.5:1.
+    metaText: { fontSize: 11, color: tk.textSecondary, lineHeight: 18 },
 
-  footer: {
-    backgroundColor: Colors.surface.default,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingBottom: 20,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
-  },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    minHeight: 44,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: Colors.brand[500],
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  checkboxChecked: { backgroundColor: Colors.brand[600], borderColor: Colors.brand[600] },
-  checkboxDisabled: { borderColor: Colors.neutral[300], backgroundColor: Colors.neutral[50] },
-  checkboxLabel: { flex: 1, fontSize: 14, color: Colors.neutral[800], lineHeight: 21 },
-  checkboxLabelDisabled: { color: Colors.neutral[400] },
+    // A11Y KFS-1: screen-reader review affordance (≥44pt target).
+    srGateBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      minHeight: 48,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: tk.brand400,
+      backgroundColor: tk.brandTint,
+      paddingHorizontal: 16,
+    },
+    srGateBtnText: { fontSize: 14, fontWeight: '700', color: tk.brandFg },
 
-  footerCtas: { flexDirection: 'row', gap: 10 },
-  downloadBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: Colors.brand[300],
-    paddingVertical: 13,
-    minHeight: 48,
-  },
-  downloadBtnText: { fontSize: 14, fontWeight: '600', color: Colors.brand[700] },
-  continueBtn: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderRadius: 14,
-    backgroundColor: Colors.brand[600],
-    paddingVertical: 13,
-    minHeight: 48,
-  },
-  continueBtnDisabled: { backgroundColor: Colors.neutral[200] },
-  continueBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  continueBtnTextDisabled: { color: Colors.neutral[400] },
-});
+    footer: {
+      backgroundColor: tk.raised,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      paddingBottom: 20,
+      gap: 12,
+      borderTopWidth: 1,
+      borderTopColor: tk.border,
+    },
+    checkboxRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      minHeight: 44,
+    },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 2,
+      borderColor: tk.brand500,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 2,
+    },
+    checkboxChecked: { backgroundColor: tk.brandCta, borderColor: tk.brandCta },
+    checkboxDisabled: { borderColor: tk.border, backgroundColor: tk.sunken },
+    checkboxLabel: { flex: 1, fontSize: 14, color: tk.textPrimary, lineHeight: 21 },
+    checkboxLabelDisabled: { color: tk.textDisabled },
+
+    footerCtas: { flexDirection: 'row', gap: 10 },
+    downloadBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: tk.brand400,
+      paddingVertical: 13,
+      minHeight: 48,
+    },
+    downloadBtnText: { fontSize: 14, fontWeight: '600', color: tk.brandFg },
+    continueBtn: {
+      flex: 2,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      borderRadius: 14,
+      backgroundColor: tk.brandCta,
+      paddingVertical: 13,
+      minHeight: 48,
+    },
+    continueBtnDisabled: { backgroundColor: tk.skeleton1 },
+    continueBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
+    continueBtnTextDisabled: { color: tk.textDisabled },
+  }),
+);

@@ -33,6 +33,7 @@
     <PackageReference Include="FluentAssertions" Version="6.*" />
     <PackageReference Include="Moq" Version="4.*" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.*" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="3.*" />
     <PackageReference Include="coverlet.collector" Version="6.*">
@@ -45,6 +46,7 @@
     <ProjectReference Include="..\..\..\backend\Services\GstService\GstService.Api\GstService.Api.csproj" />
     <ProjectReference Include="..\..\..\backend\Services\GstService\GstService.Application\GstService.Application.csproj" />
     <ProjectReference Include="..\..\..\backend\Services\GstService\GstService.Domain\GstService.Domain.csproj" />
+    <ProjectReference Include="..\..\..\backend\Services\GstService\GstService.Infrastructure\GstService.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
   </ItemGroup>
 

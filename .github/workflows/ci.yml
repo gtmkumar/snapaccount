@@ -639,3 +639,182 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           tags: snapaccount/${{ steps.lc.outputs.service }}:ci-test
+          load: true   # load into local Docker daemon so subsequent steps can run the image
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Job 7: ReportService font verification + QuestPDF smoke test (NEW-D17)
+  #
+  # Rationale:
+  #   ReportService and LoanService bundle Inter, Noto Sans Devanagari, and
+  #   Noto Sans Bengali fonts at image build time (backend/Shared/fonts/).
+  #   A missing font layer causes silent rendering failures or crashes in
+  #   QuestPDF at runtime — not at startup — so healthz does not catch it.
+  #
+  #   This job:
+  #     (a) Builds the ReportService container image.
+  #     (b) Asserts all expected font files exist at /app/fonts/ inside the image.
+  #     (c) Runs a QuestPDF font-registration smoke test via `dotnet run` against
+  #         the built project (not the container) to verify FontManager.RegisterFont*
+  #         succeeds without throwing. A full PDF render inside the container is
+  #         impractical in CI (requires a writable filesystem at /tmp and a display),
+  #         so we validate font-file presence in the image + registration in the
+  #         host dotnet process — together these cover the failure mode.
+  #
+  # Note (TL-1): CI billing is currently off. This job is syntactically valid and
+  #   will activate automatically when GitHub Actions billing is re-enabled.
+  # ─────────────────────────────────────────────────────────────────────
+  report-font-verify:
+    name: ReportService Font Verification
+    runs-on: ubuntu-latest
+    # Runs independently of docker-smoke-test to avoid the matrix overhead;
+    # only ReportService needs font verification (LoanService uses same font layer).
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── (a) Build the ReportService image ─────────────────────────────────
+      - name: Build ReportService Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          build-args: SERVICE_NAME=ReportService
+          push: false
+          load: true   # load into local Docker daemon for the verify step below
+          cache-from: type=gha,scope=ReportService
+          cache-to: type=gha,mode=max,scope=ReportService
+          tags: snapaccount/report-service:font-verify
+
+      # ── (b) Assert font files exist inside the image ───────────────────────
+      - name: Verify font files are present in /app/fonts/
+        # Runs a minimal shell command inside the image to list expected font files.
+        # Fails with a non-zero exit code if any file is missing (ls returns 1).
+        run: |
+          set -euo pipefail
+
+          echo "Verifying Inter fonts..."
+          docker run --rm --entrypoint sh snapaccount/report-service:font-verify -c \
+            "ls /app/fonts/Inter/Inter-Regular.ttf \
+                /app/fonts/Inter/Inter-Medium.ttf \
+                /app/fonts/Inter/Inter-SemiBold.ttf \
+                /app/fonts/Inter/Inter-Bold.ttf"
+
+          echo "Verifying Noto Sans Devanagari fonts..."
+          docker run --rm --entrypoint sh snapaccount/report-service:font-verify -c \
+            "ls /app/fonts/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf \
+                /app/fonts/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf"
+
+          echo "Verifying Noto Sans Bengali fonts..."
+          docker run --rm --entrypoint sh snapaccount/report-service:font-verify -c \
+            "ls /app/fonts/NotoSansBengali/NotoSansBengali-Regular.ttf \
+                /app/fonts/NotoSansBengali/NotoSansBengali-Bold.ttf"
+
+          echo "All expected font files are present in the image."
+
+      # ── (c) QuestPDF font-registration smoke test (host dotnet process) ────
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore .NET packages
+        working-directory: ${{ github.workspace }}
+        run: dotnet restore backend/
+
+      - name: QuestPDF font-registration smoke test
+        # Builds and runs a minimal C# script that:
+        #   1. Sets QuestPDF license (Community — no key required for testing).
+        #   2. Registers all three font families from backend/Shared/fonts/.
+        #   3. Exits 0 on success, non-zero if any font file is missing or
+        #      FontManager throws (e.g. corrupt TTF header, wrong path).
+        # This covers the registration code path without a full PDF render.
+        # QUESTPDF_FONTS_PATH is the fallback path used in dev/CI (not in the container).
+        env:
+          QUESTPDF_FONTS_PATH: "${{ github.workspace }}/backend/Shared/fonts"
+        run: |
+          set -euo pipefail
+
+          # Write a temporary C# top-level program into a temp project
+          SMOKE_DIR="$(mktemp -d)"
+
+          cat > "${SMOKE_DIR}/smoke.csproj" <<'CSPROJ'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net10.0</TargetFramework>
+              <Nullable>enable</Nullable>
+              <ImplicitUsings>enable</ImplicitUsings>
+            </PropertyGroup>
+            <ItemGroup>
+              <!-- Use the same QuestPDF version as ReportService by resolving from the backend NuGet cache -->
+              <PackageReference Include="QuestPDF" Version="2024.*" />
+            </ItemGroup>
+          </Project>
+          CSPROJ
+
+          cat > "${SMOKE_DIR}/Program.cs" <<'CSHARP'
+          using QuestPDF.Infrastructure;
+          using QuestPDF.Previewer;
+
+          // Set license before any FontManager calls
+          QuestPDF.Settings.License = LicenseType.Community;
+
+          var fontsRoot = Environment.GetEnvironmentVariable("QUESTPDF_FONTS_PATH")
+              ?? "/app/fonts";
+
+          Console.WriteLine($"[smoke] Fonts root: {fontsRoot}");
+
+          var expectedFonts = new[]
+          {
+              ("Inter",                Path.Combine(fontsRoot, "Inter", "Inter-Regular.ttf")),
+              ("Inter",                Path.Combine(fontsRoot, "Inter", "Inter-Medium.ttf")),
+              ("Inter",                Path.Combine(fontsRoot, "Inter", "Inter-SemiBold.ttf")),
+              ("Inter",                Path.Combine(fontsRoot, "Inter", "Inter-Bold.ttf")),
+              ("Noto Sans Devanagari", Path.Combine(fontsRoot, "NotoSansDevanagari", "NotoSansDevanagari-Regular.ttf")),
+              ("Noto Sans Devanagari", Path.Combine(fontsRoot, "NotoSansDevanagari", "NotoSansDevanagari-Bold.ttf")),
+              ("Noto Sans Bengali",    Path.Combine(fontsRoot, "NotoSansBengali", "NotoSansBengali-Regular.ttf")),
+              ("Noto Sans Bengali",    Path.Combine(fontsRoot, "NotoSansBengali", "NotoSansBengali-Bold.ttf")),
+          };
+
+          var missing = new List<string>();
+          foreach (var (name, path) in expectedFonts)
+          {
+              if (!File.Exists(path))
+              {
+                  missing.Add(path);
+                  Console.Error.WriteLine($"[smoke] MISSING: {path}");
+              }
+              else
+              {
+                  QuestPDF.Drawing.FontManager.RegisterFontWithCustomName(name, File.OpenRead(path));
+                  Console.WriteLine($"[smoke] OK: {Path.GetFileName(path)} registered as '{name}'");
+              }
+          }
+
+          if (missing.Count > 0)
+          {
+              Console.Error.WriteLine($"[smoke] FAILED: {missing.Count} font file(s) missing.");
+              Console.Error.WriteLine("  Add missing fonts to backend/Shared/fonts/ per docs/devops/questpdf-font-bundling.md");
+              Environment.Exit(1);
+          }
+
+          Console.WriteLine("[smoke] All fonts registered successfully. QuestPDF font-registration smoke test PASSED.");
+          CSHARP
+
+          echo "Running QuestPDF font-registration smoke test..."
+          dotnet run --project "${SMOKE_DIR}/smoke.csproj" \
+            --configuration Release \
+            2>&1
+
+          echo "QuestPDF font-registration smoke test passed."

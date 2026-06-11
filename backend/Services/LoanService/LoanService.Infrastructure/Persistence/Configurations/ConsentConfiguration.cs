@@ -20,11 +20,8 @@ public sealed class ConsentConfiguration : IEntityTypeConfiguration<Consent>
         builder.Property(x => x.ConsentTextVersion).HasMaxLength(50).IsRequired();
 
         // GAP-040 / P6-HANDOFF-25: locale of consent text shown (e.g. "en", "hi").
-        // Default "en" ensures backward compat with existing rows that pre-date this column.
-        builder.Property(x => x.ConsentLocale)
-            .HasMaxLength(10)
-            .HasDefaultValue("en")
-            .IsRequired();
+        // Migration 066: consent_locale VARCHAR(10) NOT NULL DEFAULT 'en' confirmed in DB.
+        builder.Property(x => x.ConsentLocale).HasColumnName("consent_locale").HasMaxLength(10).IsRequired();
         builder.Property(x => x.SignedAt).IsRequired();
         builder.Property(x => x.IpAddress).HasMaxLength(45);
         builder.Property(x => x.UserAgent).HasMaxLength(512);
@@ -38,6 +35,10 @@ public sealed class ConsentConfiguration : IEntityTypeConfiguration<Consent>
         builder.HasIndex(x => x.ApplicationId);
         builder.HasIndex(x => new { x.ApplicationId, x.ConsentType }).IsUnique();
 
-        // No soft-delete filter on consents (DB trigger blocks hard-delete; 7-year retention)
+        // No soft-delete filter on consents: loan.consents has NO deleted_at column.
+        // DB trigger (trg_consents_no_delete) prevents hard deletes; 7-year retention enforced.
+        // Override the global BaseDbContext soft-delete filter with always-true to prevent
+        // EF from generating "WHERE c.deleted_at IS NULL" which would fail with 42703.
+        builder.HasQueryFilter(c => true);
     }
 }

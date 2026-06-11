@@ -350,7 +350,8 @@ const styles = StyleSheet.create({
   },
   note: {
     fontSize: 12,
-    color: Colors.neutral[400],
+    // OTP-4 (a11y): the validity note carries meaning — neutral[400] fails 4.5:1.
+    color: Colors.neutral[500],
     marginTop: 14,
     textAlign: 'center',
   },

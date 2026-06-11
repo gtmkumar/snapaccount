@@ -1,5 +1,6 @@
 using FluentValidation;
 using ItrService.Application.Common.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Domain;
 
@@ -9,6 +10,8 @@ namespace ItrService.Application.Filings.Queries.GetFiling;
 /// Returns detailed filing information.
 /// P6-HANDOFF-20: itr_v_uri not returned — caller calls GetItrVUrl endpoint separately.
 /// SEC-039: org-scoped — verifies filing's assessee belongs to caller's organisation.
+/// Now that itr.assessee_profiles has organization_id (db-engineer added column),
+/// org isolation is enforced directly.
 /// </summary>
 public record GetFilingQuery(Guid FilingId) : IQuery<FilingDetailDto>;
 
@@ -29,21 +32,29 @@ public sealed class GetFilingQueryHandler(IItrDbContext dbContext, ICurrentUser 
 {
     public async Task<Result<FilingDetailDto>> Handle(GetFilingQuery request, CancellationToken cancellationToken)
     {
-        var f = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-            .FirstOrDefaultAsync(dbContext.Filings.Where(f => f.Id == request.FilingId && f.DeletedAt == null), cancellationToken);
+        var f = await dbContext.Filings
+            .FirstOrDefaultAsync(f => f.Id == request.FilingId && f.DeletedAt == null, cancellationToken);
 
-        if (f is null) return Error.NotFound("Filing.NotFound", $"Filing {request.FilingId} not found.");
-
-        // SEC-039: verify assessee belongs to caller's org — NotFound to avoid existence leak
-        var assessee = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-            .FirstOrDefaultAsync(dbContext.Assessees.Where(a => a.Id == f.AssesseeId && a.DeletedAt == null), cancellationToken);
-
-        if (assessee is null || assessee.OrganizationId != currentUser.OrganizationId)
+        if (f is null)
             return Error.NotFound("Filing.NotFound", $"Filing {request.FilingId} not found.");
 
-        return new FilingDetailDto(f.Id, f.AssesseeId, f.AssessmentYear, f.ItrFormType, f.Regime, f.Status,
-            f.TaxSlabVersionId, f.ComputationHash, f.SalaryIncome, f.HousePropertyIncome, f.BusinessIncome,
-            f.CapitalGains, f.OtherIncome, f.TotalDeductions, f.AcknowledgementNumber, f.FiledAt, f.EVerifiedAt,
+        // SEC-039: org-scoped IDOR check — verify assessee belongs to caller's org.
+        // organization_id is now available on assessee_profiles (DDL added by db-engineer).
+        var assessee = await dbContext.Assessees
+            .FirstOrDefaultAsync(
+                a => a.Id == f.AssesseeId
+                     && a.DeletedAt == null
+                     && a.OrganizationId == currentUser.OrganizationId,
+                cancellationToken);
+
+        if (assessee is null)
+            return Error.NotFound("Filing.NotFound", $"Filing {request.FilingId} not found.");
+
+        return new FilingDetailDto(
+            f.Id, f.AssesseeId, f.AssessmentYear, f.ItrFormType, f.Regime, f.Status,
+            f.TaxSlabVersionId, f.ComputationHash, f.SalaryIncome, f.HousePropertyIncome,
+            f.BusinessIncome, f.CapitalGains, f.OtherIncome, f.TotalDeductions,
+            f.AcknowledgementNumber, f.FiledAt, f.EVerifiedAt,
             f.ReviewedByCaId, f.CaRejectionReason);
     }
 }

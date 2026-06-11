@@ -6,6 +6,7 @@ using LoanService.Application.LoanApplications.Commands.GeneratePackage;
 using LoanService.Application.LoanApplications.Commands.RecordBankDecision;
 using LoanService.Application.Consents.Queries.GetConsentCatalog;
 using LoanService.Application.Dashboard.Queries.GetDashboardStats;
+using LoanService.Application.Dashboard.Queries.GetLoanKpi;
 using LoanService.Application.KeyFacts.Commands.GenerateKfs;
 using LoanService.Application.KeyFacts.Queries.GetKfs;
 using LoanService.Application.LoanApplications.Commands.RecordConsent;
@@ -18,6 +19,8 @@ using LoanService.Application.LoanApplications.Queries.GetBankCommunicationLog;
 using LoanService.Application.LoanApplications.Queries.GetEligibilityResult;
 using LoanService.Application.LoanApplications.Queries.GetPackageDownloadUrl;
 using LoanService.Application.LoanApplications.Queries.ListApplications;
+using LoanService.Application.LoanProducts.Queries.GetLoanProduct;
+using LoanService.Application.LoanProducts.Queries.ListLoanProducts;
 using LoanService.Application.PartnerBanks.Commands.CreatePartnerBank;
 using LoanService.Application.PartnerBanks.Commands.UpdatePartnerBank;
 using LoanService.Application.PartnerBanks.Queries.GetPartnerBanks;
@@ -41,6 +44,29 @@ public sealed class Loans : EndpointGroupBase
     /// <inheritdoc />
     public override void Map(RouteGroupBuilder groupBuilder)
     {
+        // ── Loan Products (public catalog — org-agnostic) ─────────────────────
+
+        /// <summary>
+        /// GET /loans/products — Paginated catalog of active loan products.
+        /// Mobile: LoanHubScreen calls listLoanProducts({ pageSize: 50 }).
+        /// Response: { items: LoanProductDto[], totalCount: int }
+        /// Rate limit: standard. No org-scoping — catalog is shared across all orgs.
+        /// </summary>
+        groupBuilder.MapGet("/products", ListLoanProducts)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("ListLoanProducts")
+            .WithSummary("Paginated catalog of active loan products")
+            .WithDescription("Returns all active loan products ordered by name. Org-agnostic — every authenticated user sees the same catalog. Mobile LoanHubScreen queries pageSize=50.");
+
+        /// <summary>
+        /// GET /loans/products/{id} — Single active loan product by ID.
+        /// Mobile: getLoanProduct(productId) for product detail / pre-fill.
+        /// </summary>
+        groupBuilder.MapGet("/products/{id:guid}", GetLoanProduct)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetLoanProduct")
+            .WithSummary("Get a single active loan product by ID");
+
         // ── Applications ──────────────────────────────────────────────────────
 
         /// <summary>POST /loans/applications — Start a new loan application.</summary>
@@ -168,6 +194,21 @@ public sealed class Loans : EndpointGroupBase
             .WithName("GetLoanConsentCatalog")
             .WithSummary("Versioned loan consent text catalog")
             .WithDescription("Returns current (non-retired) consent text per type for the requested locale. Mobile echoes the returned textVersion in RecordConsent so DPDP audit trail ties back to exactly what the user saw.");
+
+        // ── KPI Strip ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// GET /loans/kpi — org-scoped counts for the LoansListPage KpiStrip.
+        /// Response: { totalApps, submitted, underReview, awaitingDocs, approved, disbursed }
+        /// </summary>
+        groupBuilder.MapGet("/kpi", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetLoanKpiQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetLoanKpi")
+            .WithSummary("Org-scoped loan KPI counts for the LoansListPage KpiStrip.");
 
         // ── Admin Dashboard ───────────────────────────────────────────────────
 
@@ -328,14 +369,17 @@ public sealed class Loans : EndpointGroupBase
     }
 
     private static async Task<IResult> GetEligibilityResult(
-        Guid orgId, ISender sender, CancellationToken ct)
+        ISender sender, CancellationToken ct, Guid? orgId = null)
     {
-        var result = await sender.Send(new GetEligibilityResultQuery(orgId, null), ct);
+        // SWEEP-B FIX: orgId is a required query param — made nullable to return 400 not 500 on missing param.
+        if (!orgId.HasValue)
+            return Results.BadRequest(new { error = "orgId query parameter is required.", code = "LOAN.MissingOrgId" });
+        var result = await sender.Send(new GetEligibilityResultQuery(orgId.Value, null), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
     }
 
     private static async Task<IResult> GetPartnerBanks(
-        bool includeInactive, ISender sender, CancellationToken ct)
+        ISender sender, CancellationToken ct, bool includeInactive = false)
     {
         var result = await sender.Send(new GetPartnerBanksQuery(includeInactive), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
@@ -398,6 +442,30 @@ public sealed class Loans : EndpointGroupBase
             : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
     }
 
+    // ── Loan Product handlers ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// GET /loans/products — Returns paginated active loan product catalog.
+    /// Mobile LoanHubScreen: listLoanProducts({ pageSize: 50 }).
+    /// </summary>
+    private static async Task<IResult> ListLoanProducts(
+        [AsParameters] ProductListParams p, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new ListLoanProductsQuery(p.Page, p.PageSize), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    /// <summary>
+    /// GET /loans/products/{id} — Returns a single active loan product.
+    /// Mobile: getLoanProduct(productId).
+    /// </summary>
+    private static async Task<IResult> GetLoanProduct(
+        Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetLoanProductQuery(id), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound(result.Error.Message);
+    }
+
     private static int MapError(SnapAccount.Shared.Domain.Error error)
         => error.Type switch
         {
@@ -414,6 +482,9 @@ public sealed class Loans : EndpointGroupBase
 
 /// <summary>Query parameters for listing applications.</summary>
 internal record ListParams(string? Status = null, int Page = 1, int PageSize = 20);
+
+/// <summary>Query parameters for listing loan products.</summary>
+internal record ProductListParams(int Page = 1, int PageSize = 20);
 
 /// <summary>Request body for updating a loan application.</summary>
 internal record UpdateApplicationRequest(decimal? RequestedAmount, int? TenureMonths, string? Purpose);

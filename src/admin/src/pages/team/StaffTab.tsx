@@ -9,7 +9,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import { Search, UserPlus, Eye, Pencil, Ban, CheckCircle } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { formatDistanceToNow } from 'date-fns'
@@ -42,7 +42,6 @@ interface ActiveTarget {
 }
 
 export function StaffTab({ onInvite }: StaffTabProps) {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { hasServerPermission } = usePermission()
@@ -63,16 +62,16 @@ export function StaffTab({ onInvite }: StaffTabProps) {
     mutationFn: ({ userId, nextActive }: ActiveTarget) => setAdminUserActive(userId, nextActive),
     onSuccess: (_, target) => {
       toast.success(target.nextActive
-        ? t('team.staff.reactivated', `${target.name} reactivated`)
-        : t('team.staff.deactivated', `${target.name} deactivated`))
+        ? t('team.staff.reactivated', { name: target.name })
+        : t('team.staff.deactivated', { name: target.name }))
       setActiveTarget(null)
       void queryClient.invalidateQueries({ queryKey: ['staff', 'workload-grid'] })
     },
     onError: (err: unknown) => {
       const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code as AdminUserApiErrorCode | undefined
-      if (code === 'User.SelfDelete') toast.error(t('team.staff.err.self', 'You cannot deactivate your own account.'))
-      else if (code === 'User.LastAdmin') toast.error(t('team.staff.err.lastAdmin', 'Cannot deactivate the last active super-admin.'))
-      else toast.error(t('team.staff.err.generic', 'Failed to update staff member.'))
+      if (code === 'User.SelfDelete') toast.error(t('team.staff.err.self'))
+      else if (code === 'User.LastAdmin') toast.error(t('team.staff.err.lastAdmin'))
+      else toast.error(t('team.staff.err.generic'))
       setActiveTarget(null)
     },
   })
@@ -88,7 +87,7 @@ export function StaffTab({ onInvite }: StaffTabProps) {
   const columns: ColumnDef<StaffWorkloadRow>[] = [
     {
       id: 'member',
-      header: t('team.staff.col.member', 'Staff member'),
+      header: t('team.staff.col.member'),
       cell: ({ row: r }) => (
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-full bg-[var(--brand-primary)] text-white flex items-center justify-center text-sm font-bold shrink-0">
@@ -103,12 +102,12 @@ export function StaffTab({ onInvite }: StaffTabProps) {
     },
     {
       accessorKey: 'role',
-      header: t('team.staff.col.role', 'Role'),
+      header: t('team.staff.col.role'),
       cell: ({ getValue }) => <RoleChip role={getValue() as AdminRole} />,
     },
     {
       accessorKey: 'status',
-      header: t('team.staff.col.status', 'Status'),
+      header: t('team.staff.col.status'),
       cell: ({ getValue }) => {
         const status = getValue() as string
         return (
@@ -118,15 +117,15 @@ export function StaffTab({ onInvite }: StaffTabProps) {
               : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
           )}>
             {status === 'active'
-              ? t('team.staff.status.active', 'Active')
-              : t('team.staff.status.suspended', 'Suspended')}
+              ? t('team.staff.status.active')
+              : t('team.staff.status.suspended')}
           </span>
         )
       },
     },
     {
       id: 'queue',
-      header: t('team.staff.col.queue', 'Current queue'),
+      header: t('team.staff.col.queue'),
       cell: ({ row: r }) => {
         const level = loadLevel(r.original.totalAssigned)
         const badge = LOAD_BADGE[level]
@@ -140,19 +139,19 @@ export function StaffTab({ onInvite }: StaffTabProps) {
     },
     {
       id: 'completed',
-      header: t('team.staff.col.completed', 'Completed'),
+      header: t('team.staff.col.completed'),
       cell: ({ row: r }) => (
         <span className="text-sm text-[var(--text-secondary)] tabular-nums">{r.original.totalCompleted}</span>
       ),
     },
     {
       id: 'lastActive',
-      header: t('team.staff.col.lastActive', 'Last active'),
+      header: t('team.staff.col.lastActive'),
       cell: ({ row: r }) => (
         <span className="text-sm text-[var(--text-secondary)]">
           {r.original.lastActiveAt
             ? formatDistanceToNow(new Date(r.original.lastActiveAt), { addSuffix: true })
-            : t('team.staff.never', 'Never')}
+            : t('team.staff.never')}
         </span>
       ),
     },
@@ -167,8 +166,8 @@ export function StaffTab({ onInvite }: StaffTabProps) {
               variant="ghost"
               size="sm"
               onClick={() => void navigate(`/team/staff/${r.original.userId}`)}
-              aria-label={t('team.staff.action.view', 'View profile')}
-              title={t('team.staff.action.view', 'View profile')}
+              aria-label={t('team.staff.action.view')}
+              title={t('team.staff.action.view')}
             >
               <Eye className="h-4 w-4 text-[var(--text-tertiary)]" />
             </Button>
@@ -178,8 +177,8 @@ export function StaffTab({ onInvite }: StaffTabProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => setEditUserId(r.original.userId)}
-                  aria-label={t('team.staff.action.editRole', 'Edit role')}
-                  title={t('team.staff.action.editRole', 'Edit role')}
+                  aria-label={t('team.staff.action.editRole')}
+                  title={t('team.staff.action.editRole')}
                 >
                   <Pencil className="h-4 w-4 text-[var(--text-tertiary)]" />
                 </Button>
@@ -187,8 +186,8 @@ export function StaffTab({ onInvite }: StaffTabProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => setActiveTarget({ userId: r.original.userId, name: r.original.name, nextActive: !isActive })}
-                  aria-label={isActive ? t('team.staff.action.deactivate', 'Deactivate') : t('team.staff.action.reactivate', 'Reactivate')}
-                  title={isActive ? t('team.staff.action.deactivate', 'Deactivate') : t('team.staff.action.reactivate', 'Reactivate')}
+                  aria-label={isActive ? t('team.staff.action.deactivate') : t('team.staff.action.reactivate')}
+                  title={isActive ? t('team.staff.action.deactivate') : t('team.staff.action.reactivate')}
                 >
                   {isActive
                     ? <Ban className="h-4 w-4 text-amber-500" />
@@ -211,13 +210,13 @@ export function StaffTab({ onInvite }: StaffTabProps) {
             type="search"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder={t('team.staff.search', 'Search staff by name or email…')}
+            placeholder={t('team.staff.search')}
             className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border bg-[var(--surface-sunken)] border-[var(--border-default)] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
           />
         </div>
         <Button variant="primary" size="sm" onClick={onInvite}>
           <UserPlus className="h-4 w-4 mr-1" />
-          {t('team.staff.invite', 'Invite staff member')}
+          {t('team.staff.invite')}
         </Button>
       </div>
 
@@ -227,8 +226,8 @@ export function StaffTab({ onInvite }: StaffTabProps) {
         ) : filtered.length === 0 ? (
           <EmptyState
             variant="team"
-            title={t('team.staff.empty', 'No staff members yet')}
-            primaryCta={{ label: t('team.staff.invite', 'Invite staff member'), onPress: onInvite }}
+            title={t('team.staff.empty')}
+            primaryCta={{ label: t('team.staff.invite'), onPress: onInvite }}
           />
         ) : (
           <DataTable data={filtered} columns={columns} pageSize={25} />
@@ -250,11 +249,11 @@ export function StaffTab({ onInvite }: StaffTabProps) {
         open={activeTarget !== null}
         onClose={() => setActiveTarget(null)}
         title={activeTarget?.nextActive
-          ? t('team.staff.reactivate.title', 'Reactivate staff member')
-          : t('team.staff.deactivate.title', 'Deactivate staff member')}
+          ? t('team.staff.reactivate.title')
+          : t('team.staff.deactivate.title')}
         description={activeTarget?.nextActive
-          ? t('team.staff.reactivate.desc', 'They will regain access to the platform immediately.')
-          : t('team.staff.deactivate.desc', 'They will lose access to the platform immediately. Roles and permissions are preserved and can be restored by reactivating.')}
+          ? t('team.staff.reactivate.desc')
+          : t('team.staff.deactivate.desc')}
         footer={
           <>
             <Button
@@ -263,11 +262,11 @@ export function StaffTab({ onInvite }: StaffTabProps) {
               loading={setActiveMutation.isPending}
             >
               {activeTarget?.nextActive
-                ? t('team.staff.action.reactivate', 'Reactivate')
-                : t('team.staff.action.deactivate', 'Deactivate')}
+                ? t('team.staff.action.reactivate')
+                : t('team.staff.action.deactivate')}
             </Button>
             <Button variant="ghost" onClick={() => setActiveTarget(null)}>
-              {t('common.cancel', 'Cancel')}
+              {t('common.cancel')}
             </Button>
           </>
         }
