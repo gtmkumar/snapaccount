@@ -228,3 +228,47 @@ POST /auth/team/invite returns 409 "Org.InvalidContext" immediately after busine
 **NOT a code defect** — the same code (ThemeProvider with `addChangeListener`) works correctly on iOS 17/18 simulators (production targets). iOS 26.5 is a pre-release simulator environment.
 
 **How to apply**: When testing dark mode on iOS 26.5 simulator, do NOT mark as FAIL purely from visual output. Verify the bundle contains ThemeProvider + pixel-check for partial dark token presence (e.g. text rendering). Always note "iOS 26.5 environment limitation" in the verdict. Re-test on iOS 17/18 before final sign-off on dark mode features.
+
+---
+
+## Updated 2026-06-11: Android Emulator Interaction Patterns (DARK-VERIFY, board #37)
+
+**Device**: emulator-5554 (sdk_gphone64_arm64, Android 16, API 36, new arch / Fabric=true)
+
+### Dark mode toggle
+```bash
+adb -s emulator-5554 shell "cmd uimode night yes"   # dark mode ON
+adb -s emulator-5554 shell "cmd uimode night no"    # dark mode OFF
+```
+Android delivers Appearance events to RN new arch (Fabric) JS correctly — confirmed live. ThemeProvider's `addChangeListener` fires and app repaints within 1-2 seconds, no restart needed.
+
+### Android emulator sleep/wake issue
+- The emulator goes to sleep (screen off) after ~10 minutes of inactivity.
+- When sleeping: `isSleeping=true` in `dumpsys activity a`, `mHasSurface=false` in window dump.
+- Screenshots from MCP show STALE CACHED FRAME — the screen looks active but taps go nowhere.
+- Wake procedure: `adb shell input keyevent 224` (WAKEUP) then verify with `dumpsys power | grep mWakefulness`.
+- Set screen timeout higher: `adb shell settings put system screen_off_timeout 600000` (10 min) at session start to avoid this.
+
+### Android tap coordinate system quirk
+- MCP `get_screen_size` returns 1080×2340 (physical pixels).
+- MCP `click_on_screen_at_coordinates` uses logical dp coordinates scaled by display density.
+- Device: 420dpi = 2.625x logical density. Logical coords = 411×891 dp.
+- BUT MCP click tool appears to use physical pixel coordinates (1080×2340) — tap at MCP y=434 hits the phone input field at physical y≈434.
+- The displayed MCP screenshot preview is scaled to ~498px wide (0.46x of 1080), but coordinates are full 1080×2340 device pixels.
+- **Critical issue**: when phone input field has focus, taps in the button area below it refocus the input instead of hitting the button. Always tap a neutral area first to clear input focus before tapping a button.
+- Use adb `uiautomator dump` to get exact element bounds when coordinate uncertainty exists.
+
+### OTP HTTP rate limit trap
+- AuthService rate limits OTP requests at 5 requests per 10 minutes per IP (sliding window).
+- The emulator appears as `127.0.0.1` on the host — same IP as terminal curl requests.
+- After 5 OTP sends from terminal + emulator, the rate limiter blocks all further sends for ~10 minutes.
+- App silently does not navigate when OTP is rate-limited (no toast, no error shown to user — possible UX bug).
+- Check: `psql ... -c "SELECT created_at FROM auth.otp_request ORDER BY created_at DESC LIMIT 5;"` to see the OTP burst history.
+- Workaround: use a different X-Forwarded-For header in curl for terminal testing to avoid consuming the emulator's rate limit.
+
+### IMS action state machine (GSTIN IMS business rules)
+- PENDING → ACCEPTED: valid
+- PENDING → REJECTED: valid
+- ACCEPTED → REJECTED: INVALID — `ImsInvoice.InvalidTransition` (must use GSTR-1A amendment)
+- ACCEPTED → PENDING_KEPT: INVALID — only valid from PENDING
+- These are correct IMS business rules per GSTN portal behaviour.

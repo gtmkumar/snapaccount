@@ -27,6 +27,22 @@ import { useAuthStore } from '../../store/authStore';
 import { fetchServerUserType } from '../../lib/onboarding';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 import apiClient, { getApiError } from '../../lib/api';
+import { logger } from '../../lib/logger';
+
+/**
+ * Known backend OTP error codes → translation keys (I18N-WIZARD residual #2).
+ * The server's `message` is English-only and must never be shown to the user;
+ * unknown codes fall back to a generic translated message (raw text is kept in
+ * dev logs only via logger.debug).
+ */
+const OTP_ERROR_KEYS: Record<string, string> = {
+  'Otp.Invalid': 'mobile.auth.otp.errors.invalid',
+  'Otp.Expired': 'mobile.auth.otp.errors.expired',
+  'Otp.AlreadyUsed': 'mobile.auth.otp.errors.alreadyUsed',
+  'Otp.MaxAttemptsReached': 'mobile.auth.otp.errors.maxAttempts',
+  'Otp.Cooldown': 'mobile.auth.otp.errors.cooldown',
+  'OtpRequest.NotFound': 'mobile.auth.otp.errors.notFound',
+};
 
 type OTPNavProp = NativeStackNavigationProp<AuthStackParamList, 'OTPVerify'>;
 type OTPRouteProp = RouteProp<AuthStackParamList, 'OTPVerify'>;
@@ -124,11 +140,18 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
         setError(true);
         setOtp('');
         const apiErr = getApiError(err);
+        const mappedKey = apiErr.code ? OTP_ERROR_KEYS[apiErr.code] : undefined;
         if (apiErr.statusCode === 429) {
           setErrorMessage(t('mobile.auth.otp.errors.tooMany'));
-        } else if (apiErr.message) {
-          setErrorMessage(apiErr.message);
+        } else if (mappedKey) {
+          setErrorMessage(t(mappedKey));
         } else {
+          // Unknown code/shape — never surface the raw (English) server text.
+          logger.debug('otp-verify', 'unmapped server error', {
+            code: apiErr.code,
+            statusCode: apiErr.statusCode,
+            message: apiErr.message,
+          });
           setErrorMessage(t('mobile.auth.otp.errors.failed'));
         }
       }

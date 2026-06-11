@@ -26,6 +26,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { PanInput } from '../../components/shared/PanInput';
@@ -33,6 +34,7 @@ import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/T
 import { isValidPAN } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import apiClient, { getApiError } from '../../lib/api';
+import { logger } from '../../lib/logger';
 import { saveDocument } from '../../api/documents';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
@@ -42,13 +44,15 @@ interface Props {
   navigation: NavProp;
 }
 
-const schema = z.object({
-  pan: z.string().refine(isValidPAN, 'Invalid PAN format (e.g. ABCDE1234F)'),
-  fullName: z.string().min(2, 'Full name is required'),
-  dateOfBirth: z.string().min(10, 'Date of birth is required (DD/MM/YYYY)'),
-});
+// Schema factory so validation messages resolve through i18n (I18N-WIZARD #1).
+const makeSchema = (t: TFunction) =>
+  z.object({
+    pan: z.string().refine(isValidPAN, t('mobile.auth.wizard.valPanInvalid')),
+    fullName: z.string().min(2, t('mobile.auth.wizard.valFullNameRequired')),
+    dateOfBirth: z.string().min(10, t('mobile.auth.wizard.valDobRequired')),
+  });
 
-type FormData = z.infer<typeof schema>;
+type FormData = z.infer<ReturnType<typeof makeSchema>>;
 
 /** Convert DD/MM/YYYY → ISO YYYY-MM-DD (backend DateOnly). Undefined if unparseable. */
 function toIsoDate(ddmmyyyy?: string): string | undefined {
@@ -66,7 +70,9 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
   const [loading, setLoading] = React.useState(false);
   const [panVerified, setPanVerified] = React.useState(false);
 
-  const form = useForm<FormData>({ resolver: zodResolver(schema) });
+  // Schema (and its messages) re-resolves when the active language changes.
+  const resolver = React.useMemo(() => zodResolver(makeSchema(t)), [t]);
+  const form = useForm<FormData>({ resolver });
 
   const handleSubmit = form.handleSubmit(async (data) => {
     setLoading(true);
@@ -94,7 +100,9 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
       // which renders the salaried-individual tab set for userType=employee).
       markAuthenticated();
     } catch (err: unknown) {
-      Alert.alert('Error', getApiError(err).message || 'Could not save profile. Please try again.');
+      // Never surface raw (English-only) server text — translated message + dev log.
+      logger.debug('individual-wizard', 'profile save failed', { err: getApiError(err) });
+      Alert.alert(t('mobile.common.error'), t('mobile.auth.wizard.saveFailed'));
     } finally {
       setLoading(false);
     }
@@ -115,7 +123,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.stepTitle}>Your tax profile</Text>
+          <Text style={styles.stepTitle}>{t('mobile.auth.wizard.individualTitle')}</Text>
 
           {/* Trust signal on the regulated step (spec §4.2) */}
           <View style={styles.trustBanner}>
@@ -123,7 +131,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
             <Text style={styles.trustText}>{t('mobile.auth.wizard.trustPan')}</Text>
           </View>
           <Text style={styles.stepSubtitle}>
-            We'll use your PAN to set up personal ITR filing. No business details needed.
+            {t('mobile.auth.wizard.individualSubtitle')}
           </Text>
 
           <Controller
@@ -131,7 +139,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
             name="pan"
             render={({ field, fieldState }) => (
               <PanInput
-                label="PAN Number"
+                label={t('mobile.auth.wizard.panLabel')}
                 value={field.value ?? ''}
                 onChangeText={(v) => {
                   field.onChange(v);
@@ -155,8 +163,8 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
             name="fullName"
             render={({ field, fieldState }) => (
               <Input
-                label="Full Name (as on PAN)"
-                placeholder="Enter your full name"
+                label={t('mobile.auth.wizard.fullNameLabel')}
+                placeholder={t('mobile.auth.wizard.fullNamePlaceholder')}
                 value={field.value}
                 onChangeText={field.onChange}
                 error={fieldState.error?.message}
@@ -169,8 +177,8 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
             name="dateOfBirth"
             render={({ field, fieldState }) => (
               <Input
-                label="Date of Birth"
-                placeholder="DD/MM/YYYY"
+                label={t('mobile.auth.wizard.dobLabel')}
+                placeholder={t('mobile.auth.wizard.dobPlaceholder')}
                 value={field.value}
                 onChangeText={field.onChange}
                 error={fieldState.error?.message}
@@ -184,8 +192,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
             <View style={styles.bannerRow}>
               <Ionicons name="lock-closed-outline" size={14} color={tokens.successFg} style={styles.bannerIcon} />
               <Text style={styles.infoBannerText}>
-                Your PAN is safe. We use it only for government portal verification.
-                You can add Aadhaar and Form 16 later from your profile.
+                {t('mobile.auth.wizard.individualPanInfo')}
               </Text>
             </View>
           </View>
@@ -197,7 +204,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
             leaving no visible way to submit. */}
         <View style={styles.footer}>
           <Button
-            label="Complete Setup"
+            label={t('mobile.auth.wizard.completeSetup')}
             onPress={handleSubmit}
             loading={loading}
             fullWidth

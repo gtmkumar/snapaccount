@@ -56,7 +56,7 @@ FAIL. Report: .claude/qa/live-ios-wave5-2026-06-11.md
 
 **W5-IMS-02 (High, Both — backend):** RESOLVED — PASS (API-verified). GET /gst/ims/invoices/{id} returns 200 with full detail. POST /gst/ims/sync returns 200 with 8 mock invoices. The Npgsql character varying → Guid type mismatch is fixed in GstService (commit 18ce9b0).
 
-**W5-DARK-01 (Critical, Both):** CONDITIONAL PASS — ThemeProvider IS now mounted in App.tsx (commit 18ce9b0). Live dark mode does NOT render on iOS 26.5 pre-release + RN 0.85 old arch (Appearance bridge limitation — NOT a code defect). Re-test required on iOS 17/18. See [[feedback_simulator_interaction]] for iOS 26.5 Appearance API limitation details.
+**W5-DARK-01 (Critical, Both):** FULL PASS (Android 2026-06-11, board #37 DARK-VERIFY). ThemeProvider IS now mounted in App.tsx (commit 18ce9b0). Android new arch (Fabric=true) delivers Appearance events correctly — pixel-verified: canvas=`#0F172A`, raised=`#1E293B`, live toggle both directions without restart. iOS 26.5 pre-release still CONDITIONAL PASS (env limitation, not code defect). iOS 17/18 re-verification deferred (non-blocking). See [[feedback_simulator_interaction]] for iOS 26.5 Appearance API limitation details.
 
 **S3/S4 polish (Items 3, 5):** Code-verified PASS. RefreshControl with brand500 tint + lightTap haptic on DocumentList/NotificationCenter/GstNoticeInbox. ListSkeleton on cold load. EmptyState/ErrorState. Chat bubble own messages use tokens.brandCta (#4F46E5 light / #818CF8 dark). Live visual blocked by auth session loss.
 

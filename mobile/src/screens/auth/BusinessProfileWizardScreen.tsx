@@ -21,6 +21,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { PanInput } from '../../components/shared/PanInput';
@@ -28,6 +29,7 @@ import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/T
 import { isValidPAN, isValidGSTIN, isValidAadhaar } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import apiClient, { getApiError, refreshContextAndSwap } from '../../lib/api';
+import { logger } from '../../lib/logger';
 import { saveDocument, type DocumentKind } from '../../api/documents';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
@@ -38,38 +40,39 @@ interface Props { navigation: WizardNavProp }
 const TOTAL_STEPS = 4;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step schemas
+// Step schemas — factories so validation messages resolve through i18n
+// (I18N-WIZARD residual #1: no hardcoded English in user-visible text).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const step1Schema = z.object({
-  pan: z.string().refine(isValidPAN, 'Invalid PAN format (e.g. ABCDE1234F)'),
-  fullName: z.string().min(2, 'Full name is required'),
-  dateOfBirth: z.string().min(10, 'Date of birth is required (DD/MM/YYYY)'),
-});
+const makeStep1Schema = (t: TFunction) =>
+  z.object({
+    pan: z.string().refine(isValidPAN, t('mobile.auth.wizard.valPanInvalid')),
+    fullName: z.string().min(2, t('mobile.auth.wizard.valFullNameRequired')),
+    dateOfBirth: z.string().min(10, t('mobile.auth.wizard.valDobRequired')),
+  });
 
-const step2Schema = z.object({
-  gstin: z
-    .string()
-    .optional()
-    .refine(
-      (v) => !v || isValidGSTIN(v),
-      'Invalid GSTIN format (15 characters)',
-    ),
-  notGstRegistered: z.boolean().optional(),
-});
+const makeStep2Schema = (t: TFunction) =>
+  z.object({
+    gstin: z
+      .string()
+      .optional()
+      .refine((v) => !v || isValidGSTIN(v), t('mobile.auth.wizard.valGstinInvalid')),
+    notGstRegistered: z.boolean().optional(),
+  });
 
-const step4Schema = z.object({
-  businessName: z.string().min(2, 'Business name is required'),
-  businessType: z.string().min(1, 'Select a business type'),
-  industry: z.string().min(1, 'Select an industry'),
-  addressLine1: z.string().min(5, 'Address is required'),
-  state: z.string().min(1, 'Select a state'),
-  pinCode: z.string().regex(/^[1-9]\d{5}$/, 'Enter valid 6-digit PIN code'),
-});
+const makeStep4Schema = (t: TFunction) =>
+  z.object({
+    businessName: z.string().min(2, t('mobile.auth.wizard.valBusinessNameRequired')),
+    businessType: z.string().min(1, t('mobile.auth.wizard.valBusinessTypeRequired')),
+    industry: z.string().min(1, t('mobile.auth.wizard.valIndustryRequired')),
+    addressLine1: z.string().min(5, t('mobile.auth.wizard.valAddressRequired')),
+    state: z.string().min(1, t('mobile.auth.wizard.valStateRequired')),
+    pinCode: z.string().regex(/^[1-9]\d{5}$/, t('mobile.auth.wizard.valPinCodeInvalid')),
+  });
 
-type Step1Data = z.infer<typeof step1Schema>;
-type Step2Data = z.infer<typeof step2Schema>;
-type Step4Data = z.infer<typeof step4Schema>;
+type Step1Data = z.infer<ReturnType<typeof makeStep1Schema>>;
+type Step2Data = z.infer<ReturnType<typeof makeStep2Schema>>;
+type Step4Data = z.infer<ReturnType<typeof makeStep4Schema>>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -119,9 +122,13 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
   // created (Step 4). The 12-digit value is held only transiently in state.
   const [aadhaarNumber, setAadhaarNumber] = useState('');
 
-  const form1 = useForm<Step1Data>({ resolver: zodResolver(step1Schema) });
-  const form2 = useForm<Step2Data>({ resolver: zodResolver(step2Schema) });
-  const form4 = useForm<Step4Data>({ resolver: zodResolver(step4Schema) });
+  // Schemas (and their messages) re-resolve when the active language changes.
+  const resolver1 = React.useMemo(() => zodResolver(makeStep1Schema(t)), [t]);
+  const resolver2 = React.useMemo(() => zodResolver(makeStep2Schema(t)), [t]);
+  const resolver4 = React.useMemo(() => zodResolver(makeStep4Schema(t)), [t]);
+  const form1 = useForm<Step1Data>({ resolver: resolver1 });
+  const form2 = useForm<Step2Data>({ resolver: resolver2 });
+  const form4 = useForm<Step4Data>({ resolver: resolver4 });
 
   const goBack = () => {
     if (currentStep > 1) setCurrentStep(currentStep - 1);
@@ -236,7 +243,9 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
       // Onboarding complete — enter the app (RootNavigator swaps to AppNavigator).
       markAuthenticated();
     } catch (err: unknown) {
-      Alert.alert('Error', getApiError(err).message || 'Could not save profile. Please try again.');
+      // Never surface raw (English-only) server text — translated message + dev log.
+      logger.debug('business-wizard', 'profile save failed', { err: getApiError(err) });
+      Alert.alert(t('mobile.common.error'), t('mobile.auth.wizard.saveFailed'));
     } finally {
       setLoading(false);
     }
@@ -276,9 +285,9 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
           {/* ── Step 1: PAN ── */}
           {currentStep === 1 && (
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Your PAN Card</Text>
+              <Text style={styles.stepTitle}>{t('mobile.auth.wizard.stepPanTitle')}</Text>
               <Text style={styles.stepSubtitle}>
-                We'll verify your PAN to link your tax profile
+                {t('mobile.auth.wizard.stepPanSubtitle')}
               </Text>
 
               {/* Trust signal on the regulated step (spec §4.2) */}
@@ -292,7 +301,7 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 name="pan"
                 render={({ field, fieldState }) => (
                   <PanInput
-                    label="PAN Number"
+                    label={t('mobile.auth.wizard.panLabel')}
                     value={field.value ?? ''}
                     onChangeText={(v) => {
                       field.onChange(v);
@@ -316,8 +325,8 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 name="fullName"
                 render={({ field, fieldState }) => (
                   <Input
-                    label="Full Name (as on PAN)"
-                    placeholder="Enter your full name"
+                    label={t('mobile.auth.wizard.fullNameLabel')}
+                    placeholder={t('mobile.auth.wizard.fullNamePlaceholder')}
                     value={field.value}
                     onChangeText={field.onChange}
                     error={fieldState.error?.message}
@@ -330,8 +339,8 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 name="dateOfBirth"
                 render={({ field, fieldState }) => (
                   <Input
-                    label="Date of Birth"
-                    placeholder="DD/MM/YYYY"
+                    label={t('mobile.auth.wizard.dobLabel')}
+                    placeholder={t('mobile.auth.wizard.dobPlaceholder')}
                     value={field.value}
                     onChangeText={field.onChange}
                     error={fieldState.error?.message}
@@ -346,7 +355,7 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 <View style={styles.bannerRow}>
                   <Ionicons name="lock-closed-outline" size={14} color={tokens.successFg} style={styles.bannerIcon} />
                   <Text style={styles.infoBannerText}>
-                    Your PAN is safe. We use it only for government portal verification.
+                    {t('mobile.auth.wizard.panSafeInfo')}
                   </Text>
                 </View>
               </View>
@@ -356,9 +365,9 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
           {/* ── Step 2: GSTIN ── */}
           {currentStep === 2 && (
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Link Your GST Number</Text>
+              <Text style={styles.stepTitle}>{t('mobile.auth.wizard.stepGstinTitle')}</Text>
               <Text style={styles.stepSubtitle}>
-                Optional — link GSTIN to auto-import your filing history
+                {t('mobile.auth.wizard.stepGstinSubtitle')}
               </Text>
 
               <Controller
@@ -366,7 +375,7 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 name="gstin"
                 render={({ field, fieldState }) => (
                   <Input
-                    label="GSTIN"
+                    label={t('mobile.auth.wizard.gstinLabel')}
                     placeholder="27AABCU9603R1ZM"
                     value={field.value}
                     onChangeText={(v) => field.onChange(v.toUpperCase())}
@@ -383,9 +392,9 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                  Identity Documents screen via /auth/me/documents) ── */}
           {currentStep === 3 && (
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Add Your Aadhaar</Text>
+              <Text style={styles.stepTitle}>{t('mobile.auth.wizard.stepAadhaarTitle')}</Text>
               <Text style={styles.stepSubtitle}>
-                Used for loan applications and financial services
+                {t('mobile.auth.wizard.stepAadhaarSubtitle')}
               </Text>
 
               <AadhaarInputSection onContinue={handleAadhaarContinue} />
@@ -394,8 +403,7 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 <View style={styles.bannerRow}>
                   <Ionicons name="warning-outline" size={14} color={tokens.warningFg} style={styles.bannerIcon} />
                   <Text style={styles.warningBannerText}>
-                    Your Aadhaar number is masked and never stored in full — UIDAI guidelines.
-                    You can verify it later from Profile → Identity Documents.
+                    {t('mobile.auth.wizard.aadhaarMaskWarning')}
                   </Text>
                 </View>
               </View>
@@ -405,15 +413,15 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
           {/* ── Step 4: Business Details ── */}
           {currentStep === 4 && (
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Business Details</Text>
+              <Text style={styles.stepTitle}>{t('mobile.auth.wizard.stepBusinessTitle')}</Text>
 
               <Controller
                 control={form4.control}
                 name="businessName"
                 render={({ field, fieldState }) => (
                   <Input
-                    label="Business Name"
-                    placeholder="Enter your business name"
+                    label={t('mobile.auth.wizard.businessNameLabel')}
+                    placeholder={t('mobile.auth.wizard.businessNamePlaceholder')}
                     value={field.value}
                     onChangeText={field.onChange}
                     error={fieldState.error?.message}
@@ -426,12 +434,14 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 name="businessType"
                 render={({ field, fieldState }) => (
                   <Input
-                    label="Business Type"
-                    placeholder="Select business type"
+                    label={t('mobile.auth.wizard.businessTypeLabel')}
+                    placeholder={t('mobile.auth.wizard.businessTypePlaceholder')}
                     value={field.value}
                     onChangeText={field.onChange}
                     error={fieldState.error?.message}
-                    hint={`Options: ${BUSINESS_TYPES.slice(0, 3).join(', ')}...`}
+                    hint={t('mobile.auth.wizard.businessTypeHint', {
+                      options: BUSINESS_TYPES.slice(0, 3).join(', '),
+                    })}
                   />
                 )}
               />
@@ -441,8 +451,8 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 name="industry"
                 render={({ field, fieldState }) => (
                   <Input
-                    label="Industry / Category"
-                    placeholder="e.g. Retail, Manufacturing, Services"
+                    label={t('mobile.auth.wizard.industryLabel')}
+                    placeholder={t('mobile.auth.wizard.industryPlaceholder')}
                     value={field.value}
                     onChangeText={field.onChange}
                     error={fieldState.error?.message}
@@ -455,8 +465,8 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 name="addressLine1"
                 render={({ field, fieldState }) => (
                   <Input
-                    label="Business Address"
-                    placeholder="Street address, locality"
+                    label={t('mobile.auth.wizard.addressLabel')}
+                    placeholder={t('mobile.auth.wizard.addressPlaceholder')}
                     value={field.value}
                     onChangeText={field.onChange}
                     error={fieldState.error?.message}
@@ -469,12 +479,12 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 name="state"
                 render={({ field, fieldState }) => (
                   <Input
-                    label="State"
-                    placeholder="Select state"
+                    label={t('mobile.auth.wizard.stateLabel')}
+                    placeholder={t('mobile.auth.wizard.statePlaceholder')}
                     value={field.value}
                     onChangeText={field.onChange}
                     error={fieldState.error?.message}
-                    hint={`${INDIAN_STATES.length} states/UTs available`}
+                    hint={t('mobile.auth.wizard.stateHint', { total: INDIAN_STATES.length })}
                   />
                 )}
               />
@@ -484,8 +494,8 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 name="pinCode"
                 render={({ field, fieldState }) => (
                   <Input
-                    label="PIN Code"
-                    placeholder="6-digit postal code"
+                    label={t('mobile.auth.wizard.pinCodeLabel')}
+                    placeholder={t('mobile.auth.wizard.pinCodePlaceholder')}
                     value={field.value}
                     onChangeText={field.onChange}
                     error={fieldState.error?.message}
@@ -504,19 +514,19 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
             keyboard while typing, leaving no visible way to continue/submit. */}
         <View style={styles.footer}>
           {currentStep === 1 && (
-            <Button label="Continue" onPress={handleStep1Submit} loading={loading} fullWidth size="lg" />
+            <Button label={t('mobile.auth.wizard.continue')} onPress={handleStep1Submit} loading={loading} fullWidth size="lg" />
           )}
           {currentStep === 2 && (
             <>
-              <Button label="Continue" onPress={handleStep2Submit} fullWidth size="lg" />
-              <Button label="Skip for now" variant="ghost" onPress={() => setCurrentStep(3)} fullWidth size="lg" />
+              <Button label={t('mobile.auth.wizard.continue')} onPress={handleStep2Submit} fullWidth size="lg" />
+              <Button label={t('mobile.auth.wizard.skipForNow')} variant="ghost" onPress={() => setCurrentStep(3)} fullWidth size="lg" />
             </>
           )}
           {currentStep === 3 && (
-            <Button label="Skip for now" variant="ghost" onPress={() => setCurrentStep(4)} fullWidth size="lg" />
+            <Button label={t('mobile.auth.wizard.skipForNow')} variant="ghost" onPress={() => setCurrentStep(4)} fullWidth size="lg" />
           )}
           {currentStep === 4 && (
-            <Button label="Complete Setup" onPress={handleStep4Submit} loading={loading} fullWidth size="lg" />
+            <Button label={t('mobile.auth.wizard.completeSetup')} onPress={handleStep4Submit} loading={loading} fullWidth size="lg" />
           )}
         </View>
       </KeyboardAvoidingView>
@@ -530,23 +540,24 @@ function AadhaarInputSection({
 }: {
   onContinue: (aadhaar: string) => void;
 }) {
+  const { t } = useTranslation();
   const [aadhaar, setAadhaar] = useState('');
   const isValid = isValidAadhaar(aadhaar);
 
   return (
     <View>
       <Input
-        label="Aadhaar Number"
+        label={t('mobile.auth.wizard.aadhaarLabel')}
         placeholder="XXXX XXXX XXXX"
         value={aadhaar}
         onChangeText={(v) => setAadhaar(v.replace(/\D/g, '').slice(0, 12))}
         keyboardType="numeric"
         maxLength={12}
         secureTextEntry
-        hint="Your Aadhaar number is masked and never stored"
+        hint={t('mobile.auth.wizard.aadhaarHint')}
       />
       <Button
-        label="Continue"
+        label={t('mobile.auth.wizard.continue')}
         onPress={() => onContinue(aadhaar)}
         disabled={!isValid}
         fullWidth

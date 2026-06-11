@@ -195,18 +195,21 @@ export interface ApiError {
   message: string;
   errors?: Record<string, string[]>;
   statusCode: number;
+  /** Stable backend error code (e.g. "Otp.Invalid") from the { error, code } envelope. */
+  code?: string;
 }
 
 export function getApiError(error: unknown): ApiError {
   if (axios.isAxiosError(error)) {
     // Backend error envelope is { error, code }; some endpoints use { message }.
     const data = error.response?.data as
-      | (Partial<ApiError> & { error?: string })
+      | (Partial<ApiError> & { error?: string; code?: string })
       | undefined;
     return {
       message: data?.message ?? data?.error ?? error.message ?? 'An error occurred',
       errors: data?.errors,
       statusCode: error.response?.status ?? 0,
+      code: typeof data?.code === 'string' ? data.code : undefined,
     };
   }
   return {
