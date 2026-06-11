@@ -16,3 +16,6 @@
 - [Task #2 B15 wire + WEB-13/16 fixes](project_task2_b15_wire.md) — approve/reject/clarify/archive wired; common.previous→common.prev; listGstReturns orgId required; 923 tests
 - [Task #11/#12 completion](project_task11_12_completion.md) — subscription stats wired; react-i18next removed; 14 files migrated; 1611-key parity; 928 tests, 0 lint errors
 - [Task #26/#30 design elevation S0 + slaCompliance ratio fix](project_task26_30_design_elevation.md) — S0 canonical tokens (Emerald success, Orange accent, radius-sm 6px, color-loan EA580C); slaCompliance 0..1→% conversion; 941 tests
+- [Task #33 MCA edit-log page](project_task33_mca_editlog.md) — accountingApi.ts + EditLogPage + /compliance/edit-log route + sidebar + 36 i18n keys; 963 tests, 0 lint errors
+- [Task #32 GSTN IMS Inbox](project_task32_ims_inbox.md) — 3 routes + gstImsApi + 84 i18n keys (en/hi/bn) + 44 tests; Zod UUID v4 caveat; optimistic accept/undo; 963→1007 tests
+- [S3/S5 design elevation: skeleton sweep + dashboard hierarchy](project_s3_s5_design_elevation.md) — 5 pages fixed (UserDetail/LoansListKpi/PartnerBanks/PartnerBanksSettings/CallbackKpi); dashboard 3-tier hierarchy; 89 new i18n keys; 1007 tests

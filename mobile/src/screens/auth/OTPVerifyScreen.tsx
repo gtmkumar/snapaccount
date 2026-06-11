@@ -3,7 +3,7 @@
  * Clean, focused OTP entry with premium styling
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -20,7 +20,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/ui/Button';
 import { OTPInput, OTPResendTimer } from '../../components/forms/OTPInput';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { formatPhoneDisplay } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import { fetchServerUserType } from '../../lib/onboarding';
@@ -36,6 +36,8 @@ interface OTPVerifyScreenProps {
 }
 
 export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { phone } = route.params;
   const { setAuthenticated, setSession, setOrganizations, updateProfile } = useAuthStore();
 
@@ -43,7 +45,7 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [autoDetected, setAutoDetected] = useState(false);
+  const [autoDetected] = useState(false);
 
   const formattedPhone = formatPhoneDisplay(phone);
 
@@ -102,7 +104,7 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
         // Returning user — enrich profile + organizations, then enter the app.
         try {
           const orgsRes = await apiClient.get<
-            Array<{ id: string; businessName?: string; name?: string; gstin?: string; panNumber?: string }>
+            { id: string; businessName?: string; name?: string; gstin?: string; panNumber?: string }[]
           >('/auth/organizations');
           const orgs = (orgsRes.data ?? []).map((o) => ({
             id: o.id,
@@ -168,13 +170,13 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
-            <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+            <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
           </TouchableOpacity>
 
           {/* Illustration */}
           <View style={styles.illustrationArea}>
             <View style={styles.iconCircle}>
-              <Ionicons name="mail-outline" size={32} color={Colors.brand[500]} />
+              <Ionicons name="mail-outline" size={32} color={tokens.brand500} />
             </View>
           </View>
 
@@ -196,7 +198,7 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
           {/* Auto-detected banner */}
           {autoDetected && (
             <View style={styles.autoDetectedBanner}>
-              <Ionicons name="checkmark-circle" size={16} color={Colors.success[600]} />
+              <Ionicons name="checkmark-circle" size={16} color={tokens.successFg} />
               <Text style={styles.autoDetectedText}>
                 OTP auto-detected from SMS
               </Text>
@@ -222,7 +224,7 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
 
             {errorMessage ? (
               <View style={styles.errorRow}>
-                <Ionicons name="alert-circle" size={14} color={Colors.error[600]} />
+                <Ionicons name="alert-circle" size={14} color={tokens.errorFg} />
                 <Text style={styles.errorMessage} accessibilityLiveRegion="polite">
                   {errorMessage}
                 </Text>
@@ -254,10 +256,11 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.neutral[0],
+    backgroundColor: tk.raised,
   },
   flex: {
     flex: 1,
@@ -271,7 +274,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
@@ -284,32 +287,32 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 22,
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
   heading: {
     fontSize: 28,
     fontWeight: '800',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     marginBottom: 10,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
   subtext: {
     fontSize: 15,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     textAlign: 'center',
     marginBottom: 8,
     lineHeight: 22,
   },
   phoneText: {
     fontWeight: '600',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
   },
   changeNumber: {
     fontSize: 14,
-    color: Colors.brand[500],
+    color: tk.brand500,
     fontWeight: '600',
     marginBottom: 32,
     textAlign: 'center',
@@ -318,14 +321,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: Colors.success[50],
+    backgroundColor: tk.successTint,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 16,
   },
   autoDetectedText: {
-    color: Colors.success[700],
+    color: tk.successFg,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -342,7 +345,7 @@ const styles = StyleSheet.create({
   },
   errorMessage: {
     fontSize: 14,
-    color: Colors.error[600],
+    color: tk.errorFg,
   },
   buttonArea: {
     width: '100%',
@@ -351,8 +354,9 @@ const styles = StyleSheet.create({
   note: {
     fontSize: 12,
     // OTP-4 (a11y): the validity note carries meaning — neutral[400] fails 4.5:1.
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     marginTop: 14,
     textAlign: 'center',
   },
-});
+  }),
+);

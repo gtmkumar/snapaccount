@@ -76,6 +76,9 @@ public static class DependencyInjection
         // SEC-AI-01: PII redactor — always registered (singleton, stateless).
         services.AddSingleton<ITextRedactor, TextRedactor>();
 
+        // SEC-AI-02 H-03: Atomic token budget enforcement via PostgreSQL advisory locks.
+        services.AddScoped<ITokenBudgetService, TokenBudgetService>();
+
         // MockAiProvider — default, GCP-free. Registered as singleton so the resolver
         // can hold a reference to it without allocating a new instance per request.
         services.AddSingleton<MockAiProvider>();

@@ -168,7 +168,10 @@ export const DARK_TOKENS: ThemeTokens = {
   sunken: '#0F172A',
   textPrimary: '#F8FAFC',
   textSecondary: '#94A3B8',
-  textTertiary: '#475569',
+  // tokens.json v2.1.0: dark tertiary overridden to neutral-400 — neutral-500
+  // (#64748B) failed WCAG (3.07:1 on raised). Tertiary therefore EQUALS
+  // secondary in colour in dark mode; distinguish by weight/size, not colour.
+  textTertiary: '#94A3B8',
   textDisabled: '#475569',
   textOnBrand: '#0F172A', // dark mode: lifted indigo fill needs dark label (≥4.5:1)
   brand500: '#818CF8',  // lifted saturation for dark bg
@@ -239,7 +242,7 @@ const ThemeContext = createContext<ThemeContextValue>({
 
 function resolveIsDark(
   pref: ThemePreference,
-  systemScheme: ColorSchemeName,
+  systemScheme: ColorSchemeName | null,
 ): boolean {
   if (pref === 'dark') return true;
   if (pref === 'light') return false;
@@ -248,8 +251,8 @@ function resolveIsDark(
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [preference, setPreference] = useState<ThemePreference>('system');
-  const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(
-    Appearance.getColorScheme(),
+  const [systemScheme, setSystemScheme] = useState<ColorSchemeName | null>(
+    () => Appearance.getColorScheme() ?? null,
   );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -281,14 +284,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // enum is LIGHT|DARK|SYSTEM, so map the lowercase local pref before PATCHing.
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { apiClient } = require('../lib/api') as { apiClient: { patch: (url: string, data: unknown) => Promise<unknown> } };
-        const theme = pref.toUpperCase(); // 'system' → 'SYSTEM', etc.
-        void apiClient.patch('/auth/me/preferences', { theme });
-      } catch {
-        // silent — local preference is source of truth
-      }
+      const theme = pref.toUpperCase(); // 'system' → 'SYSTEM', etc.
+      // Lazy import keeps ThemeContext free of an eager api-client dependency.
+      void import('../lib/api')
+        .then(({ apiClient }) => apiClient.patch('/auth/me/preferences', { theme }))
+        .catch(() => {
+          // silent — local preference is source of truth
+        });
     }, 1500);
   }, []);
 

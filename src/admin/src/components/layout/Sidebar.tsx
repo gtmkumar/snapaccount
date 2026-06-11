@@ -28,6 +28,8 @@ import {
   Database,
   ListTree,
   ClipboardList,
+  ScrollText,
+  Inbox,
 } from 'lucide-react'
 import type { AdminRole } from '@/hooks/useAuth'
 
@@ -65,6 +67,14 @@ const navItems: NavItem[] = [
     href: '/gst/notices',
     icon: Receipt,
     requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
+  },
+  {
+    // GAP-101: IMS Inbox — mandatory regulatory surface from 1 Apr 2026
+    label: 'IMS Inbox',
+    href: '/gst/ims',
+    icon: Inbox,
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
+    requiredServerPermission: 'gst.ims.read',
   },
   {
     label: 'ITR',
@@ -158,6 +168,14 @@ const navItems: NavItem[] = [
     icon: ClipboardList,
     requiredRoles: ['SUPER_ADMIN'],
     requiredServerPermission: 'admin.dashboard.read',
+  },
+  // MCA Compliance — Edit Log (accounting.editlog.read)
+  {
+    label: 'Edit Log',
+    href: '/compliance/edit-log',
+    icon: ScrollText,
+    requiredRoles: ['SUPER_ADMIN', 'CA'],
+    requiredServerPermission: 'accounting.editlog.read',
   },
   // Module 1, Increment 1.1 — Permission Catalog (SUPER_ADMIN, platform.permissions.manage)
   {

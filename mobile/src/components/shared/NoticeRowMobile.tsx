@@ -4,7 +4,7 @@
  * Accessibility: full accessibilityActions for swipe gestures.
  */
 
-import React, { useRef } from 'react';
+import React, { useState } from 'react';
 import {
   Animated,
   Pressable,
@@ -14,7 +14,7 @@ import {
   AccessibilityActionEvent,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { DueDateChip } from './DueDateChip';
 
 export interface NoticeRowMobileProps {
@@ -46,16 +46,18 @@ export function NoticeRowMobile({
   archiveGated = false,
   testID,
 }: NoticeRowMobileProps) {
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  const { tokens } = useTheme();
+  const styles = useStyles();
+  const [slideAnim] = useState(() => new Animated.Value(0));
 
   const isOpen = status === 'Open' || status === 'Overdue';
   const isOverdue = status === 'Overdue';
 
   const statusColor = isOverdue
-    ? Colors.error[500]
+    ? tokens.errorFg
     : isOpen
-    ? Colors.warning[500]
-    : Colors.success[500];
+    ? tokens.warningFg
+    : tokens.successFg;
 
   const handleAccessibilityAction = (event: AccessibilityActionEvent) => {
     if (event.nativeEvent.actionName === 'archive' && onArchive && !archiveGated) {
@@ -135,7 +137,7 @@ export function NoticeRowMobile({
                 <Ionicons
                   name="checkmark-circle-outline"
                   size={16}
-                  color={Colors.neutral[500]}
+                  color={tokens.textSecondary}
                 />
                 <Text style={styles.actionBtnText}>Mark read</Text>
               </Pressable>
@@ -153,7 +155,7 @@ export function NoticeRowMobile({
                 <Ionicons
                   name="archive-outline"
                   size={16}
-                  color={archiveGated ? Colors.neutral[300] : Colors.neutral[500]}
+                  color={archiveGated ? tokens.textTertiary : tokens.textSecondary}
                 />
                 <Text
                   style={[
@@ -169,7 +171,7 @@ export function NoticeRowMobile({
             <Ionicons
               name="chevron-forward"
               size={16}
-              color={Colors.neutral[400]}
+              color={tokens.textTertiary}
             />
           </View>
         </View>
@@ -178,13 +180,14 @@ export function NoticeRowMobile({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   wrapper: {
     borderRadius: 14,
     overflow: 'hidden',
     marginBottom: 10,
-    backgroundColor: Colors.surface.default,
-    shadowColor: '#0F172A',
+    backgroundColor: tk.raised,
+    shadowColor: tk.shadowColor,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -220,7 +223,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   typeBadge: {
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 6,
@@ -228,12 +231,12 @@ const styles = StyleSheet.create({
   typeBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
   },
   noticeNumber: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
     flex: 1,
   },
   statusPill: {
@@ -247,7 +250,7 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 13,
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     lineHeight: 18,
   },
   footerRow: {
@@ -257,7 +260,7 @@ const styles = StyleSheet.create({
   },
   issuedDate: {
     fontSize: 12,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
   },
   actionRow: {
     flexDirection: 'row',
@@ -266,7 +269,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
+    borderTopColor: tk.border,
   },
   actionBtn: {
     flexDirection: 'row',
@@ -281,13 +284,14 @@ const styles = StyleSheet.create({
   },
   actionBtnText: {
     fontSize: 12,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     fontWeight: '500',
   },
   actionBtnTextDisabled: {
-    color: Colors.neutral[300],
+    color: tk.textTertiary,
   },
   spacer: {
     flex: 1,
   },
-});
+  }),
+);

@@ -17,4 +17,3 @@ const Constants = {
 };
 
 export default Constants;
-module.exports = { default: Constants, ...Constants };

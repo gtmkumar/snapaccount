@@ -24,7 +24,7 @@ import * as StoreReview from 'expo-store-review';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { StatusTimeline } from '../../components/shared/StatusTimeline';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import apiClient from '../../lib/api';
 import type { GstStackParamList } from '../../navigation/GstStack';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
@@ -66,6 +66,8 @@ const TIMELINE_STEPS = [
 ];
 
 export function GstApprovalScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   // SEC-015: Prevent screenshots on GST approval screen (authorisation with tax figures)
   useSensitiveScreen();
 
@@ -195,7 +197,7 @@ export function GstApprovalScreen({ navigation, route }: Props) {
         {/* Disclaimer */}
         <View style={styles.disclaimer}>
           <View style={styles.disclaimerRow}>
-            <Ionicons name="information-circle-outline" size={16} color={Colors.info[600]} style={styles.disclaimerIcon} />
+            <Ionicons name="information-circle-outline" size={16} color={tokens.infoFg} style={styles.disclaimerIcon} />
             <Text style={styles.disclaimerText}>
               Once approved, our team will file within 24 hours of the deadline.
             </Text>
@@ -256,32 +258,33 @@ export function GstApprovalScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[200],
+    borderBottomColor: tk.border,
   },
   backBtn: { padding: 4 },
-  backText: { fontSize: 20, color: Colors.brand[500] },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: Colors.neutral[900] },
+  backText: { fontSize: 20, color: tk.brand500 },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: tk.textPrimary },
   headerSpacer: { width: 28 },
   scrollContent: { padding: 16, paddingBottom: 100, gap: 16 },
   summaryCard: { padding: 16 },
-  summaryType: { fontSize: 20, fontWeight: '700', color: Colors.neutral[900], marginBottom: 16 },
+  summaryType: { fontSize: 20, fontWeight: '700', color: tk.textPrimary, marginBottom: 16 },
   checklistCard: { padding: 16 },
-  checklistTitle: { fontSize: 15, fontWeight: '600', color: Colors.neutral[700], marginBottom: 14 },
+  checklistTitle: { fontSize: 15, fontWeight: '600', color: tk.textSecondary, marginBottom: 14 },
   checkItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
     gap: 12,
   },
   checkbox: {
@@ -289,39 +292,39 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: Colors.neutral[300],
+    borderColor: tk.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
   },
   checkboxChecked: {
-    backgroundColor: Colors.brand[500],
-    borderColor: Colors.brand[500],
+    backgroundColor: tk.brand500,
+    borderColor: tk.brand500,
   },
-  checkmark: { color: Colors.neutral[0], fontSize: 14, fontWeight: '700' },
-  checkItemLabel: { flex: 1, fontSize: 14, color: Colors.neutral[700], lineHeight: 20 },
+  checkmark: { color: tk.textOnBrand, fontSize: 14, fontWeight: '700' },
+  checkItemLabel: { flex: 1, fontSize: 14, color: tk.textSecondary, lineHeight: 20 },
   consentCard: {
     padding: 16,
-    backgroundColor: Colors.neutral[50],
+    backgroundColor: tk.canvas,
   },
-  consentTitle: { fontSize: 14, fontWeight: '600', color: Colors.neutral[700], marginBottom: 8 },
-  consentText: { fontSize: 13, color: Colors.neutral[600], lineHeight: 20 },
+  consentTitle: { fontSize: 14, fontWeight: '600', color: tk.textSecondary, marginBottom: 8 },
+  consentText: { fontSize: 13, color: tk.textSecondary, lineHeight: 20 },
   disclaimer: {
     padding: 12,
-    backgroundColor: Colors.info[50],
+    backgroundColor: tk.infoTint,
     borderRadius: 8,
   },
   disclaimerRow: { flexDirection: 'row', alignItems: 'flex-start' },
   disclaimerIcon: { marginRight: 6, marginTop: 1 },
-  disclaimerText: { fontSize: 13, color: Colors.info[600], lineHeight: 18, flex: 1 },
+  disclaimerText: { fontSize: 13, color: tk.infoFg, lineHeight: 18, flex: 1 },
   actionBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[200],
+    borderTopColor: tk.border,
     padding: 16,
     flexDirection: 'row',
     gap: 12,
@@ -341,24 +344,25 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   changesModalContent: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 16,
     padding: 20,
     width: '100%',
     gap: 12,
   },
-  changesModalTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
-  changesModalSubtitle: { fontSize: 14, color: Colors.neutral[600] },
+  changesModalTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
+  changesModalSubtitle: { fontSize: 14, color: tk.textSecondary },
   changesModalInput: {
     borderWidth: 1,
-    borderColor: Colors.neutral[300],
+    borderColor: tk.border,
     borderRadius: 8,
     padding: 12,
     fontSize: 14,
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     minHeight: 100,
     textAlignVertical: 'top',
   },
   changesModalActions: { flexDirection: 'row', gap: 12 },
   changesModalBtn: { flex: 1 },
-});
+  }),
+);

@@ -6,7 +6,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 export type UrgencyBucket = 'overdue' | 'today' | 'urgent' | 'soon' | 'safe';
 
@@ -23,16 +23,16 @@ function getUrgencyBucket(dueDate: string): { bucket: UrgencyBucket; daysLeft: n
   return { bucket: 'safe', daysLeft };
 }
 
-const BUCKET_STYLES: Record<
+const bucketStylesFor = (tk: ThemeTokens): Record<
   UrgencyBucket,
   { bg: string; text: string; icon: React.ComponentProps<typeof Ionicons>['name'] }
-> = {
-  overdue: { bg: Colors.error[50], text: Colors.error[600], icon: 'alert-circle' },
-  today: { bg: Colors.error[50], text: Colors.error[600], icon: 'time' },
-  urgent: { bg: Colors.warning[50], text: Colors.warning[700], icon: 'time-outline' },
-  soon: { bg: Colors.warning[50], text: Colors.warning[600], icon: 'time-outline' },
-  safe: { bg: Colors.neutral[100], text: Colors.neutral[600], icon: 'calendar-outline' },
-};
+> => ({
+  overdue: { bg: tk.errorTint, text: tk.errorFg, icon: 'alert-circle' },
+  today: { bg: tk.errorTint, text: tk.errorFg, icon: 'time' },
+  urgent: { bg: tk.warningTint, text: tk.warningFg, icon: 'time-outline' },
+  soon: { bg: tk.warningTint, text: tk.warningFg, icon: 'time-outline' },
+  safe: { bg: tk.sunken, text: tk.textSecondary, icon: 'calendar-outline' },
+});
 
 interface Props {
   dueDate: string;
@@ -40,8 +40,10 @@ interface Props {
 }
 
 export function DueDateChip({ dueDate, testID }: Props) {
+  const styles = useStyles();
+  const { tokens } = useTheme();
   const { bucket, daysLeft } = getUrgencyBucket(dueDate);
-  const style = BUCKET_STYLES[bucket];
+  const style = bucketStylesFor(tokens)[bucket];
 
   let label: string;
   if (bucket === 'overdue') label = `${Math.abs(daysLeft)}d overdue`;
@@ -60,7 +62,8 @@ export function DueDateChip({ dueDate, testID }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((_tk: ThemeTokens) =>
+  StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -73,4 +76,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-});
+  }),
+);

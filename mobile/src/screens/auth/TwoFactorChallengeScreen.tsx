@@ -24,7 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
 import { OTPInput } from '../../components/forms/OTPInput';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useAuthStore } from '../../store/authStore';
 import { fetchServerUserType } from '../../lib/onboarding';
 import { complete2faChallenge } from '../../api/auth';
@@ -40,6 +40,8 @@ interface Props {
 }
 
 export function TwoFactorChallengeScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { challengeToken, phone } = route.params;
   const { setAuthenticated, setOrganizations, updateProfile } = useAuthStore();
   const { t } = useTranslation();
@@ -125,12 +127,12 @@ export function TwoFactorChallengeScreen({ navigation, route }: Props) {
             accessibilityRole="button"
             accessibilityLabel={t('mobile.common.back')}
           >
-            <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+            <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
           </TouchableOpacity>
 
           <View style={styles.illustrationArea}>
             <View style={styles.iconCircle}>
-              <Ionicons name="shield-checkmark-outline" size={32} color={Colors.brand[500]} />
+              <Ionicons name="shield-checkmark-outline" size={32} color={tokens.brand500} />
             </View>
           </View>
 
@@ -152,7 +154,7 @@ export function TwoFactorChallengeScreen({ navigation, route }: Props) {
 
             {error ? (
               <View style={styles.errorRow}>
-                <Ionicons name="alert-circle" size={14} color={Colors.error[600]} />
+                <Ionicons name="alert-circle" size={14} color={tokens.errorFg} />
                 <Text style={styles.errorMessage} accessibilityLiveRegion="polite">
                   {error}
                 </Text>
@@ -176,15 +178,16 @@ export function TwoFactorChallengeScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.neutral[0] },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.raised },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, padding: 24, paddingBottom: 40 },
   backBtn: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
@@ -194,27 +197,28 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 22,
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
   heading: {
     fontSize: 28,
     fontWeight: '800',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     marginBottom: 10,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
   subtext: {
     fontSize: 15,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 22,
   },
   otpArea: { width: '100%', alignItems: 'center', marginBottom: 8 },
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
-  errorMessage: { fontSize: 14, color: Colors.error[600] },
+  errorMessage: { fontSize: 14, color: tk.errorFg },
   buttonArea: { width: '100%', marginTop: 32 },
-});
+  }),
+);

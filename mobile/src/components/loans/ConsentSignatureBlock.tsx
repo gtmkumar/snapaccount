@@ -17,7 +17,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
 import {
   createThemedStyles,
   useTheme,
@@ -90,7 +89,7 @@ export function ConsentSignatureBlock({
             !scrolledToBottom && styles.checkboxDisabled,
           ]}
         >
-          {checked && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+          {checked && <Ionicons name="checkmark" size={14} color={tokens.textOnBrand} />}
         </View>
         <Text
           style={[styles.flagText, !scrolledToBottom && styles.flagTextDisabled]}
@@ -121,13 +120,13 @@ export function ConsentSignatureBlock({
           accessibilityLabel={resolvedSignLabel}
         >
           {isSubmitting ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color={tokens.textOnBrand} />
           ) : (
             <>
               <Ionicons
                 name="shield-checkmark"
                 size={16}
-                color={canSign ? '#FFFFFF' : tokens.textDisabled}
+                color={canSign ? tokens.textOnBrand : tokens.textDisabled}
               />
               <Text style={[styles.signBtnText, !canSign && styles.signBtnTextDisabled]}>
                 {resolvedSignLabel}
@@ -180,9 +179,9 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
       marginTop: 1,
     },
     checkboxChecked: {
-      // Loan module accent (tokens.json module.loan — canonical per spec T-5).
-      backgroundColor: Colors.loan,
-      borderColor: Colors.loan,
+      // Loan module accent (tokens.json module.loan, themed: lifted in dark).
+      backgroundColor: tk.loanAccent,
+      borderColor: tk.loanAccent,
     },
     checkboxDisabled: {
       backgroundColor: tk.sunken,
@@ -220,7 +219,7 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
       flex: 1,
       minHeight: 48,
       borderRadius: 12,
-      backgroundColor: Colors.loan,
+      backgroundColor: tk.loanAccent,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -232,7 +231,7 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     signBtnText: {
       fontSize: 15,
       fontWeight: '700',
-      color: '#FFFFFF',
+      color: tk.textOnBrand,
     },
     signBtnTextDisabled: {
       color: tk.textDisabled,

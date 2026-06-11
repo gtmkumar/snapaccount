@@ -6,6 +6,9 @@ import { GstApprovalScreen } from '../screens/gst/GstApprovalScreen';
 import { GstNoticeInboxScreen } from '../screens/gst/GstNoticeInboxScreen';
 import { GstNoticeDetailScreen } from '../screens/gst/GstNoticeDetailScreen';
 import { GstNilReturnConfirmScreen } from '../screens/gst/GstNilReturnConfirmScreen';
+import { ImsInboxScreen } from '../screens/gst/ImsInboxScreen';
+import { ImsInvoiceDetailScreen } from '../screens/gst/ImsInvoiceDetailScreen';
+import { Gstr1aAmendmentsScreen } from '../screens/gst/Gstr1aAmendmentsScreen';
 import { RequestCallbackModalScreen } from '../screens/callbacks/RequestCallbackModalScreen';
 import { CallbackStatusScreen } from '../screens/callbacks/CallbackStatusScreen';
 import type { CtaCategory, LinkedEntity } from '../components/callbacks/RequestCallbackCta';
@@ -18,6 +21,17 @@ export type GstStackParamList = {
   GstNoticeInbox: { orgId: string };
   GstNoticeDetail: { noticeId: string };
   GstNilReturnConfirm: { returnId: string; period: string; gstin: string };
+  /** Phase 7 GAP-101 — GSTN IMS inbox (deep-link target for deadline reminder push). */
+  ImsInbox: { period?: string } | undefined;
+  ImsInvoiceDetail: { invoiceId: string };
+  Gstr1aAmendments: {
+    prefill?: {
+      originalImsInvoiceId: string;
+      originalInvoiceNumber: string;
+      originalSupplierGstin: string;
+      period: string;
+    };
+  } | undefined;
   RequestCallbackModal: {
     category?: CtaCategory;
     linkedEntity?: LinkedEntity;
@@ -37,6 +51,9 @@ export function GstStack() {
       <Stack.Screen name="GstNoticeInbox" component={GstNoticeInboxScreen} />
       <Stack.Screen name="GstNoticeDetail" component={GstNoticeDetailScreen} />
       <Stack.Screen name="GstNilReturnConfirm" component={GstNilReturnConfirmScreen} />
+      <Stack.Screen name="ImsInbox" component={ImsInboxScreen} />
+      <Stack.Screen name="ImsInvoiceDetail" component={ImsInvoiceDetailScreen} />
+      <Stack.Screen name="Gstr1aAmendments" component={Gstr1aAmendmentsScreen} />
       <Stack.Screen
         name="RequestCallbackModal"
         component={RequestCallbackModalScreen}

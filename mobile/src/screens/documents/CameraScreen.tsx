@@ -21,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import NetInfo from '@react-native-community/netinfo';
 import { Button } from '../../components/ui/Button';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import type { DocumentStackParamList } from '../../navigation/DocumentStack';
 import { useDocumentQueue } from '../../hooks/useDocumentQueue';
 
@@ -29,6 +29,8 @@ type NavProp = NativeStackNavigationProp<DocumentStackParamList, 'Camera'>;
 interface Props { navigation: NavProp }
 
 export function CameraScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
@@ -159,7 +161,7 @@ export function CameraScreen({ navigation }: Props) {
         {/* Offline banner */}
         {isOffline && (
           <View style={styles.offlineBanner}>
-            <Ionicons name="cloud-offline-outline" size={16} color={Colors.warning[700]} />
+            <Ionicons name="cloud-offline-outline" size={16} color={tokens.warningFg} />
             <View style={styles.offlineBannerText}>
               <Text style={styles.offlineBannerTitle}>
                 {t('mobile.camera.offlineBannerTitle')}
@@ -219,7 +221,7 @@ export function CameraScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('DocumentList' as never)}
               accessibilityLabel={t('mobile.camera.pendingChip', { count: pendingCount })}
             >
-              <Ionicons name="cloud-upload-outline" size={14} color={Colors.brand[600]} />
+              <Ionicons name="cloud-upload-outline" size={14} color={tokens.brandCta} />
               <Text style={styles.pendingChipText}>
                 {t('mobile.camera.pendingChip', { count: pendingCount })}
               </Text>
@@ -288,35 +290,36 @@ const CORNER_SIZE = 24;
 const CORNER_THICKNESS = 3;
 const OVERLAY_PADDING = 40;
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1 },
   permContainer: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
-    padding: 24, backgroundColor: Colors.bg.base, gap: 16,
+    padding: 24, backgroundColor: tk.canvas, gap: 16,
   },
-  permText: { fontSize: 16, textAlign: 'center', color: Colors.neutral[700], marginBottom: 16 },
+  permText: { fontSize: 16, textAlign: 'center', color: tk.textSecondary, marginBottom: 16 },
 
   // Toast
   toast: {
     position: 'absolute', top: 60, left: 16, right: 16, zIndex: 100,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.neutral[900] + 'EE',
+    backgroundColor: tk.textPrimary + 'EE',
     borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12,
   },
-  toastText: { fontSize: 13, color: '#fff', flex: 1 },
-  toastCta: { fontSize: 13, color: Colors.brand[300], fontWeight: '700', marginLeft: 12 },
+  toastText: { fontSize: 13, color: tk.textOnBrand, flex: 1 },
+  toastCta: { fontSize: 13, color: tk.brand400, fontWeight: '700', marginLeft: 12 },
 
   // Offline banner
   offlineBanner: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 99,
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: Colors.warning[50] + 'F0',
+    backgroundColor: tk.warningTint + 'F0',
     paddingHorizontal: 16, paddingVertical: 10,
   },
   offlineBannerText: { flex: 1 },
-  offlineBannerTitle: { fontSize: 13, fontWeight: '700', color: Colors.warning[800] },
-  offlineBannerBody: { fontSize: 12, color: Colors.warning[700] },
+  offlineBannerTitle: { fontSize: 13, fontWeight: '700', color: tk.warningFg },
+  offlineBannerBody: { fontSize: 12, color: tk.warningFg },
 
   // Top bar
   topBar: {
@@ -328,7 +331,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center', justifyContent: 'center',
   },
-  topBarIcon: { color: '#fff', fontSize: 16 },
+  topBarIcon: { color: '#FFFFFF', fontSize: 16 }, // on black scrim, both modes
   topBarRight: { flexDirection: 'row', gap: 12 },
 
   // Edge overlay
@@ -340,25 +343,25 @@ const styles = StyleSheet.create({
   },
   corner: {
     position: 'absolute', width: CORNER_SIZE, height: CORNER_SIZE,
-    borderColor: Colors.brand[400],
+    borderColor: tk.brand400,
   },
   cornerTL: { top: 0, left: 0, borderTopWidth: CORNER_THICKNESS, borderLeftWidth: CORNER_THICKNESS, borderTopLeftRadius: 4 },
   cornerTR: { top: 0, right: 0, borderTopWidth: CORNER_THICKNESS, borderRightWidth: CORNER_THICKNESS, borderTopRightRadius: 4 },
   cornerBL: { bottom: 40, left: 0, borderBottomWidth: CORNER_THICKNESS, borderLeftWidth: CORNER_THICKNESS, borderBottomLeftRadius: 4 },
   cornerBR: { bottom: 40, right: 0, borderBottomWidth: CORNER_THICKNESS, borderRightWidth: CORNER_THICKNESS, borderBottomRightRadius: 4 },
   hintBanner: { alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  hintText: { fontSize: 12, color: '#fff' },
+  hintText: { fontSize: 12, color: '#FFFFFF' }, // on black scrim, both modes
 
   // Bottom controls
   bottomControls: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: 40, alignItems: 'center', gap: 12 },
   pendingChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.brand[50], borderRadius: 20,
+    backgroundColor: tk.brandTint, borderRadius: 20,
     paddingHorizontal: 14, paddingVertical: 6,
-    borderWidth: 1, borderColor: Colors.brand[200],
+    borderWidth: 1, borderColor: tk.brandTintBorder,
     minHeight: 44,
   },
-  pendingChipText: { fontSize: 12, color: Colors.brand[600], fontWeight: '600' },
+  pendingChipText: { fontSize: 12, color: tk.brandCta, fontWeight: '600' },
   bottomRow: { flexDirection: 'row', alignItems: 'center', gap: 40 },
   sideBtn: {
     width: 44, height: 44, borderRadius: 22,
@@ -380,6 +383,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'flex-end',
   },
   previewContent: { width: '100%', padding: 24, gap: 16 },
-  previewTitle: { fontSize: 20, fontWeight: '700', color: '#fff', textAlign: 'center' },
+  previewTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', textAlign: 'center' }, // on rgba(0,0,0,0.8)
   previewActions: { flexDirection: 'row', gap: 12 },
-});
+  }),
+);

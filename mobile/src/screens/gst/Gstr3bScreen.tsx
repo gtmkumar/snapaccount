@@ -21,7 +21,7 @@ import { StatusBadge } from '../../components/ui/Badge';
 import { Card } from '../../components/ui/Card';
 import { AmountDisplay } from '../../components/ui/AmountDisplay';
 import { Button } from '../../components/ui/Button';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { formatINR } from '../../lib/utils';
 import apiClient from '../../lib/api';
 import type { GstStackParamList } from '../../navigation/GstStack';
@@ -53,6 +53,7 @@ interface Gstr3bData {
 }
 
 function TaxTable({ rows }: { rows: TaxRow[] }) {
+  const tableStyles = useTableStyles();
   const cols = ['Rate', 'Taxable', 'IGST', 'CGST', 'SGST'];
 
   return (
@@ -77,23 +78,27 @@ function TaxTable({ rows }: { rows: TaxRow[] }) {
   );
 }
 
-const tableStyles = StyleSheet.create({
-  table: { borderWidth: 1, borderColor: Colors.neutral[200], borderRadius: 8, overflow: 'hidden' },
-  row: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: Colors.neutral[100] },
-  headerRow: { backgroundColor: Colors.neutral[50] },
+const useTableStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  table: { borderWidth: 1, borderColor: tk.border, borderRadius: 8, overflow: 'hidden' },
+  row: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: tk.border },
+  headerRow: { backgroundColor: tk.canvas },
   headerCell: {
     flex: 1,
     fontSize: 10,
     fontWeight: '700',
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     padding: 8,
     textAlign: 'right',
     textTransform: 'uppercase',
   },
-  cell: { flex: 1, fontSize: 11, color: Colors.neutral[800], padding: 8, textAlign: 'right' },
-});
+  cell: { flex: 1, fontSize: 11, color: tk.textPrimary, padding: 8, textAlign: 'right' },
+  }),
+);
 
 export function Gstr3bScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   // SEC-015: Prevent screenshots on GSTR-3B filing screen (shows tax figures and GSTIN)
   useSensitiveScreen();
 
@@ -144,7 +149,7 @@ export function Gstr3bScreen({ navigation, route }: Props) {
         </Pressable>
         <Text style={styles.headerTitle}>GSTR-3B — {period}</Text>
         <Pressable style={styles.helpBtn} accessibilityLabel="Help">
-          <Ionicons name="help-circle-outline" size={22} color={Colors.brand[500]} />
+          <Ionicons name="help-circle-outline" size={22} color={tokens.brand500} />
         </Pressable>
       </View>
 
@@ -160,7 +165,7 @@ export function Gstr3bScreen({ navigation, route }: Props) {
         {/* Alert */}
         <View style={styles.alertBanner}>
           <View style={styles.alertRow}>
-            <Ionicons name="information-circle-outline" size={16} color={Colors.info[600]} style={styles.alertIcon} />
+            <Ionicons name="information-circle-outline" size={16} color={tokens.infoFg} style={styles.alertIcon} />
             <Text style={styles.alertText}>
               Auto-calculated from your documents. Please verify before submission.
             </Text>
@@ -189,7 +194,7 @@ export function Gstr3bScreen({ navigation, route }: Props) {
           {gstr3b.itcMismatch > 0 && (
             <View style={styles.mismatchWarning}>
               <View style={styles.mismatchRow}>
-                <Ionicons name="warning-outline" size={14} color={Colors.warning[600]} style={styles.mismatchIcon} />
+                <Ionicons name="warning-outline" size={14} color={tokens.warningFg} style={styles.mismatchIcon} />
                 <Text style={styles.mismatchText}>
                   {formatINR(gstr3b.itcMismatch)} difference detected
                 </Text>
@@ -230,22 +235,23 @@ export function Gstr3bScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  loadingText: { fontSize: 16, color: Colors.neutral[500] },
+  loadingText: { fontSize: 16, color: tk.textSecondary },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[200],
+    borderBottomColor: tk.border,
   },
   backBtn: { padding: 4 },
-  backText: { fontSize: 20, color: Colors.brand[500] },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: Colors.neutral[900] },
+  backText: { fontSize: 20, color: tk.brand500 },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: tk.textPrimary },
   helpBtn: { padding: 8 },
   scrollContent: { padding: 16, paddingBottom: 100, gap: 16 },
   statusRow: {
@@ -253,49 +259,49 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  periodInfo: { fontSize: 12, color: Colors.neutral[500], flex: 1 },
+  periodInfo: { fontSize: 12, color: tk.textSecondary, flex: 1 },
   alertBanner: {
-    backgroundColor: Colors.info[50],
+    backgroundColor: tk.infoTint,
     borderLeftWidth: 4,
-    borderLeftColor: Colors.info[600],
+    borderLeftColor: tk.infoFg,
     padding: 12,
     borderRadius: 8,
   },
   alertRow: { flexDirection: 'row', alignItems: 'flex-start' },
   alertIcon: { marginRight: 6, marginTop: 1 },
-  alertText: { fontSize: 13, color: Colors.info[600], lineHeight: 18, flex: 1 },
+  alertText: { fontSize: 13, color: tk.infoFg, lineHeight: 18, flex: 1 },
   section: { padding: 16 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.neutral[800], marginBottom: 12 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: tk.textPrimary, marginBottom: 12 },
   itcRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
-  itcLabel: { fontSize: 13, color: Colors.neutral[600], flex: 1 },
+  itcLabel: { fontSize: 13, color: tk.textSecondary, flex: 1 },
   mismatchWarning: {
-    backgroundColor: Colors.warning[50],
+    backgroundColor: tk.warningTint,
     padding: 10,
     borderRadius: 6,
     marginTop: 10,
   },
   mismatchRow: { flexDirection: 'row', alignItems: 'center' },
   mismatchIcon: { marginRight: 4 },
-  mismatchText: { fontSize: 13, color: Colors.warning[600], fontWeight: '500', flex: 1 },
-  netPayableCard: { backgroundColor: Colors.brand[50] },
+  mismatchText: { fontSize: 13, color: tk.warningFg, fontWeight: '500', flex: 1 },
+  netPayableCard: { backgroundColor: tk.brandTint },
   netPayableRow: { alignItems: 'center', paddingVertical: 8 },
-  netPayableFormula: { fontSize: 12, color: Colors.neutral[500], marginBottom: 8 },
-  netPayableNote: { fontSize: 12, color: Colors.neutral[500], textAlign: 'center', marginTop: 8 },
+  netPayableFormula: { fontSize: 12, color: tk.textSecondary, marginBottom: 8 },
+  netPayableNote: { fontSize: 12, color: tk.textSecondary, textAlign: 'center', marginTop: 8 },
   actionBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[200],
+    borderTopColor: tk.border,
     padding: 16,
     flexDirection: 'row',
     gap: 12,
@@ -303,4 +309,5 @@ const styles = StyleSheet.create({
   },
   draftBtn: { flex: 1 },
   approveBtn: { flex: 1.5 },
-});
+  }),
+);

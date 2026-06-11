@@ -920,6 +920,40 @@ Notice + invoice + IRN + EWB events reuse existing `success`, `info`, `warning`,
 
 ---
 
+## Phase 7 — GSTN IMS (Invoice Management System) Additions
+
+> Full spec: `docs/design/ims-inbox-spec.md`. Statuses are the EXACT backend `ImsInvoice.Status` / GSTR-1A vocabulary. All pairs icon+text, validated WCAG AA per `accessibility-standard.md` §4.
+
+### StatusBadge — IMS invoice statuses
+| Status (API verbatim) | Variant | Icon |
+|---|---|---|
+| PENDING | warning (Amber) | clock |
+| ACCEPTED | success (Emerald; **text `success[700] #047857`**) | check-circle |
+| REJECTED | error | x-circle |
+| PENDING_KEPT | info | pause-circle |
+
+When `deemedAccepted = true`, append a muted "Deemed" `Tag` beside the ACCEPTED badge.
+
+### StatusBadge — GSTR-1A amendment statuses
+| Status | Variant | Icon |
+|---|---|---|
+| DRAFT | neutral | file-pen |
+| SUBMITTED | info | send |
+| FILED | success | check-circle |
+
+### DueDateChip — IMS deemed-acceptance reuse
+Reuse the existing `DueDateChip` (countdown) for "days until deemed acceptance" with IMS-specific thresholds: ≤3 days = error, 4–7 = warning, >7 = neutral, past/swept = info "Deemed accepted". Suppress countdown once an explicit terminal action (ACCEPTED/REJECTED) exists. Thresholds + a11y labels in `ims-inbox-spec.md` §4.
+
+### New composite components (detailed specs in `docs/design/ims-inbox-spec.md`)
+- `ImsInvoiceCard` (mobile) — §3.1. Card composition of supplier/GSTIN/invoice/amounts/status/DueDateChip + 44pt action zone.
+- `RejectReasonModal` (web Dialog / mobile bottom sheet) — §6.2. Required multiline reason (client rule; reason is optional server-side) + quick-pick chips; focus-trapped; shared by single + bulk reject.
+- `Gstr1aCreateForm` — §9.3. Amendment type Select + read-only original-invoice fields + editable tax rows serialized to `amendmentPayloadJson`.
+
+### Toast — undo affordance
+Accept / Keep-pending / Reject success toasts carry a 5s **Undo** (re-action to prior status; PENDING→undo lands on PENDING_KEPT). No bulk undo. Reuses existing `success` Toast variant.
+
+---
+
 ## Phase 6D — ITR Engine Additions
 > Date: 2026-04-25 — appended; do NOT replace prior entries.
 

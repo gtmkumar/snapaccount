@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { PhoneInput } from '../../components/forms/PhoneInput';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import apiClient, { getApiError } from '../../lib/api';
 import { isValidPhone } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
@@ -29,6 +29,8 @@ import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 type NavProp = NativeStackNavigationProp<AuthStackParamList, 'PasswordAuth'>;
 
 export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { setAuthenticated, setSession, setOrganizations, updateProfile } = useAuthStore();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -109,7 +111,7 @@ export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
       }
       try {
         const orgsRes = await apiClient.get<
-          Array<{ id: string; businessName?: string; name?: string; gstin?: string }>
+          { id: string; businessName?: string; name?: string; gstin?: string }[]
         >('/auth/organizations');
         const orgs = (orgsRes.data ?? []).map((o) => ({
           id: o.id,
@@ -141,7 +143,7 @@ export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
-            <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+            <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
           </TouchableOpacity>
 
           <Text style={styles.heading}>{isRegister ? 'Create account' : 'Welcome back'}</Text>
@@ -211,7 +213,7 @@ export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
             fullWidth
             size="lg"
             onPress={() => navigation.navigate('PhoneEntry')}
-            leftIcon={<Ionicons name="chatbubble-ellipses-outline" size={20} color={Colors.neutral[700]} />}
+            leftIcon={<Ionicons name="chatbubble-ellipses-outline" size={20} color={tokens.textSecondary} />}
           />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -219,23 +221,25 @@ export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.neutral[0] },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.raised },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 8 },
   backBtn: {
     width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: Colors.neutral[100], marginBottom: 16,
+    backgroundColor: tk.sunken, marginBottom: 16,
   },
-  heading: { fontSize: 30, fontWeight: '800', color: Colors.neutral[900], letterSpacing: -0.5 },
-  subtext: { fontSize: 15, color: Colors.neutral[500], lineHeight: 22, marginTop: 8, marginBottom: 28 },
+  heading: { fontSize: 30, fontWeight: '800', color: tk.textPrimary, letterSpacing: -0.5 },
+  subtext: { fontSize: 15, color: tk.textSecondary, lineHeight: 22, marginTop: 8, marginBottom: 28 },
   form: { gap: 16 },
-  label: { fontSize: 14, fontWeight: '600', color: Colors.neutral[700], marginBottom: -8 },
+  label: { fontSize: 14, fontWeight: '600', color: tk.textSecondary, marginBottom: -8 },
   input: { marginTop: 0 },
   toggle: { marginTop: 20, alignItems: 'center' },
-  toggleText: { fontSize: 14, color: Colors.neutral[500] },
-  toggleLink: { color: Colors.brand[500], fontWeight: '700' },
+  toggleText: { fontSize: 14, color: tk.textSecondary },
+  toggleLink: { color: tk.brand500, fontWeight: '700' },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 24 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: Colors.neutral[200] },
-  dividerText: { fontSize: 13, color: Colors.neutral[400] },
-});
+  dividerLine: { flex: 1, height: 1, backgroundColor: tk.border },
+  dividerText: { fontSize: 13, color: tk.textTertiary },
+  }),
+);

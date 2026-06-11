@@ -20,7 +20,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import i18n from '../../i18n';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 interface ScreenErrorBoundaryProps {
   children: React.ReactNode;
@@ -54,40 +54,48 @@ export class ScreenErrorBoundary extends React.Component<
 
   render(): React.ReactNode {
     if (!this.state.hasError) return this.props.children;
-
-    const { onBack } = this.props;
-    return (
-      <SafeAreaView style={styles.container} testID="screen-error-boundary">
-        <View style={styles.content}>
-          <View style={styles.iconWrap}>
-            <Ionicons name="alert-circle-outline" size={40} color={Colors.error[500]} />
-          </View>
-          <Text style={styles.title}>{i18n.t('mobile.common.screenError.title')}</Text>
-          <Text style={styles.body}>{i18n.t('mobile.common.screenError.body')}</Text>
-          <Pressable
-            style={styles.retryBtn}
-            onPress={this.handleRetry}
-            accessibilityRole="button"
-            accessibilityLabel={i18n.t('mobile.common.retry')}
-            testID="screen-error-retry"
-          >
-            <Text style={styles.retryBtnText}>{i18n.t('mobile.common.retry')}</Text>
-          </Pressable>
-          {onBack && (
-            <Pressable
-              style={styles.backBtn}
-              onPress={onBack}
-              accessibilityRole="button"
-              accessibilityLabel={i18n.t('mobile.common.back')}
-              testID="screen-error-back"
-            >
-              <Text style={styles.backBtnText}>{i18n.t('mobile.common.back')}</Text>
-            </Pressable>
-          )}
-        </View>
-      </SafeAreaView>
-    );
+    return <ErrorFallback onRetry={this.handleRetry} onBack={this.props.onBack} />;
   }
+}
+
+/**
+ * Themed fallback UI. Hooks are not allowed inside the class boundary, so the
+ * themed styles live in this function component instead.
+ */
+function ErrorFallback({ onRetry, onBack }: { onRetry: () => void; onBack?: () => void }) {
+  const styles = useStyles();
+  const { tokens } = useTheme();
+  return (
+    <SafeAreaView style={styles.container} testID="screen-error-boundary">
+      <View style={styles.content}>
+        <View style={styles.iconWrap}>
+          <Ionicons name="alert-circle-outline" size={40} color={tokens.errorFg} />
+        </View>
+        <Text style={styles.title}>{i18n.t('mobile.common.screenError.title')}</Text>
+        <Text style={styles.body}>{i18n.t('mobile.common.screenError.body')}</Text>
+        <Pressable
+          style={styles.retryBtn}
+          onPress={onRetry}
+          accessibilityRole="button"
+          accessibilityLabel={i18n.t('mobile.common.retry')}
+          testID="screen-error-retry"
+        >
+          <Text style={styles.retryBtnText}>{i18n.t('mobile.common.retry')}</Text>
+        </Pressable>
+        {onBack && (
+          <Pressable
+            style={styles.backBtn}
+            onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel={i18n.t('mobile.common.back')}
+            testID="screen-error-back"
+          >
+            <Text style={styles.backBtnText}>{i18n.t('mobile.common.back')}</Text>
+          </Pressable>
+        )}
+      </View>
+    </SafeAreaView>
+  );
 }
 
 type NavigationLike = { goBack?: () => void; canGoBack?: () => boolean };
@@ -119,8 +127,9 @@ export function withScreenErrorBoundary<P extends object>(
   return WrappedScreen;
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   content: {
     flex: 1,
     alignItems: 'center',
@@ -132,7 +141,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: Colors.error[50],
+    backgroundColor: tk.errorTint,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
@@ -140,12 +149,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     textAlign: 'center',
   },
   body: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     textAlign: 'center',
     lineHeight: 21,
   },
@@ -155,11 +164,11 @@ const styles = StyleSheet.create({
     minWidth: 160,
     paddingHorizontal: 24,
     borderRadius: 12,
-    backgroundColor: Colors.brand[500],
+    backgroundColor: tk.brandCta,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  retryBtnText: { fontSize: 15, fontWeight: '700', color: Colors.neutral[0] },
+  retryBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
   backBtn: {
     minHeight: 44,
     minWidth: 160,
@@ -168,5 +177,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backBtnText: { fontSize: 14, fontWeight: '600', color: Colors.brand[600] },
-});
+  backBtnText: { fontSize: 14, fontWeight: '600', color: tk.brandCta },
+  }),
+);

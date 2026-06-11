@@ -2,7 +2,7 @@
 
 > **Classification:** INTERNAL — Restricted
 > **Reviewer:** security-reviewer agent
-> **Last Updated:** 2026-05-29
+> **Last Updated:** 2026-06-11
 
 ---
 
@@ -32,6 +32,11 @@
 | Increment 1.4 Phase A — Reference-Data CRUD (2026-05-29) | 0 | 0 | 0 | 1 | 1 | Complete — **GO** |
 | **Total (Phases 4–Increment 1.4A)** | **4** | **21** | **30** | **16** | **17** | — |
 | **Total open (pre-prod blockers)** | **0** | **2** (NEW-002, M1-R-001) | **7** (unchanged) | **9** (+ I1.4A-001) | **8** (+ I1.4A-INFO-001) | Increment 1.4A: **GO** |
+| SEC-AI-02: AiService P7a (2026-06-11) | 0 | 4 | 5 | 4 | 2 | Complete — **NO-GO** (4 HIGH require fixes before staging) |
+| SEC-AI-02 Re-verification (2026-06-11) | 0 | 1 | 2 | 0 | 0 | Complete — **NO-GO** (RV-03 HIGH race not closed; RV-01/RV-02 new MEDIUM) — 3 HIGH fixed, 3 MEDIUM fixed, 2 LOW fixed |
+| SEC-AI-02 Remediation Pass 2 + Final Gate (2026-06-11) | 0 | 0 | 0 | 1 | 0 | Complete — **GO** (all RV-03/RV-01/RV-02/M-01/L-03/L-04/I-02 fixed; FG-01 LOW new; 2 CONDITIONS tracked) |
+| **Total (Phases 4–SEC-AI-02 final gate)** | **4** | **26** | **37** | **21** | **19** | — |
+| **Total open (pre-prod blockers)** | **0** | **2** (NEW-002, M1-R-001) | **9** (prior deferred + M1-R-002 + I1.1-001 + I1.3-002) | **10** (prior deferred + M1-R-003 + I1.1-002 + I1.3-003 + I1.4A-001 + FG-01 cancel-leak) | **9** (prior INFO) | SEC-AI-02 final gate: **GO** |
 
 ---
 

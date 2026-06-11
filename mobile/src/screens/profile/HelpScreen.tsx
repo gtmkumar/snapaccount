@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { RequestCallbackCta } from '../../components/callbacks/RequestCallbackCta';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
@@ -21,6 +21,8 @@ type NavProp = NativeStackNavigationProp<MoreStackParamList, 'Help'>;
 interface Props { navigation: NavProp }
 
 export function HelpScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
 
   return (
@@ -32,7 +34,7 @@ export function HelpScreen({ navigation }: Props) {
           accessibilityLabel={t('mobile.common.back')}
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.help.title')}</Text>
         <View style={{ width: 40 }} />
@@ -50,13 +52,13 @@ export function HelpScreen({ navigation }: Props) {
           testID="help-chat-cta"
         >
           <View style={styles.chatIconWrap}>
-            <Ionicons name="chatbubbles-outline" size={22} color={Colors.brand[600]} />
+            <Ionicons name="chatbubbles-outline" size={22} color={tokens.brandCta} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.chatTitle}>{t('mobile.help.chatCta')}</Text>
             <Text style={styles.chatBody}>{t('mobile.help.chatBody')}</Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={Colors.neutral[400]} />
+          <Ionicons name="chevron-forward" size={18} color={tokens.textTertiary} />
         </Pressable>
 
         {/* Request a callback */}
@@ -74,28 +76,30 @@ export function HelpScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
 
   scrollContent: { padding: 16, gap: 14, paddingBottom: 32 },
-  intro: { fontSize: 14, color: Colors.neutral[600], lineHeight: 21 },
+  intro: { fontSize: 14, color: tk.textSecondary, lineHeight: 21 },
 
   chatCard: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: Colors.surface.default, borderRadius: 16, padding: 16, minHeight: 64,
-    borderWidth: 1, borderColor: Colors.neutral[100],
-    shadowColor: '#0F172A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
+    backgroundColor: tk.raised, borderRadius: 16, padding: 16, minHeight: 64,
+    borderWidth: 1, borderColor: tk.border,
+    shadowColor: tk.shadowColor, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
   },
-  chatIconWrap: { width: 44, height: 44, borderRadius: 12, backgroundColor: Colors.brand[50], alignItems: 'center', justifyContent: 'center' },
-  chatTitle: { fontSize: 15, fontWeight: '700', color: Colors.neutral[900] },
-  chatBody: { fontSize: 12, color: Colors.neutral[500], marginTop: 2, lineHeight: 18 },
+  chatIconWrap: { width: 44, height: 44, borderRadius: 12, backgroundColor: tk.brandTint, alignItems: 'center', justifyContent: 'center' },
+  chatTitle: { fontSize: 15, fontWeight: '700', color: tk.textPrimary },
+  chatBody: { fontSize: 12, color: tk.textSecondary, marginTop: 2, lineHeight: 18 },
 
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.neutral[900], marginTop: 6 },
-});
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: tk.textPrimary, marginTop: 6 },
+  }),
+);

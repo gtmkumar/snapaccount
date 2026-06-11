@@ -7,7 +7,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 export type ResultVariant = 'success' | 'error' | 'info';
 
@@ -23,26 +23,26 @@ interface ResultScreenProps {
   testID?: string;
 }
 
-const VARIANT_CONFIG: Record<
+const variantConfigFor = (tk: ThemeTokens): Record<
   ResultVariant,
   { iconName: React.ComponentProps<typeof Ionicons>['name']; color: string; bg: string }
-> = {
+> => ({
   success: {
     iconName: 'checkmark-circle',
-    color: Colors.success[600],
-    bg: Colors.success[50],
+    color: tk.successFg,
+    bg: tk.successTint,
   },
   error: {
     iconName: 'close-circle',
-    color: Colors.error[600],
-    bg: Colors.error[50],
+    color: tk.errorFg,
+    bg: tk.errorTint,
   },
   info: {
     iconName: 'information-circle',
-    color: Colors.brand[600],
-    bg: Colors.brand[50],
+    color: tk.brandCta,
+    bg: tk.brandTint,
   },
-};
+});
 
 export function ResultScreen({
   variant = 'success',
@@ -55,7 +55,9 @@ export function ResultScreen({
   onSecondary,
   testID,
 }: ResultScreenProps) {
-  const config = VARIANT_CONFIG[variant];
+  const styles = useStyles();
+  const { tokens } = useTheme();
+  const config = variantConfigFor(tokens)[variant];
 
   return (
     <SafeAreaView style={styles.container} testID={testID}>
@@ -96,10 +98,11 @@ export function ResultScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg.base,
+    backgroundColor: tk.canvas,
     justifyContent: 'space-between',
     padding: 24,
   },
@@ -120,19 +123,19 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '800',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     textAlign: 'center',
     letterSpacing: -0.4,
   },
   subtitle: {
     fontSize: 16,
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
   },
   detail: {
     fontSize: 13,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -147,19 +150,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   btnPrimary: {
-    backgroundColor: Colors.brand[600],
+    backgroundColor: tk.brandCta,
   },
   btnPrimaryText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
   },
   btnSecondary: {
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
   },
   btnSecondaryText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
   },
-});
+  }),
+);

@@ -1,5 +1,8 @@
 using GstService.Application;
 using GstService.Infrastructure;
+using GstService.Infrastructure.Jobs;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.RateLimiting;
 using Scalar.AspNetCore;
 using Serilog;
@@ -30,6 +33,15 @@ try
     builder.Services.AddGstApplicationServices();
 
     builder.Services.AddOpenApi();
+
+    // Hangfire — persistent job storage in PostgreSQL (same DB, separate hangfire schema)
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    builder.Services.AddHangfire(config => config
+        .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connStr)));
+    builder.Services.AddHangfireServer();
+
+    // IMS deemed-acceptance job (transient — resolved per job invocation via Hangfire DI)
+    builder.Services.AddTransient<ImsDeemedAcceptanceJob>();
 
     // SEC-002: Restrict CORS to known origins
     builder.Services.AddCors(options =>
@@ -91,6 +103,18 @@ try
 
     // Auto-discover and register all EndpointGroupBase subclasses in this assembly
     app.MapEndpoints(Assembly.GetExecutingAssembly());
+
+    // Hangfire recurring jobs
+    // IMS Deemed Acceptance: 14th of every month at 02:00 IST (20:30 UTC on 13th).
+    // GSTN GSTR-2B is generated on the 14th; any PENDING invoice is deemed ACCEPTED.
+    RecurringJob.AddOrUpdate<ImsDeemedAcceptanceJob>(
+        recurringJobId: "ims-deemed-acceptance-monthly",
+        methodCall: job => job.RunAsync(),
+        cronExpression: "30 20 13 * *", // 13th at 20:30 UTC = 14th at 02:00 IST
+        options: new RecurringJobOptions
+        {
+            TimeZone = TimeZoneInfo.Utc
+        });
 
     // GAP-005: Fail-fast in non-Development when SESSION_JWT_SECRET is absent.
     SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);

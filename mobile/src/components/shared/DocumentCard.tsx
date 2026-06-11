@@ -12,7 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { formatDateIN, formatINR } from '../../lib/utils';
 import { StatusBadge, DocumentStatus } from '../ui/Badge';
 
@@ -43,7 +43,9 @@ export function DocumentCard({
   onPress,
   showOcrConfidence = true,
 }: DocumentCardProps) {
-  const ocrColor = getOcrColor(document.ocrConfidence);
+  const styles = useStyles();
+  const { tokens } = useTheme();
+  const ocrColor = getOcrColor(tokens, document.ocrConfidence);
 
   if (view === 'grid') {
     return (
@@ -126,23 +128,24 @@ export function DocumentCard({
   );
 }
 
-function getOcrColor(confidence?: number): string {
-  if (confidence === undefined) return Colors.neutral[300];
-  if (confidence >= 80) return Colors.success[600];
-  if (confidence >= 50) return Colors.warning[600];
-  return Colors.error[600];
+function getOcrColor(tk: ThemeTokens, confidence?: number): string {
+  if (confidence === undefined) return tk.textTertiary;
+  if (confidence >= 80) return tk.successFg;
+  if (confidence >= 50) return tk.warningFg;
+  return tk.errorFg;
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   // List view
   listCard: {
     flexDirection: 'row',
     padding: 12,
-    backgroundColor: Colors.neutral[0],
+    backgroundColor: tk.raised,
     borderRadius: 8,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
   },
   thumbnail: {
     width: 56,
@@ -150,7 +153,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     overflow: 'hidden',
     marginRight: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
   },
   thumbnailImage: {
     width: '100%',
@@ -160,7 +163,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
   },
   placeholderText: {
     fontSize: 20,
@@ -175,7 +178,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   categoryBadge: {
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -183,7 +186,7 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 10,
     fontWeight: '600',
-    color: Colors.brand[600],
+    color: tk.brandCta,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -195,26 +198,26 @@ const styles = StyleSheet.create({
   filename: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
   },
   meta: {
     fontSize: 12,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
   },
 
   // Grid view
   gridCard: {
     flex: 1,
     margin: 4,
-    backgroundColor: Colors.neutral[0],
+    backgroundColor: tk.raised,
     borderRadius: 8,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
   },
   gridThumbnail: {
     height: 80,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
   },
   gridImage: {
     width: '100%',
@@ -226,12 +229,13 @@ const styles = StyleSheet.create({
   gridCategory: {
     fontSize: 11,
     fontWeight: '600',
-    color: Colors.brand[600],
+    color: tk.brandCta,
     textTransform: 'uppercase',
   },
   gridDate: {
     fontSize: 11,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     marginTop: 2,
   },
-});
+  }),
+);

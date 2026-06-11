@@ -20,7 +20,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { AmountDisplay } from '../../components/ui/AmountDisplay';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { Colors } from '../../constants/colors';
+import { createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { getCurrentFinancialYear } from '../../lib/utils';
 import apiClient from '../../lib/api';
 import type { HomeStackParamList } from '../../navigation/HomeStack';
@@ -50,6 +50,7 @@ interface ReportRow {
 }
 
 export function ReportDetailScreen({ navigation, route }: Props) {
+  const styles = useStyles();
   // SEC-015: Prevent screenshots on financial report detail screen (shows balance sheet, P&L, tax liability)
   useSensitiveScreen();
 
@@ -163,28 +164,29 @@ export function ReportDetailScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[200],
+    borderBottomColor: tk.border,
   },
   backBtn: { padding: 4, marginRight: 8 },
-  backText: { fontSize: 20, color: Colors.brand[500] },
-  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: Colors.neutral[900] },
+  backText: { fontSize: 20, color: tk.brand500 },
+  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: tk.textPrimary },
   headerActions: { flexDirection: 'row', gap: 8 },
   headerActionBtn: { padding: 8 },
   headerActionText: { fontSize: 18 },
   scrollContent: { padding: 16, gap: 16 },
   reportHeaderCard: { padding: 16 },
-  reportTitle: { fontSize: 20, fontWeight: '700', color: Colors.neutral[900] },
-  reportPeriod: { fontSize: 14, color: Colors.neutral[600], marginTop: 4 },
-  reportGenerated: { fontSize: 12, color: Colors.neutral[400], marginTop: 2 },
+  reportTitle: { fontSize: 20, fontWeight: '700', color: tk.textPrimary },
+  reportPeriod: { fontSize: 14, color: tk.textSecondary, marginTop: 4 },
+  reportGenerated: { fontSize: 12, color: tk.textTertiary, marginTop: 2 },
   reportContent: { padding: 0, overflow: 'hidden' },
   reportRow: {
     flexDirection: 'row',
@@ -193,30 +195,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
   reportRowTotal: {
-    backgroundColor: Colors.neutral[50],
+    backgroundColor: tk.canvas,
     borderTopWidth: 2,
-    borderTopColor: Colors.neutral[300],
+    borderTopColor: tk.border,
   },
   reportRowHighlighted: {
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
   },
-  rowLabel: { fontSize: 14, color: Colors.neutral[700], flex: 1 },
-  rowLabelTotal: { fontWeight: '700', color: Colors.neutral[900] },
+  rowLabel: { fontSize: 14, color: tk.textSecondary, flex: 1 },
+  rowLabelTotal: { fontWeight: '700', color: tk.textPrimary },
   loadingRows: { padding: 16, gap: 12 },
   skeletonRow: {
     height: 20,
-    backgroundColor: Colors.neutral[200],
+    backgroundColor: tk.border,
     borderRadius: 4,
   },
   emptyState: { padding: 32, alignItems: 'center' },
   emptyStateText: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
   },
   actionBar: { gap: 10 },
-});
+  }),
+);

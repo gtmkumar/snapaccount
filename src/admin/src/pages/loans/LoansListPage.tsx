@@ -21,6 +21,7 @@ import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { AmountDisplay } from '@/components/ui/AmountDisplay'
@@ -81,9 +82,13 @@ function DaysInStageCell({ days }: { days: number | null | undefined }) {
 function KpiStrip({ kpi, loading }: { kpi: LoanKpi | undefined; loading: boolean }) {
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"
+        aria-label={t('loansList.kpi.loading.ariaLabel')}
+        aria-busy="true"
+      >
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-20 rounded-xl bg-neutral-100 animate-pulse" />
+          <Skeleton key={i} variant="card" className="h-20" />
         ))}
       </div>
     )

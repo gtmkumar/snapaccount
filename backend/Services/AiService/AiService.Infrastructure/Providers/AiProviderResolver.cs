@@ -43,8 +43,20 @@ public sealed class AiProviderResolver(
         try
         {
             var authBase = configuration["ServiceUrls:AuthService"] ?? "http://localhost:5101";
-            cfg = await http.GetFromJsonAsync<EffectiveAiConfig>(
-                $"{authBase.TrimEnd('/')}/auth/config/ai/effective", ct);
+            var internalToken = configuration["InternalApi:SharedToken"];
+            using var req = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"{authBase.TrimEnd('/')}/auth/config/ai/effective");
+
+            // SEC-AI-02 H-02: identify this as an internal service-to-service call.
+            // AuthService validates this token (constant-time comparison) and bypasses
+            // PermissionBehavior for the decrypted-key endpoint.
+            if (!string.IsNullOrWhiteSpace(internalToken))
+                req.Headers.Add("X-Internal-Token", internalToken);
+
+            using var resp = await http.SendAsync(req, ct);
+            if (resp.IsSuccessStatusCode)
+                cfg = await resp.Content.ReadFromJsonAsync<EffectiveAiConfig>(ct);
         }
         catch (Exception ex)
         {
@@ -53,20 +65,27 @@ public sealed class AiProviderResolver(
 
         var provider = cfg?.Provider?.ToLowerInvariant() ?? "mock";
 
+        // DPDP data-residency: default region is asia-south1 (Mumbai).
+        // Override via Vertex:Region in appsettings.json or VERTEX_REGION env var.
+        var vertexRegion = configuration["VERTEX_REGION"]
+            ?? configuration["Vertex:Region"]
+            ?? "asia-south1";
+
         if (provider == "vertex" && !string.IsNullOrEmpty(cfg?.ApiKey))
         {
             var chatModel = string.IsNullOrWhiteSpace(cfg!.Model) ? "gemini-2.0-flash" : cfg.Model!;
             var embedModel = string.IsNullOrWhiteSpace(cfg.EmbeddingModel) ? "text-embedding-005" : cfg.EmbeddingModel!;
 
-            logger.LogInformation("AI provider: vertex (chat={ChatModel}, embed={EmbedModel}).",
-                chatModel, embedModel);
+            logger.LogInformation("AI provider: vertex (chat={ChatModel}, embed={EmbedModel}, region={Region}).",
+                chatModel, embedModel, vertexRegion);
 
             var vertexProvider = new VertexAiProvider(
                 http,
                 cfg.ApiKey!,
                 chatModel,
                 embedModel,
-                loggerFactory.CreateLogger<VertexAiProvider>());
+                loggerFactory.CreateLogger<VertexAiProvider>(),
+                vertexRegion);
 
             return new ResolvedProvider(vertexProvider, chatModel);
         }
@@ -77,11 +96,13 @@ public sealed class AiProviderResolver(
             var chatModel = string.IsNullOrWhiteSpace(cfg!.Model) ? "gemini-2.0-flash" : cfg.Model!;
             var embedModel = string.IsNullOrWhiteSpace(cfg.EmbeddingModel) ? "text-embedding-005" : cfg.EmbeddingModel!;
 
-            logger.LogInformation("AI provider: gemini-developer-api (chat={ChatModel}).", chatModel);
+            logger.LogInformation("AI provider: gemini-developer-api (chat={ChatModel}, region={Region}).",
+                chatModel, vertexRegion);
 
             var vertexProvider = new VertexAiProvider(
                 http, cfg.ApiKey!, chatModel, embedModel,
-                loggerFactory.CreateLogger<VertexAiProvider>());
+                loggerFactory.CreateLogger<VertexAiProvider>(),
+                vertexRegion);
 
             return new ResolvedProvider(vertexProvider, chatModel);
         }
@@ -95,6 +116,20 @@ public sealed class AiProviderResolver(
         else
         {
             logger.LogInformation("AI provider: mock (GCP-free mode).");
+        }
+
+        // L-03 (SEC-AI-02): Warn prominently when MockAiProvider is active outside Development.
+        // MockAiProvider produces deterministic hash-based embeddings — two orgs uploading
+        // identical documents get identical vectors, which is an information-theoretic leak
+        // in staging/production. This warning makes the misconfiguration visible in Cloud Logging.
+        var envName = configuration["ASPNETCORE_ENVIRONMENT"] ?? "Production";
+        if (!string.Equals(envName, "Development", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogWarning(
+                "[SEC-AI-02 L-03] MockAiProvider is ACTIVE in environment '{Environment}'. " +
+                "Deterministic hash-based embeddings may leak content similarity across orgs. " +
+                "Configure a real Vertex/Gemini provider via admin AI settings before handling real user data.",
+                envName);
         }
 
         return new ResolvedProvider(mockProvider, "mock-v1");

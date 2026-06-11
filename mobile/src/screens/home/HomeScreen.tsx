@@ -23,7 +23,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import { AmountDisplay } from '../../components/ui/AmountDisplay';
 import { Card } from '../../components/ui/Card';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { formatINR, formatINRCompact, getCurrentFinancialYear, timeAgo } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import apiClient from '../../lib/api';
@@ -61,7 +61,13 @@ function getGstr3bDeadlineLabel(): string {
   return `GSTR-3B ${month} ${year}`;
 }
 
+// Brand hero gradient — deliberately identical in light and dark mode (deep
+// indigo panel, white-on-brand text stays AA in both); tokens.json brand 900→700.
+const HERO_GRADIENT = ['#312E81', '#4338CA'] as const;
+
 export function HomeScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { user, currentOrganization } = useAuthStore();
   const fy = getCurrentFinancialYear();
   const gstr3bLabel = useMemo(() => getGstr3bDeadlineLabel(), []);
@@ -117,7 +123,7 @@ export function HomeScreen({ navigation }: Props) {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            tintColor={Colors.brand[400]}
+            tintColor={tokens.brand400}
           />
         }
         showsVerticalScrollIndicator={false}
@@ -125,10 +131,10 @@ export function HomeScreen({ navigation }: Props) {
         {/* Hero Header */}
         <View style={styles.heroSection}>
           <LinearGradient
-            colors={[Colors.brand[900], Colors.brand[700]]}
+            colors={HERO_GRADIENT}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
           <View style={styles.heroTopRow}>
             <View style={styles.heroLeftCol}>
@@ -165,7 +171,7 @@ export function HomeScreen({ navigation }: Props) {
               size="xl"
               colorCode={false}
               sign="auto"
-              style={{ color: Colors.neutral[0] }}
+              style={{ color: '#FFFFFF' }} // fixed dark hero panel — white in both modes
             />
             <View style={styles.fyPill}>
               <Text style={styles.fyPillText}>{fy.label}</Text>
@@ -188,8 +194,8 @@ export function HomeScreen({ navigation }: Props) {
               trend={metrics?.salesTrend ?? 0}
               loading={metricsLoading}
               iconName="trending-up"
-              iconColor={Colors.success[500]}
-              iconBg={Colors.success[50]}
+              iconColor={tokens.successFg}
+              iconBg={tokens.successTint}
               onPress={() => navigation.navigate('FinancialReportsList')}
             />
             <MetricCard
@@ -198,8 +204,8 @@ export function HomeScreen({ navigation }: Props) {
               trend={metrics?.expensesTrend ?? 0}
               loading={metricsLoading}
               iconName="trending-down"
-              iconColor={Colors.error[500]}
-              iconBg={Colors.error[50]}
+              iconColor={tokens.errorFg}
+              iconBg={tokens.errorTint}
               onPress={() => navigation.navigate('FinancialReportsList')}
             />
             <MetricCard
@@ -208,8 +214,8 @@ export function HomeScreen({ navigation }: Props) {
               trend={0}
               loading={metricsLoading}
               iconName="receipt"
-              iconColor={Colors.gst}
-              iconBg={Colors.gst + '15'}
+              iconColor={tokens.gstAccent}
+              iconBg={tokens.gstAccent + '15'}
               onPress={() => {}}
             />
           </ScrollView>
@@ -223,19 +229,19 @@ export function HomeScreen({ navigation }: Props) {
               iconName="camera-outline"
               label="Upload Bill"
               onPress={() => navigation.navigate('DocumentsTab')}
-              gradient={[Colors.brand[500], Colors.brand[600]] as const}
+              gradient={[tokens.brand500, tokens.brandCta] as const}
             />
             <QuickActionBtn
               iconName="receipt-outline"
               label="File GST"
               onPress={() => navigation.navigate('GstTab')}
-              gradient={[Colors.gst, '#6D28D9'] as const}
+              gradient={[tokens.gstAccent, '#6D28D9'] as const}
             />
             <QuickActionBtn
               iconName="wallet-outline"
               label="Get Loan"
               onPress={() => navigation.navigate('LoanTab')}
-              gradient={[Colors.accent[500], Colors.accent[600]] as const}
+              gradient={[tokens.loanAccent, tokens.loanAccent] as const}
             />
             <QuickActionBtn
               iconName="document-text-outline"
@@ -252,7 +258,7 @@ export function HomeScreen({ navigation }: Props) {
             <View style={styles.deadlineBanner}>
               <View style={styles.deadlineLeft}>
                 <View style={styles.deadlineIconWrap}>
-                  <Ionicons name="time-outline" size={20} color={Colors.warning[600]} />
+                  <Ionicons name="time-outline" size={20} color={tokens.warningFg} />
                 </View>
                 <View style={styles.deadlineTextBlock}>
                   <Text style={styles.deadlineBannerTitle}>{gstr3bLabel}</Text>
@@ -266,7 +272,7 @@ export function HomeScreen({ navigation }: Props) {
                 accessibilityLabel="File GST return now"
               >
                 <Text style={styles.deadlineBtnText}>File Now</Text>
-                <Ionicons name="arrow-forward" size={14} color={Colors.neutral[0]} />
+                <Ionicons name="arrow-forward" size={14} color={tokens.textOnBrand} />
               </Pressable>
             </View>
           </Card>
@@ -305,7 +311,7 @@ export function HomeScreen({ navigation }: Props) {
         accessibilityRole="button"
         onPress={() => navigation.navigate('DocumentsTab')}
       >
-        <Ionicons name="camera" size={24} color={Colors.neutral[0]} />
+        <Ionicons name="camera" size={24} color={tokens.textOnBrand} />
       </Pressable>
     </SafeAreaView>
   );
@@ -325,6 +331,8 @@ interface MetricCardProps {
 }
 
 function MetricCard({ title, amount, trend, loading, iconName, iconColor, iconBg, onPress }: MetricCardProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const trendPositive = trend >= 0;
   return (
     <Pressable style={styles.metricCard} onPress={onPress}>
@@ -338,14 +346,14 @@ function MetricCard({ title, amount, trend, loading, iconName, iconColor, iconBg
         <>
           <Text style={styles.metricAmount}>{formatINRCompact(amount)}</Text>
           {trend !== 0 && (
-            <View style={[styles.trendPill, { backgroundColor: trendPositive ? Colors.success[50] : Colors.error[50] }]}>
+            <View style={[styles.trendPill, { backgroundColor: trendPositive ? tokens.successTint : tokens.errorTint }]}>
               <Ionicons
                 name={trendPositive ? 'arrow-up' : 'arrow-down'}
                 size={10}
-                color={trendPositive ? Colors.success[600] : Colors.error[600]}
+                color={trendPositive ? tokens.successFg : tokens.errorFg}
               />
               <Text
-                style={[styles.metricTrend, { color: trendPositive ? Colors.success[600] : Colors.error[600] }]}
+                style={[styles.metricTrend, { color: trendPositive ? tokens.successFg : tokens.errorFg }]}
               >
                 {Math.abs(trend).toFixed(1)}%
               </Text>
@@ -368,6 +376,8 @@ function QuickActionBtn({
   onPress: () => void;
   gradient: readonly [string, string, ...string[]];
 }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   // AND-02: the icon was nested in an absolute-fill sibling of the
   // LinearGradient inside an overflow:hidden wrapper — on Android the glyph
   // was not painted (empty grey box). Render the icon as a normal centered
@@ -387,7 +397,7 @@ function QuickActionBtn({
           end={{ x: 1, y: 1 }}
           style={styles.quickActionGradient}
         />
-        <Ionicons name={iconName} size={22} color={Colors.neutral[0]} />
+        <Ionicons name={iconName} size={22} color={tokens.textOnBrand} />
       </View>
       <Text style={styles.quickActionLabel}>{label}</Text>
     </Pressable>
@@ -395,11 +405,13 @@ function QuickActionBtn({
 }
 
 function ActivityRow({ item, isLast }: { item: ActivityItem; isLast: boolean }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const typeConfig: Record<ActivityItem['type'], { icon: React.ComponentProps<typeof Ionicons>['name']; color: string; bg: string }> = {
-    document: { icon: 'document-outline', color: Colors.brand[500], bg: Colors.brand[50] },
-    gst: { icon: 'receipt-outline', color: Colors.gst, bg: Colors.gst + '15' },
-    itr: { icon: 'document-text-outline', color: Colors.itr, bg: Colors.itr + '15' },
-    loan: { icon: 'wallet-outline', color: Colors.loan, bg: Colors.loan + '15' },
+    document: { icon: 'document-outline', color: tokens.brand500, bg: tokens.brandTint },
+    gst: { icon: 'receipt-outline', color: tokens.gstAccent, bg: tokens.gstAccent + '15' },
+    itr: { icon: 'document-text-outline', color: tokens.itrAccent, bg: tokens.itrAccent + '15' },
+    loan: { icon: 'wallet-outline', color: tokens.loanAccent, bg: tokens.loanAccent + '15' },
   };
   const cfg = typeConfig[item.type] ?? typeConfig.document;
 
@@ -422,11 +434,13 @@ function ActivityRow({ item, isLast }: { item: ActivityItem; isLast: boolean }) 
 }
 
 function EmptyActivityState() {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   return (
     <Card shadow="sm" padding="lg">
       <View style={styles.emptyActivity}>
         <View style={styles.emptyIconWrap}>
-          <Ionicons name="document-outline" size={32} color={Colors.neutral[300]} />
+          <Ionicons name="document-outline" size={32} color={tokens.textTertiary} />
         </View>
         <Text style={styles.emptyActivityTitle}>No activity yet</Text>
         <Text style={styles.emptyActivityText}>
@@ -439,10 +453,11 @@ function EmptyActivityState() {
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg.base,
+    backgroundColor: tk.canvas,
   },
   scrollView: {
     flex: 1,
@@ -475,7 +490,7 @@ const styles = StyleSheet.create({
   orgName: {
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.neutral[0],
+    color: '#FFFFFF', // on fixed HERO_GRADIENT — identical in both modes
     maxWidth: 200,
     letterSpacing: -0.3,
   },
@@ -496,14 +511,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 14,
-    backgroundColor: Colors.accent[500],
+    backgroundColor: tk.loanAccent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.neutral[0],
+    color: tk.textOnBrand,
   },
   heroNetPnL: {
     alignItems: 'flex-start',
@@ -540,10 +555,10 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     width: 152,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 18,
     padding: 16,
-    shadowColor: '#0F172A',
+    shadowColor: tk.shadowColor,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
@@ -559,14 +574,14 @@ const styles = StyleSheet.create({
   },
   metricTitle: {
     fontSize: 12,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     marginBottom: 4,
     letterSpacing: 0.2,
   },
   metricAmount: {
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     marginBottom: 6,
     letterSpacing: -0.3,
   },
@@ -585,7 +600,7 @@ const styles = StyleSheet.create({
   },
   metricSkeleton: {
     height: 24,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     borderRadius: 6,
     width: 80,
   },
@@ -604,13 +619,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
     marginBottom: 14,
     letterSpacing: -0.3,
   },
   viewAll: {
     fontSize: 14,
-    color: Colors.brand[500],
+    color: tk.brand500,
     fontWeight: '600',
   },
 
@@ -633,12 +648,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   quickActionGradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   quickActionLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
     textAlign: 'center',
   },
 
@@ -658,7 +673,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.warning[50],
+    backgroundColor: tk.warningTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -667,17 +682,17 @@ const styles = StyleSheet.create({
   },
   deadlineBannerTitle: {
     fontSize: 14,
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
     fontWeight: '600',
   },
   deadlineBannerSubtitle: {
     fontSize: 12,
-    color: Colors.warning[600],
+    color: tk.warningFg,
     fontWeight: '500',
     marginTop: 1,
   },
   deadlineBtn: {
-    backgroundColor: Colors.warning[600],
+    backgroundColor: tk.warningFg,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
@@ -688,7 +703,7 @@ const styles = StyleSheet.create({
   deadlineBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.neutral[0],
+    color: tk.textOnBrand,
   },
 
   // Activity
@@ -700,7 +715,7 @@ const styles = StyleSheet.create({
   },
   activityRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
   activityIcon: {
     width: 40,
@@ -715,17 +730,17 @@ const styles = StyleSheet.create({
   activityDescription: {
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
   },
   activityTime: {
     fontSize: 12,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     marginTop: 2,
   },
   activityAmount: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
     fontFamily: Platform.OS === 'ios' ? 'SF Mono' : 'monospace',
   },
   emptyActivity: {
@@ -736,7 +751,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 16,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
@@ -744,12 +759,12 @@ const styles = StyleSheet.create({
   emptyActivityTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
     marginBottom: 4,
   },
   emptyActivityText: {
     fontSize: 14,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     textAlign: 'center',
   },
 
@@ -761,10 +776,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 18,
-    backgroundColor: Colors.brand[500],
+    backgroundColor: tk.brand500,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.brand[500],
+    shadowColor: tk.brand500,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -773,4 +788,5 @@ const styles = StyleSheet.create({
   bottomSpacing: {
     height: 120,
   },
-});
+  }),
+);

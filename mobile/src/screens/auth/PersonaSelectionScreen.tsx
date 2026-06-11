@@ -21,7 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
 type NavProp = NativeStackNavigationProp<AuthStackParamList, 'PersonaSelection'>;
@@ -40,6 +40,8 @@ interface PersonaCardProps {
 }
 
 function PersonaCard({ icon, title, description, onPress, accentBg, accentFg }: PersonaCardProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   return (
     <TouchableOpacity
       style={styles.card}
@@ -55,18 +57,20 @@ function PersonaCard({ icon, title, description, onPress, accentBg, accentFg }: 
         <Text style={styles.cardTitle}>{title}</Text>
         <Text style={styles.cardDesc}>{description}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={Colors.neutral[400]} />
+      <Ionicons name="chevron-forward" size={20} color={tokens.textTertiary} />
     </TouchableOpacity>
   );
 }
 
 export function PersonaSelectionScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.iconCircle}>
-          <Ionicons name="people-outline" size={32} color={Colors.brand[500]} />
+          <Ionicons name="people-outline" size={32} color={tokens.brand500} />
         </View>
 
         <Text style={styles.heading}>How will you use SnapAccount?</Text>
@@ -79,16 +83,16 @@ export function PersonaSelectionScreen({ navigation }: Props) {
             icon="storefront-outline"
             title="I run a business"
             description="GST filing, accounting, loans, document vault & expert CA chat"
-            accentBg={Colors.brand[50]}
-            accentFg={Colors.brand[500]}
+            accentBg={tokens.brandTint}
+            accentFg={tokens.brand500}
             onPress={() => navigation.navigate('BusinessProfileWizard')}
           />
           <PersonaCard
             icon="person-outline"
             title="I'm a salaried individual"
             description="File your personal ITR, upload Form 16 & get tax support"
-            accentBg={Colors.success[50]}
-            accentFg={Colors.success[600]}
+            accentBg={tokens.successTint}
+            accentFg={tokens.successFg}
             onPress={() => navigation.navigate('IndividualProfileWizard')}
           />
         </View>
@@ -104,7 +108,7 @@ export function PersonaSelectionScreen({ navigation }: Props) {
           accessibilityRole="button"
           accessibilityLabel={t('mobile.auth.invite.joinEntry')}
         >
-          <Ionicons name="link-outline" size={16} color={Colors.brand[500]} />
+          <Ionicons name="link-outline" size={16} color={tokens.brand500} />
           <Text style={styles.joinLinkText}>{t('mobile.auth.invite.joinEntry')}</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -112,10 +116,11 @@ export function PersonaSelectionScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.neutral[0],
+    backgroundColor: tk.raised,
   },
   scrollContent: {
     flexGrow: 1,
@@ -126,7 +131,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 22,
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
@@ -135,14 +140,14 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 26,
     fontWeight: '800',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     textAlign: 'center',
     letterSpacing: -0.5,
     marginBottom: 10,
   },
   subtext: {
     fontSize: 15,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 28,
@@ -157,8 +162,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.neutral[200],
-    backgroundColor: Colors.neutral[0],
+    borderColor: tk.border,
+    backgroundColor: tk.raised,
   },
   cardIcon: {
     width: 52,
@@ -173,17 +178,17 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     marginBottom: 4,
   },
   cardDesc: {
     fontSize: 13,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     lineHeight: 18,
   },
   note: {
     fontSize: 12,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     textAlign: 'center',
     marginTop: 28,
   },
@@ -199,6 +204,7 @@ const styles = StyleSheet.create({
   joinLinkText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.brand[500],
+    color: tk.brand500,
   },
-});
+  }),
+);

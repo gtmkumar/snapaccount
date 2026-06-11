@@ -7,7 +7,7 @@
  * Auto-dismisses after 6s if no interaction.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Pressable,
@@ -18,7 +18,7 @@ import {
 import { useReducedMotion } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 /**
  * Phase 6F: expanded kind enum.
@@ -99,10 +99,12 @@ export function CelebrationOverlay({
   onSecondary,
   testID,
 }: CelebrationOverlayProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const reduceMotion = useReducedMotion();
-  const slideAnim = useRef(new Animated.Value(reduceMotion ? 0 : 60)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const [slideAnim] = useState(() => new Animated.Value(reduceMotion ? 0 : 60));
+  const [opacityAnim] = useState(() => new Animated.Value(0));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -212,7 +214,7 @@ export function CelebrationOverlay({
   })();
 
   const iconName = KIND_ICON[kind];
-  const iconColor = Colors.success[500];
+  const iconColor = tokens.successFg;
   const headline = copy.headline;
   const body = copy.body;
   const primaryLabel = copy.primary;
@@ -265,9 +267,10 @@ export function CelebrationOverlay({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(15,23,42,0.85)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -275,7 +278,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   content: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 24,
     padding: 28,
     alignItems: 'center',
@@ -297,13 +300,13 @@ const styles = StyleSheet.create({
   headline: {
     fontSize: 26,
     fontWeight: '800',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
   body: {
     fontSize: 15,
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -313,7 +316,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   primaryBtn: {
-    backgroundColor: Colors.success[600],
+    backgroundColor: tk.successFg,
     borderRadius: 14,
     minHeight: 52,
     alignItems: 'center',
@@ -322,7 +325,7 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
   },
   secondaryBtn: {
     borderRadius: 14,
@@ -333,6 +336,7 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
   },
-});
+  }),
+);

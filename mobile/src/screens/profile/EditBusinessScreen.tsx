@@ -29,7 +29,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { getOrgSettings, patchOrgSettings, type OrgSettings } from '../../api/auth';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
@@ -45,6 +45,8 @@ interface AddressForm {
 }
 
 export function EditBusinessScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -63,7 +65,7 @@ export function EditBusinessScreen({ navigation }: Props) {
           accessibilityLabel={t('mobile.common.back')}
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.editBusiness.title')}</Text>
         <View style={{ width: 40 }} />
@@ -71,11 +73,11 @@ export function EditBusinessScreen({ navigation }: Props) {
 
       {isLoading ? (
         <View style={styles.centerBox}>
-          <ActivityIndicator size="large" color={Colors.brand[600]} />
+          <ActivityIndicator size="large" color={tokens.brandCta} />
         </View>
       ) : isError || !data ? (
         <View style={styles.centerBox}>
-          <Ionicons name="cloud-offline-outline" size={48} color={Colors.neutral[400]} />
+          <Ionicons name="cloud-offline-outline" size={48} color={tokens.textTertiary} />
           <Text style={styles.errorTitle}>{t('mobile.editBusiness.error.load')}</Text>
           <Pressable
             style={styles.primaryBtn}
@@ -96,6 +98,7 @@ export function EditBusinessScreen({ navigation }: Props) {
 }
 
 function BusinessForm({ settings }: { settings: OrgSettings }) {
+  const styles = useStyles();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
@@ -220,6 +223,7 @@ function Field({
   readOnly?: boolean;
   mono?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <View
       style={styles.fieldRow}
@@ -255,6 +259,7 @@ function LabeledInput({
   error?: string;
   testID?: string;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.inputGroup}>
       <Text style={styles.inputLabel}>{label}</Text>
@@ -277,57 +282,59 @@ function LabeledInput({
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
 
   centerBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 },
-  errorTitle: { fontSize: 16, fontWeight: '700', color: Colors.neutral[800], textAlign: 'center' },
+  errorTitle: { fontSize: 16, fontWeight: '700', color: tk.textPrimary, textAlign: 'center' },
 
   scrollContent: { padding: 16, gap: 14, paddingBottom: 40 },
 
   card: {
-    backgroundColor: Colors.surface.default, borderRadius: 16, padding: 16, gap: 12,
-    borderWidth: 1, borderColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderRadius: 16, padding: 16, gap: 12,
+    borderWidth: 1, borderColor: tk.border,
   },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.neutral[900] },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: tk.textPrimary },
 
   fieldRow: { gap: 2 },
-  fieldLabel: { fontSize: 12, fontWeight: '600', color: Colors.neutral[500], textTransform: 'uppercase', letterSpacing: 0.4 },
-  fieldValue: { fontSize: 15, fontWeight: '600', color: Colors.neutral[900] },
+  fieldLabel: { fontSize: 12, fontWeight: '600', color: tk.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4 },
+  fieldValue: { fontSize: 15, fontWeight: '600', color: tk.textPrimary },
   fieldValueMono: { letterSpacing: 1 },
-  fieldValueReadOnly: { color: Colors.neutral[700] },
-  readonlyNote: { fontSize: 12, color: Colors.neutral[500], lineHeight: 18 },
+  fieldValueReadOnly: { color: tk.textSecondary },
+  readonlyNote: { fontSize: 12, color: tk.textSecondary, lineHeight: 18 },
 
   inputGroup: { gap: 6 },
-  inputLabel: { fontSize: 13, fontWeight: '600', color: Colors.neutral[700] },
+  inputLabel: { fontSize: 13, fontWeight: '600', color: tk.textSecondary },
   input: {
     minHeight: 48,
     borderWidth: 1.5,
-    borderColor: Colors.neutral[300],
+    borderColor: tk.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     fontSize: 15,
-    color: Colors.neutral[900],
-    backgroundColor: Colors.surface.default,
+    color: tk.textPrimary,
+    backgroundColor: tk.raised,
   },
-  inputError: { borderColor: Colors.error[500], backgroundColor: Colors.error[50] },
-  inputErrorText: { fontSize: 12, color: Colors.error[600] },
+  inputError: { borderColor: tk.errorCta, backgroundColor: tk.errorTint },
+  inputErrorText: { fontSize: 12, color: tk.errorFg },
 
-  saveError: { fontSize: 13, color: Colors.error[600], textAlign: 'center' },
-  saveSuccess: { fontSize: 13, color: Colors.success[700], textAlign: 'center' },
+  saveError: { fontSize: 13, color: tk.errorFg, textAlign: 'center' },
+  saveSuccess: { fontSize: 13, color: tk.successFg, textAlign: 'center' },
 
   primaryBtn: {
-    backgroundColor: Colors.brand[600], borderRadius: 14,
+    backgroundColor: tk.brandCta, borderRadius: 14,
     minHeight: 48, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  primaryBtnDisabled: { backgroundColor: Colors.neutral[200] },
-  primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-});
+  primaryBtnDisabled: { backgroundColor: tk.border },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);

@@ -13,7 +13,7 @@
 
 Three token sources are partially out of sync:
 
-- `docs/design/tokens.json` — the declared design system (v2.0.0).
+- `docs/design/tokens.json` — the declared design system (audited at v2.0.0; **now v2.1.0** after WP-T3 added semantic `text.*`, `display.*`, and named `elevation.*`).
 - `mobile/src/constants/colors.ts` — RN runtime `Colors` object.
 - `src/admin/src/styles/globals.css` — Tailwind v4 `@theme` custom properties + `.dark` overrides.
 
@@ -33,7 +33,7 @@ Three token sources are partially out of sync:
 
 ### 1.3 Canonical token set (the source of truth after this pass)
 
-**Colors** = `tokens.json` v2.0.0 **with these corrections applied to admin `globals.css`**: success→Emerald (T-1), accent→Orange + warning stays Amber (T-2), `--radius-sm: 6px` + add `--radius-3xl: 24px` (T-3), `--color-loan: #EA580C` (T-5).
+**Colors** = `tokens.json` (now **v2.1.0** — WP-T3 landed; semantic `text.*`, `display.*`, named `elevation.*` added additively) **with these corrections applied to admin `globals.css`**: success→Emerald (T-1), accent→Orange + warning stays Amber (T-2), `--radius-sm: 6px` + add `--radius-3xl: 24px` (T-3), `--color-loan: #EA580C` (T-5). *(tokens.json already held the canonical values for T-1/T-2/T-3/T-5 at v2.0.0; only admin `globals.css` diverged.)*
 
 **New semantic text tokens** (add to all three sources; resolves a11y §4 + T-6):
 
@@ -61,7 +61,7 @@ Three token sources are partially out of sync:
 
 - **WP-T1 (frontend-dev):** rewrite `globals.css` `@theme` success-* (Emerald), separate accent(Orange)/warning(Amber), `--radius-sm: 6px`, add `--radius-3xl`, fix `--color-loan`, add semantic text tokens + display tokens. Regression-test snapshots.
 - **WP-T2 (mobile-dev):** extend `Colors`/theme with semantic `text.*`, display tokens, and named `elevation.*`; codemod hardcoded `fontSize`/`borderRadius`/`shadow*` on regulated + high-traffic screens to tokens.
-- **WP-T3 (ui-ux-agent):** bump `tokens.json` to v2.1.0 documenting the canonical decisions (separate follow-up edit; this spec is the decision record).
+- **WP-T3 (ui-ux-agent):** ✅ **DONE** — `tokens.json` bumped to v2.1.0 (additive: `color.text.*`, `typography.display.*`, `elevation.*`; `_changelog` records canonical decisions + the IMS/MCA semantic-reuse rationale). This spec remains the decision record.
 - **Acceptance:** zero raw hex in screen StyleSheets for colors covered by tokens; admin `@theme` success/accent/radius match tokens.json; a11y contrast gate (§a11y-5) still green.
 
 ---

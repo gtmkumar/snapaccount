@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { formatINR } from '../../lib/utils';
 
 interface RegimeBarChartProps {
@@ -16,15 +16,16 @@ interface RegimeBarChartProps {
   testID?: string;
 }
 
-const OLD_COLOR = Colors.accent[500];
-const NEW_COLOR = Colors.brand[500];
-
 export function RegimeBarChart({
   oldTax,
   newTax,
   recommendedRegime,
   testID,
 }: RegimeBarChartProps) {
+  const styles = useStyles();
+  const { tokens } = useTheme();
+  const OLD_COLOR = tokens.loanAccent;
+  const NEW_COLOR = tokens.brand500;
   const maxTax = Math.max(oldTax, newTax, 1);
   const oldBarRatio = oldTax / maxTax;
   const newBarRatio = newTax / maxTax;
@@ -94,13 +95,14 @@ export function RegimeBarChart({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: Colors.neutral[100],
+    borderColor: tk.border,
   },
   barsRow: {
     flexDirection: 'row',
@@ -119,7 +121,7 @@ const styles = StyleSheet.create({
   barTrack: {
     width: 48,
     height: 120,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     borderRadius: 8,
     overflow: 'hidden',
     justifyContent: 'flex-end',
@@ -139,7 +141,7 @@ const styles = StyleSheet.create({
   barLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     textAlign: 'center',
   },
   barAmount: {
@@ -168,28 +170,29 @@ const styles = StyleSheet.create({
   savingsLine: {
     width: 1,
     height: 40,
-    backgroundColor: Colors.neutral[200],
+    backgroundColor: tk.border,
   },
   savingsBadge: {
-    backgroundColor: Colors.success[50],
+    backgroundColor: tk.successTint,
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 6,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.success[200],
+    borderColor: tk.successTintBorder,
   },
   savingsLabel: {
     fontSize: 10,
-    color: Colors.success[600],
+    color: tk.successFg,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
   savingsAmount: {
     fontSize: 12,
-    color: Colors.success[700],
+    color: tk.successFg,
     fontWeight: '800',
     letterSpacing: -0.2,
   },
-});
+  }),
+);

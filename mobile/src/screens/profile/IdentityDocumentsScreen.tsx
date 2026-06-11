@@ -48,7 +48,7 @@ import {
   TanInput,
   AadhaarNumberInput,
 } from '../../components/shared/DocumentNumberInputs';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { getApiError } from '../../lib/api';
 import {
   isValidPAN,
@@ -106,15 +106,17 @@ function isValidForKind(kind: DocumentKind, value: string): boolean {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function StatusChip({ status }: { status: DocumentStatus }) {
+  const { tokens } = useTheme();
+  const chipStyles = useChipStyles();
   const { t } = useTranslation();
   const map: Record<
     DocumentStatus,
     { bg: string; fg: string; icon: React.ComponentProps<typeof Ionicons>['name']; key: string }
   > = {
-    VERIFIED: { bg: Colors.success[50], fg: Colors.success[700], icon: 'checkmark-circle', key: 'verified' },
-    SAVED: { bg: Colors.info[50], fg: Colors.info[700], icon: 'save-outline', key: 'saved' },
-    PENDING: { bg: Colors.warning[50], fg: Colors.warning[700], icon: 'time-outline', key: 'pending' },
-    FAILED: { bg: Colors.error[50], fg: Colors.error[700], icon: 'alert-circle', key: 'failed' },
+    VERIFIED: { bg: tokens.successTint, fg: tokens.successFg, icon: 'checkmark-circle', key: 'verified' },
+    SAVED: { bg: tokens.infoTint, fg: tokens.infoFg, icon: 'save-outline', key: 'saved' },
+    PENDING: { bg: tokens.warningTint, fg: tokens.warningFg, icon: 'time-outline', key: 'pending' },
+    FAILED: { bg: tokens.errorTint, fg: tokens.errorFg, icon: 'alert-circle', key: 'failed' },
   };
   const s = map[status];
   return (
@@ -127,7 +129,8 @@ function StatusChip({ status }: { status: DocumentStatus }) {
   );
 }
 
-const chipStyles = StyleSheet.create({
+const useChipStyles = createThemedStyles((_tk: ThemeTokens) =>
+  StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -137,7 +140,8 @@ const chipStyles = StyleSheet.create({
     borderRadius: 8,
   },
   chipText: { fontSize: 11, fontWeight: '700' },
-});
+  }),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-kind input switch
@@ -187,6 +191,8 @@ function DocumentCard({
   governmentVerificationEnabled,
   onChanged,
 }: DocCardProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const [value, setValue] = useState('');
   const [otp, setOtp] = useState('');
@@ -269,7 +275,7 @@ function DocumentCard({
       {/* Header: icon + name + status chip */}
       <View style={styles.docHeader}>
         <View style={styles.docIcon}>
-          <Ionicons name={kindIcon(kind)} size={20} color={Colors.brand[500]} />
+          <Ionicons name={kindIcon(kind)} size={20} color={tokens.brand500} />
         </View>
         <View style={styles.docTitleWrap}>
           <Text style={styles.docTitle}>{t(`mobile.documents.kind.${kind}.label`)}</Text>
@@ -377,6 +383,8 @@ function DocumentCard({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function IdentityDocumentsScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
@@ -413,7 +421,7 @@ export function IdentityDocumentsScreen({ navigation }: Props) {
           accessibilityRole="button"
           accessibilityLabel={t('mobile.common.back')}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.title}>{t('mobile.documents.title')}</Text>
         <View style={{ width: 40 }} />
@@ -421,7 +429,7 @@ export function IdentityDocumentsScreen({ navigation }: Props) {
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.brand[500]} />
+          <ActivityIndicator size="large" color={tokens.brand500} />
         </View>
       ) : isError ? (
         <View style={styles.centered}>
@@ -451,13 +459,13 @@ export function IdentityDocumentsScreen({ navigation }: Props) {
               <Ionicons
                 name={govEnabled ? 'shield-checkmark-outline' : 'information-circle-outline'}
                 size={16}
-                color={govEnabled ? Colors.success[600] : Colors.info[600]}
+                color={govEnabled ? tokens.successFg : tokens.infoFg}
                 style={styles.bannerIcon}
               />
               <Text
                 style={[
                   styles.bannerText,
-                  { color: govEnabled ? Colors.success[700] : Colors.info[700] },
+                  { color: govEnabled ? tokens.successFg : tokens.infoFg },
                 ]}
               >
                 {govEnabled
@@ -484,8 +492,9 @@ export function IdentityDocumentsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   flex: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -493,22 +502,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900], letterSpacing: -0.2 },
+  title: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
   scrollContent: { padding: 16, gap: 14, paddingBottom: 40 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
-  emptyText: { fontSize: 14, color: Colors.neutral[500], textAlign: 'center' },
+  emptyText: { fontSize: 14, color: tk.textSecondary, textAlign: 'center' },
   retryBtn: { marginTop: 8 },
 
   banner: {
@@ -517,8 +526,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
   },
-  bannerVerify: { backgroundColor: Colors.success[50] },
-  bannerSave: { backgroundColor: Colors.info[50] },
+  bannerVerify: { backgroundColor: tk.successTint },
+  bannerSave: { backgroundColor: tk.infoTint },
   bannerIcon: { marginRight: 8, marginTop: 1 },
   bannerText: { flex: 1, fontSize: 13, lineHeight: 18 },
 
@@ -528,25 +537,26 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
   docTitleWrap: { flex: 1, gap: 2 },
-  docTitle: { fontSize: 15, fontWeight: '700', color: Colors.neutral[900] },
-  docRef: { fontSize: 13, color: Colors.neutral[600], fontWeight: '600', letterSpacing: 1 },
-  docHint: { fontSize: 12, color: Colors.neutral[400] },
+  docTitle: { fontSize: 15, fontWeight: '700', color: tk.textPrimary },
+  docRef: { fontSize: 13, color: tk.textSecondary, fontWeight: '600', letterSpacing: 1 },
+  docHint: { fontSize: 12, color: tk.textTertiary },
 
   inputBlock: { gap: 12 },
   otpBlock: { gap: 14 },
-  otpPrompt: { fontSize: 13, color: Colors.neutral[600], textAlign: 'center' },
+  otpPrompt: { fontSize: 13, color: tk.textSecondary, textAlign: 'center' },
 
-  errorText: { fontSize: 13, color: Colors.error[600], lineHeight: 18 },
+  errorText: { fontSize: 13, color: tk.errorFg, lineHeight: 18 },
   footnote: {
     fontSize: 12,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     textAlign: 'center',
     paddingHorizontal: 8,
     lineHeight: 16,
   },
-});
+  }),
+);

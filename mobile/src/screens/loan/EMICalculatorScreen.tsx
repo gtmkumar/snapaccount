@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../components/ui/Card';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { formatINR, formatINRCompact } from '../../lib/utils';
 import type { LoanStackParamList } from '../../navigation/LoanStack';
 
@@ -24,7 +24,13 @@ function calculateEMI(principal: number, annualRate: number, months: number): nu
   return emi;
 }
 
+// Brand hero gradient — deliberately identical in light and dark mode (deep
+// indigo panel, white-on-brand text stays AA in both); tokens.json brand 900→700.
+const HERO_GRADIENT = ['#312E81', '#4338CA'] as const;
+
 export function EMICalculatorScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const [amount, setAmount] = useState(1000000);
   const [rate, setRate] = useState(14);
   const [months, setMonths] = useState(36);
@@ -38,7 +44,7 @@ export function EMICalculatorScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.title}>EMI Calculator</Text>
         <View style={{ width: 40 }} />
@@ -79,10 +85,10 @@ export function EMICalculatorScreen({ navigation }: Props) {
         {/* Result card */}
         <View style={styles.resultCard}>
           <LinearGradient
-            colors={[Colors.brand[900], Colors.brand[700]]}
+            colors={HERO_GRADIENT}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
           <View style={styles.resultContent}>
             <Text style={styles.resultLabel}>Monthly EMI</Text>
@@ -98,7 +104,7 @@ export function EMICalculatorScreen({ navigation }: Props) {
               </View>
               <View style={styles.resultRow}>
                 <Text style={styles.resultRowLabel}>Total Interest</Text>
-                <Text style={[styles.resultRowValue, { color: Colors.accent[300] }]}>{formatINR(totalInterest)}</Text>
+                <Text style={[styles.resultRowValue, { color: '#FDBA74' }]}>{formatINR(totalInterest)}</Text>
               </View>
               <View style={[styles.resultRow, styles.resultRowTotal]}>
                 <Text style={styles.resultRowLabelBold}>Total Repayment</Text>
@@ -114,11 +120,11 @@ export function EMICalculatorScreen({ navigation }: Props) {
               </View>
               <View style={styles.chartLegend}>
                 <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: Colors.brand[300] }]} />
+                  <View style={[styles.legendDot, { backgroundColor: '#A5B4FC' }]} />
                   <Text style={styles.legendText}>Principal ({(100 - interestPercent).toFixed(0)}%)</Text>
                 </View>
                 <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: Colors.accent[400] }]} />
+                  <View style={[styles.legendDot, { backgroundColor: '#FB923C' }]} />
                   <Text style={styles.legendText}>Interest ({interestPercent.toFixed(0)}%)</Text>
                 </View>
               </View>
@@ -141,6 +147,8 @@ interface SliderInputProps {
 }
 
 function SliderInput({ label, value, min, max, step, display, onChange }: SliderInputProps) {
+  const { tokens } = useTheme();
+  const sliderStyles = useSliderStyles();
   const percent = ((value - min) / (max - min)) * 100;
 
   return (
@@ -155,7 +163,7 @@ function SliderInput({ label, value, min, max, step, display, onChange }: Slider
           onPress={() => onChange(Math.max(min, value - step))}
           accessibilityLabel={`Decrease ${label}`}
         >
-          <Ionicons name="remove" size={18} color={Colors.brand[600]} />
+          <Ionicons name="remove" size={18} color={tokens.brandCta} />
         </Pressable>
         <View style={sliderStyles.track}>
           <View style={[sliderStyles.fill, { width: `${percent}%` }]} />
@@ -166,30 +174,33 @@ function SliderInput({ label, value, min, max, step, display, onChange }: Slider
           onPress={() => onChange(Math.min(max, value + step))}
           accessibilityLabel={`Increase ${label}`}
         >
-          <Ionicons name="add" size={18} color={Colors.brand[600]} />
+          <Ionicons name="add" size={18} color={tokens.brandCta} />
         </Pressable>
       </View>
     </View>
   );
 }
 
-const sliderStyles = StyleSheet.create({
+const useSliderStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: { marginBottom: 24 },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  label: { fontSize: 14, color: Colors.neutral[600], fontWeight: '500' },
-  value: { fontSize: 14, fontWeight: '700', color: Colors.brand[600] },
+  label: { fontSize: 14, color: tk.textSecondary, fontWeight: '500' },
+  value: { fontSize: 14, fontWeight: '700', color: tk.brandCta },
   controls: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  btn: { width: 38, height: 38, borderRadius: 12, backgroundColor: Colors.brand[50], alignItems: 'center', justifyContent: 'center' },
-  track: { flex: 1, height: 6, backgroundColor: Colors.neutral[200], borderRadius: 3, overflow: 'visible', position: 'relative' },
-  fill: { height: '100%', backgroundColor: Colors.brand[500], borderRadius: 3 },
-  thumb: { position: 'absolute', top: -5, width: 16, height: 16, borderRadius: 8, backgroundColor: Colors.brand[500], marginLeft: -8, shadowColor: Colors.brand[500], shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 3 },
-});
+  btn: { width: 38, height: 38, borderRadius: 12, backgroundColor: tk.brandTint, alignItems: 'center', justifyContent: 'center' },
+  track: { flex: 1, height: 6, backgroundColor: tk.border, borderRadius: 3, overflow: 'visible', position: 'relative' },
+  fill: { height: '100%', backgroundColor: tk.brand500, borderRadius: 3 },
+  thumb: { position: 'absolute', top: -5, width: 16, height: 16, borderRadius: 8, backgroundColor: tk.brand500, marginLeft: -8, shadowColor: tk.brand500, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 3 },
+  }),
+);
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100] },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900], letterSpacing: -0.2 },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
   scrollContent: { padding: 16, gap: 16 },
   inputCard: { padding: 20 },
 
@@ -197,22 +208,23 @@ const styles = StyleSheet.create({
   resultCard: { borderRadius: 20, overflow: 'hidden' },
   resultContent: { padding: 24 },
   resultLabel: { fontSize: 13, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.3, textTransform: 'uppercase', marginBottom: 4 },
-  resultEMI: { fontSize: 36, fontWeight: '800', color: Colors.neutral[0], letterSpacing: -1 },
+  resultEMI: { fontSize: 36, fontWeight: '800', color: '#FFFFFF', letterSpacing: -1 }, // fixed gradient card
   resultPerMonth: { fontSize: 14, color: 'rgba(255,255,255,0.4)', marginBottom: 4 },
   resultDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 20 },
   resultRows: { gap: 14 },
   resultRow: { flexDirection: 'row', justifyContent: 'space-between' },
   resultRowTotal: { marginTop: 6, paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' },
   resultRowLabel: { fontSize: 14, color: 'rgba(255,255,255,0.6)' },
-  resultRowValue: { fontSize: 14, fontWeight: '600', color: Colors.neutral[0] },
-  resultRowLabelBold: { fontSize: 15, fontWeight: '700', color: Colors.neutral[0] },
-  resultRowValueBold: { fontSize: 15, fontWeight: '800', color: Colors.accent[300] },
+  resultRowValue: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
+  resultRowLabelBold: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  resultRowValueBold: { fontSize: 15, fontWeight: '800', color: '#FDBA74' }, // accent-300 pops on fixed indigo
   chartContainer: { marginTop: 20 },
   chartBar: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', marginBottom: 10 },
-  chartPrincipal: { backgroundColor: Colors.brand[300] },
-  chartInterest: { backgroundColor: Colors.accent[400] },
+  chartPrincipal: { backgroundColor: '#A5B4FC' }, // on fixed gradient
+  chartInterest: { backgroundColor: '#FB923C' }, // on fixed gradient
   chartLegend: { flexDirection: 'row', gap: 20 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
-});
+  }),
+);

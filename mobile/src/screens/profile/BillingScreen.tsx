@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { getMySubscription, listInvoices, type InvoiceDto } from '../../api/subscriptions';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
@@ -40,6 +40,8 @@ function formatDate(iso: string): string {
 }
 
 export function BillingScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
 
   const subscription = useQuery({
@@ -75,7 +77,7 @@ export function BillingScreen({ navigation }: Props) {
           accessibilityLabel={t('mobile.common.back')}
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.billing.title')}</Text>
         <View style={{ width: 40 }} />
@@ -83,11 +85,11 @@ export function BillingScreen({ navigation }: Props) {
 
       {isLoading ? (
         <View style={styles.centerBox}>
-          <ActivityIndicator size="large" color={Colors.brand[600]} />
+          <ActivityIndicator size="large" color={tokens.brandCta} />
         </View>
       ) : fatalError ? (
         <View style={styles.centerBox}>
-          <Ionicons name="cloud-offline-outline" size={48} color={Colors.neutral[400]} />
+          <Ionicons name="cloud-offline-outline" size={48} color={tokens.textTertiary} />
           <Text style={styles.errorTitle}>{t('mobile.billing.error.title')}</Text>
           <Text style={styles.errorBody}>{t('mobile.billing.error.body')}</Text>
           <Pressable
@@ -129,7 +131,7 @@ export function BillingScreen({ navigation }: Props) {
           <Text style={styles.sectionTitle}>{t('mobile.billing.invoices')}</Text>
           {invoices.isError ? (
             <View style={styles.inlineError}>
-              <Ionicons name="alert-circle-outline" size={16} color={Colors.error[600]} />
+              <Ionicons name="alert-circle-outline" size={16} color={tokens.errorFg} />
               <Text style={styles.inlineErrorText}>{t('mobile.billing.error.title')}</Text>
               <Pressable
                 onPress={() => void invoices.refetch()}
@@ -153,6 +155,7 @@ export function BillingScreen({ navigation }: Props) {
 }
 
 function PlanRow({ label, value }: { label: string; value: string }) {
+  const styles = useStyles();
   return (
     <View
       style={styles.planRow}
@@ -173,6 +176,7 @@ function InvoiceRow({
   invoice: InvoiceDto;
   t: (k: string, o?: Record<string, unknown>) => string;
 }) {
+  const styles = useStyles();
   const period = `${formatDate(invoice.periodStart)} – ${formatDate(invoice.periodEnd)}`;
   return (
     <View
@@ -197,60 +201,62 @@ function InvoiceRow({
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
 
   centerBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 },
-  errorTitle: { fontSize: 16, fontWeight: '700', color: Colors.neutral[800], textAlign: 'center' },
-  errorBody: { fontSize: 14, color: Colors.neutral[600], textAlign: 'center', lineHeight: 21 },
+  errorTitle: { fontSize: 16, fontWeight: '700', color: tk.textPrimary, textAlign: 'center' },
+  errorBody: { fontSize: 14, color: tk.textSecondary, textAlign: 'center', lineHeight: 21 },
   retryBtn: {
-    backgroundColor: Colors.brand[600], borderRadius: 12,
+    backgroundColor: tk.brandCta, borderRadius: 12,
     paddingHorizontal: 24, paddingVertical: 12, minHeight: 44,
     alignItems: 'center', justifyContent: 'center',
   },
-  retryBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  retryBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
 
   scrollContent: { padding: 16, gap: 12, paddingBottom: 32 },
 
   planCard: {
-    backgroundColor: Colors.surface.default, borderRadius: 16, padding: 16, gap: 10,
-    borderWidth: 1, borderColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderRadius: 16, padding: 16, gap: 10,
+    borderWidth: 1, borderColor: tk.border,
   },
-  planCardLabel: { fontSize: 12, fontWeight: '600', color: Colors.neutral[500], textTransform: 'uppercase', letterSpacing: 0.4 },
+  planCardLabel: { fontSize: 12, fontWeight: '600', color: tk.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4 },
   planNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  planName: { fontSize: 20, fontWeight: '800', color: Colors.neutral[900], flex: 1 },
-  statusPill: { backgroundColor: Colors.success[50], borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
-  statusPillText: { fontSize: 12, fontWeight: '700', color: Colors.success[700] },
+  planName: { fontSize: 20, fontWeight: '800', color: tk.textPrimary, flex: 1 },
+  statusPill: { backgroundColor: tk.successTint, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
+  statusPillText: { fontSize: 12, fontWeight: '700', color: tk.successFg },
   planRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  planRowLabel: { fontSize: 14, color: Colors.neutral[600], flex: 1, paddingRight: 8 },
-  planRowValue: { fontSize: 14, fontWeight: '600', color: Colors.neutral[900], textAlign: 'right' },
-  noPlanTitle: { fontSize: 16, fontWeight: '700', color: Colors.neutral[800] },
-  noPlanBody: { fontSize: 13, color: Colors.neutral[600], lineHeight: 20 },
+  planRowLabel: { fontSize: 14, color: tk.textSecondary, flex: 1, paddingRight: 8 },
+  planRowValue: { fontSize: 14, fontWeight: '600', color: tk.textPrimary, textAlign: 'right' },
+  noPlanTitle: { fontSize: 16, fontWeight: '700', color: tk.textPrimary },
+  noPlanBody: { fontSize: 13, color: tk.textSecondary, lineHeight: 20 },
 
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.neutral[900], marginTop: 8 },
-  emptyText: { fontSize: 13, color: Colors.neutral[500] },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: tk.textPrimary, marginTop: 8 },
+  emptyText: { fontSize: 13, color: tk.textSecondary },
 
   inlineError: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
-  inlineErrorText: { fontSize: 13, color: Colors.error[600], flex: 1 },
+  inlineErrorText: { fontSize: 13, color: tk.errorFg, flex: 1 },
   inlineRetry: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
-  inlineRetryText: { fontSize: 13, fontWeight: '700', color: Colors.brand[600] },
+  inlineRetryText: { fontSize: 13, fontWeight: '700', color: tk.brandCta },
 
   invoiceRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: Colors.surface.default, borderRadius: 14, padding: 14,
-    borderWidth: 1, borderColor: Colors.neutral[100], minHeight: 64,
+    backgroundColor: tk.raised, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: tk.border, minHeight: 64,
   },
-  invoiceNumber: { fontSize: 14, fontWeight: '700', color: Colors.neutral[900] },
-  invoicePeriod: { fontSize: 12, color: Colors.neutral[500], marginTop: 2 },
-  invoicePaid: { fontSize: 12, color: Colors.success[700], marginTop: 2 },
+  invoiceNumber: { fontSize: 14, fontWeight: '700', color: tk.textPrimary },
+  invoicePeriod: { fontSize: 12, color: tk.textSecondary, marginTop: 2 },
+  invoicePaid: { fontSize: 12, color: tk.successFg, marginTop: 2 },
   invoiceAmountCol: { alignItems: 'flex-end', gap: 2 },
-  invoiceTotal: { fontSize: 14, fontWeight: '800', color: Colors.neutral[900] },
-  invoiceStatus: { fontSize: 12, color: Colors.neutral[500] },
-});
+  invoiceTotal: { fontSize: 14, fontWeight: '800', color: tk.textPrimary },
+  invoiceStatus: { fontSize: 12, color: tk.textSecondary },
+  }),
+);

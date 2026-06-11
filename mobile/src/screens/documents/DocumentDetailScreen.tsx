@@ -23,8 +23,8 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { AmountDisplay } from '../../components/ui/AmountDisplay';
 import { StatusTimeline } from '../../components/shared/StatusTimeline';
-import { Colors } from '../../constants/colors';
-import { formatDateIN, formatINR } from '../../lib/utils';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { formatDateIN } from '../../lib/utils';
 import apiClient from '../../lib/api';
 import type { DocumentStackParamList } from '../../navigation/DocumentStack';
 import type { DocumentStatus } from '../../components/ui/Badge';
@@ -143,31 +143,33 @@ function getTimelineSteps(status: DocumentStatus) {
   }));
 }
 
-function getOcrConfidenceConfig(confidence: number) {
+function getOcrConfidenceConfig(confidence: number, tk: ThemeTokens) {
   if (confidence >= 80) return {
-    color: Colors.success[600],
-    bg: Colors.success[100],
+    color: tk.successFg,
+    bg: tk.successTint,
     label: 'High confidence — auto-processed',
   };
   if (confidence >= 50) return {
-    color: Colors.warning[600],
-    bg: Colors.warning[100],
+    color: tk.warningFg,
+    bg: tk.warningTint,
     label: 'Medium confidence — please verify data',
   };
   return {
-    color: Colors.error[600],
-    bg: Colors.error[100],
+    color: tk.errorFg,
+    bg: tk.errorTint,
     label: 'Low confidence — manual review required',
   };
 }
 
-function getFieldConfidenceColor(confidence: number): string {
+function getFieldConfidenceColor(confidence: number, tk: ThemeTokens): string {
   if (confidence >= 80) return 'transparent';
-  if (confidence >= 50) return Colors.warning[100];
-  return Colors.error[100];
+  if (confidence >= 50) return tk.warningTint;
+  return tk.errorTint;
 }
 
 export function DocumentDetailScreen({ navigation, route }: Props) {
+  const styles = useStyles();
+  const { tokens } = useTheme();
   const { documentId } = route.params;
 
   const { data: document, isLoading } = useQuery({
@@ -215,7 +217,7 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
     );
   }
 
-  const ocrConfig = getOcrConfidenceConfig(document.ocrConfidence);
+  const ocrConfig = getOcrConfidenceConfig(document.ocrConfidence, tokens);
   const timelineSteps = getTimelineSteps(document.status);
 
   return (
@@ -274,7 +276,7 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
                 key={index}
                 style={[
                   styles.ocrFieldRow,
-                  { backgroundColor: getFieldConfidenceColor(field.confidence) },
+                  { backgroundColor: getFieldConfidenceColor(field.confidence, tokens) },
                 ]}
               >
                 <Text style={styles.ocrFieldLabel}>{field.label}</Text>
@@ -340,27 +342,28 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  loadingText: { fontSize: 16, color: Colors.neutral[500] },
+  loadingText: { fontSize: 16, color: tk.textSecondary },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[200],
+    borderBottomColor: tk.border,
   },
   backBtn: { padding: 4, marginRight: 8 },
-  backText: { fontSize: 20, color: Colors.brand[500] },
-  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: Colors.neutral[900] },
+  backText: { fontSize: 20, color: tk.brand500 },
+  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: tk.textPrimary },
   headerBtn: { padding: 8 },
   scrollContent: { padding: 16, gap: 16 },
   imageContainer: {
     height: 240,
-    backgroundColor: Colors.neutral[900],
+    backgroundColor: tk.textPrimary,
     borderRadius: 12,
     overflow: 'hidden',
     alignItems: 'center',
@@ -384,7 +387,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
     marginBottom: 12,
   },
   ocrFieldRow: {
@@ -395,17 +398,18 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginBottom: 4,
   },
-  ocrFieldLabel: { fontSize: 13, color: Colors.neutral[600] },
-  ocrFieldValue: { fontSize: 13, fontWeight: '500', color: Colors.neutral[900] },
+  ocrFieldLabel: { fontSize: 13, color: tk.textSecondary },
+  ocrFieldValue: { fontSize: 13, fontWeight: '500', color: tk.textPrimary },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
-  metaLabel: { fontSize: 13, color: Colors.neutral[500] },
-  metaValue: { fontSize: 13, fontWeight: '500', color: Colors.neutral[800] },
+  metaLabel: { fontSize: 13, color: tk.textSecondary },
+  metaValue: { fontSize: 13, fontWeight: '500', color: tk.textPrimary },
   actionsSection: { gap: 10 },
   deleteBtn: {},
-});
+  }),
+);

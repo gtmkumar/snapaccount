@@ -6,12 +6,14 @@
 import React from 'react';
 import {
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -31,6 +33,13 @@ import type { GstStackParamList } from '../../navigation/GstStack';
 import type { GstReturnStatus } from '../../components/ui/Badge';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { RequestCallbackCta } from '../../components/callbacks/RequestCallbackCta';
+import { useAuthStore } from '../../store/authStore';
+import { getImsSummary } from '../../api/gstIms';
+import {
+  currentOpenImsPeriod,
+  daysUntilDate,
+  periodToLabel,
+} from '../../lib/imsPeriod';
 
 type NavProp = NativeStackNavigationProp<GstStackParamList, 'GstDashboard'>;
 interface Props { navigation: NavProp }
@@ -57,8 +66,24 @@ interface GstSummary {
 
 export function GstDashboardScreen({ navigation }: Props) {
   useSensitiveScreen();
+  const { t } = useTranslation();
   const { tokens } = useTheme();
   const styles = useStyles();
+  const organization = useAuthStore((s) => s.currentOrganization);
+  const imsPeriod = currentOpenImsPeriod();
+
+  // GAP-101: live PENDING badge for the IMS Inbox entry card (spec §1.2)
+  const { data: imsSummary } = useQuery({
+    queryKey: ['ims-summary', organization?.id ?? '', imsPeriod],
+    queryFn: () => getImsSummary(organization?.id ?? '', imsPeriod),
+    enabled: !!organization?.id,
+  });
+  const imsPending = (imsSummary?.pending ?? 0) + (imsSummary?.pendingKept ?? 0);
+  const imsDaysLeft = imsSummary
+    ? daysUntilDate(imsSummary.gstr2bGenerationDeadline)
+    : 99;
+  const imsUrgent =
+    !!imsSummary && !imsSummary.gstr2bGenerationPast && imsPending > 0 && imsDaysLeft <= 7;
 
   const { data: summary, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['gst-dashboard'],
@@ -162,6 +187,36 @@ export function GstDashboardScreen({ navigation }: Props) {
 
         {/* Pending Actions */}
         <Text style={styles.sectionTitle}>Pending Actions</Text>
+
+        {/* GAP-101: IMS Inbox entry card (spec §1.2) */}
+        <Pressable
+          onPress={() => navigation.navigate('ImsInbox', { period: imsPeriod })}
+          style={styles.imsCard}
+          accessibilityRole="button"
+          accessibilityLabel={
+            imsPending > 0
+              ? `${t('mobile.gst.ims.entry.title')}, ${t('mobile.gst.ims.entry.pendingCount', { count: imsPending })}, ${periodToLabel(imsPeriod)}`
+              : `${t('mobile.gst.ims.entry.title')}, ${periodToLabel(imsPeriod)}`
+          }
+          testID="gst-ims-entry-card"
+        >
+          <View style={styles.imsIconWrap}>
+            <Ionicons name="file-tray-full-outline" size={20} color={tokens.gstAccent} />
+            {imsUrgent && <View style={styles.imsUrgencyDot} testID="gst-ims-urgency-dot" />}
+          </View>
+          <View style={styles.imsCardBody}>
+            <Text style={styles.imsCardTitle}>{t('mobile.gst.ims.entry.title')}</Text>
+            <Text style={styles.imsCardSub}>
+              {t('mobile.gst.ims.entry.subtitle', { period: periodToLabel(imsPeriod) })}
+            </Text>
+          </View>
+          {imsPending > 0 && (
+            <View style={styles.imsBadge} testID="gst-ims-pending-badge">
+              <Text style={styles.imsBadgeText}>{imsPending}</Text>
+            </View>
+          )}
+          <Ionicons name="chevron-forward" size={18} color={tokens.textSecondary} />
+        </Pressable>
         {isLoading ? (
           <View style={styles.skeletonCard} />
         ) : summary?.pendingReturns.length === 0 ? (
@@ -314,6 +369,54 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     mismatchText: { fontSize: 13, color: tk.warningFg, fontWeight: '600' },
 
     sectionTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.3 },
+
+    // GAP-101: IMS Inbox entry card
+    imsCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: tk.raised,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: tk.border,
+      padding: 14,
+      minHeight: 44,
+      ...tk.elevation1,
+    },
+    imsIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: tk.gstAccent + '15',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    imsUrgencyDot: {
+      position: 'absolute',
+      top: -2,
+      right: -2,
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: tk.errorCta,
+      borderWidth: 1.5,
+      borderColor: tk.raised,
+    },
+    imsCardBody: { flex: 1, minWidth: 0 },
+    imsCardTitle: { fontSize: 15, fontWeight: '700', color: tk.textPrimary },
+    imsCardSub: { fontSize: 12, color: tk.textSecondary, marginTop: 2 },
+    imsBadge: {
+      minWidth: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: tk.warningTint,
+      borderWidth: 1,
+      borderColor: tk.warningTintBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 7,
+    },
+    imsBadgeText: { fontSize: 12, fontWeight: '800', color: tk.warningFg },
     skeletonCard: { height: 120, backgroundColor: tk.skeleton1, borderRadius: 16 },
     allClear: { alignItems: 'center', gap: 8 },
     allClearIcon: { width: 56, height: 56, borderRadius: 16, backgroundColor: tk.successTint, alignItems: 'center', justifyContent: 'center' },

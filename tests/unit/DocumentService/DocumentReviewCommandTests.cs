@@ -90,6 +90,13 @@ file static class FakeDocumentDb
         dbMock.Setup(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()))
               .ReturnsAsync(1);
 
+        // Mock OcrResults as empty list — ApproveDocumentCommandHandler queries this
+        // to populate the OcrText field in the Pub/Sub event payload.
+        // Empty list means null OcrText (no OCR result available), which is valid.
+        var ocrResults = new List<DocumentService.Domain.Entities.OcrResult>();
+        dbMock.Setup(db => db.OcrResults)
+              .Returns(ocrResults.BuildAsyncDbSetMock());
+
         return (dbMock, doc);
     }
 
@@ -222,7 +229,10 @@ public sealed class ApproveDocumentCommandTests
     {
         var publisherMock = new Mock<IDocumentEventPublisher>();
         publisherMock
-            .Setup(p => p.PublishOcrCompletedAsync(It.IsAny<Document>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.PublishOcrCompletedAsync(
+                It.IsAny<Document>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         var handler = new ApproveDocumentCommandHandler(db, user, publisherMock.Object);
         return (handler, publisherMock);
@@ -242,7 +252,7 @@ public sealed class ApproveDocumentCommandTests
         doc.ApprovedBy.Should().Be(UserId);
         doc.ApprovedAt.Should().NotBeNull();
         publisherMock.Verify(
-            p => p.PublishOcrCompletedAsync(doc, It.IsAny<CancellationToken>()),
+            p => p.PublishOcrCompletedAsync(doc, It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Once);
         dbMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -271,7 +281,7 @@ public sealed class ApproveDocumentCommandTests
 
         result.IsSuccess.Should().BeTrue();
         publisherMock.Verify(
-            p => p.PublishOcrCompletedAsync(It.IsAny<Document>(), It.IsAny<CancellationToken>()),
+            p => p.PublishOcrCompletedAsync(It.IsAny<Document>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);
         dbMock.Verify(db => db.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }

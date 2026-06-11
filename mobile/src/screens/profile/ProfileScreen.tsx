@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../../components/ui/Card';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useAuthStore } from '../../store/authStore';
 import { FirebaseAuth } from '../../lib/firebase';
 import { deleteAccount } from '../../lib/api';
@@ -29,6 +29,8 @@ function normalizePhone(phone: string | null | undefined): string {
 }
 
 export function ProfileScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { user, currentOrganization, signOut } = useAuthStore();
   const { t } = useTranslation();
   const { trigger: triggerBiometric } = useBiometricGate();
@@ -91,7 +93,7 @@ export function ProfileScreen({ navigation }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.title}>{t('mobile.profile.title')}</Text>
         <View style={{ width: 40 }} />
@@ -123,7 +125,7 @@ export function ProfileScreen({ navigation }: Props) {
           <Card shadow="sm" style={styles.orgCard}>
             <View style={styles.orgHeader}>
               <View style={styles.orgIconWrap}>
-                <Ionicons name="business" size={18} color={Colors.brand[500]} />
+                <Ionicons name="business" size={18} color={tokens.brand500} />
               </View>
               <View style={styles.orgInfo}>
                 <Text style={styles.orgCardTitle}>{t('mobile.profile.org.currentOrg')}</Text>
@@ -143,18 +145,18 @@ export function ProfileScreen({ navigation }: Props) {
         <Card shadow="sm" padding="none" style={styles.menuCard}>
           {([
             // Task #18 (GAP-060rem): Edit Business / Billing / Help now route to real screens
-            { label: t('mobile.profile.menu.editBusiness'), icon: 'business-outline', color: Colors.brand[600], route: 'EditBusiness' },
-            { label: t('mobile.profile.menu.identityDocuments'), icon: 'document-attach-outline', color: Colors.accent[600], route: 'IdentityDocuments' },
-            { label: t('mobile.profile.menu.manageDevices'), icon: 'phone-portrait-outline', color: Colors.info[500], route: 'Devices' },
+            { label: t('mobile.profile.menu.editBusiness'), icon: 'business-outline', color: tokens.brandCta, route: 'EditBusiness' },
+            { label: t('mobile.profile.menu.identityDocuments'), icon: 'document-attach-outline', color: tokens.loanAccent, route: 'IdentityDocuments' },
+            { label: t('mobile.profile.menu.manageDevices'), icon: 'phone-portrait-outline', color: tokens.infoFg, route: 'Devices' },
             // AND-11: both entries intentionally open the combined
             // language + notification preferences screen (now titled
             // "Language & Notifications"); distinct testIDs since the route
             // is shared.
-            { label: t('mobile.profile.menu.language'), icon: 'language-outline', color: Colors.accent[500], route: 'NotificationPreferences', testID: 'profile-menu-language' },
-            { label: t('mobile.profile.menu.notifications'), icon: 'notifications-outline', color: Colors.warning[500], route: 'NotificationPreferences', testID: 'profile-menu-notifications' },
-            { label: t('mobile.profile.menu.billing'), icon: 'card-outline', color: Colors.success[500], route: 'Billing' },
-            { label: t('mobile.profile.menu.help'), icon: 'help-circle-outline', color: Colors.neutral[500], route: 'Help' },
-            { label: t('mobile.profile.menu.about'), icon: 'information-circle-outline', color: Colors.neutral[500] },
+            { label: t('mobile.profile.menu.language'), icon: 'language-outline', color: tokens.loanAccent, route: 'NotificationPreferences', testID: 'profile-menu-language' },
+            { label: t('mobile.profile.menu.notifications'), icon: 'notifications-outline', color: tokens.warningFg, route: 'NotificationPreferences', testID: 'profile-menu-notifications' },
+            { label: t('mobile.profile.menu.billing'), icon: 'card-outline', color: tokens.successFg, route: 'Billing' },
+            { label: t('mobile.profile.menu.help'), icon: 'help-circle-outline', color: tokens.textSecondary, route: 'Help' },
+            { label: t('mobile.profile.menu.about'), icon: 'information-circle-outline', color: tokens.textSecondary },
           ] as { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string; route?: keyof MoreStackParamList; disabled?: boolean; testID?: string }[]).map((item, idx, arr) => (
             <Pressable
               key={item.label}
@@ -177,18 +179,18 @@ export function ProfileScreen({ navigation }: Props) {
                 <Ionicons name={item.icon} size={18} color={item.color} />
               </View>
               <Text style={styles.menuItemLabel}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={16} color={Colors.neutral[300]} />
+              <Ionicons name="chevron-forward" size={16} color={tokens.textTertiary} />
             </Pressable>
           ))}
         </Card>
 
         {/* Sign out */}
         <Pressable style={styles.signOutRow} onPress={handleSignOut}>
-          <View style={[styles.menuItemIconWrap, { backgroundColor: Colors.error[50] }]}>
-            <Ionicons name="log-out-outline" size={18} color={Colors.error[500]} />
+          <View style={[styles.menuItemIconWrap, { backgroundColor: tokens.errorTint }]}>
+            <Ionicons name="log-out-outline" size={18} color={tokens.errorFg} />
           </View>
           <Text style={styles.signOutLabel}>{t('mobile.profile.signOut.label')}</Text>
-          <Ionicons name="chevron-forward" size={16} color={Colors.neutral[300]} />
+          <Ionicons name="chevron-forward" size={16} color={tokens.textTertiary} />
         </Pressable>
 
         {/* Delete account — DPDP Act 2023 Right to Erasure */}
@@ -199,8 +201,8 @@ export function ProfileScreen({ navigation }: Props) {
           accessibilityRole="button"
           accessibilityLabel={t('mobile.profile.deleteAccount.accessibilityLabel')}
         >
-          <View style={[styles.menuItemIconWrap, { backgroundColor: Colors.error[100] }]}>
-            <Ionicons name="trash-outline" size={18} color={Colors.error[700]} />
+          <View style={[styles.menuItemIconWrap, { backgroundColor: tokens.errorTintBorder }]}>
+            <Ionicons name="trash-outline" size={18} color={tokens.errorFg} />
           </View>
           <Text style={[styles.signOutLabel, styles.deleteAccountLabel]}>
             {deletingAccount
@@ -208,7 +210,7 @@ export function ProfileScreen({ navigation }: Props) {
               : t('mobile.profile.deleteAccount.label')}
           </Text>
           {!deletingAccount && (
-            <Ionicons name="chevron-forward" size={16} color={Colors.neutral[300]} />
+            <Ionicons name="chevron-forward" size={16} color={tokens.textTertiary} />
           )}
         </Pressable>
 
@@ -218,48 +220,50 @@ export function ProfileScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100] },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900], letterSpacing: -0.2 },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
   // paddingBottom clears the bottom tab bar so the last items (Sign Out / Delete
   // account) are reachable — without it the ScrollView ends behind the tab bar.
   scrollContent: { padding: 16, gap: 16, paddingBottom: 120 },
 
   // Avatar section
   avatarSection: { alignItems: 'center', paddingVertical: 20 },
-  avatar: { width: 80, height: 80, borderRadius: 24, backgroundColor: Colors.brand[500], alignItems: 'center', justifyContent: 'center', marginBottom: 14, shadowColor: Colors.brand[500], shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
-  avatarText: { fontSize: 32, fontWeight: '800', color: Colors.neutral[0] },
-  userName: { fontSize: 22, fontWeight: '700', color: Colors.neutral[900], marginBottom: 4, letterSpacing: -0.3 },
-  userPhone: { fontSize: 14, color: Colors.neutral[500], marginBottom: 8 },
-  userTypePill: { backgroundColor: Colors.brand[50], paddingHorizontal: 12, paddingVertical: 5, borderRadius: 10 },
-  userTypeText: { fontSize: 12, color: Colors.brand[600], fontWeight: '600' },
+  avatar: { width: 80, height: 80, borderRadius: 24, backgroundColor: tk.brand500, alignItems: 'center', justifyContent: 'center', marginBottom: 14, shadowColor: tk.brand500, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  avatarText: { fontSize: 32, fontWeight: '800', color: tk.textOnBrand },
+  userName: { fontSize: 22, fontWeight: '700', color: tk.textPrimary, marginBottom: 4, letterSpacing: -0.3 },
+  userPhone: { fontSize: 14, color: tk.textSecondary, marginBottom: 8 },
+  userTypePill: { backgroundColor: tk.brandTint, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 10 },
+  userTypeText: { fontSize: 12, color: tk.brandCta, fontWeight: '600' },
 
   // Org card
   orgCard: { padding: 16 },
   orgHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
-  orgIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.brand[50], alignItems: 'center', justifyContent: 'center' },
+  orgIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: tk.brandTint, alignItems: 'center', justifyContent: 'center' },
   orgInfo: { flex: 1 },
   // X-1 (a11y): meaningful labels must be ≥ neutral[500] on light surfaces.
-  orgCardTitle: { fontSize: 11, color: Colors.neutral[500], textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
-  orgName: { fontSize: 16, fontWeight: '700', color: Colors.neutral[900] },
-  gstinRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.neutral[100] },
-  gstinLabel: { fontSize: 12, color: Colors.neutral[500] },
-  orgGstin: { fontSize: 13, color: Colors.neutral[600], fontFamily: Platform.OS === 'ios' ? 'SF Mono' : 'monospace', fontWeight: '500' },
+  orgCardTitle: { fontSize: 11, color: tk.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  orgName: { fontSize: 16, fontWeight: '700', color: tk.textPrimary },
+  gstinRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: tk.border },
+  gstinLabel: { fontSize: 12, color: tk.textSecondary },
+  orgGstin: { fontSize: 13, color: tk.textSecondary, fontFamily: Platform.OS === 'ios' ? 'SF Mono' : 'monospace', fontWeight: '500' },
 
   // Menu
   menuCard: { overflow: 'hidden', borderRadius: 18 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100], gap: 12 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: tk.border, gap: 12 },
   menuItemDisabled: { opacity: 0.4 },
   menuItemIconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  menuItemLabel: { flex: 1, fontSize: 15, color: Colors.neutral[800], letterSpacing: -0.1 },
+  menuItemLabel: { flex: 1, fontSize: 15, color: tk.textPrimary, letterSpacing: -0.1 },
 
   // Sign out
-  signOutRow: { flexDirection: 'row', alignItems: 'center', padding: 16, minHeight: 44, backgroundColor: Colors.surface.default, borderRadius: 18, gap: 12, shadowColor: '#0F172A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
-  signOutLabel: { flex: 1, fontSize: 15, color: Colors.error[500], fontWeight: '600' },
+  signOutRow: { flexDirection: 'row', alignItems: 'center', padding: 16, minHeight: 44, backgroundColor: tk.raised, borderRadius: 18, gap: 12, shadowColor: tk.shadowColor, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+  signOutLabel: { flex: 1, fontSize: 15, color: tk.errorFg, fontWeight: '600' },
   // Delete account row — more prominent danger styling per DPDP Act 2023 UX guidance
-  deleteAccountRow: { borderWidth: 1, borderColor: Colors.error[200], backgroundColor: Colors.error[50] },
-  deleteAccountLabel: { color: Colors.error[700] },
-  version: { fontSize: 12, color: Colors.neutral[400], textAlign: 'center', paddingVertical: 4 },
-});
+  deleteAccountRow: { borderWidth: 1, borderColor: tk.errorTintBorder, backgroundColor: tk.errorTint },
+  deleteAccountLabel: { color: tk.errorFg },
+  version: { fontSize: 12, color: tk.textTertiary, textAlign: 'center', paddingVertical: 4 },
+  }),
+);

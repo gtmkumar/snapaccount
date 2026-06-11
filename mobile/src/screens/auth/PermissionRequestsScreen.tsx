@@ -13,7 +13,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { usePreferencesStore } from '../../store/preferencesStore';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
@@ -59,6 +59,8 @@ const PERMISSIONS: PermissionItem[] = [
 ];
 
 export function PermissionRequestsScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { setPermissionsGranted } = usePreferencesStore();
   const [statuses, setStatuses] = useState<Record<string, PermStatus>>(
     Object.fromEntries(PERMISSIONS.map((p) => [p.id, 'idle'])),
@@ -111,7 +113,7 @@ export function PermissionRequestsScreen({ navigation }: Props) {
 
   const handleContinue = () => {
     setPermissionsGranted();
-    navigation.replace('App' as never, {} as never);
+    navigation.replace('App');
   };
 
   return (
@@ -134,7 +136,7 @@ export function PermissionRequestsScreen({ navigation }: Props) {
                     status === 'denied' && styles.iconCircleDenied,
                   ]}
                 >
-                  <Ionicons name={permission.icon} size={24} color={Colors.brand[500]} />
+                  <Ionicons name={permission.icon} size={24} color={tokens.brand500} />
                 </View>
                 <View style={styles.permTextArea}>
                   <Text style={styles.permTitle}>{permission.title}</Text>
@@ -195,18 +197,19 @@ export function PermissionRequestsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   scrollContent: { padding: 24, paddingBottom: 40 },
   heading: {
     fontSize: 28,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     marginBottom: 8,
   },
   subtext: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     marginBottom: 24,
     lineHeight: 20,
   },
@@ -224,15 +227,15 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconCircleGranted: {
-    backgroundColor: Colors.success[100],
+    backgroundColor: tk.successTintBorder,
   },
   iconCircleDenied: {
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
   },
   permTextArea: {
     flex: 1,
@@ -240,22 +243,22 @@ const styles = StyleSheet.create({
   permTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
   },
   requiredBadge: {
     fontSize: 11,
-    color: Colors.error[600],
+    color: tk.errorFg,
     fontWeight: '600',
     marginTop: 2,
   },
   grantedCheck: {
     fontSize: 20,
-    color: Colors.success[600],
+    color: tk.successFg,
     fontWeight: '700',
   },
   permReason: {
     fontSize: 14,
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     lineHeight: 20,
     marginBottom: 16,
   },
@@ -264,16 +267,17 @@ const styles = StyleSheet.create({
   },
   grantedText: {
     fontSize: 13,
-    color: Colors.success[600],
+    color: tk.successFg,
     fontWeight: '500',
     textAlign: 'center',
   },
   deniedText: {
     fontSize: 12,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     textAlign: 'center',
   },
   continueArea: {
     marginTop: 8,
   },
-});
+  }),
+);

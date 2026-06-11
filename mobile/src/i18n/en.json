@@ -243,6 +243,194 @@
         "backToDashboard": "Back to Dashboard",
         "errorTitle": "Filing Failed",
         "errorBody": "Could not file nil return. Please try again."
+      },
+      "ims": {
+        "nav": {
+          "title": "IMS Inbox"
+        },
+        "entry": {
+          "title": "IMS Inbox",
+          "subtitle": "Accept or reject supplier invoices · {{period}}",
+          "pendingCount_one": "{{count}} invoice pending",
+          "pendingCount_other": "{{count}} invoices pending"
+        },
+        "period": {
+          "label": "Period",
+          "current": "Current period"
+        },
+        "summary": {
+          "pending": "Pending",
+          "accepted": "Accepted",
+          "rejected": "Rejected",
+          "pendingKept": "Pending (kept)",
+          "total_one": "{{count}} invoice",
+          "total_other": "{{count}} invoices"
+        },
+        "sync": {
+          "button": "Sync from GSTN",
+          "hint": "Pulls inward invoices from GSTN. Your existing decisions are kept.",
+          "lastSynced": "Last synced: {{datetime}}",
+          "never": "Not synced yet",
+          "success": "Synced — {{inserted}} new, {{skipped}} unchanged",
+          "error": "Couldn't sync with GSTN. {{message}}",
+          "rateLimited": "Too many sync attempts. Try again in a minute."
+        },
+        "banner": {
+          "actionRequired_one": "Action required by {{date}}. {{count}} invoice still pending. Anything not actioned will be automatically accepted when GSTR-2B is generated on the 14th.",
+          "actionRequired_other": "Action required by {{date}}. {{count}} invoices still pending. Anything not actioned will be automatically accepted when GSTR-2B is generated on the 14th.",
+          "windowPast": "GSTR-2B for {{period}} has been generated. Pending invoices were deemed accepted. To correct a rejection, use GSTR-1A.",
+          "learnMore": "Learn how IMS works"
+        },
+        "edu": {
+          "title": "How the Invoice Management System works",
+          "what": "Suppliers report invoices to GSTN. You must accept, reject, or keep each one pending. Accepted invoices flow into GSTR-2B and earn you ITC; rejected ones do not.",
+          "cutoff": "GSTR-2B for this period is generated on {{date}}. Act on every invoice before then.",
+          "cutoffNoDate": "GSTR-2B is generated on the 14th of the following month. Act on every invoice before then.",
+          "doingNothing": "If you do nothing, the invoice is automatically accepted on the 14th.",
+          "rejectPath": "Rejected an invoice? The supplier must correct it through a GSTR-1A amendment.",
+          "gotIt": "Got it"
+        },
+        "col": {
+          "supplier": "Supplier",
+          "invoice": "Invoice",
+          "taxableValue": "Taxable value",
+          "tax": "Tax",
+          "invoiceValue": "Invoice value",
+          "source": "Source",
+          "status": "Status",
+          "deadline": "Deadline",
+          "actions": "Actions"
+        },
+        "status": {
+          "PENDING": "Pending",
+          "ACCEPTED": "Accepted",
+          "REJECTED": "Rejected",
+          "PENDING_KEPT": "Pending (kept)",
+          "deemed": "Deemed accepted"
+        },
+        "deadline": {
+          "dueToday": "Due today",
+          "dueTodayA11y": "Deemed acceptance due today",
+          "inDays_one": "Deemed in {{count}} day",
+          "inDays_other": "Deemed in {{count}} days",
+          "a11y_one": "Automatically accepted in {{count}} day if no action is taken",
+          "a11y_other": "Automatically accepted in {{count}} days if no action is taken",
+          "deemedA11y": "Deemed accepted; GSTR-2B generated"
+        },
+        "action": {
+          "accept": "Accept",
+          "reject": "Reject",
+          "keepPending": "Keep pending",
+          "fixViaGstr1a": "Fix via GSTR-1A"
+        },
+        "accept": {
+          "success": "Invoice {{invoiceNumber}} accepted"
+        },
+        "keepPending": {
+          "hint": "You still need to accept or reject before the 14th, or it will be deemed accepted.",
+          "success": "Invoice {{invoiceNumber}} kept pending"
+        },
+        "reject": {
+          "title": "Reject invoice {{invoiceNumber}}?",
+          "consequence": "ITC for this invoice will not be included in GSTR-2B. The supplier must correct it via a GSTR-1A amendment.",
+          "reasonLabel": "Reason for rejection",
+          "reasonRequired": "Please give a reason (at least 3 characters).",
+          "reason": {
+            "price": "Price mismatch",
+            "notReceived": "Goods not received",
+            "duplicate": "Duplicate",
+            "taxRate": "Tax rate wrong",
+            "notMine": "Not my purchase"
+          },
+          "confirm": "Reject invoice",
+          "success": "Invoice {{invoiceNumber}} rejected"
+        },
+        "bulk": {
+          "select": "Select",
+          "selectedCount_one": "{{count}} selected",
+          "selectedCount_other": "{{count}} selected",
+          "cap": "Select up to 100 invoices per action",
+          "keepFirst": "Keep first {{count}}",
+          "preflight": "{{change}} will be {{action}}, {{skip}} skipped (already settled)",
+          "result": "{{changed}} updated, {{skipped}} skipped, {{failed}} failed",
+          "confirmTitle": "Apply bulk action?",
+          "rejectTitle_one": "Reject {{count}} invoice?",
+          "rejectTitle_other": "Reject {{count}} invoices?",
+          "noneEligible": "No selected invoices are eligible for this action.",
+          "failedTitle": "Some actions failed"
+        },
+        "undo": {
+          "label": "Undo",
+          "movedToKept": "Moved back to pending-kept."
+        },
+        "filter": {
+          "all": "All",
+          "searchPlaceholder": "Search supplier or invoice no.",
+          "clear": "Clear filters"
+        },
+        "empty": {
+          "noInvoices": "No invoices in IMS for {{period}}.",
+          "neverSynced": "Sync to pull your inward invoices from GSTN for {{period}}.",
+          "filtered": "No {{status}} invoices match your filters."
+        },
+        "error": {
+          "loadFailed": "Couldn't load IMS invoices.",
+          "alreadySettled": "This invoice is already {{status}} and can't be {{action}}. Use GSTR-1A to correct it.",
+          "actionFailed": "The action couldn't be completed. Please try again.",
+          "retry": "Retry"
+        },
+        "announce": {
+          "filtered": "Showing {{status}} invoices for {{period}}"
+        },
+        "row": {
+          "a11y": "{{supplier}}, GSTIN {{gstin}}, invoice {{invoiceNumber}} dated {{date}}, taxable {{taxable}}, tax {{tax}}, total {{total}}, status {{status}}. {{countdown}}"
+        },
+        "loadMore": "Load more",
+        "detail": {
+          "title": "Invoice detail",
+          "invoiceDate": "Invoice date",
+          "taxBreakdown": "Tax breakdown",
+          "igst": "IGST",
+          "cgst": "CGST",
+          "sgst": "SGST",
+          "cess": "Cess",
+          "rejectionReason": "Rejection reason",
+          "actionLog": "Action history",
+          "noActions": "No actions taken yet.",
+          "bulkTag": "Bulk"
+        }
+      },
+      "gstr1a": {
+        "nav": {
+          "title": "GSTR-1A amendments"
+        },
+        "empty": "No amendments. Rejected invoices that need supplier correction will appear here.",
+        "create": {
+          "cta": "Create GSTR-1A amendment",
+          "typeLabel": "Amendment type",
+          "originalInvoice": "Original invoice no.",
+          "supplierGstin": "Supplier GSTIN",
+          "correctedFigures": "Corrected figures",
+          "draftNote": "This creates a draft only. Submission and filing happen in a later step.",
+          "submit": "Create draft",
+          "success": "Amendment draft created"
+        },
+        "type": {
+          "B2B_AMENDMENT": "B2B amendment",
+          "B2BA": "B2B amendment (prior period)",
+          "CDNR_AMENDMENT": "Credit/debit note amendment",
+          "CDNRA": "Credit/debit note amendment (prior period)"
+        },
+        "status": {
+          "DRAFT": "Draft",
+          "SUBMITTED": "Submitted",
+          "FILED": "Filed"
+        },
+        "col": {
+          "arn": "ARN",
+          "filed": "Filed"
+        },
+        "notFiled": "Not filed"
       }
     },
     "itr": {

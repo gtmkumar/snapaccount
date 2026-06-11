@@ -13,7 +13,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 
@@ -51,6 +51,8 @@ export function PanInput({
   disabled = false,
   testID,
 }: PanInputProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const [touched, setTouched] = useState(false);
   const internalErrorKey = touched ? validatePan(value) : null;
@@ -83,7 +85,7 @@ export function PanInput({
         onChangeText={handleChange}
         onBlur={handleBlur}
         placeholder={placeholder}
-        placeholderTextColor={Colors.neutral[400]}
+        placeholderTextColor={tokens.textTertiary}
         autoCapitalize="characters"
         autoCorrect={false}
         maxLength={10}
@@ -117,49 +119,51 @@ export function PanInput({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: { gap: 6 },
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
   },
   input: {
     minHeight: 48,
     borderWidth: 1.5,
     // PAN-3: neutral[200] resting border was ~1.3:1 on white — imperceptible.
-    borderColor: Colors.neutral[300],
+    borderColor: tk.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.neutral[900],
-    backgroundColor: Colors.surface.default,
+    color: tk.textPrimary,
+    backgroundColor: tk.raised,
     letterSpacing: 2,
   },
   inputError: {
-    borderColor: Colors.error[500],
-    backgroundColor: Colors.error[50],
+    borderColor: tk.errorCta,
+    backgroundColor: tk.errorTint,
   },
   inputDisabled: {
-    backgroundColor: Colors.neutral[50],
-    color: Colors.neutral[400],
+    backgroundColor: tk.canvas,
+    color: tk.textTertiary,
   },
   inputValid: {
-    borderColor: Colors.success[500],
+    borderColor: tk.successFg,
   },
   errorText: {
     fontSize: 12,
-    color: Colors.error[600],
+    color: tk.errorFg,
   },
   validText: {
     fontSize: 12,
     // success[600] ≈ 3.5:1 on white — below AA for small text; success[700] passes.
-    color: Colors.success[700],
+    color: tk.successFg,
   },
   hintText: {
     fontSize: 12,
     // X-1: neutral[400] is reserved for disabled/decorative; this hint carries meaning.
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
   },
-});
+  }),
+);

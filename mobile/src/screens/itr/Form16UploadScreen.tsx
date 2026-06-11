@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { uploadForm16 } from '../../api/itr';
 import type { ItrStackParamList } from '../../navigation/ItrStack';
@@ -45,6 +45,8 @@ interface ExtractedFields {
 type UploadPhase = 'pick' | 'uploading' | 'review' | 'done';
 
 export function Form16UploadScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { filingId, assesseeId } = route.params;
@@ -131,7 +133,7 @@ export function Form16UploadScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.itr.form16.title')}</Text>
         <View style={{ width: 40 }} />
@@ -142,7 +144,7 @@ export function Form16UploadScreen({ navigation, route }: Props) {
           <>
             <View style={styles.illustrationWrap}>
               <View style={styles.illustrationIcon}>
-                <Ionicons name="document-text" size={52} color={Colors.itr} />
+                <Ionicons name="document-text" size={52} color={tokens.itrAccent} />
               </View>
               <Text style={styles.illustrationTitle}>{t('mobile.itr.form16.pickTitle')}</Text>
               <Text style={styles.illustrationSub}>{t('mobile.itr.form16.pickSub')}</Text>
@@ -156,7 +158,7 @@ export function Form16UploadScreen({ navigation, route }: Props) {
                 accessibilityLabel={t('mobile.itr.form16.camera')}
               >
                 <View style={styles.pickOptionIcon}>
-                  <Ionicons name="camera" size={28} color={Colors.itr} />
+                  <Ionicons name="camera" size={28} color={tokens.itrAccent} />
                 </View>
                 <Text style={styles.pickOptionLabel}>{t('mobile.itr.form16.camera')}</Text>
                 <Text style={styles.pickOptionSub}>{t('mobile.itr.form16.cameraSub')}</Text>
@@ -168,7 +170,7 @@ export function Form16UploadScreen({ navigation, route }: Props) {
                 accessibilityLabel={t('mobile.itr.form16.gallery')}
               >
                 <View style={styles.pickOptionIcon}>
-                  <Ionicons name="images" size={28} color={Colors.brand[500]} />
+                  <Ionicons name="images" size={28} color={tokens.brand500} />
                 </View>
                 <Text style={styles.pickOptionLabel}>{t('mobile.itr.form16.gallery')}</Text>
                 <Text style={styles.pickOptionSub}>{t('mobile.itr.form16.gallerySub')}</Text>
@@ -179,7 +181,7 @@ export function Form16UploadScreen({ navigation, route }: Props) {
               <Text style={styles.tipsTitle}>{t('mobile.itr.form16.tipsTitle')}</Text>
               {['mobile.itr.form16.tip1', 'mobile.itr.form16.tip2', 'mobile.itr.form16.tip3'].map((key) => (
                 <View key={key} style={styles.tipRow}>
-                  <Ionicons name="checkmark-circle-outline" size={14} color={Colors.success[600]} />
+                  <Ionicons name="checkmark-circle-outline" size={14} color={tokens.successFg} />
                   <Text style={styles.tipText}>{t(key)}</Text>
                 </View>
               ))}
@@ -189,7 +191,7 @@ export function Form16UploadScreen({ navigation, route }: Props) {
 
         {phase === 'uploading' && (
           <View style={styles.uploadingWrap}>
-            <ActivityIndicator size="large" color={Colors.itr} />
+            <ActivityIndicator size="large" color={tokens.itrAccent} />
             <Text style={styles.uploadingTitle}>{t('mobile.itr.form16.uploading')}</Text>
             <Text style={styles.uploadingSub}>{t('mobile.itr.form16.uploadingSub')}</Text>
           </View>
@@ -198,7 +200,7 @@ export function Form16UploadScreen({ navigation, route }: Props) {
         {phase === 'review' && (
           <>
             <View style={styles.reviewHeader}>
-              <Ionicons name="checkmark-circle" size={28} color={Colors.success[600]} />
+              <Ionicons name="checkmark-circle" size={28} color={tokens.successFg} />
               <View style={styles.reviewHeaderText}>
                 <Text style={styles.reviewTitle}>{t('mobile.itr.form16.reviewTitle')}</Text>
                 <Text style={styles.reviewSub}>{t('mobile.itr.form16.reviewSub')}</Text>
@@ -226,7 +228,7 @@ export function Form16UploadScreen({ navigation, route }: Props) {
                   style={styles.reviewFieldInput}
                   value={fields[key]}
                   onChangeText={(v) => setField(key, v)}
-                  placeholderTextColor={Colors.neutral[400]}
+                  placeholderTextColor={tokens.textTertiary}
                   placeholder={t('mobile.itr.form16.notExtracted')}
                   accessibilityLabel={label}
                 />
@@ -248,74 +250,76 @@ export function Form16UploadScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900], letterSpacing: -0.2 },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
   scrollContent: { padding: 16, gap: 20 },
 
   illustrationWrap: { alignItems: 'center', paddingTop: 20, gap: 12 },
-  illustrationIcon: { width: 96, height: 96, borderRadius: 24, backgroundColor: Colors.itr + '12', alignItems: 'center', justifyContent: 'center' },
-  illustrationTitle: { fontSize: 20, fontWeight: '800', color: Colors.neutral[900], textAlign: 'center', letterSpacing: -0.3 },
-  illustrationSub: { fontSize: 14, color: Colors.neutral[500], textAlign: 'center', lineHeight: 21, paddingHorizontal: 16 },
+  illustrationIcon: { width: 96, height: 96, borderRadius: 24, backgroundColor: tk.itrAccent + '12', alignItems: 'center', justifyContent: 'center' },
+  illustrationTitle: { fontSize: 20, fontWeight: '800', color: tk.textPrimary, textAlign: 'center', letterSpacing: -0.3 },
+  illustrationSub: { fontSize: 14, color: tk.textSecondary, textAlign: 'center', lineHeight: 21, paddingHorizontal: 16 },
 
   pickOptionsRow: { flexDirection: 'row', gap: 12 },
   pickOption: {
     flex: 1,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
     gap: 10,
     borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
     minHeight: 130,
     justifyContent: 'center',
   },
-  pickOptionIcon: { width: 56, height: 56, borderRadius: 16, backgroundColor: Colors.neutral[50], alignItems: 'center', justifyContent: 'center' },
-  pickOptionLabel: { fontSize: 14, fontWeight: '700', color: Colors.neutral[800], textAlign: 'center' },
-  pickOptionSub: { fontSize: 12, color: Colors.neutral[500], textAlign: 'center' },
+  pickOptionIcon: { width: 56, height: 56, borderRadius: 16, backgroundColor: tk.canvas, alignItems: 'center', justifyContent: 'center' },
+  pickOptionLabel: { fontSize: 14, fontWeight: '700', color: tk.textPrimary, textAlign: 'center' },
+  pickOptionSub: { fontSize: 12, color: tk.textSecondary, textAlign: 'center' },
 
-  tipsCard: { backgroundColor: Colors.success[50], borderRadius: 14, padding: 16, gap: 10, borderWidth: 1, borderColor: Colors.success[200] },
-  tipsTitle: { fontSize: 14, fontWeight: '700', color: Colors.success[700] },
+  tipsCard: { backgroundColor: tk.successTint, borderRadius: 14, padding: 16, gap: 10, borderWidth: 1, borderColor: tk.successTintBorder },
+  tipsTitle: { fontSize: 14, fontWeight: '700', color: tk.successFg },
   tipRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  tipText: { flex: 1, fontSize: 13, color: Colors.success[700], lineHeight: 18 },
+  tipText: { flex: 1, fontSize: 13, color: tk.successFg, lineHeight: 18 },
 
   uploadingWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 16 },
-  uploadingTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[800] },
-  uploadingSub: { fontSize: 14, color: Colors.neutral[500] },
+  uploadingTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
+  uploadingSub: { fontSize: 14, color: tk.textSecondary },
 
-  reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.success[50], borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.success[200] },
+  reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: tk.successTint, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: tk.successTintBorder },
   reviewHeaderText: { flex: 1, gap: 2 },
-  reviewTitle: { fontSize: 16, fontWeight: '700', color: Colors.success[700] },
-  reviewSub: { fontSize: 13, color: Colors.success[600] },
+  reviewTitle: { fontSize: 16, fontWeight: '700', color: tk.successFg },
+  reviewSub: { fontSize: 13, color: tk.successFg },
 
-  extractIdBadge: { backgroundColor: Colors.neutral[100], borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, alignSelf: 'flex-start' },
-  extractIdText: { fontSize: 12, color: Colors.neutral[500], fontFamily: 'monospace' },
+  extractIdBadge: { backgroundColor: tk.sunken, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, alignSelf: 'flex-start' },
+  extractIdText: { fontSize: 12, color: tk.textSecondary, fontFamily: 'monospace' },
 
   reviewField: { gap: 6 },
-  reviewFieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.neutral[700] },
+  reviewFieldLabel: { fontSize: 13, fontWeight: '600', color: tk.textSecondary },
   reviewFieldInput: {
     height: 48,
     borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     fontSize: 15,
-    color: Colors.neutral[900],
-    backgroundColor: Colors.surface.default,
+    color: tk.textPrimary,
+    backgroundColor: tk.raised,
   },
 
-  confirmBtn: { backgroundColor: Colors.itr, borderRadius: 14, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
-  confirmBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-});
+  confirmBtn: { backgroundColor: tk.itrAccent, borderRadius: 14, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
+  confirmBtnText: { fontSize: 16, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);

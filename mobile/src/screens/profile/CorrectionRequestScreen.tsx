@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { submitDataCorrection } from '../../api/privacy';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
@@ -33,6 +33,8 @@ const DATA_CATEGORIES = [
 type DataCategory = typeof DATA_CATEGORIES[number];
 
 export function CorrectionRequestScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [category, setCategory] = useState<DataCategory | ''>('');
@@ -64,7 +66,7 @@ export function CorrectionRequestScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8} accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.privacy.correction.title')}</Text>
         <View style={{ width: 40 }} />
@@ -86,7 +88,7 @@ export function CorrectionRequestScreen({ navigation }: Props) {
                 ? t(`mobile.privacy.correction.field.options.${category}`)
                 : t('mobile.privacy.correction.field.label')}
             </Text>
-            <Ionicons name="chevron-down" size={18} color={Colors.neutral[400]} />
+            <Ionicons name="chevron-down" size={18} color={tokens.textTertiary} />
           </Pressable>
         </View>
 
@@ -98,7 +100,7 @@ export function CorrectionRequestScreen({ navigation }: Props) {
             multiline
             numberOfLines={5}
             placeholder={t('mobile.privacy.correction.field.descriptionPlaceholder')}
-            placeholderTextColor={Colors.neutral[400]}
+            placeholderTextColor={tokens.textTertiary}
             value={description}
             onChangeText={setDescription}
             maxLength={1000}
@@ -110,7 +112,7 @@ export function CorrectionRequestScreen({ navigation }: Props) {
 
         {/* Info banner */}
         <View style={styles.infoBanner}>
-          <Ionicons name="information-circle-outline" size={16} color={Colors.accent[600]} />
+          <Ionicons name="information-circle-outline" size={16} color={tokens.loanAccent} />
           <Text style={styles.infoBannerText}>{t('mobile.privacy.correction.info.reverify')}</Text>
         </View>
 
@@ -132,7 +134,7 @@ export function CorrectionRequestScreen({ navigation }: Props) {
                   <Text style={[styles.pickerOptionText, category === cat && styles.pickerOptionTextSelected]}>
                     {t(`mobile.privacy.correction.field.options.${cat}`)}
                   </Text>
-                  {category === cat && <Ionicons name="checkmark" size={16} color={Colors.brand[600]} />}
+                  {category === cat && <Ionicons name="checkmark" size={16} color={tokens.brandCta} />}
                 </Pressable>
               ))}
               <Pressable style={styles.pickerCancel} onPress={() => setShowCategoryPicker(false)}>
@@ -161,7 +163,7 @@ export function CorrectionRequestScreen({ navigation }: Props) {
           accessibilityLabel={t('mobile.privacy.correction.cta.submit')}
         >
           {submitMutation.isPending ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={tokens.textOnBrand} />
           ) : (
             <Text style={[styles.submitBtnText, !canSubmit && styles.submitBtnTextDisabled]}>
               {t('mobile.privacy.correction.cta.submit')}
@@ -173,82 +175,84 @@ export function CorrectionRequestScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
 
   scrollContent: { padding: 16, gap: 16, paddingBottom: 100 },
-  explainer: { fontSize: 14, color: Colors.neutral[600], lineHeight: 21 },
+  explainer: { fontSize: 14, color: tk.textSecondary, lineHeight: 21 },
 
   fieldGroup: { gap: 8 },
-  fieldLabel: { fontSize: 14, fontWeight: '600', color: Colors.neutral[700] },
+  fieldLabel: { fontSize: 14, fontWeight: '600', color: tk.textSecondary },
   selectRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.surface.default, borderRadius: 12,
-    borderWidth: 1.5, borderColor: Colors.neutral[200],
+    backgroundColor: tk.raised, borderRadius: 12,
+    borderWidth: 1.5, borderColor: tk.border,
     paddingHorizontal: 14, paddingVertical: 14, minHeight: 52,
   },
-  selectValue: { fontSize: 15, color: Colors.neutral[900] },
-  selectPlaceholder: { fontSize: 15, color: Colors.neutral[400] },
+  selectValue: { fontSize: 15, color: tk.textPrimary },
+  selectPlaceholder: { fontSize: 15, color: tk.textTertiary },
 
   textarea: {
-    backgroundColor: Colors.surface.default, borderRadius: 12,
-    borderWidth: 1.5, borderColor: Colors.neutral[200],
+    backgroundColor: tk.raised, borderRadius: 12,
+    borderWidth: 1.5, borderColor: tk.border,
     paddingHorizontal: 14, paddingVertical: 14,
-    fontSize: 15, color: Colors.neutral[900], lineHeight: 22,
+    fontSize: 15, color: tk.textPrimary, lineHeight: 22,
     minHeight: 140,
   },
-  charCount: { fontSize: 12, color: Colors.neutral[400], textAlign: 'right' },
+  charCount: { fontSize: 12, color: tk.textTertiary, textAlign: 'right' },
 
   infoBanner: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    backgroundColor: Colors.accent[50], borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: Colors.accent[100],
+    backgroundColor: tk.warningTint, borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: tk.warningTintBorder,
   },
-  infoBannerText: { flex: 1, fontSize: 13, color: Colors.accent[700], lineHeight: 20 },
+  infoBannerText: { flex: 1, fontSize: 13, color: tk.loanAccent, lineHeight: 20 },
 
   pickerOverlay: {
     position: 'absolute', top: 0, left: -16, right: -16, bottom: -100,
-    backgroundColor: Colors.surface.overlay, justifyContent: 'flex-end', zIndex: 100,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'flex-end', zIndex: 100,
   },
   pickerCard: {
-    backgroundColor: Colors.surface.default, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    backgroundColor: tk.raised, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     padding: 16, gap: 4,
   },
-  pickerTitle: { fontSize: 16, fontWeight: '700', color: Colors.neutral[900], marginBottom: 8, paddingHorizontal: 8 },
+  pickerTitle: { fontSize: 16, fontWeight: '700', color: tk.textPrimary, marginBottom: 8, paddingHorizontal: 8 },
   pickerOption: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 8, paddingVertical: 14, borderRadius: 10, minHeight: 48,
   },
-  pickerOptionSelected: { backgroundColor: Colors.brand[50] },
-  pickerOptionText: { fontSize: 15, color: Colors.neutral[900] },
-  pickerOptionTextSelected: { fontWeight: '700', color: Colors.brand[700] },
+  pickerOptionSelected: { backgroundColor: tk.brandTint },
+  pickerOptionText: { fontSize: 15, color: tk.textPrimary },
+  pickerOptionTextSelected: { fontWeight: '700', color: tk.brandFg },
   pickerCancel: {
     marginTop: 8, paddingVertical: 14, alignItems: 'center', minHeight: 48,
-    backgroundColor: Colors.neutral[100], borderRadius: 12,
+    backgroundColor: tk.sunken, borderRadius: 12,
   },
-  pickerCancelText: { fontSize: 15, fontWeight: '600', color: Colors.neutral[700] },
+  pickerCancelText: { fontSize: 15, fontWeight: '600', color: tk.textSecondary },
 
   stickyFooter: {
     flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingVertical: 12, paddingBottom: 20,
-    backgroundColor: Colors.surface.default, borderTopWidth: 1, borderTopColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderTopWidth: 1, borderTopColor: tk.border,
   },
   cancelBtn: {
-    flex: 1, minHeight: 52, borderRadius: 14, borderWidth: 1.5, borderColor: Colors.neutral[200],
+    flex: 1, minHeight: 52, borderRadius: 14, borderWidth: 1.5, borderColor: tk.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  cancelBtnText: { fontSize: 15, fontWeight: '600', color: Colors.neutral[600] },
+  cancelBtnText: { fontSize: 15, fontWeight: '600', color: tk.textSecondary },
   submitBtn: {
-    flex: 2, minHeight: 52, borderRadius: 14, backgroundColor: Colors.brand[600],
+    flex: 2, minHeight: 52, borderRadius: 14, backgroundColor: tk.brandCta,
     alignItems: 'center', justifyContent: 'center',
   },
-  submitBtnDisabled: { backgroundColor: Colors.neutral[200] },
-  submitBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  submitBtnTextDisabled: { color: Colors.neutral[400] },
-});
+  submitBtnDisabled: { backgroundColor: tk.border },
+  submitBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
+  submitBtnTextDisabled: { color: tk.textTertiary },
+  }),
+);

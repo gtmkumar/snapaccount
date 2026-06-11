@@ -26,7 +26,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import {
   INVITE_ROLE_OPTIONS,
   inviteMember,
@@ -56,6 +56,8 @@ function buildInviteLink(token: string): string {
 }
 
 export function InviteMemberModal({ visible, onClose, onInvited }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const [role, setRole] = React.useState<InviteRoleName>('ORG_MEMBER');
   const [submitting, setSubmitting] = React.useState(false);
@@ -126,7 +128,7 @@ export function InviteMemberModal({ visible, onClose, onInvited }: Props) {
               accessibilityLabel={t('mobile.common.close')}
               hitSlop={8}
             >
-              <Ionicons name="close" size={22} color={Colors.neutral[600]} />
+              <Ionicons name="close" size={22} color={tokens.textSecondary} />
             </Pressable>
           </View>
 
@@ -139,7 +141,7 @@ export function InviteMemberModal({ visible, onClose, onInvited }: Props) {
               // ── Success state: show the one-time link + code to Share ──
               <View>
                 <View style={styles.successIcon}>
-                  <Ionicons name="mail-open-outline" size={28} color={Colors.success[600]} />
+                  <Ionicons name="mail-open-outline" size={28} color={tokens.successFg} />
                 </View>
                 <Text style={styles.successBody}>{t('mobile.team.invite.sentBody')}</Text>
 
@@ -164,7 +166,7 @@ export function InviteMemberModal({ visible, onClose, onInvited }: Props) {
                   onPress={handleShare}
                   fullWidth
                   size="lg"
-                  leftIcon={<Ionicons name="share-outline" size={18} color={Colors.neutral[0]} />}
+                  leftIcon={<Ionicons name="share-outline" size={18} color={tokens.textOnBrand} />}
                   style={styles.topGap}
                 />
                 <Button
@@ -250,7 +252,7 @@ export function InviteMemberModal({ visible, onClose, onInvited }: Props) {
 
                 {error && (
                   <View style={styles.errorBanner}>
-                    <Ionicons name="alert-circle-outline" size={16} color={Colors.error[600]} />
+                    <Ionicons name="alert-circle-outline" size={16} color={tokens.errorFg} />
                     <Text style={styles.errorBannerText}>{error}</Text>
                   </View>
                 )}
@@ -267,7 +269,7 @@ export function InviteMemberModal({ visible, onClose, onInvited }: Props) {
             )}
 
             {submitting && !created && (
-              <ActivityIndicator style={styles.topGapSm} color={Colors.brand[500]} />
+              <ActivityIndicator style={styles.topGapSm} color={tokens.brand500} />
             )}
           </ScrollView>
         </View>
@@ -276,14 +278,15 @@ export function InviteMemberModal({ visible, onClose, onInvited }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 10,
@@ -294,7 +297,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.neutral[200],
+    backgroundColor: tk.border,
     marginBottom: 8,
   },
   headerRow: {
@@ -307,14 +310,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '800',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     letterSpacing: -0.3,
   },
   closeBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -326,7 +329,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
     marginBottom: 8,
     marginTop: 4,
   },
@@ -340,20 +343,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     minHeight: 44,
     justifyContent: 'center',
   },
   roleChipActive: {
-    backgroundColor: Colors.brand[500],
+    backgroundColor: tk.brand500,
   },
   roleChipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
   },
   roleChipTextActive: {
-    color: Colors.neutral[0],
+    color: tk.textOnBrand,
   },
   messageInput: {
     minHeight: 60,
@@ -363,7 +366,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: Colors.error[50],
+    backgroundColor: tk.errorTint,
     borderRadius: 10,
     padding: 12,
     marginTop: 4,
@@ -372,7 +375,7 @@ const styles = StyleSheet.create({
   errorBannerText: {
     flex: 1,
     fontSize: 13,
-    color: Colors.error[600],
+    color: tk.errorFg,
     lineHeight: 18,
   },
   successIcon: {
@@ -380,34 +383,34 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 18,
-    backgroundColor: Colors.success[50],
+    backgroundColor: tk.successTint,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
   },
   successBody: {
     fontSize: 14,
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 20,
   },
   codeBox: {
-    backgroundColor: Colors.neutral[50],
+    backgroundColor: tk.canvas,
     borderWidth: 1,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
   },
   codeText: {
     fontSize: 13,
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
   },
   helperOnce: {
     fontSize: 12,
-    color: Colors.warning[600],
+    color: tk.warningFg,
     marginBottom: 8,
     lineHeight: 16,
   },
@@ -417,4 +420,5 @@ const styles = StyleSheet.create({
   topGapSm: {
     marginTop: 8,
   },
-});
+  }),
+);

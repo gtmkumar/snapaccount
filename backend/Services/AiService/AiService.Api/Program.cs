@@ -97,6 +97,23 @@ try
     // GAP-005: Fail-fast in non-Development when SESSION_JWT_SECRET is absent.
     SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);
 
+    // RV-02 (SEC-AI-02): Fail-fast in non-Development when InternalApi:SharedToken is absent.
+    // Without this secret, AiProviderResolver cannot authenticate its call to AuthService's
+    // /auth/config/ai/effective endpoint and silently falls back to MockAiProvider in production.
+    // Dev is intentionally unaffected (local env has no Secret Manager binding).
+    if (!string.Equals(app.Environment.EnvironmentName, "Development", StringComparison.OrdinalIgnoreCase))
+    {
+        var internalToken = app.Configuration["InternalApi:SharedToken"];
+        if (string.IsNullOrWhiteSpace(internalToken) || internalToken.Length < 32)
+        {
+            throw new InvalidOperationException(
+                "InternalApi:SharedToken is not configured or is shorter than 32 characters. " +
+                "In non-Development environments this secret MUST be set (e.g. via GCP Secret Manager) " +
+                "to enable authenticated service-to-service communication with AuthService. " +
+                "Without it, AiService silently degrades to the mock AI provider in production.");
+        }
+    }
+
     app.Run();
 }
 catch (Exception ex) { Log.Fatal(ex, "AiService failed to start."); }

@@ -476,6 +476,11 @@ create_subscription() {
 
 create_subscription "snapaccount.document.ocr.completed" "accounting-service-ocr-sub"
 create_subscription "snapaccount.document.ocr.completed" "gst-service-ocr-sub"
+# Phase 7 (board #31): AiService RagIngestionSubscriber pulls from this topic to index
+# OCR-completed documents into the RAG vector store (pgvector). Uses the same
+# dead-letter policy (5 attempts, 14d retention on DL topic) as sibling subscriptions.
+# Consumer: AiService → RagIngestionSubscriber background worker.
+create_subscription "snapaccount.document.ocr.completed" "ai-service-rag-sub"
 create_subscription "snapaccount.gst.return.filed" "notification-service-gst-sub"
 create_subscription "snapaccount.itr.filed" "notification-service-itr-sub"
 create_subscription "snapaccount.user.registered" "notification-service-user-sub"

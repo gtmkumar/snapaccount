@@ -20,7 +20,8 @@
       "<rootDir>/src/__mocks__/setup.js"
     ],
     "setupFilesAfterEnv": [
-      "@testing-library/jest-native/extend-expect"
+      "@testing-library/jest-native/extend-expect",
+      "<rootDir>/src/__mocks__/jestAfterEnv.setup.js"
     ],
     "moduleNameMapper": {
       "^react-native/Libraries/BatchedBridge/NativeModules$": "<rootDir>/src/__mocks__/nativeModules.js",
@@ -30,6 +31,8 @@
       "^expo/src/winter$": "<rootDir>/src/__mocks__/expoWinter.js",
       "^expo/src/winter/(.*)$": "<rootDir>/src/__mocks__/expoWinter.js",
       "^expo/src/async-require/messageSocket$": "<rootDir>/src/__mocks__/expoMessageSocket.js",
+      "^@tanstack/react-query$": "<rootDir>/src/__mocks__/reactQueryTracked.js",
+      "^tanstack-react-query-actual$": "<rootDir>/node_modules/@tanstack/react-query",
       "^@expo/vector-icons$": "<rootDir>/src/__mocks__/vectorIcons.js",
       "^@expo/vector-icons/(.*)$": "<rootDir>/src/__mocks__/vectorIcons.js",
       "^@react-native-async-storage/async-storage$": "<rootDir>/src/__mocks__/asyncStorage.ts",

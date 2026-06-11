@@ -16,7 +16,7 @@ import React from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 interface PdfViewerMobileProps {
   /** Signed GCS URL — expires per backend TTL. Never cache. */
@@ -34,6 +34,8 @@ export function PdfViewerMobile({
   watermarkText,
   testID,
 }: PdfViewerMobileProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
 
   const handleOpen = async () => {
@@ -49,7 +51,7 @@ export function PdfViewerMobile({
       {/* Watermark visibility indicator (for integrity check) */}
       {watermarkText && (
         <View style={styles.watermarkBanner} testID="pdf-watermark-text">
-          <Ionicons name="shield-checkmark-outline" size={14} color={Colors.success[600]} />
+          <Ionicons name="shield-checkmark-outline" size={14} color={tokens.successFg} />
           <Text style={styles.watermarkText} numberOfLines={2}>
             {watermarkText}
           </Text>
@@ -58,7 +60,7 @@ export function PdfViewerMobile({
 
       {/* PDF preview placeholder — replace with react-native-pdf in Phase 6F */}
       <View style={styles.previewArea}>
-        <Ionicons name="document-text" size={48} color={Colors.neutral[300]} />
+        <Ionicons name="document-text" size={48} color={tokens.textTertiary} />
         {pageCount !== undefined && (
           <Text style={styles.pageCount}>
             {t('mobile.loan.preview.meta.pages', { count: pageCount })}
@@ -86,10 +88,11 @@ export function PdfViewerMobile({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     borderRadius: 12,
     overflow: 'hidden',
   },
@@ -97,16 +100,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: Colors.success[50],
+    backgroundColor: tk.successTint,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.success[100],
+    borderBottomColor: tk.successTintBorder,
   },
   watermarkText: {
     flex: 1,
     fontSize: 11,
-    color: Colors.success[700],
+    color: tk.successFg,
     fontWeight: '600',
     lineHeight: 16,
   },
@@ -120,16 +123,16 @@ const styles = StyleSheet.create({
   pageCount: {
     fontSize: 15,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
   },
   packageIdText: {
     fontSize: 12,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     fontFamily: 'monospace',
   },
   fallbackNote: {
     fontSize: 13,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -137,7 +140,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: Colors.loan,
+    backgroundColor: tk.loanAccent,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
@@ -146,6 +149,7 @@ const styles = StyleSheet.create({
   openBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
   },
-});
+  }),
+);

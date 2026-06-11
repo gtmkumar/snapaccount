@@ -29,7 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { PanInput } from '../../components/shared/PanInput';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { isValidPAN } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import apiClient, { getApiError } from '../../lib/api';
@@ -59,6 +59,8 @@ function toIsoDate(ddmmyyyy?: string): string | undefined {
 }
 
 export function IndividualProfileWizardScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { updateProfile, markAuthenticated } = useAuthStore();
   const { t } = useTranslation();
   const [loading, setLoading] = React.useState(false);
@@ -137,7 +139,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
 
           {panVerified && (
             <View style={styles.verifiedRow}>
-              <Ionicons name="checkmark-circle" size={16} color={Colors.success[600]} />
+              <Ionicons name="checkmark-circle" size={16} color={tokens.successFg} />
               <Text style={styles.verifiedText}>{t('mobile.auth.kyc.panVerified')}</Text>
             </View>
           )}
@@ -174,7 +176,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
 
           <View style={styles.infoBanner}>
             <View style={styles.bannerRow}>
-              <Ionicons name="lock-closed-outline" size={14} color={Colors.success[600]} style={styles.bannerIcon} />
+              <Ionicons name="lock-closed-outline" size={14} color={tokens.successFg} style={styles.bannerIcon} />
               <Text style={styles.infoBannerText}>
                 Your PAN is safe. We use it only for government portal verification.
                 You can add Aadhaar and Form 16 later from your profile.
@@ -201,10 +203,11 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg.base,
+    backgroundColor: tk.canvas,
   },
   flex: { flex: 1 },
   header: {
@@ -223,25 +226,25 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 24,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
-    backgroundColor: Colors.bg.base,
+    borderTopColor: tk.border,
+    backgroundColor: tk.canvas,
   },
   stepTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     marginBottom: 8,
   },
   stepSubtitle: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     marginBottom: 24,
     lineHeight: 20,
   },
   infoBanner: {
-    backgroundColor: Colors.info[50],
+    backgroundColor: tk.infoTint,
     borderLeftWidth: 4,
-    borderLeftColor: Colors.info[600],
+    borderLeftColor: tk.infoFg,
     padding: 12,
     borderRadius: 8,
     marginVertical: 16,
@@ -250,7 +253,7 @@ const styles = StyleSheet.create({
   bannerIcon: { marginRight: 6, marginTop: 2 },
   infoBannerText: {
     fontSize: 13,
-    color: Colors.info[600],
+    color: tk.infoFg,
     lineHeight: 18,
     flex: 1,
   },
@@ -262,7 +265,8 @@ const styles = StyleSheet.create({
   },
   verifiedText: {
     fontSize: 13,
-    color: Colors.success[600],
+    color: tk.successFg,
     fontWeight: '600',
   },
-});
+  }),
+);

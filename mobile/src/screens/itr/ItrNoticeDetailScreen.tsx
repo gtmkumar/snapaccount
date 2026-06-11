@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { DueDateChip } from '../../components/shared/DueDateChip';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { respondToItrNotice } from '../../api/itr';
 import type { ItrNotice } from '../../api/itr';
@@ -46,6 +46,8 @@ const NOTICE_TYPE_INFO: Record<string, { name: string; desc: string }> = {
 };
 
 export function ItrNoticeDetailScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { noticeId, filingId } = route.params;
@@ -88,7 +90,7 @@ export function ItrNoticeDetailScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.itr.noticeDetail.title')}</Text>
         <View style={{ width: 40 }} />
@@ -96,13 +98,13 @@ export function ItrNoticeDetailScreen({ navigation, route }: Props) {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {isLoading ? (
-          <ActivityIndicator size="large" color={Colors.itr} style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={tokens.itrAccent} style={{ marginTop: 40 }} />
         ) : notice ? (
           <>
             {/* Notice type banner */}
             <View style={styles.typeBanner}>
               <View style={styles.typeIcon}>
-                <Ionicons name="mail-open-outline" size={24} color={Colors.itr} />
+                <Ionicons name="mail-open-outline" size={24} color={tokens.itrAccent} />
               </View>
               <View style={styles.typeText}>
                 <Text style={styles.typeName}>{noticeInfo?.name}</Text>
@@ -111,13 +113,13 @@ export function ItrNoticeDetailScreen({ navigation, route }: Props) {
               <View
                 style={[
                   styles.statusBadge,
-                  { backgroundColor: notice.status === 'Closed' ? Colors.success[50] : Colors.warning[50] },
+                  { backgroundColor: notice.status === 'Closed' ? tokens.successTint : tokens.warningTint },
                 ]}
               >
                 <Text
                   style={[
                     styles.statusText,
-                    { color: notice.status === 'Closed' ? Colors.success[700] : Colors.warning[700] },
+                    { color: notice.status === 'Closed' ? tokens.successFg : tokens.warningFg },
                   ]}
                 >
                   {notice.status}
@@ -153,7 +155,7 @@ export function ItrNoticeDetailScreen({ navigation, route }: Props) {
                 </Text>
                 {notice.attachmentsJson.map((att, i) => (
                   <View key={i} style={styles.attachmentRow}>
-                    <Ionicons name="document-outline" size={16} color={Colors.neutral[500]} />
+                    <Ionicons name="document-outline" size={16} color={tokens.textSecondary} />
                     <Text style={styles.attachmentName} numberOfLines={1}>{att.fileName}</Text>
                   </View>
                 ))}
@@ -164,7 +166,7 @@ export function ItrNoticeDetailScreen({ navigation, route }: Props) {
             {notice.responseText && (
               <View style={styles.responseCard}>
                 <View style={styles.responseHeader}>
-                  <Ionicons name="checkmark-circle" size={16} color={Colors.success[600]} />
+                  <Ionicons name="checkmark-circle" size={16} color={tokens.successFg} />
                   <Text style={styles.responseTitle}>{t('mobile.itr.noticeDetail.yourResponse')}</Text>
                   {notice.respondedAt && (
                     <Text style={styles.respondedAt}>{notice.respondedAt}</Text>
@@ -195,7 +197,7 @@ export function ItrNoticeDetailScreen({ navigation, route }: Props) {
                       value={responseText}
                       onChangeText={setResponseText}
                       placeholder={t('mobile.itr.noticeDetail.responsePlaceholder')}
-                      placeholderTextColor={Colors.neutral[400]}
+                      placeholderTextColor={tokens.textTertiary}
                       multiline
                       numberOfLines={6}
                       textAlignVertical="top"
@@ -237,71 +239,73 @@ export function ItrNoticeDetailScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
   scrollContent: { padding: 16, gap: 14 },
 
   typeBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: Colors.itr + '0D', borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: Colors.itr + '25',
+    backgroundColor: tk.itrAccent + '0D', borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: tk.itrAccent + '25',
   },
-  typeIcon: { width: 48, height: 48, borderRadius: 14, backgroundColor: Colors.itr + '18', alignItems: 'center', justifyContent: 'center' },
+  typeIcon: { width: 48, height: 48, borderRadius: 14, backgroundColor: tk.itrAccent + '18', alignItems: 'center', justifyContent: 'center' },
   typeText: { flex: 1, gap: 3 },
-  typeName: { fontSize: 16, fontWeight: '800', color: Colors.itr },
-  typeDesc: { fontSize: 12, color: Colors.neutral[600], lineHeight: 17 },
+  typeName: { fontSize: 16, fontWeight: '800', color: tk.itrAccent },
+  typeDesc: { fontSize: 12, color: tk.textSecondary, lineHeight: 17 },
   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   statusText: { fontSize: 12, fontWeight: '700' },
 
-  metaCard: { backgroundColor: Colors.surface.default, borderRadius: 14, borderWidth: 1, borderColor: Colors.neutral[100], overflow: 'hidden' },
+  metaCard: { backgroundColor: tk.raised, borderRadius: 14, borderWidth: 1, borderColor: tk.border, overflow: 'hidden' },
   metaRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 13, minHeight: 50,
-    borderBottomWidth: 1, borderBottomColor: Colors.neutral[50],
+    borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  metaLabel: { fontSize: 13, color: Colors.neutral[500], flex: 1 },
-  metaValue: { fontSize: 13, fontWeight: '600', color: Colors.neutral[900], flex: 1.5, textAlign: 'right' },
+  metaLabel: { fontSize: 13, color: tk.textSecondary, flex: 1 },
+  metaValue: { fontSize: 13, fontWeight: '600', color: tk.textPrimary, flex: 1.5, textAlign: 'right' },
 
-  attachmentsCard: { backgroundColor: Colors.surface.default, borderRadius: 14, borderWidth: 1, borderColor: Colors.neutral[100], padding: 16, gap: 10 },
-  attachmentsTitle: { fontSize: 14, fontWeight: '700', color: Colors.neutral[800] },
+  attachmentsCard: { backgroundColor: tk.raised, borderRadius: 14, borderWidth: 1, borderColor: tk.border, padding: 16, gap: 10 },
+  attachmentsTitle: { fontSize: 14, fontWeight: '700', color: tk.textPrimary },
   attachmentRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  attachmentName: { flex: 1, fontSize: 13, color: Colors.neutral[700] },
+  attachmentName: { flex: 1, fontSize: 13, color: tk.textSecondary },
 
   responseCard: {
-    backgroundColor: Colors.success[50], borderRadius: 14, borderWidth: 1,
-    borderColor: Colors.success[200], padding: 16, gap: 10,
+    backgroundColor: tk.successTint, borderRadius: 14, borderWidth: 1,
+    borderColor: tk.successTintBorder, padding: 16, gap: 10,
   },
   responseHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  responseTitle: { fontSize: 14, fontWeight: '700', color: Colors.success[700], flex: 1 },
-  respondedAt: { fontSize: 12, color: Colors.success[600] },
-  responseText: { fontSize: 14, color: Colors.success[800], lineHeight: 21 },
+  responseTitle: { fontSize: 14, fontWeight: '700', color: tk.successFg, flex: 1 },
+  respondedAt: { fontSize: 12, color: tk.successFg },
+  responseText: { fontSize: 14, color: tk.successFg, lineHeight: 21 },
 
   respondBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    backgroundColor: Colors.itr, borderRadius: 14, minHeight: 52,
+    backgroundColor: tk.itrAccent, borderRadius: 14, minHeight: 52,
   },
-  respondBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  respondBtnText: { fontSize: 16, fontWeight: '700', color: tk.textOnBrand },
 
   responseForm: { gap: 12 },
-  formLabel: { fontSize: 13, fontWeight: '600', color: Colors.neutral[700] },
+  formLabel: { fontSize: 13, fontWeight: '600', color: tk.textSecondary },
   responseInput: {
-    borderWidth: 1.5, borderColor: Colors.neutral[200], borderRadius: 12,
+    borderWidth: 1.5, borderColor: tk.border, borderRadius: 12,
     paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12,
-    fontSize: 15, color: Colors.neutral[900], backgroundColor: Colors.surface.default,
+    fontSize: 15, color: tk.textPrimary, backgroundColor: tk.raised,
     minHeight: 120,
   },
-  charCount: { fontSize: 11, color: Colors.neutral[400], textAlign: 'right' },
+  charCount: { fontSize: 11, color: tk.textTertiary, textAlign: 'right' },
   formActions: { flexDirection: 'row', gap: 12 },
-  cancelFormBtn: { flex: 1, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.neutral[100] },
-  cancelFormText: { fontSize: 14, fontWeight: '600', color: Colors.neutral[700] },
-  submitResponseBtn: { flex: 2, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.itr },
+  cancelFormBtn: { flex: 1, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: tk.sunken },
+  cancelFormText: { fontSize: 14, fontWeight: '600', color: tk.textSecondary },
+  submitResponseBtn: { flex: 2, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: tk.itrAccent },
   submitResponseBtnDisabled: { opacity: 0.4 },
-  submitResponseText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
-});
+  submitResponseText: { fontSize: 14, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);

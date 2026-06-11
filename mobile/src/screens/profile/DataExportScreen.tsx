@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { getDataExportStatus, requestDataExport, type DataExportJob } from '../../api/privacy';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
@@ -28,6 +28,8 @@ interface Props { navigation: NavProp }
 const POLL_INTERVAL_MS = 10_000;
 
 export function DataExportScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const qc = useQueryClient();
 
@@ -55,7 +57,7 @@ export function DataExportScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8} accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.privacy.export.title')}</Text>
         <View style={{ width: 40 }} />
@@ -71,7 +73,7 @@ export function DataExportScreen({ navigation }: Props) {
         {/* Job status card */}
         {isLoading ? (
           <View style={styles.jobCard}>
-            <ActivityIndicator size="large" color={Colors.brand[600]} />
+            <ActivityIndicator size="large" color={tokens.brandCta} />
           </View>
         ) : error ? (
           <View style={styles.jobCard}>
@@ -82,7 +84,7 @@ export function DataExportScreen({ navigation }: Props) {
           </View>
         ) : !job ? (
           <View style={styles.jobCard}>
-            <Ionicons name="cloud-download-outline" size={40} color={Colors.brand[400]} />
+            <Ionicons name="cloud-download-outline" size={40} color={tokens.brand400} />
             <Text style={styles.jobMessage}>
               {t('mobile.privacy.export.explainer.title')}
             </Text>
@@ -94,7 +96,7 @@ export function DataExportScreen({ navigation }: Props) {
               accessibilityLabel={t('mobile.privacy.export.cta.request')}
             >
               {requestMutation.isPending ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={tokens.textOnBrand} />
               ) : (
                 <Text style={styles.primaryBtnText}>{t('mobile.privacy.export.cta.request')}</Text>
               )}
@@ -102,14 +104,14 @@ export function DataExportScreen({ navigation }: Props) {
           </View>
         ) : job.status === 'REQUESTED' || job.status === 'PROCESSING' ? (
           <View style={styles.jobCard}>
-            <ActivityIndicator size="large" color={Colors.brand[600]} />
+            <ActivityIndicator size="large" color={tokens.brandCta} />
             <Text style={styles.jobMessage} accessibilityLiveRegion="polite">
               {t('mobile.privacy.export.status.processing')}
             </Text>
           </View>
         ) : job.status === 'READY' ? (
           <View style={[styles.jobCard, styles.jobCardReady]}>
-            <Ionicons name="checkmark-circle" size={40} color={Colors.success[600]} />
+            <Ionicons name="checkmark-circle" size={40} color={tokens.successFg} />
             <Text style={styles.jobMessageReady} accessibilityLiveRegion="polite">
               {t('mobile.privacy.export.status.ready')}
             </Text>
@@ -125,14 +127,14 @@ export function DataExportScreen({ navigation }: Props) {
                 accessibilityRole="button"
                 accessibilityLabel={t('mobile.privacy.export.cta.download')}
               >
-                <Ionicons name="download-outline" size={16} color="#fff" />
+                <Ionicons name="download-outline" size={16} color={tokens.textOnBrand} />
                 <Text style={styles.primaryBtnText}>{t('mobile.privacy.export.cta.download')}</Text>
               </Pressable>
             )}
           </View>
         ) : job.status === 'EXPIRED' ? (
           <View style={styles.jobCard}>
-            <Ionicons name="time-outline" size={40} color={Colors.neutral[400]} />
+            <Ionicons name="time-outline" size={40} color={tokens.textTertiary} />
             <Text style={styles.jobMessage}>{t('mobile.privacy.export.status.expired')}</Text>
             <Pressable
               style={styles.primaryBtn}
@@ -145,8 +147,8 @@ export function DataExportScreen({ navigation }: Props) {
           </View>
         ) : (
           <View style={[styles.jobCard, styles.jobCardError]}>
-            <Ionicons name="alert-circle-outline" size={40} color={Colors.error[500]} />
-            <Text style={[styles.jobMessage, { color: Colors.error[700] }]}>
+            <Ionicons name="alert-circle-outline" size={40} color={tokens.errorFg} />
+            <Text style={[styles.jobMessage, { color: tokens.errorFg }]}>
               {t('mobile.privacy.export.status.failed')}
             </Text>
             <Pressable
@@ -168,43 +170,45 @@ export function DataExportScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
 
   scrollContent: { padding: 16, gap: 16, paddingBottom: 32 },
 
   explainer: {
-    backgroundColor: Colors.brand[50], borderRadius: 16, padding: 16, gap: 8,
-    borderWidth: 1, borderColor: Colors.brand[100],
+    backgroundColor: tk.brandTint, borderRadius: 16, padding: 16, gap: 8,
+    borderWidth: 1, borderColor: tk.brandTintBorder,
   },
-  explainerTitle: { fontSize: 15, fontWeight: '700', color: Colors.brand[900] },
-  explainerBody: { fontSize: 13, color: Colors.brand[700], lineHeight: 20 },
+  explainerTitle: { fontSize: 15, fontWeight: '700', color: tk.brandFg },
+  explainerBody: { fontSize: 13, color: tk.brandFg, lineHeight: 20 },
 
   jobCard: {
-    backgroundColor: Colors.surface.default, borderRadius: 16, padding: 24,
+    backgroundColor: tk.raised, borderRadius: 16, padding: 24,
     alignItems: 'center', gap: 14, minHeight: 160, justifyContent: 'center',
-    borderWidth: 1, borderColor: Colors.neutral[100],
+    borderWidth: 1, borderColor: tk.border,
   },
-  jobCardReady: { borderColor: Colors.success[200] },
-  jobCardError: { borderColor: Colors.error[200] },
-  jobMessage: { fontSize: 15, color: Colors.neutral[700], textAlign: 'center', lineHeight: 22 },
-  jobMessageReady: { fontSize: 15, fontWeight: '700', color: Colors.success[700], textAlign: 'center' },
-  expiryText: { fontSize: 13, color: Colors.neutral[500] },
-  errorText: { fontSize: 14, color: Colors.error[600], textAlign: 'center' },
+  jobCardReady: { borderColor: tk.successTintBorder },
+  jobCardError: { borderColor: tk.errorTintBorder },
+  jobMessage: { fontSize: 15, color: tk.textSecondary, textAlign: 'center', lineHeight: 22 },
+  jobMessageReady: { fontSize: 15, fontWeight: '700', color: tk.successFg, textAlign: 'center' },
+  expiryText: { fontSize: 13, color: tk.textSecondary },
+  errorText: { fontSize: 14, color: tk.errorFg, textAlign: 'center' },
 
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: Colors.brand[600], borderRadius: 12,
+    backgroundColor: tk.brandCta, borderRadius: 12,
     paddingHorizontal: 24, paddingVertical: 13, minHeight: 48, minWidth: 180,
   },
-  primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
 
-  transparencyNote: { fontSize: 12, color: Colors.neutral[400], textAlign: 'center', lineHeight: 18 },
-});
+  transparencyNote: { fontSize: 12, color: tk.textTertiary, textAlign: 'center', lineHeight: 18 },
+  }),
+);

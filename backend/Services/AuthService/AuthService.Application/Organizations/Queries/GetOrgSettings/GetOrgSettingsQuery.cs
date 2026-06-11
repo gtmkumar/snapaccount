@@ -13,7 +13,13 @@ namespace AuthService.Application.Organizations.Queries.GetOrgSettings;
 [RequiresPermission(AuthService.Domain.Permissions.OrgSettingsRead)]
 public record GetOrgSettingsQuery : IQuery<OrgSettingsDto>;
 
-/// <summary>Organization settings shape returned by GET /auth/org/settings.</summary>
+/// <summary>
+/// Organization settings shape returned by GET /auth/org/settings.
+/// <para>
+/// All address fields including <c>AddressLine2</c> are returned — the field was
+/// previously omitted from the GET response despite being writable via PATCH (BUG-CONTRACT-002).
+/// </para>
+/// </summary>
 public record OrgSettingsDto(
     string Name,
     string? Gstin,
@@ -21,6 +27,7 @@ public record OrgSettingsDto(
     string? Email,
     string? LogoUrl,
     string? AddressLine1,
+    string? AddressLine2,
     string? City,
     string? State,
     string? Pincode);
@@ -45,6 +52,7 @@ public sealed class GetOrgSettingsQueryHandler(IAuthDbContext db, ICurrentUser c
                 o.Gstin,
                 o.LogoUrl,
                 o.AddressLine1,
+                o.AddressLine2,
                 o.City,
                 o.State,
                 o.Pincode,
@@ -69,6 +77,7 @@ public sealed class GetOrgSettingsQueryHandler(IAuthDbContext db, ICurrentUser c
             Email: ownerContact?.Email,
             LogoUrl: org.LogoUrl,
             AddressLine1: org.AddressLine1,
+            AddressLine2: org.AddressLine2,
             City: org.City,
             State: org.State,
             Pincode: org.Pincode));

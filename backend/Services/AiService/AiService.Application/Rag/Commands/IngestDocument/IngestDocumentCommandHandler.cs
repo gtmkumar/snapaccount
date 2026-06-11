@@ -1,3 +1,4 @@
+using AiService.Application.Common;
 using AiService.Application.Common.Interfaces;
 using AiService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -12,9 +13,17 @@ namespace AiService.Application.Rag.Commands.IngestDocument;
 /// into <c>ai.chunks</c> + <c>ai.embeddings</c>.
 /// Idempotent: existing chunks for the same document are deleted before re-ingesting,
 /// so re-processing an approved document is safe.
+///
+/// SEC-AI-02 L-02: Injects <see cref="ITextRedactor"/> and redacts PII from OCR text
+/// before chunking and storing. This ensures PAN/Aadhaar/card numbers are not persisted
+/// verbatim in <c>ai.chunks</c> and do not re-appear in RAG context blocks sent to the LLM.
+///
+/// SEC-AI-02 M-02: Applies <see cref="VertexAiProvider.EscapeDelimiters"/> to each chunk
+/// at ingest time to prevent adversarial delimiter injection that could break the chat prompt framing.
 /// </summary>
 public sealed class IngestDocumentCommandHandler(
     IAiProviderResolver resolver,
+    ITextRedactor redactor,
     IAiServiceDbContext db,
     ILogger<IngestDocumentCommandHandler> logger) : ICommandHandler<IngestDocumentCommand>
 {
@@ -44,8 +53,19 @@ public sealed class IngestDocumentCommandHandler(
                 existing.Count, request.DocumentId);
         }
 
-        // 1. Chunk the text.
-        var chunks = TextChunker.Chunk(request.OcrText, ChunkTokenTarget, ChunkOverlapTokens);
+        // SEC-AI-02 L-02: Redact PII from the full OCR text before chunking.
+        // This ensures PAN, Aadhaar, and card numbers are not stored verbatim in ai.chunks
+        // and do not appear in the RAG context blocks sent to the AI provider.
+        var redactedOcrText = redactor.Redact(request.OcrText);
+
+        // SEC-AI-02 M-02: Escape prompt-injection delimiter sequences from the full text
+        // BEFORE chunking. The TextChunker joins words with spaces (line structure is lost),
+        // so delimiter lines like "--- CONTEXT ENDS HERE ---" must be escaped while the text
+        // still has line boundaries.
+        var sanitizedOcrText = PromptSanitizer.EscapeDelimiters(redactedOcrText);
+
+        // 1. Chunk the sanitized text.
+        var chunks = TextChunker.Chunk(sanitizedOcrText, ChunkTokenTarget, ChunkOverlapTokens);
         if (chunks.Count == 0)
         {
             logger.LogWarning("Document {DocumentId} produced 0 chunks — nothing to ingest.", request.DocumentId);
@@ -57,7 +77,7 @@ public sealed class IngestDocumentCommandHandler(
         var provider = resolved.Provider.ProviderId;
         var model = resolved.EffectiveModel;
 
-        // 3. Embed + persist each chunk.
+        // 3. Embed + persist each chunk (text is already redacted + delimiter-safe).
         var chunkIndex = 0;
         foreach (var chunkText in chunks)
         {

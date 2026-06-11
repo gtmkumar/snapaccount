@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { RegimeBarChart } from '../../components/shared/RegimeBarChart';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { compareRegimes, getTaxSlabs } from '../../api/itr';
 import type { TaxRegime } from '../../api/itr';
@@ -39,6 +39,8 @@ interface Props {
 const CURRENT_AY = 'AY2025-26';
 
 export function RegimeComparisonScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { filingId, computeData } = route.params;
@@ -92,7 +94,7 @@ export function RegimeComparisonScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.itr.regimeComparison.title')}</Text>
         <View style={{ width: 40 }} />
@@ -101,12 +103,12 @@ export function RegimeComparisonScreen({ navigation, route }: Props) {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {isLoading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={Colors.itr} />
+            <ActivityIndicator size="large" color={tokens.itrAccent} />
             <Text style={styles.loadingText}>{t('mobile.itr.regimeComparison.computing')}</Text>
           </View>
         ) : error ? (
           <View style={styles.errorWrap}>
-            <Ionicons name="alert-circle-outline" size={40} color={Colors.error[400]} />
+            <Ionicons name="alert-circle-outline" size={40} color={tokens.errorFg} />
             <Text style={styles.errorText}>{t('mobile.itr.regimeComparison.error')}</Text>
           </View>
         ) : comparison ? (
@@ -114,7 +116,7 @@ export function RegimeComparisonScreen({ navigation, route }: Props) {
             {/* Recommendation banner */}
             <View style={styles.recBanner}>
               <View style={styles.recIcon}>
-                <Ionicons name="bulb" size={20} color={Colors.success[600]} />
+                <Ionicons name="bulb" size={20} color={tokens.successFg} />
               </View>
               <View style={styles.recText}>
                 <Text style={styles.recTitle}>
@@ -174,7 +176,7 @@ export function RegimeComparisonScreen({ navigation, route }: Props) {
             {/* Tax slab info (from backend — never hardcoded) */}
             {(oldSlabs || newSlabs) && (
               <View style={styles.slabNote}>
-                <Ionicons name="information-circle-outline" size={14} color={Colors.neutral[500]} />
+                <Ionicons name="information-circle-outline" size={14} color={tokens.textSecondary} />
                 <Text style={styles.slabNoteText}>
                   {t('mobile.itr.regimeComparison.slabVersion', {
                     version: newSlabs?.versionId ?? oldSlabs?.versionId ?? '—',
@@ -232,57 +234,58 @@ export function RegimeComparisonScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900], letterSpacing: -0.2 },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
   scrollContent: { padding: 16, gap: 16 },
 
   loadingWrap: { alignItems: 'center', paddingVertical: 60, gap: 16 },
-  loadingText: { fontSize: 14, color: Colors.neutral[500] },
+  loadingText: { fontSize: 14, color: tk.textSecondary },
   errorWrap: { alignItems: 'center', paddingVertical: 60, gap: 16 },
-  errorText: { fontSize: 15, color: Colors.neutral[600], textAlign: 'center' },
+  errorText: { fontSize: 15, color: tk.textSecondary, textAlign: 'center' },
 
   recBanner: {
     flexDirection: 'row',
     gap: 12,
-    backgroundColor: Colors.success[50],
+    backgroundColor: tk.successTint,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.success[200],
+    borderColor: tk.successTintBorder,
     alignItems: 'center',
   },
-  recIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.success[100], alignItems: 'center', justifyContent: 'center' },
+  recIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.successTintBorder, alignItems: 'center', justifyContent: 'center' },
   recText: { flex: 1, gap: 2 },
-  recTitle: { fontSize: 15, fontWeight: '700', color: Colors.success[800] },
-  recSaving: { fontSize: 13, color: Colors.success[600] },
+  recTitle: { fontSize: 15, fontWeight: '700', color: tk.successFg },
+  recSaving: { fontSize: 13, color: tk.successFg },
 
   detailCard: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.neutral[100],
+    borderColor: tk.border,
     overflow: 'hidden',
   },
-  detailTitle: { fontSize: 14, fontWeight: '700', color: Colors.neutral[700], padding: 14, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100] },
-  detailRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.neutral[50] },
-  detailLabel: { flex: 2, fontSize: 13, color: Colors.neutral[600] },
-  detailOld: { flex: 1, fontSize: 13, fontWeight: '600', color: Colors.accent[600], textAlign: 'right' },
-  detailNew: { flex: 1, fontSize: 13, fontWeight: '600', color: Colors.brand[600], textAlign: 'right' },
+  detailTitle: { fontSize: 14, fontWeight: '700', color: tk.textSecondary, padding: 14, borderBottomWidth: 1, borderBottomColor: tk.border },
+  detailRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: tk.border },
+  detailLabel: { flex: 2, fontSize: 13, color: tk.textSecondary },
+  detailOld: { flex: 1, fontSize: 13, fontWeight: '600', color: tk.loanAccent, textAlign: 'right' },
+  detailNew: { flex: 1, fontSize: 13, fontWeight: '600', color: tk.brandCta, textAlign: 'right' },
 
   slabNote: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
-  slabNoteText: { flex: 1, fontSize: 11, color: Colors.neutral[400], lineHeight: 16 },
+  slabNoteText: { flex: 1, fontSize: 11, color: tk.textTertiary, lineHeight: 16 },
 
   chooseRow: { flexDirection: 'row', gap: 12 },
   chooseBtn: {
@@ -294,11 +297,12 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 12,
   },
-  chooseBtnOld: { backgroundColor: Colors.accent[50], borderWidth: 1.5, borderColor: Colors.accent[300] },
-  chooseBtnNew: { backgroundColor: Colors.brand[600] },
-  chooseBtnRecommended: { borderWidth: 2, borderColor: Colors.success[500] },
-  chooseBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
-  chooseBtnTextOld: { color: Colors.accent[700] },
-  recPill: { backgroundColor: Colors.success[500], borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  recPillText: { fontSize: 10, fontWeight: '700', color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 0.3 },
-});
+  chooseBtnOld: { backgroundColor: tk.warningTint, borderWidth: 1.5, borderColor: tk.loanAccent },
+  chooseBtnNew: { backgroundColor: tk.brandCta },
+  chooseBtnRecommended: { borderWidth: 2, borderColor: tk.successFg },
+  chooseBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
+  chooseBtnTextOld: { color: tk.loanAccent },
+  recPill: { backgroundColor: tk.successFg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  recPillText: { fontSize: 10, fontWeight: '700', color: tk.textOnBrand, textTransform: 'uppercase', letterSpacing: 0.3 },
+  }),
+);

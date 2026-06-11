@@ -193,6 +193,38 @@ Rate limit: 5 req / 10 min per IP. Reset link emailed via SendGrid (or logged to
 
 **DPDP:** Full Aadhaar never stored. `reference_number` masked as `XXXX-XXXX-1234` (last 4 digits). Controlled by `KYC_PROVIDER=mock` (default) or `KYC_PROVIDER=sandbox`.
 
+### Org Settings — `/auth/org/settings` (CONTRACT-GAPS task #27)
+
+| Method | Route | Permission | Description | Request Body | Response |
+|--------|-------|-----------|-------------|-------------|----------|
+| GET | /auth/org/settings | `org.settings.read` | Return org self-service settings | — | `{ name, gstin, phone, email, logoUrl, addressLine1, addressLine2, city, state, pincode }` 200 |
+| PATCH | /auth/org/settings | `org.settings.update` | Update mutable org settings | `{ name?, logoUrl?, addressLine1?, addressLine2?, city?, state?, pincode?, gstin? }` | 204 |
+
+**PATCH field notes:**
+- All fields optional (null = keep existing value).
+- `name` — org display name, editable by ORG_ADMIN tier.
+- `gstin` — if supplied, always rejected with 400 `{ code: "Gstin", message: "GSTIN changes require re-verification — contact support." }`. This makes the read-only contract explicit rather than silently ignored.
+- `addressLine2` — was previously accepted by PATCH but missing from GET response (BUG-CONTRACT-002). Now included in GET response.
+
+### Platform Config — `/auth/config` and `/auth/feature-flags`
+
+| Method | Route | Permission | Description | Request Body | Response |
+|--------|-------|-----------|-------------|-------------|----------|
+| GET | /auth/feature-flags | `platform.feature-flags.read` | List all feature flags | — | `{ [flag]: bool }` 200 |
+| PATCH | /auth/feature-flags/{flag} | `platform.feature-flags.write` | Enable/disable a feature flag | `{ enabled: bool }` | 204 |
+| GET | /auth/config/language | `platform.config.read` | Platform language/locale config | — | `{ defaultLocale, supportedLocales, fallbackLocale }` 200 |
+| PATCH | /auth/config/language | `platform.config.write` | Update language config | JSON body | 204 |
+| GET | /auth/config/whatsapp | `platform.config.read` | WhatsApp integration config | — | `{ enabled, wabaId, phoneNumberId, webhookVerifyToken }` 200 |
+| PATCH | /auth/config/whatsapp | `platform.config.write` | Update WhatsApp config | JSON body | 204 |
+| GET | /auth/config/privacy-contact | Required (no permission gate) | DPDP DPO / privacy-contact details (Task #27, item 4) | — | `{ name, email, address }` 200 |
+
+**GET /auth/config/privacy-contact notes:**
+- Reads `Privacy:Contact:Name`, `Privacy:Contact:Email`, `Privacy:Contact:Address` from server configuration (appsettings / GCP Secret Manager env-override).
+- No `[RequiresPermission]` gate — all authenticated users may read DPO contact info (DPDP Act 2023, Section 8(7): data fiduciaries must disclose DPO details to data principals).
+- Never fails: if config keys are absent, empty strings are returned (TL-10 DPO appointment is pending).
+- Development environment substitutes placeholder values when config is absent, so frontends render without production secrets.
+- **Do NOT ship DPO contact details in mobile app builds** — always fetch from this endpoint at runtime.
+
 ### Security Controls
 
 | Code | Control |
@@ -664,7 +696,7 @@ Mobile LoanHubScreen calls `GET /loans/products?pageSize=50` on mount.
 | GET | /subscriptions/plans | Required | — | List active subscription plans | — | `[{ planId, name, tier, billingCycle, priceInr, trialDays, isActive }]` 200 |
 | POST | /subscriptions/plans | Required | `subscription.plan.create` | Create plan (admin) | `{ name, tier, billingCycle, priceInr, trialDays?, description? }` | `{ planId, name, priceInr }` 201 |
 | PUT | /subscriptions/plans/{id} | Required | `subscription.plan.update` | Update plan | `{ name, priceInr, description?, isActive }` | 204 |
-| GET | /subscriptions/me | Required | — | Get current org subscription | — | `{ subscriptionId, planId, status, currentPeriodEnd, razorpaySubscriptionId }` 200 |
+| GET | /subscriptions/me | Required | — | Get current org subscription | — | `{ subscriptionId, planId, planName, planTier, billingCycle, priceInr, status, currentPeriodStart, currentPeriodEnd, createdAt }` 200; **404** `{ code: "Subscription.NotFound", message }` when no subscription (CONTRACT-GAPS task #27, item 3) |
 | POST | /subscriptions | Required | — | Subscribe org to plan | `{ planId, razorpaySubscriptionId?, razorpayCustomerId? }` | `{ subscriptionId, status, currentPeriodEnd }` 201 |
 | POST | /subscriptions/{id}/cancel | Required | — | Cancel subscription | — | 204 |
 | POST | /subscriptions/{id}/upgrade | Required | — | Upgrade to higher-tier plan | `{ newPlanId }` | `{ subscriptionId, newPlanId }` 200 |
@@ -675,6 +707,12 @@ Mobile LoanHubScreen calls `GET /loans/products?pageSize=50` on mount.
 | GET | /subscriptions/mrr | Required | `subscription.plan.create` | MRR dashboard (admin) | — | `{ totalMrr, activeCount, trialingCount, pastDueCount, cancelledCount }` 200 |
 | PUT | /subscriptions/razorpay-config | Required | `subscription.config.write` | Update Razorpay API credentials | `{ keyId, keySecret }` | 204 |
 | POST | /webhooks/razorpay | No JWT (HMAC-SHA256) | — | Razorpay event webhook (SEC-051) | Razorpay JSON payload | 200 |
+
+**GET /subscriptions/me — null vs 404 contract (CONTRACT-GAPS task #27, item 3):**
+- **200** when an active (or cancelled/past-due) subscription exists.
+- **404** `{ code: "Subscription.NotFound", message: "This organisation has no active subscription." }` when the org has no subscription (free tier / never subscribed). Clients must treat 404 as "no subscription" — NOT as an error.
+- Mobile client (`mobile/src/api/subscriptions.ts`): already handles 404 → null.
+- Admin client (`src/admin/src/lib/subscriptionApi.ts`): should catch 404 and treat as no-subscription state (empty body / null result).
 
 **Webhook header:** `X-Razorpay-Signature` (HMAC-SHA256 verified).
 **Plan tiers:** Free=0, Starter=1, Growth=2, Enterprise=3.
@@ -886,7 +924,7 @@ No API surface change — this is a resolver upgrade within `GetTaxSlabsQuery` a
 }
 ```
 
-`GET /itr/deductions?assessmentYear=AY2026-27` now includes:
+`GET /itr/deduction-catalog?assessmentYear=AY2026-27` now includes:
 
 ```json
 {

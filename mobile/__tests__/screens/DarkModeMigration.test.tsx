@@ -88,8 +88,14 @@ import { ITRDashboardScreen } from '../../src/screens/itr/ITRDashboardScreen';
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn() } as never;
 const kfsRoute = { params: { applicationId: 'app-1' } } as never;
 
+// Track every QueryClient so afterEach can cancel its pending notify timers —
+// otherwise the jest worker holds an open setTimeout handle and is force-exited
+// ("worker failed to exit gracefully").
+const queryClients: QueryClient[] = [];
+
 function makeWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClients.push(qc);
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={qc}>
@@ -113,6 +119,11 @@ function rootBackground(json: { props?: { style?: unknown } } | null): string | 
 
 beforeEach(() => {
   jest.clearAllMocks();
+});
+
+afterEach(() => {
+  for (const qc of queryClients) qc.clear();
+  queryClients.length = 0;
 });
 
 // ── 1. Static: migrated files must not import static Colors ─────────────────
@@ -139,15 +150,42 @@ describe('S2 static gate — migrated files use theme tokens, not static Colors'
     expect(src).toContain('ThemeContext');
   });
 
-  it('ConsentSignatureBlock only keeps the canonical loan-module accent', () => {
-    // Exception documented in design-elevation-spec T-5: Colors.loan is the
-    // canonical module accent; all surfaces/text in the block are themed.
+  it('ConsentSignatureBlock is fully themed (T-5 exception retired in WP-D)', () => {
+    // tk.loanAccent IS the canonical module accent now (lifted in dark), so
+    // the former Colors.loan carve-out no longer applies.
     const src = fs.readFileSync(
       path.join(__dirname, '../../src/components/loans/ConsentSignatureBlock.tsx'),
       'utf8',
     );
     const colorRefs = src.match(/Colors\.\w+/g) ?? [];
-    expect([...new Set(colorRefs)]).toEqual(['Colors.loan']);
+    expect([...new Set(colorRefs)]).toEqual([]);
+  });
+
+  it('NO screen under src/screens imports static constants/colors (WP-D1..D4 complete)', () => {
+    const screensRoot = path.join(__dirname, '../../src/screens');
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (/\.tsx?$/.test(entry.name)) {
+          const src = fs.readFileSync(full, 'utf8');
+          if (/from\s+['"].*constants\/colors['"]/.test(src)) {
+            offenders.push(path.relative(screensRoot, full));
+          }
+        }
+      }
+    };
+    walk(screensRoot);
+    expect(offenders).toEqual([]);
+  });
+
+  it('navigation shell (tab bar) is themed', () => {
+    for (const rel of ['src/navigation/AppNavigator.tsx', 'src/navigation/RootNavigator.tsx']) {
+      const src = fs.readFileSync(path.join(__dirname, '../../', rel), 'utf8');
+      expect(src).not.toMatch(/from\s+['"].*constants\/colors['"]/);
+      expect(src).toContain('ThemeContext');
+    }
   });
 });
 

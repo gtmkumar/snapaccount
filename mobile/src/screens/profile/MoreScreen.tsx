@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../../components/ui/Card';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useAuthStore } from '../../store/authStore';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
@@ -26,6 +26,8 @@ function normalizePhone(phone: string | null | undefined): string {
 }
 
 export function MoreScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { user } = useAuthStore();
   const { t } = useTranslation();
   const isOwner = user?.userType === 'business_owner';
@@ -37,21 +39,21 @@ export function MoreScreen({ navigation }: Props) {
     color: string;
     desc: string;
   }[] = [
-    { label: t('mobile.more.expertChat'), icon: 'chatbubble-ellipses-outline', route: 'Chat', color: Colors.brand[500], desc: t('mobile.more.expertChatDesc') },
-    { label: t('mobile.more.itrFiling'), icon: 'document-text-outline', route: 'ITRDashboard', color: Colors.itr, desc: t('mobile.more.itrFilingDesc') },
+    { label: t('mobile.more.expertChat'), icon: 'chatbubble-ellipses-outline', route: 'Chat', color: tokens.brand500, desc: t('mobile.more.expertChatDesc') },
+    { label: t('mobile.more.itrFiling'), icon: 'document-text-outline', route: 'ITRDashboard', color: tokens.itrAccent, desc: t('mobile.more.itrFilingDesc') },
     // Phase 2: business owners can manage their team (members + invites).
     ...(isOwner
       ? [{
           label: t('mobile.team.menuLabel'),
           icon: 'people-outline' as React.ComponentProps<typeof Ionicons>['name'],
           route: 'Team' as keyof MoreStackParamList,
-          color: Colors.brand[600],
+          color: tokens.brandCta,
           desc: t('mobile.team.menuDesc'),
         }]
       : []),
-    { label: t('mobile.more.notifications'), icon: 'notifications-outline', route: 'NotificationCenter', color: Colors.accent[500], desc: t('mobile.more.notificationsDesc') },
-    { label: t('mobile.more.privacyData'), icon: 'shield-outline', route: 'PrivacyCenter', color: Colors.brand[700], desc: t('mobile.more.privacyDataDesc') },
-    { label: t('mobile.more.profileSettings'), icon: 'person-circle-outline', route: 'Profile', color: Colors.neutral[600], desc: t('mobile.more.profileSettingsDesc') },
+    { label: t('mobile.more.notifications'), icon: 'notifications-outline', route: 'NotificationCenter', color: tokens.loanAccent, desc: t('mobile.more.notificationsDesc') },
+    { label: t('mobile.more.privacyData'), icon: 'shield-outline', route: 'PrivacyCenter', color: tokens.brandFg, desc: t('mobile.more.privacyDataDesc') },
+    { label: t('mobile.more.profileSettings'), icon: 'person-circle-outline', route: 'Profile', color: tokens.textSecondary, desc: t('mobile.more.profileSettingsDesc') },
   ];
 
   return (
@@ -82,7 +84,7 @@ export function MoreScreen({ navigation }: Props) {
             </View>
             {/* Decorative affordance only — the row itself is the button */}
             <View style={styles.editBtn}>
-              <Ionicons name="chevron-forward" size={20} color={Colors.neutral[400]} />
+              <Ionicons name="chevron-forward" size={20} color={tokens.textTertiary} />
             </View>
           </Pressable>
         </Card>
@@ -113,52 +115,54 @@ export function MoreScreen({ navigation }: Props) {
           accessibilityRole="button"
           accessibilityLabel={t('mobile.auth.invite.joinEntry')}
         >
-          <Ionicons name="link-outline" size={18} color={Colors.brand[500]} />
+          <Ionicons name="link-outline" size={18} color={tokens.brand500} />
           <Text style={styles.joinRowText}>{t('mobile.auth.invite.joinEntry')}</Text>
-          <Ionicons name="chevron-forward" size={18} color={Colors.neutral[400]} />
+          <Ionicons name="chevron-forward" size={18} color={tokens.textTertiary} />
         </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
-  header: { paddingHorizontal: 20, paddingVertical: 14, backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100] },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: Colors.neutral[900], letterSpacing: -0.3 },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
+  header: { paddingHorizontal: 20, paddingVertical: 14, backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border },
+  headerTitle: { fontSize: 22, fontWeight: '800', color: tk.textPrimary, letterSpacing: -0.3 },
   scrollContent: { padding: 16, gap: 16 },
   userCard: { overflow: 'hidden' },
   // AND-14: padding lives on the Pressable so the full card area is tappable
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, minHeight: 56 },
-  avatar: { width: 52, height: 52, borderRadius: 16, backgroundColor: Colors.brand[500], alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 20, fontWeight: '700', color: Colors.neutral[0] },
+  avatar: { width: 52, height: 52, borderRadius: 16, backgroundColor: tk.brand500, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 20, fontWeight: '700', color: tk.textOnBrand },
   userInfo: { flex: 1 },
-  userName: { fontSize: 17, fontWeight: '700', color: Colors.neutral[900], letterSpacing: -0.2 },
-  userPhone: { fontSize: 13, color: Colors.neutral[500], marginTop: 2 },
-  editBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
+  userName: { fontSize: 17, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
+  userPhone: { fontSize: 13, color: tk.textSecondary, marginTop: 2 },
+  editBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   gridItem: {
     width: '47%',
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 18,
     padding: 18,
-    shadowColor: '#0F172A',
+    shadowColor: tk.shadowColor,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
   },
   gridIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  gridLabel: { fontSize: 15, fontWeight: '700', color: Colors.neutral[900], marginBottom: 4, letterSpacing: -0.2 },
-  gridDesc: { fontSize: 12, color: Colors.neutral[500], lineHeight: 16 },
+  gridLabel: { fontSize: 15, fontWeight: '700', color: tk.textPrimary, marginBottom: 4, letterSpacing: -0.2 },
+  gridDesc: { fontSize: 12, color: tk.textSecondary, lineHeight: 16 },
   joinRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 16,
     padding: 16,
     minHeight: 56,
   },
-  joinRowText: { flex: 1, fontSize: 15, fontWeight: '600', color: Colors.neutral[800] },
-});
+  joinRowText: { flex: 1, fontSize: 15, fontWeight: '600', color: tk.textPrimary },
+  }),
+);

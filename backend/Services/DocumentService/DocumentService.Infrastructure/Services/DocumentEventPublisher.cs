@@ -22,7 +22,7 @@ public sealed class DocumentEventPublisher(
     private const string OcrCompletedTopic = "snapaccount.document.ocr.completed";
 
     /// <inheritdoc />
-    public async Task PublishOcrCompletedAsync(Document document, CancellationToken ct = default)
+    public async Task PublishOcrCompletedAsync(Document document, string? ocrText = null, CancellationToken ct = default)
     {
         // Build the payload hash from the document's extracted fields so
         // AccountingService can compute its DedupeHash identically.
@@ -38,7 +38,8 @@ public sealed class DocumentEventPublisher(
             DocumentDate: document.DocumentDate ?? DateOnly.FromDateTime(document.UploadedAt),
             DocumentType: null,
             SuggestedDebitAccountId: null,
-            SuggestedCreditAccountId: null);
+            SuggestedCreditAccountId: null,
+            OcrText: ocrText);
 
         try
         {
@@ -80,6 +81,10 @@ public sealed class DocumentEventPublisher(
 /// Serialised to the <c>snapaccount.document.ocr.completed</c> Pub/Sub topic.
 /// IMPORTANT: field names must match exactly what AccountingService deserialises
 /// (camelCase via <see cref="System.Text.Json.JsonNamingPolicy.CamelCase"/>).
+///
+/// <para><b>OcrText</b>: added in Phase 7 task #3. Downstream subscribers (AiService
+/// RagIngestionSubscriber) should prefer this field when present and fall back to a
+/// storage fetch when null (e.g., documents approved before this deployment).</para>
 /// </summary>
 internal sealed record OcrCompletedAccountingPayload(
     Guid OrgId,
@@ -91,4 +96,5 @@ internal sealed record OcrCompletedAccountingPayload(
     DateOnly DocumentDate,
     string? DocumentType,
     Guid? SuggestedDebitAccountId,
-    Guid? SuggestedCreditAccountId) : DomainEvent;
+    Guid? SuggestedCreditAccountId,
+    string? OcrText = null) : DomainEvent;

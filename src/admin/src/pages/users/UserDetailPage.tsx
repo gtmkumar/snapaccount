@@ -6,6 +6,8 @@ import { ArrowLeft, Bell, MessageSquare, AlertTriangle, Trash2, Pencil, CheckCir
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardHeader } from '@/components/ui/Card'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { AmountDisplay } from '@/components/ui/AmountDisplay'
 import { formatDate, formatRelativeTime, getInitials, getAvatarColor } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -102,18 +104,20 @@ export default function UserDetailPage() {
 
   if (isLoading) {
     return (
-      <Card>
-        <p className="text-sm text-neutral-500">Loading user…</p>
-      </Card>
+      <div aria-label={t('userDetail.loading.ariaLabel')} aria-busy="true">
+        <Skeleton variant="card" className="h-36 mb-4" />
+        <Skeleton variant="dataTableDense" />
+      </div>
     )
   }
 
   if (isError || !user) {
     return (
-      <Card>
-        <p className="text-sm text-error-600">Could not load user.</p>
-        <Button variant="ghost" size="sm" onClick={() => void refetch()}>Retry</Button>
-      </Card>
+      <EmptyState
+        variant="generic"
+        title={t('userDetail.error.title')}
+        primaryCta={{ label: t('userDetail.error.retry'), onPress: () => void refetch() }}
+      />
     )
   }
 
@@ -349,7 +353,7 @@ export default function UserDetailPage() {
                   )}
                 </>
               ) : (
-                <p className="text-neutral-400 text-sm">No business profile linked.</p>
+                <p className="text-[var(--text-secondary)] text-sm">{t('userDetail.noBusinessProfile')}</p>
               )}
               {user.preferredLanguage && (
                 <div className="flex justify-between">
@@ -398,7 +402,7 @@ export default function UserDetailPage() {
               </thead>
               <tbody className="divide-y divide-neutral-100">
                 {documents.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-6 text-center text-neutral-400">No documents.</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-6 text-center"><EmptyState variant="generic" title={t('userDetail.noDocs')} size="sm" /></td></tr>
                 )}
                 {documents.map((doc) => (
                   <tr key={doc.id} className="hover:bg-neutral-50">
@@ -430,7 +434,7 @@ export default function UserDetailPage() {
           <CardHeader title="GST Returns" subtitle={user.business ? user.business.businessName : 'No org linked'} />
           <div className="overflow-x-auto">
             {!user.business ? (
-              <p className="px-4 py-6 text-neutral-400">No organisation linked to this user.</p>
+              <div className="px-4 py-6"><EmptyState variant="generic" title={t('userDetail.noOrg')} size="sm" /></div>
             ) : (
               <table className="w-full text-sm" aria-label="GST returns">
                 <thead>
@@ -442,7 +446,7 @@ export default function UserDetailPage() {
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
                   {gstReturns.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-6 text-center text-neutral-400">No GST returns.</td></tr>
+                    <tr><td colSpan={7} className="px-4 py-6 text-center"><EmptyState variant="generic" title={t('userDetail.noGstReturns')} size="sm" /></td></tr>
                   )}
                   {gstReturns.map((r) => (
                     <tr key={r.id} className="hover:bg-neutral-50">
@@ -475,7 +479,7 @@ export default function UserDetailPage() {
           <CardHeader title="Audit Log" subtitle={`Actions by ${user.name}`} />
           <div className="space-y-0 divide-y divide-neutral-100">
             {auditEvents.length === 0 && (
-              <p className="px-1 py-6 text-center text-neutral-400 text-sm">No audit events for this user.</p>
+              <EmptyState variant="generic" title={t('userDetail.noAuditEvents')} size="sm" />
             )}
             {auditEvents.map((event) => (
               <div key={event.id} className="flex items-center gap-4 px-1 py-3">

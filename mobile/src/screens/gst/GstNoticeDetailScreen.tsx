@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { DueDateChip } from '../../components/shared/DueDateChip';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { getGstNotice, respondToGstNotice } from '../../api/gst';
 import type { GstStackParamList } from '../../navigation/GstStack';
@@ -36,6 +36,8 @@ interface Props {
 }
 
 export function GstNoticeDetailScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { noticeId } = route.params;
@@ -73,7 +75,7 @@ export function GstNoticeDetailScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.gst.noticeDetail.title')}</Text>
         <View style={{ width: 40 }} />
@@ -81,7 +83,7 @@ export function GstNoticeDetailScreen({ navigation, route }: Props) {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {isLoading ? (
-          <ActivityIndicator size="large" color={Colors.gst} style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={tokens.gstAccent} style={{ marginTop: 40 }} />
         ) : notice ? (
           <>
             <View style={styles.card}>
@@ -126,7 +128,7 @@ export function GstNoticeDetailScreen({ navigation, route }: Props) {
                       value={responseText}
                       onChangeText={setResponseText}
                       placeholder={t('mobile.gst.noticeDetail.responsePlaceholder')}
-                      placeholderTextColor={Colors.neutral[400]}
+                      placeholderTextColor={tokens.textTertiary}
                       multiline
                       numberOfLines={5}
                       textAlignVertical="top"
@@ -151,36 +153,38 @@ export function GstNoticeDetailScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
   scrollContent: { padding: 16, gap: 14 },
-  card: { backgroundColor: Colors.surface.default, borderRadius: 14, borderWidth: 1, borderColor: Colors.neutral[100], overflow: 'hidden' },
+  card: { backgroundColor: tk.raised, borderRadius: 14, borderWidth: 1, borderColor: tk.border, overflow: 'hidden' },
   row: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 13, minHeight: 50,
-    borderBottomWidth: 1, borderBottomColor: Colors.neutral[50],
+    borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  rowLabel: { fontSize: 13, color: Colors.neutral[500], flex: 1 },
-  rowValue: { fontSize: 13, fontWeight: '600', color: Colors.neutral[900], flex: 1.5, textAlign: 'right' },
-  descCard: { backgroundColor: Colors.surface.default, borderRadius: 14, borderWidth: 1, borderColor: Colors.neutral[100], padding: 16, gap: 8 },
-  descTitle: { fontSize: 14, fontWeight: '700', color: Colors.neutral[800] },
-  descText: { fontSize: 14, color: Colors.neutral[700], lineHeight: 21 },
-  respondBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: Colors.gst, borderRadius: 14, minHeight: 52 },
-  respondBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  rowLabel: { fontSize: 13, color: tk.textSecondary, flex: 1 },
+  rowValue: { fontSize: 13, fontWeight: '600', color: tk.textPrimary, flex: 1.5, textAlign: 'right' },
+  descCard: { backgroundColor: tk.raised, borderRadius: 14, borderWidth: 1, borderColor: tk.border, padding: 16, gap: 8 },
+  descTitle: { fontSize: 14, fontWeight: '700', color: tk.textPrimary },
+  descText: { fontSize: 14, color: tk.textSecondary, lineHeight: 21 },
+  respondBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: tk.gstAccent, borderRadius: 14, minHeight: 52 },
+  respondBtnText: { fontSize: 16, fontWeight: '700', color: tk.textOnBrand },
   form: { gap: 12 },
   responseInput: {
-    borderWidth: 1.5, borderColor: Colors.neutral[200], borderRadius: 12,
-    paddingHorizontal: 14, paddingTop: 12, fontSize: 15, color: Colors.neutral[900],
-    backgroundColor: Colors.surface.default, minHeight: 120,
+    borderWidth: 1.5, borderColor: tk.border, borderRadius: 12,
+    paddingHorizontal: 14, paddingTop: 12, fontSize: 15, color: tk.textPrimary,
+    backgroundColor: tk.raised, minHeight: 120,
   },
-  submitBtn: { backgroundColor: Colors.gst, borderRadius: 14, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  submitBtn: { backgroundColor: tk.gstAccent, borderRadius: 14, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   submitBtnDisabled: { opacity: 0.4 },
-  submitBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
-});
+  submitBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);

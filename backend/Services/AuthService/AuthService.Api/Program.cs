@@ -140,6 +140,23 @@ try
     // well-known repo default key (auth bypass risk). Dev is intentionally unaffected.
     SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);
 
+    // RV-02 (SEC-AI-02): Fail-fast in non-Development when InternalApi:SharedToken is absent.
+    // Without this secret, AiService's AiProviderResolver cannot authenticate its service-to-service
+    // call to /auth/config/ai/effective and silently degrades to MockAiProvider in production.
+    // Dev is intentionally unaffected (local env has no Secret Manager binding).
+    if (!string.Equals(app.Environment.EnvironmentName, "Development", StringComparison.OrdinalIgnoreCase))
+    {
+        var internalToken = app.Configuration["InternalApi:SharedToken"];
+        if (string.IsNullOrWhiteSpace(internalToken) || internalToken.Length < 32)
+        {
+            throw new InvalidOperationException(
+                "InternalApi:SharedToken is not configured or is shorter than 32 characters. " +
+                "In non-Development environments this secret MUST be set (e.g. via GCP Secret Manager) " +
+                "to enable authenticated service-to-service communication between AiService and AuthService. " +
+                "Without it, AiService silently degrades to the mock AI provider in production.");
+        }
+    }
+
     // LOCAL_AUTH: idempotently seed a dev admin (admin@snapaccount.local) for local login.
     var localAuthEnabled =
         string.Equals(app.Configuration["LOCAL_AUTH"], "true", StringComparison.OrdinalIgnoreCase) ||

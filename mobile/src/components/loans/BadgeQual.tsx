@@ -7,7 +7,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 export type QualLevel = 'QUALIFIED' | 'NEAR_MATCH' | 'NOT_QUALIFIED' | 'UNCHECKED';
 
@@ -17,34 +17,36 @@ interface BadgeQualProps {
   testID?: string;
 }
 
-const BADGE_CONFIG: Record<
+const badgeConfigFor = (tk: ThemeTokens): Record<
   QualLevel,
   { bg: string; text: string; icon: React.ComponentProps<typeof Ionicons>['name'] }
-> = {
+> => ({
   QUALIFIED: {
-    bg: Colors.success[50],
-    text: Colors.success[700],
+    bg: tk.successTint,
+    text: tk.successFg,
     icon: 'checkmark-circle',
   },
   NEAR_MATCH: {
-    bg: Colors.warning[50],
-    text: Colors.warning[700],
+    bg: tk.warningTint,
+    text: tk.warningFg,
     icon: 'alert-circle',
   },
   NOT_QUALIFIED: {
-    bg: Colors.neutral[100],
-    text: Colors.neutral[500],
+    bg: tk.sunken,
+    text: tk.textSecondary,
     icon: 'remove-circle',
   },
   UNCHECKED: {
-    bg: Colors.neutral[100],
-    text: Colors.neutral[400],
+    bg: tk.sunken,
+    text: tk.textTertiary,
     icon: 'help-circle-outline',
   },
-};
+});
 
 export function BadgeQual({ level, label, testID }: BadgeQualProps) {
-  const config = BADGE_CONFIG[level];
+  const styles = useStyles();
+  const { tokens } = useTheme();
+  const config = badgeConfigFor(tokens)[level];
   return (
     <View
       testID={testID}
@@ -57,7 +59,8 @@ export function BadgeQual({ level, label, testID }: BadgeQualProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((_tk: ThemeTokens) =>
+  StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -71,4 +74,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.2,
   },
-});
+  }),
+);

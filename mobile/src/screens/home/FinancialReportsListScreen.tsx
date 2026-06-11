@@ -5,7 +5,7 @@
  * Matches docs/design/screens/mobile/dashboard-reports.md §Screen 9
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -21,10 +21,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { getFinancialYears } from '../../lib/utils';
 import type { HomeStackParamList } from '../../navigation/HomeStack';
-import { getFinancialReport, type ReportType } from '../../api/accounting';
+import { getFinancialReport } from '../../api/accounting';
 import { useAuthStore } from '../../store/authStore';
 
 type NavProp = NativeStackNavigationProp<HomeStackParamList, 'FinancialReportsList'>;
@@ -42,15 +42,15 @@ type ReportCard = {
   badge?: string;
 };
 
-const REPORT_TYPES: ReportCard[] = [
-  { id: 'trial-balance', apiId: 'trial-balance', label: 'Trial Balance', icon: 'scale-outline', color: Colors.brand[500] },
-  { id: 'pnl', apiId: 'profit-and-loss', label: 'Profit & Loss', icon: 'trending-up-outline', color: Colors.positive },
-  { id: 'balance-sheet', apiId: 'balance-sheet', label: 'Balance Sheet', icon: 'business-outline', color: Colors.brand[600] },
-  { id: 'cash-flow', label: 'Cash Flow', icon: 'swap-horizontal-outline', color: Colors.info[600] },
-  { id: 'tax-liability', label: 'Tax Liability', icon: 'calculator-outline', color: Colors.gst },
-  { id: 'ledger', label: 'Ledger', icon: 'book-outline', color: Colors.neutral[600] },
-  { id: 'comparative', label: 'Comparative', icon: 'bar-chart-outline', color: Colors.accent[600], badge: 'NEW' },
-  { id: 'forecast', label: 'Cash Flow Forecast', icon: 'analytics-outline', color: Colors.itr, badge: 'AI' },
+const buildReportTypes = (tk: ThemeTokens): ReportCard[] => [
+  { id: 'trial-balance', apiId: 'trial-balance', label: 'Trial Balance', icon: 'scale-outline', color: tk.brand500 },
+  { id: 'pnl', apiId: 'profit-and-loss', label: 'Profit & Loss', icon: 'trending-up-outline', color: tk.successFg },
+  { id: 'balance-sheet', apiId: 'balance-sheet', label: 'Balance Sheet', icon: 'business-outline', color: tk.brandCta },
+  { id: 'cash-flow', label: 'Cash Flow', icon: 'swap-horizontal-outline', color: tk.infoFg },
+  { id: 'tax-liability', label: 'Tax Liability', icon: 'calculator-outline', color: tk.gstAccent },
+  { id: 'ledger', label: 'Ledger', icon: 'book-outline', color: tk.textSecondary },
+  { id: 'comparative', label: 'Comparative', icon: 'bar-chart-outline', color: tk.loanAccent, badge: 'NEW' },
+  { id: 'forecast', label: 'Cash Flow Forecast', icon: 'analytics-outline', color: tk.itrAccent, badge: 'AI' },
 ];
 
 const FY_LIST = getFinancialYears(4);
@@ -62,6 +62,9 @@ function parseFy(fy: string): { fiscalYear: string } {
 }
 
 export function FinancialReportsListScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
+  const reportTypes = useMemo(() => buildReportTypes(tokens), [tokens]);
   const { t } = useTranslation();
   const [selectedFY, setSelectedFY] = useState(FY_LIST[0]);
   const { user } = useAuthStore();
@@ -87,11 +90,11 @@ export function FinancialReportsListScreen({ navigation }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
-          <Ionicons name="arrow-back" size={22} color={Colors.brand[500]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.brand500} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.reports.title')}</Text>
         <Pressable onPress={() => refetch()} style={styles.headerBtn} hitSlop={8}>
-          <Ionicons name="refresh-outline" size={20} color={Colors.neutral[600]} />
+          <Ionicons name="refresh-outline" size={20} color={tokens.textSecondary} />
         </Pressable>
       </View>
 
@@ -134,7 +137,7 @@ export function FinancialReportsListScreen({ navigation }: Props) {
                 <Text
                   style={[
                     styles.summaryAmount,
-                    { color: (netProfit ?? 0) >= 0 ? Colors.positive : Colors.negative },
+                    { color: (netProfit ?? 0) >= 0 ? tokens.successFg: tokens.errorFg },
                   ]}
                 >
                   {netProfit !== undefined
@@ -151,7 +154,7 @@ export function FinancialReportsListScreen({ navigation }: Props) {
 
         {/* Reports grid */}
         <FlatList
-          data={REPORT_TYPES}
+          data={reportTypes}
           numColumns={2}
           scrollEnabled={false}
           keyExtractor={(item) => item.id}
@@ -204,49 +207,50 @@ export function FinancialReportsListScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
-    borderBottomWidth: 1, borderBottomColor: Colors.neutral[200],
+    backgroundColor: tk.raised,
+    borderBottomWidth: 1, borderBottomColor: tk.border,
   },
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: tk.textPrimary },
   headerBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { padding: 16, gap: 16 },
   fyScroll: { marginBottom: 4 },
   fyScrollContent: { gap: 8 },
   fyChip: {
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: Colors.neutral[100],
-    borderWidth: 1, borderColor: Colors.neutral[200], minHeight: 44,
+    backgroundColor: tk.sunken,
+    borderWidth: 1, borderColor: tk.border, minHeight: 44,
     alignItems: 'center', justifyContent: 'center',
   },
-  fyChipActive: { backgroundColor: Colors.brand[500], borderColor: Colors.brand[500] },
-  fyChipText: { fontSize: 13, fontWeight: '500', color: Colors.neutral[600] },
-  fyChipTextActive: { color: Colors.neutral[0] },
+  fyChipActive: { backgroundColor: tk.brandCta, borderColor: tk.brandCta },
+  fyChipText: { fontSize: 13, fontWeight: '500', color: tk.textSecondary },
+  fyChipTextActive: { color: tk.textOnBrand },
 
   // P&L summary
   summaryCard: { marginBottom: 4 },
-  summarySkeletonCard: { height: 72, backgroundColor: Colors.neutral[100], borderRadius: 16, marginBottom: 4 },
+  summarySkeletonCard: { height: 72, backgroundColor: tk.sunken, borderRadius: 16, marginBottom: 4 },
   summaryCardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  summaryLabel: { fontSize: 12, color: Colors.neutral[500], marginBottom: 4 },
+  summaryLabel: { fontSize: 12, color: tk.textSecondary, marginBottom: 4 },
   summaryAmount: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
-  summaryUpdated: { fontSize: 11, color: Colors.neutral[400] },
+  summaryUpdated: { fontSize: 11, color: tk.textTertiary },
 
   // Error
   errorCard: { padding: 16, alignItems: 'center', gap: 8 },
-  errorText: { fontSize: 14, color: Colors.error[600], textAlign: 'center' },
+  errorText: { fontSize: 14, color: tk.errorFg, textAlign: 'center' },
 
   // Grid
   columnWrapper: { gap: 12, marginBottom: 12 },
   gridContent: {},
   reportCard: {
-    flex: 1, backgroundColor: Colors.surface.default,
+    flex: 1, backgroundColor: tk.raised,
     borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: Colors.neutral[200],
+    borderWidth: 1, borderColor: tk.border,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
   },
@@ -255,18 +259,19 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginBottom: 10,
   },
   reportCardContent: { flex: 1 },
-  reportLabel: { fontSize: 14, fontWeight: '600', color: Colors.neutral[800], marginBottom: 4 },
+  reportLabel: { fontSize: 14, fontWeight: '600', color: tk.textPrimary, marginBottom: 4 },
   reportBadge: {
-    backgroundColor: Colors.brand[100], paddingHorizontal: 6, paddingVertical: 2,
+    backgroundColor: tk.brandTintBorder, paddingHorizontal: 6, paddingVertical: 2,
     borderRadius: 4, alignSelf: 'flex-start', marginBottom: 4,
   },
-  reportBadgeAI: { backgroundColor: Colors.gst + '20' },
-  reportBadgeText: { fontSize: 9, fontWeight: '700', color: Colors.brand[600], letterSpacing: 0.5 },
-  reportUpdated: { fontSize: 11, color: Colors.neutral[400] },
-  viewText: { fontSize: 12, color: Colors.brand[500], fontWeight: '600', marginTop: 8 },
+  reportBadgeAI: { backgroundColor: tk.gstAccent + '20' },
+  reportBadgeText: { fontSize: 9, fontWeight: '700', color: tk.brandCta, letterSpacing: 0.5 },
+  reportUpdated: { fontSize: 11, color: tk.textTertiary },
+  viewText: { fontSize: 12, color: tk.brand500, fontWeight: '600', marginTop: 8 },
 
   // Export
   exportCard: { marginTop: 8, padding: 16 },
-  exportTitle: { fontSize: 16, fontWeight: '600', color: Colors.neutral[800], marginBottom: 12 },
+  exportTitle: { fontSize: 16, fontWeight: '600', color: tk.textPrimary, marginBottom: 12 },
   exportButtons: { gap: 10 },
-});
+  }),
+);

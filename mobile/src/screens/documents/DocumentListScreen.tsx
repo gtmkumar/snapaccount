@@ -24,7 +24,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { DocumentCard, DocumentDto } from '../../components/shared/DocumentCard';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import apiClient from '../../lib/api';
 import type { DocumentStackParamList } from '../../navigation/DocumentStack';
 import { useDocumentQueue, type QueueItem } from '../../hooks/useDocumentQueue';
@@ -66,14 +66,16 @@ function normalizeDocument(raw: RawDocumentDto): DocumentDto {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProcessingBadge({ item }: { item: QueueItem }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
 
   const configs: Record<string, { bg: string; text: string; icon: keyof typeof Ionicons.glyphMap }> = {
-    QUEUED: { bg: Colors.neutral[100], text: Colors.neutral[700], icon: 'time-outline' },
-    UPLOADING: { bg: Colors.info[100], text: Colors.info[700], icon: 'arrow-up-circle-outline' },
-    PROCESSING: { bg: Colors.brand[100], text: Colors.brand[700], icon: 'sparkles-outline' },
-    READY: { bg: Colors.success[100], text: Colors.success[700], icon: 'checkmark-circle-outline' },
-    FAILED: { bg: Colors.error[100], text: Colors.error[700], icon: 'alert-circle-outline' },
+    QUEUED: { bg: tokens.sunken, text: tokens.textSecondary, icon: 'time-outline' },
+    UPLOADING: { bg: tokens.infoTint, text: tokens.infoFg, icon: 'arrow-up-circle-outline' },
+    PROCESSING: { bg: tokens.brandTintBorder, text: tokens.brandFg, icon: 'sparkles-outline' },
+    READY: { bg: tokens.successTint, text: tokens.successFg, icon: 'checkmark-circle-outline' },
+    FAILED: { bg: tokens.errorTint, text: tokens.errorFg, icon: 'alert-circle-outline' },
   };
 
   const cfg = configs[item.status] ?? configs.QUEUED;
@@ -114,6 +116,8 @@ function QueueCard({ item, onRetry, onRemove }: {
   onRetry: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
 
   const failReasonText: Record<string, string> = {
@@ -141,7 +145,7 @@ function QueueCard({ item, onRetry, onRemove }: {
       <View style={styles.queueCardTop}>
         {/* Placeholder thumbnail */}
         <View style={styles.queueThumb}>
-          <Ionicons name="document-outline" size={24} color={Colors.neutral[400]} />
+          <Ionicons name="document-outline" size={24} color={tokens.textTertiary} />
         </View>
         <View style={styles.queueCardContent}>
           <View style={styles.queueCardTitleRow}>
@@ -178,7 +182,7 @@ function QueueCard({ item, onRetry, onRemove }: {
               accessibilityLabel={t('mobile.docs.action.retry')}
               hitSlop={8}
             >
-              <Ionicons name="refresh-outline" size={14} color={Colors.neutral[0]} />
+              <Ionicons name="refresh-outline" size={14} color={tokens.textOnBrand} />
               <Text style={styles.retryBtnText}>{t('mobile.docs.action.retry')}</Text>
             </Pressable>
           )}
@@ -189,7 +193,7 @@ function QueueCard({ item, onRetry, onRemove }: {
             accessibilityLabel={t('mobile.docs.action.remove')}
             hitSlop={8}
           >
-            <Ionicons name="trash-outline" size={14} color={Colors.error[600]} />
+            <Ionicons name="trash-outline" size={14} color={tokens.errorFg} />
             <Text style={styles.removeBtnText}>{t('mobile.docs.action.remove')}</Text>
           </Pressable>
         </View>
@@ -203,6 +207,8 @@ function QueueCard({ item, onRetry, onRemove }: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function DocumentListScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showSearch, setShowSearch] = useState(false);
@@ -306,13 +312,13 @@ export function DocumentListScreen({ navigation }: Props) {
       <View style={styles.header}>
         {showSearch ? (
           <View style={styles.searchBar}>
-            <Ionicons name="search" size={16} color={Colors.neutral[400]} />
+            <Ionicons name="search" size={16} color={tokens.textTertiary} />
             <TextInput
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder="Search documents..."
-              placeholderTextColor={Colors.neutral[400]}
+              placeholderTextColor={tokens.textTertiary}
               autoFocus
             />
             <Pressable onPress={() => { setShowSearch(false); setSearchQuery(''); }}>
@@ -324,13 +330,13 @@ export function DocumentListScreen({ navigation }: Props) {
             <Text style={styles.headerTitle}>Documents</Text>
             <View style={styles.headerActions}>
               <Pressable onPress={() => setShowSearch(true)} style={styles.headerBtn}>
-                <Ionicons name="search" size={20} color={Colors.neutral[600]} />
+                <Ionicons name="search" size={20} color={tokens.textSecondary} />
               </Pressable>
               <Pressable
                 style={styles.headerBtn}
                 onPress={() => Alert.alert('Coming Soon', 'Document settings coming soon.')}
               >
-                <Ionicons name="options-outline" size={20} color={Colors.neutral[600]} />
+                <Ionicons name="options-outline" size={20} color={tokens.textSecondary} />
               </Pressable>
             </View>
           </>
@@ -364,7 +370,7 @@ export function DocumentListScreen({ navigation }: Props) {
         </Text>
         <Pressable style={styles.sortAction}>
           <Text style={styles.sortActionText}>Date</Text>
-          <Ionicons name="chevron-down" size={14} color={Colors.neutral[500]} />
+          <Ionicons name="chevron-down" size={14} color={tokens.textSecondary} />
         </Pressable>
       </View>
 
@@ -399,7 +405,7 @@ export function DocumentListScreen({ navigation }: Props) {
           isLoading || activeQueueItems.length > 0 ? null : (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconWrap}>
-                <Ionicons name="folder-open-outline" size={40} color={Colors.neutral[300]} />
+                <Ionicons name="folder-open-outline" size={40} color={tokens.textTertiary} />
               </View>
               <Text style={styles.emptyTitle}>No documents yet</Text>
               <Text style={styles.emptySubtext}>
@@ -409,7 +415,7 @@ export function DocumentListScreen({ navigation }: Props) {
                 style={styles.emptyBtn}
                 onPress={handleAddDocument}
               >
-                <Ionicons name="camera-outline" size={18} color={Colors.neutral[0]} style={{ marginRight: 6 }} />
+                <Ionicons name="camera-outline" size={18} color={tokens.textOnBrand} style={{ marginRight: 6 }} />
                 <Text style={styles.emptyBtnText}>Capture First Document</Text>
               </Pressable>
             </View>
@@ -424,73 +430,74 @@ export function DocumentListScreen({ navigation }: Props) {
         accessibilityLabel="Add document"
         accessibilityRole="button"
       >
-        <Ionicons name="add" size={28} color={Colors.neutral[0]} />
+        <Ionicons name="add" size={28} color={tokens.textOnBrand} />
       </Pressable>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 20, paddingVertical: 14,
-    backgroundColor: Colors.surface.default,
-    borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised,
+    borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  headerTitle: { flex: 1, fontSize: 22, fontWeight: '800', color: Colors.neutral[900], letterSpacing: -0.3 },
+  headerTitle: { flex: 1, fontSize: 22, fontWeight: '800', color: tk.textPrimary, letterSpacing: -0.3 },
   headerActions: { flexDirection: 'row', gap: 6 },
-  headerBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
+  headerBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
   searchBar: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.neutral[100], borderRadius: 12,
+    backgroundColor: tk.sunken, borderRadius: 12,
     paddingHorizontal: 12, height: 44, gap: 8,
   },
-  searchInput: { flex: 1, fontSize: 15, color: Colors.neutral[900] },
-  cancelSearch: { fontSize: 14, color: Colors.brand[500], fontWeight: '600' },
-  filterRow: { maxHeight: 52, backgroundColor: Colors.surface.default },
+  searchInput: { flex: 1, fontSize: 15, color: tk.textPrimary },
+  cancelSearch: { fontSize: 14, color: tk.brand500, fontWeight: '600' },
+  filterRow: { maxHeight: 52, backgroundColor: tk.raised },
   filterScroll: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-  filterChip: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, backgroundColor: Colors.neutral[100] },
-  filterChipActive: { backgroundColor: Colors.brand[500] },
-  filterChipText: { fontSize: 13, color: Colors.neutral[600], fontWeight: '500' },
-  filterChipTextActive: { color: Colors.neutral[0], fontWeight: '600' },
+  filterChip: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, backgroundColor: tk.sunken },
+  filterChipActive: { backgroundColor: tk.brand500 },
+  filterChipText: { fontSize: 13, color: tk.textSecondary, fontWeight: '500' },
+  filterChipTextActive: { color: tk.textOnBrand, fontWeight: '600' },
   sortBar: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20, paddingVertical: 8,
-    borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  sortText: { fontSize: 13, color: Colors.neutral[400] },
+  sortText: { fontSize: 13, color: tk.textTertiary },
   sortAction: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  sortActionText: { fontSize: 13, color: Colors.neutral[500], fontWeight: '500' },
+  sortActionText: { fontSize: 13, color: tk.textSecondary, fontWeight: '500' },
   listContent: { padding: 16, paddingBottom: 100 },
 
   // Queue section
   queueSection: { marginBottom: 8 },
   queueCard: {
-    backgroundColor: Colors.neutral[0],
+    backgroundColor: tk.raised,
     borderRadius: 12, borderWidth: 1,
-    borderColor: Colors.neutral[200], marginBottom: 8, overflow: 'hidden',
+    borderColor: tk.border, marginBottom: 8, overflow: 'hidden',
   },
   queueCardTop: { flexDirection: 'row', padding: 12, gap: 12, alignItems: 'flex-start' },
   queueThumb: {
     width: 56, height: 56, borderRadius: 6,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center', justifyContent: 'center',
   },
   queueCardContent: { flex: 1, gap: 6 },
   queueCardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  queueCardFilename: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.neutral[800] },
+  queueCardFilename: { flex: 1, fontSize: 14, fontWeight: '600', color: tk.textPrimary },
 
   // Processing badge
   procBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   procBadgeText: { fontSize: 11, fontWeight: '600' },
 
   // Progress bar
-  progressTrack: { height: 3, backgroundColor: Colors.brand[100], borderRadius: 2 },
-  progressFill: { height: 3, backgroundColor: Colors.brand[500], borderRadius: 2 },
+  progressTrack: { height: 3, backgroundColor: tk.brandTintBorder, borderRadius: 2 },
+  progressFill: { height: 3, backgroundColor: tk.brand500, borderRadius: 2 },
 
   // Fail reason
-  failReasonText: { fontSize: 12, color: Colors.neutral[500] },
+  failReasonText: { fontSize: 12, color: tk.textSecondary },
 
   // Queue card footer
   queueCardFooter: {
@@ -498,34 +505,35 @@ const styles = StyleSheet.create({
   },
   retryBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, backgroundColor: Colors.brand[500],
+    gap: 6, backgroundColor: tk.brand500,
     borderRadius: 8, paddingVertical: 10, minHeight: 44,
   },
-  retryBtnText: { fontSize: 13, fontWeight: '700', color: Colors.neutral[0] },
+  retryBtnText: { fontSize: 13, fontWeight: '700', color: tk.textOnBrand },
   removeBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, borderRadius: 8, paddingVertical: 10,
-    borderWidth: 1, borderColor: Colors.error[200], minHeight: 44,
+    borderWidth: 1, borderColor: tk.errorTintBorder, minHeight: 44,
   },
-  removeBtnText: { fontSize: 13, fontWeight: '600', color: Colors.error[600] },
+  removeBtnText: { fontSize: 13, fontWeight: '600', color: tk.errorFg },
 
   // Empty state
   emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 32 },
-  emptyIconWrap: { width: 72, height: 72, borderRadius: 20, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  emptyTitle: { fontSize: 20, fontWeight: '700', color: Colors.neutral[800], marginBottom: 8 },
-  emptySubtext: { fontSize: 14, color: Colors.neutral[500], textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  emptyIconWrap: { width: 72, height: 72, borderRadius: 20, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  emptyTitle: { fontSize: 20, fontWeight: '700', color: tk.textPrimary, marginBottom: 8 },
+  emptySubtext: { fontSize: 14, color: tk.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   emptyBtn: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.brand[500], paddingHorizontal: 24, paddingVertical: 14,
-    borderRadius: 14, shadowColor: Colors.brand[500],
+    backgroundColor: tk.brand500, paddingHorizontal: 24, paddingVertical: 14,
+    borderRadius: 14, shadowColor: tk.brand500,
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
   },
-  emptyBtnText: { color: Colors.neutral[0], fontSize: 15, fontWeight: '700' },
+  emptyBtnText: { color: tk.textOnBrand, fontSize: 15, fontWeight: '700' },
   fab: {
     position: 'absolute', bottom: 88, right: 20,
     width: 56, height: 56, borderRadius: 18,
-    backgroundColor: Colors.brand[500], alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.brand[500], shadowOffset: { width: 0, height: 8 },
+    backgroundColor: tk.brand500, alignItems: 'center', justifyContent: 'center',
+    shadowColor: tk.brand500, shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3, shadowRadius: 16, elevation: 12,
   },
-});
+  }),
+);

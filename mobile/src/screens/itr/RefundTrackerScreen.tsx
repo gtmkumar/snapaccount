@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { RaiseGrievanceModal } from '../../components/shared/RaiseGrievanceModal';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { getRefundStatus } from '../../api/itr';
 import type { RefundStatus } from '../../api/itr';
@@ -54,16 +54,18 @@ function statusToStep(status: RefundStatus): number {
   return steps.indexOf(status);
 }
 
-const STATUS_COLORS: Record<RefundStatus, string> = {
-  NotApplicable: Colors.neutral[400],
-  Pending: Colors.warning[500],
-  Processing: Colors.brand[500],
-  Issued: Colors.success[500],
-  Failed: Colors.error[500],
-  Adjusted: Colors.accent[500],
-};
+const statusColors = (tk: ThemeTokens): Record<RefundStatus, string> => ({
+  NotApplicable: tk.textTertiary,
+  Pending: tk.warningFg,
+  Processing: tk.brand500,
+  Issued: tk.successFg,
+  Failed: tk.errorFg,
+  Adjusted: tk.loanAccent,
+});
 
 export function RefundTrackerScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { filingId } = route.params;
@@ -77,7 +79,7 @@ export function RefundTrackerScreen({ navigation, route }: Props) {
 
   const currentStep = data ? statusToStep(data.refundStatus) : -1;
   const isDelayed = data?.refundStatus === 'Pending' || data?.refundStatus === 'Processing';
-  const statusColor = data ? STATUS_COLORS[data.refundStatus] : Colors.neutral[400];
+  const statusColor = data ? statusColors(tokens)[data.refundStatus] : tokens.textTertiary;
 
   const handleSubmitGrievance = async (formData: { subject: string; description: string; contactEmail?: string }) => {
     await apiClient.post('/itr/grievances', { filingId, ...formData });
@@ -88,7 +90,7 @@ export function RefundTrackerScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.itr.refund.title')}</Text>
         <View style={{ width: 40 }} />
@@ -101,7 +103,7 @@ export function RefundTrackerScreen({ navigation, route }: Props) {
       >
         {isLoading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={Colors.itr} />
+            <ActivityIndicator size="large" color={tokens.itrAccent} />
           </View>
         ) : data ? (
           <>
@@ -159,7 +161,7 @@ export function RefundTrackerScreen({ navigation, route }: Props) {
                         <Ionicons
                           name={isDone ? 'checkmark' : step.icon}
                           size={14}
-                          color={isDone || isActive ? '#FFFFFF' : Colors.neutral[400]}
+                          color={isDone || isActive ? tokens.textOnBrand : tokens.textTertiary}
                         />
                       </View>
                       {index < TIMELINE_STEPS.length - 1 && (
@@ -188,7 +190,7 @@ export function RefundTrackerScreen({ navigation, route }: Props) {
 
             {/* Last polled */}
             <View style={styles.polledRow}>
-              <Ionicons name="refresh-outline" size={14} color={Colors.neutral[400]} />
+              <Ionicons name="refresh-outline" size={14} color={tokens.textTertiary} />
               <Text style={styles.polledText}>
                 {t('mobile.itr.refund.lastPolled', { time: data.lastPolledAt })}
               </Text>
@@ -202,14 +204,14 @@ export function RefundTrackerScreen({ navigation, route }: Props) {
                 accessibilityRole="button"
                 accessibilityLabel={t('mobile.itr.refund.raiseGrievance')}
               >
-                <Ionicons name="alert-circle-outline" size={20} color={Colors.error[600]} />
+                <Ionicons name="alert-circle-outline" size={20} color={tokens.errorFg} />
                 <Text style={styles.grievanceBtnText}>{t('mobile.itr.refund.raiseGrievance')}</Text>
               </Pressable>
             )}
           </>
         ) : (
           <View style={styles.emptyWrap}>
-            <Ionicons name="receipt-outline" size={48} color={Colors.neutral[300]} />
+            <Ionicons name="receipt-outline" size={48} color={tokens.textTertiary} />
             <Text style={styles.emptyText}>{t('mobile.itr.refund.noData')}</Text>
           </View>
         )}
@@ -226,58 +228,60 @@ export function RefundTrackerScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
   scrollContent: { padding: 16, gap: 16 },
 
   loadingWrap: { alignItems: 'center', paddingVertical: 60 },
 
   heroCard: {
-    backgroundColor: Colors.surface.default, borderRadius: 20,
+    backgroundColor: tk.raised, borderRadius: 20,
     borderWidth: 1.5, padding: 24, alignItems: 'center', gap: 10,
   },
   heroIcon: { width: 72, height: 72, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   heroStatus: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
-  heroAmount: { fontSize: 28, fontWeight: '800', color: Colors.neutral[900], letterSpacing: -0.5 },
-  heroMessage: { fontSize: 14, color: Colors.neutral[600], textAlign: 'center', lineHeight: 20 },
-  heroDate: { fontSize: 13, color: Colors.neutral[500] },
-  txRefBadge: { backgroundColor: Colors.neutral[100], borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  txRefText: { fontSize: 12, color: Colors.neutral[600], fontFamily: 'monospace' },
+  heroAmount: { fontSize: 28, fontWeight: '800', color: tk.textPrimary, letterSpacing: -0.5 },
+  heroMessage: { fontSize: 14, color: tk.textSecondary, textAlign: 'center', lineHeight: 20 },
+  heroDate: { fontSize: 13, color: tk.textSecondary },
+  txRefBadge: { backgroundColor: tk.sunken, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  txRefText: { fontSize: 12, color: tk.textSecondary, fontFamily: 'monospace' },
 
-  timelineCard: { backgroundColor: Colors.surface.default, borderRadius: 16, borderWidth: 1, borderColor: Colors.neutral[100], padding: 16, gap: 0 },
-  timelineTitle: { fontSize: 15, fontWeight: '700', color: Colors.neutral[800], marginBottom: 16 },
+  timelineCard: { backgroundColor: tk.raised, borderRadius: 16, borderWidth: 1, borderColor: tk.border, padding: 16, gap: 0 },
+  timelineTitle: { fontSize: 15, fontWeight: '700', color: tk.textPrimary, marginBottom: 16 },
   timelineRow: { flexDirection: 'row', gap: 14 },
   timelineLeft: { alignItems: 'center', width: 28 },
   timelineCircle: {
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: Colors.neutral[100], borderWidth: 2, borderColor: Colors.neutral[200],
+    backgroundColor: tk.sunken, borderWidth: 2, borderColor: tk.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  timelineCircleDone: { backgroundColor: Colors.success[500], borderColor: Colors.success[500] },
-  timelineCircleActive: { backgroundColor: Colors.brand[500], borderColor: Colors.brand[500] },
-  timelineLine: { width: 2, flex: 1, backgroundColor: Colors.neutral[200], marginVertical: 4 },
-  timelineLineDone: { backgroundColor: Colors.success[400] },
+  timelineCircleDone: { backgroundColor: tk.successFg, borderColor: tk.successFg },
+  timelineCircleActive: { backgroundColor: tk.brand500, borderColor: tk.brand500 },
+  timelineLine: { width: 2, flex: 1, backgroundColor: tk.border, marginVertical: 4 },
+  timelineLineDone: { backgroundColor: tk.successFg },
   timelineContent: { flex: 1, paddingBottom: 20, paddingTop: 4 },
-  timelineLabel: { fontSize: 14, fontWeight: '600', color: Colors.neutral[500] },
-  timelineLabelDone: { color: Colors.neutral[800] },
+  timelineLabel: { fontSize: 14, fontWeight: '600', color: tk.textSecondary },
+  timelineLabelDone: { color: tk.textPrimary },
 
   polledRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  polledText: { fontSize: 12, color: Colors.neutral[400] },
+  polledText: { fontSize: 12, color: tk.textTertiary },
 
   grievanceBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 12, justifyContent: 'center',
-    backgroundColor: Colors.error[50], borderRadius: 14, padding: 16,
-    borderWidth: 1, borderColor: Colors.error[200], minHeight: 52,
+    backgroundColor: tk.errorTint, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: tk.errorTintBorder, minHeight: 52,
   },
-  grievanceBtnText: { fontSize: 15, fontWeight: '700', color: Colors.error[700] },
+  grievanceBtnText: { fontSize: 15, fontWeight: '700', color: tk.errorFg },
 
   emptyWrap: { alignItems: 'center', paddingVertical: 60, gap: 12 },
-  emptyText: { fontSize: 15, color: Colors.neutral[500], textAlign: 'center' },
-});
+  emptyText: { fontSize: 15, color: tk.textSecondary, textAlign: 'center' },
+  }),
+);

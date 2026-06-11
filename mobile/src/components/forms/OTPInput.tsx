@@ -17,7 +17,7 @@ import {
   View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 interface OTPInputProps {
   length?: number;
@@ -38,18 +38,22 @@ export function OTPInput({
   disabled = false,
   autoFocus = true,
 }: OTPInputProps) {
+  const styles = useStyles();
   const { t } = useTranslation();
   const inputRefs = useRef<(TextInput | null)[]>([]);
   const [localValues, setLocalValues] = useState<string[]>(
     Array(length).fill(''),
   );
 
-  // Sync external value into local boxes
-  useEffect(() => {
+  // Sync external value into local boxes — adjust state during render
+  // (react.dev "adjusting state when a prop changes") instead of an effect,
+  // so there is no extra cascading re-render.
+  const [prevSync, setPrevSync] = useState({ value, length });
+  if (prevSync.value !== value || prevSync.length !== length) {
+    setPrevSync({ value, length });
     const chars = value.split('').slice(0, length);
-    const padded = [...chars, ...Array(length - chars.length).fill('')];
-    setLocalValues(padded);
-  }, [value, length]);
+    setLocalValues([...chars, ...Array(length - chars.length).fill('')]);
+  }
 
   const handleChange = useCallback(
     (text: string, index: number) => {
@@ -168,13 +172,14 @@ export function OTPResendTimer({
   initialSeconds = 60,
   onResend,
 }: OTPResendTimerProps) {
+  const timerStyles = useTimerStyles();
   const { t } = useTranslation();
   const [seconds, setSeconds] = useState(initialSeconds);
-  const [canResend, setCanResend] = useState(false);
+  // Derived, not state — avoids a setState-in-effect cascade.
+  const canResend = seconds === 0;
 
   useEffect(() => {
     if (seconds === 0) {
-      setCanResend(true);
       // OTP-1: announce availability without requiring focus change (4.1.3).
       AccessibilityInfo.announceForAccessibility(t('mobile.otp.resendAvailable'));
       return;
@@ -191,7 +196,6 @@ export function OTPResendTimer({
   const handleResend = () => {
     if (!canResend) return;
     setSeconds(initialSeconds);
-    setCanResend(false);
     onResend();
   };
 
@@ -229,7 +233,8 @@ export function OTPResendTimer({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -240,31 +245,33 @@ const styles = StyleSheet.create({
     height: 56,
     borderWidth: 1.5,
     // OTP-3: resting outline must stay ≥3:1 non-text contrast on white.
-    borderColor: Colors.neutral[400],
+    borderColor: tk.textTertiary,
     borderStyle: 'dashed',
     borderRadius: 8,
     textAlign: 'center',
     fontSize: 24,
     fontWeight: '700',
-    color: Colors.neutral[900],
-    backgroundColor: Colors.neutral[50],
+    color: tk.textPrimary,
+    backgroundColor: tk.canvas,
   },
   boxFilled: {
     borderStyle: 'solid',
-    borderColor: Colors.neutral[400],
-    backgroundColor: Colors.neutral[0],
+    borderColor: tk.textTertiary,
+    backgroundColor: tk.raised,
   },
   boxError: {
     borderStyle: 'solid',
-    borderColor: Colors.error[600],
+    borderColor: tk.errorCta,
   },
   boxDisabled: {
     opacity: 0.5,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
   },
-});
+  }),
+);
 
-const timerStyles = StyleSheet.create({
+const useTimerStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     alignItems: 'center',
     marginTop: 16,
@@ -279,11 +286,12 @@ const timerStyles = StyleSheet.create({
   },
   timer: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
   },
   resendLink: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.brand[500],
+    color: tk.brand500,
   },
-});
+  }),
+);

@@ -24,7 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { PanInput } from '../../components/shared/PanInput';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { isValidPAN, isValidGSTIN, isValidAadhaar } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import apiClient, { getApiError, refreshContextAndSwap } from '../../lib/api';
@@ -103,6 +103,8 @@ function toIsoDate(ddmmyyyy?: string): string | undefined {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function BusinessProfileWizardScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { updateProfile, setOrganizations, markAuthenticated } = useAuthStore();
   const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(1);
@@ -293,7 +295,7 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
 
               {panVerified && (
                 <View style={styles.verifiedRow}>
-                  <Ionicons name="checkmark-circle" size={16} color={Colors.success[600]} />
+                  <Ionicons name="checkmark-circle" size={16} color={tokens.successFg} />
                   <Text style={styles.verifiedText}>{t('mobile.auth.kyc.panVerified')}</Text>
                 </View>
               )}
@@ -331,7 +333,7 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
               {/* Info banner */}
               <View style={styles.infoBanner}>
                 <View style={styles.bannerRow}>
-                  <Ionicons name="lock-closed-outline" size={14} color={Colors.success[600]} style={styles.bannerIcon} />
+                  <Ionicons name="lock-closed-outline" size={14} color={tokens.successFg} style={styles.bannerIcon} />
                   <Text style={styles.infoBannerText}>
                     Your PAN is safe. We use it only for government portal verification.
                   </Text>
@@ -379,7 +381,7 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
 
               <View style={styles.warningBanner}>
                 <View style={styles.bannerRow}>
-                  <Ionicons name="warning-outline" size={14} color={Colors.warning[600]} style={styles.bannerIcon} />
+                  <Ionicons name="warning-outline" size={14} color={tokens.warningFg} style={styles.bannerIcon} />
                   <Text style={styles.warningBannerText}>
                     Your Aadhaar number is masked and never stored in full — UIDAI guidelines.
                     You can verify it later from Profile → Identity Documents.
@@ -543,10 +545,11 @@ function AadhaarInputSection({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg.base,
+    backgroundColor: tk.canvas,
   },
   flex: { flex: 1 },
   header: {
@@ -558,19 +561,19 @@ const styles = StyleSheet.create({
   },
   stepIndicator: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     fontWeight: '500',
   },
   progressBar: {
     height: 4,
-    backgroundColor: Colors.neutral[200],
+    backgroundColor: tk.border,
     marginHorizontal: 16,
     borderRadius: 2,
     marginBottom: 8,
   },
   progressFill: {
     height: '100%',
-    backgroundColor: Colors.brand[500],
+    backgroundColor: tk.brand500,
     borderRadius: 2,
   },
   scrollContent: {
@@ -584,8 +587,8 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     gap: 8,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
-    backgroundColor: Colors.bg.base,
+    borderTopColor: tk.border,
+    backgroundColor: tk.canvas,
   },
   stepContent: {
     gap: 4,
@@ -593,19 +596,19 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     marginBottom: 8,
   },
   stepSubtitle: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     marginBottom: 24,
     lineHeight: 20,
   },
   infoBanner: {
-    backgroundColor: Colors.info[50],
+    backgroundColor: tk.infoTint,
     borderLeftWidth: 4,
-    borderLeftColor: Colors.info[600],
+    borderLeftColor: tk.infoFg,
     padding: 12,
     borderRadius: 8,
     marginVertical: 16,
@@ -614,21 +617,21 @@ const styles = StyleSheet.create({
   bannerIcon: { marginRight: 6, marginTop: 2 },
   infoBannerText: {
     fontSize: 13,
-    color: Colors.info[600],
+    color: tk.infoFg,
     lineHeight: 18,
     flex: 1,
   },
   warningBanner: {
-    backgroundColor: Colors.warning[50],
+    backgroundColor: tk.warningTint,
     borderLeftWidth: 4,
-    borderLeftColor: Colors.warning[600],
+    borderLeftColor: tk.warningFg,
     padding: 12,
     borderRadius: 8,
     marginVertical: 16,
   },
   warningBannerText: {
     fontSize: 13,
-    color: Colors.warning[600],
+    color: tk.warningFg,
     lineHeight: 18,
     flex: 1,
   },
@@ -640,7 +643,8 @@ const styles = StyleSheet.create({
   },
   verifiedText: {
     fontSize: 13,
-    color: Colors.success[600],
+    color: tk.successFg,
     fontWeight: '600',
   },
-});
+  }),
+);

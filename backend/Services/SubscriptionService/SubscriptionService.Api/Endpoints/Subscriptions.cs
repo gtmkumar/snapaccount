@@ -159,12 +159,26 @@ public sealed class Subscriptions : EndpointGroupBase
         return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
     }
 
+    /// <summary>
+    /// CONTRACT: returns 200+body when an active subscription exists;
+    /// 404 (typed error body) when the org has no subscription yet.
+    /// Clients must treat 404 as "no subscription / free tier" — NOT as an error.
+    /// Mobile client: already handles 404 → null (see mobile/src/api/subscriptions.ts).
+    /// Admin client: should catch 404 and treat as no-subscription state.
+    /// </summary>
     private static async Task<IResult> GetSubscription(ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new GetSubscriptionQuery(), ct);
-        return result.IsSuccess
-            ? result.Value != null ? Results.Ok(result.Value) : Results.NotFound()
-            : MapError(result.Error);
+        if (!result.IsSuccess)
+            return MapError(result.Error);
+
+        return result.Value is not null
+            ? Results.Ok(result.Value)
+            : Results.NotFound(new
+            {
+                code = "Subscription.NotFound",
+                message = "This organisation has no active subscription."
+            });
     }
 
     private static async Task<IResult> Subscribe(

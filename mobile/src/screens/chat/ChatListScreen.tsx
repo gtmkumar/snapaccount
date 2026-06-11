@@ -14,9 +14,8 @@
  * - i18n: all strings via t()
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -32,7 +31,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 
-import { Colors } from '../../constants/colors';
 import { timeAgo } from '../../lib/utils';
 import { listThreads, type ChatThread, type ThreadCategory } from '../../api/chat';
 import { RequestCallbackCta } from '../../components/callbacks/RequestCallbackCta';
@@ -179,7 +177,7 @@ function ThreadRow({
 
       {/* Avatar */}
       <View style={[styles.avatar, { backgroundColor: tokens.brand500 }]}>
-        <Text style={styles.avatarText}>
+        <Text style={[styles.avatarText, { color: tokens.textOnBrand }]}>
           {(thread.subject ?? thread.category).charAt(0).toUpperCase()}
         </Text>
       </View>
@@ -206,7 +204,7 @@ function ThreadRow({
           <CategoryBadge category={thread.category} isDark={isDark} />
           {isUnread && (
             <View style={[styles.unreadChip, { backgroundColor: tokens.brand500 }]}>
-              <Text style={styles.unreadChipText}>{unreadLabel}</Text>
+              <Text style={[styles.unreadChipText, { color: tokens.textOnBrand }]}>{unreadLabel}</Text>
             </View>
           )}
         </View>
@@ -380,7 +378,7 @@ export function ChatListScreen({ navigation }: Props) {
               <Text
                 style={[
                   styles.filterChipText,
-                  { color: selected ? '#FFFFFF' : tokens.textSecondary },
+                  { color: selected ? tokens.textOnBrand : tokens.textSecondary },
                 ]}
               >
                 {t(`mobile.chat.list.filter.${f}`)}
@@ -562,7 +560,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
-  avatarText: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
+  avatarText: { fontSize: 18, fontWeight: '700' },
   rowContent: { flex: 1, gap: 4 },
   rowTop: {
     flexDirection: 'row',
@@ -599,7 +597,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
-  unreadChipText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  unreadChipText: { fontSize: 11, fontWeight: '700' },
 
   // Skeleton
   skeletonAvatar: { width: 48, height: 48, borderRadius: 14, flexShrink: 0 },

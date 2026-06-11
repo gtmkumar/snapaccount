@@ -17,6 +17,10 @@ import ItcMismatchPage from '@/pages/gst/ItcMismatchPage'
 // Phase 6B — GST Notice Tracker
 import NoticeTrackerListPage from '@/pages/gst/NoticeTrackerListPage'
 import NoticeDetailPage from '@/pages/gst/NoticeDetailPage'
+// GAP-101 — GSTN IMS Inbox (Board #32, mandatory from 1 Apr 2026)
+import ImsInboxPage from '@/pages/gst/ImsInboxPage'
+import ImsInvoiceDetailPage from '@/pages/gst/ImsInvoiceDetailPage'
+import Gstr1aPage from '@/pages/gst/Gstr1aPage'
 import UserListPage from '@/pages/users/UserListPage'
 import UserDetailPage from '@/pages/users/UserDetailPage'
 import SettingsPage from '@/pages/settings/SettingsPage'
@@ -49,6 +53,8 @@ import OrganizationDetailPage from '@/pages/orgs/OrganizationDetailPage'
 import InviteAcceptancePage from '@/pages/auth/InviteAcceptancePage'
 // Admin utilities — audit log (admin.dashboard.read)
 import AuditLogPage from '@/pages/admin/AuditLogPage'
+// MCA Compliance — edit log (accounting.editlog.read)
+import EditLogPage from '@/pages/compliance/EditLogPage'
 
 // Layout wrapper for protected routes
 // KeyboardShortcutsProvider uses useNavigate() so it must live inside the
@@ -161,6 +167,31 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedLayout>
         <NoticeDetailPage />
+      </ProtectedLayout>
+    ),
+  },
+  // GAP-101: IMS Inbox (specific routes BEFORE dynamic :id, GSTR-1A BEFORE detail)
+  {
+    path: '/gst/ims',
+    element: (
+      <ProtectedLayout>
+        <ImsInboxPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    path: '/gst/ims/gstr1a',
+    element: (
+      <ProtectedLayout>
+        <Gstr1aPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    path: '/gst/ims/:invoiceId',
+    element: (
+      <ProtectedLayout>
+        <ImsInvoiceDetailPage />
       </ProtectedLayout>
     ),
   },
@@ -385,6 +416,16 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedLayout>
         <AuditLogPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // MCA Compliance — Edit Log (accounting.editlog.read)
+  {
+    path: '/compliance/edit-log',
+    element: (
+      <ProtectedLayout>
+        <EditLogPage />
       </ProtectedLayout>
     ),
   },

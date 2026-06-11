@@ -3,11 +3,10 @@
  * Premium brand animation with gradient background
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
-  Dimensions,
   StyleSheet,
   Text,
   View,
@@ -15,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Colors } from '../../constants/colors';
+import { createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { FirebaseAuth } from '../../lib/firebase';
 import { useAuthStore } from '../../store/authStore';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
@@ -26,16 +25,19 @@ interface SplashScreenProps {
   navigation: SplashNavProp;
 }
 
-const { height } = Dimensions.get('window');
+// Full-bleed brand gradient — deliberately identical in light and dark mode
+// (deep indigo 950→800→700); all text on it stays literal white.
+const SPLASH_GRADIENT = ['#1E1B4B', '#3730A3', '#4338CA'] as const;
 
 export function SplashScreen({ navigation }: SplashScreenProps) {
-  const { isAuthenticated, user, setLoading } = useAuthStore();
+  const styles = useStyles();
+  const { isAuthenticated, setLoading } = useAuthStore();
 
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const logoScale = useRef(new Animated.Value(0.85)).current;
-  const logoTranslateY = useRef(new Animated.Value(20)).current;
-  const taglineOpacity = useRef(new Animated.Value(0)).current;
-  const bottomOpacity = useRef(new Animated.Value(0)).current;
+  const [logoOpacity] = useState(() => new Animated.Value(0));
+  const [logoScale] = useState(() => new Animated.Value(0.85));
+  const [logoTranslateY] = useState(() => new Animated.Value(20));
+  const [taglineOpacity] = useState(() => new Animated.Value(0));
+  const [bottomOpacity] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     Animated.sequence([
@@ -73,7 +75,7 @@ export function SplashScreen({ navigation }: SplashScreenProps) {
       try {
         const currentUser = FirebaseAuth.getCurrentUser();
         if (currentUser && isAuthenticated) {
-          navigation.replace('App' as never, {} as never);
+          navigation.replace('App');
         } else {
           navigation.replace('PhoneEntry');
         }
@@ -90,10 +92,10 @@ export function SplashScreen({ navigation }: SplashScreenProps) {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={[Colors.brand[950], Colors.brand[800], Colors.brand[700]]}
+        colors={SPLASH_GRADIENT}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
       <SafeAreaView style={styles.safeArea}>
         {/* Logo area */}
@@ -133,7 +135,8 @@ export function SplashScreen({ navigation }: SplashScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((_tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -170,13 +173,13 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 38,
     fontWeight: '800',
-    color: Colors.neutral[0],
+    color: '#FFFFFF', // on fixed SPLASH_GRADIENT
     letterSpacing: -1,
   },
   appName: {
     fontSize: 34,
     fontWeight: '800',
-    color: Colors.neutral[0],
+    color: '#FFFFFF', // on fixed SPLASH_GRADIENT
     letterSpacing: -0.5,
     marginBottom: 10,
   },
@@ -197,4 +200,5 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.35)',
     letterSpacing: 0.5,
   },
-});
+  }),
+);

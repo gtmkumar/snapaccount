@@ -21,7 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { CountdownCard } from '../../components/shared/CountdownCard';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { eVerifyFiling, getItrFiling } from '../../api/itr';
 import type { EVerificationMethod } from '../../api/itr';
@@ -90,6 +90,8 @@ function getVerificationDeadline(filedAt?: string): string {
 }
 
 export function EVerificationScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { filingId } = route.params;
@@ -138,7 +140,7 @@ export function EVerificationScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.itr.eVerify.title')}</Text>
         <View style={{ width: 40 }} />
@@ -175,7 +177,7 @@ export function EVerificationScreen({ navigation, route }: Props) {
               <Ionicons
                 name={opt.icon}
                 size={22}
-                color={selectedMethod === opt.method ? '#FFFFFF' : Colors.neutral[600]}
+                color={selectedMethod === opt.method ? tokens.textOnBrand : tokens.textSecondary}
               />
             </View>
             <View style={styles.optionText}>
@@ -209,7 +211,7 @@ export function EVerificationScreen({ navigation, route }: Props) {
             <Ionicons
               name={itrVUri ? 'document-text' : 'cloud-upload-outline'}
               size={24}
-              color={itrVUri ? Colors.success[600] : Colors.itr}
+              color={itrVUri ? tokens.successFg : tokens.itrAccent}
             />
             <Text style={[styles.itrVText, itrVUri && styles.itrVTextDone]}>
               {itrVUri ? t('mobile.itr.eVerify.itrVPicked') : t('mobile.itr.eVerify.uploadItrV')}
@@ -246,55 +248,57 @@ export function EVerificationScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
   scrollContent: { padding: 16, gap: 14 },
 
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.neutral[800], marginTop: 4 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: tk.textPrimary, marginTop: 4 },
 
   optionCard: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: Colors.surface.default, borderRadius: 14, padding: 16,
-    borderWidth: 1.5, borderColor: Colors.neutral[200], minHeight: 72,
+    backgroundColor: tk.raised, borderRadius: 14, padding: 16,
+    borderWidth: 1.5, borderColor: tk.border, minHeight: 72,
   },
-  optionCardSelected: { borderColor: Colors.itr, backgroundColor: Colors.itr + '06' },
+  optionCardSelected: { borderColor: tk.itrAccent, backgroundColor: tk.itrAccent + '06' },
   optionIcon: {
     width: 44, height: 44, borderRadius: 12,
-    backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center',
+    backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center',
   },
-  optionIconSelected: { backgroundColor: Colors.itr },
+  optionIconSelected: { backgroundColor: tk.itrAccent },
   optionText: { flex: 1, gap: 3 },
   optionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  optionTitle: { fontSize: 14, fontWeight: '700', color: Colors.neutral[900] },
-  optionSub: { fontSize: 12, color: Colors.neutral[500], lineHeight: 17 },
-  recBadge: { backgroundColor: Colors.success[50], borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  recBadgeText: { fontSize: 10, fontWeight: '700', color: Colors.success[700] },
+  optionTitle: { fontSize: 14, fontWeight: '700', color: tk.textPrimary },
+  optionSub: { fontSize: 12, color: tk.textSecondary, lineHeight: 17 },
+  recBadge: { backgroundColor: tk.successTint, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  recBadgeText: { fontSize: 10, fontWeight: '700', color: tk.successFg },
   radio: {
     width: 22, height: 22, borderRadius: 11,
-    borderWidth: 2, borderColor: Colors.neutral[300],
+    borderWidth: 2, borderColor: tk.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  radioSelected: { borderColor: Colors.itr },
-  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.itr },
+  radioSelected: { borderColor: tk.itrAccent },
+  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: tk.itrAccent },
 
   itrVUpload: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: Colors.itr + '0D', borderRadius: 12, padding: 16,
-    borderWidth: 1.5, borderColor: Colors.itr + '40', borderStyle: 'dashed',
+    backgroundColor: tk.itrAccent + '0D', borderRadius: 12, padding: 16,
+    borderWidth: 1.5, borderColor: tk.itrAccent + '40', borderStyle: 'dashed',
     minHeight: 60,
   },
-  itrVText: { fontSize: 14, fontWeight: '600', color: Colors.itr },
-  itrVTextDone: { color: Colors.success[600] },
+  itrVText: { fontSize: 14, fontWeight: '600', color: tk.itrAccent },
+  itrVTextDone: { color: tk.successFg },
 
-  footer: { padding: 16, borderTopWidth: 1, borderTopColor: Colors.neutral[100], backgroundColor: Colors.surface.default },
-  verifyBtn: { backgroundColor: Colors.itr, borderRadius: 14, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
+  footer: { padding: 16, borderTopWidth: 1, borderTopColor: tk.border, backgroundColor: tk.raised },
+  verifyBtn: { backgroundColor: tk.itrAccent, borderRadius: 14, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
   verifyBtnDisabled: { opacity: 0.4 },
-  verifyBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-});
+  verifyBtnText: { fontSize: 16, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);

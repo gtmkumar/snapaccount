@@ -143,12 +143,11 @@ public sealed class Ai : EndpointGroupBase
             ?? request.Locale
             ?? "en";
 
-        // Org is required for scoped retrieval — take from body or JWT.
-        var orgId = request.OrganizationId
-            ?? (Guid.TryParse(ctx.User.FindFirst("org_id")?.Value, out var jwtOrg) ? jwtOrg : Guid.Empty);
-
-        if (orgId == Guid.Empty)
-            return Results.Problem("organizationId is required for /ai/chat.", statusCode: 400);
+        // SEC-AI-02 M-03: org_id MUST come exclusively from the JWT claim — never from the
+        // request body. Accepting org_id from the body created an IDOR: a user belonging to
+        // Org A could supply Org B's id and retrieve Org B's RAG chunks.
+        if (!Guid.TryParse(ctx.User.FindFirst("org_id")?.Value, out var orgId) || orgId == Guid.Empty)
+            return Results.Problem("organizationId is required for /ai/chat — must be present in JWT claims.", statusCode: 400);
 
         var query = new AiChatQuery(
             Message: request.Message,
@@ -182,10 +181,13 @@ internal sealed record ExtractRequest(
     string? RawText,
     string? FeatureCode);
 
-/// <summary>Request body for POST /ai/chat.</summary>
+/// <summary>
+/// Request body for POST /ai/chat.
+/// SEC-AI-02 M-03: OrganizationId is intentionally absent — it is derived exclusively
+/// from the JWT <c>org_id</c> claim at the endpoint level to prevent IDOR attacks.
+/// </summary>
 internal sealed record ChatRequest(
     string Message,
-    Guid? OrganizationId,
     Guid? SessionId,
     string? Locale,
     int? TopK);

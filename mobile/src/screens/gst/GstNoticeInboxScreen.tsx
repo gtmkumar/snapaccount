@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { NoticeRowMobile } from '../../components/shared/NoticeRowMobile';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import type { GstNoticeStatus } from '../../api/gst';
 import { listGstNotices, respondToGstNotice } from '../../api/gst';
@@ -44,6 +44,8 @@ const FILTER_TABS: { key: GstNoticeStatus | 'All'; label: string }[] = [
 ];
 
 export function GstNoticeInboxScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { orgId } = route.params;
@@ -82,7 +84,7 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
           accessibilityLabel={t('mobile.common.back')}
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t('mobile.gst.notices.title')}</Text>
@@ -123,12 +125,12 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
       {/* Body */}
       {isLoading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={Colors.gst} />
+          <ActivityIndicator size="large" color={tokens.gstAccent} />
           <Text style={styles.loadingText}>{t('mobile.gst.notices.loading')}</Text>
         </View>
       ) : error ? (
         <View style={styles.errorWrap}>
-          <Ionicons name="alert-circle-outline" size={40} color={Colors.error[400]} />
+          <Ionicons name="alert-circle-outline" size={40} color={tokens.errorFg} />
           <Text style={styles.errorText}>{t('mobile.gst.notices.error')}</Text>
           <Pressable style={styles.retryBtn} onPress={() => void refetch()}>
             <Text style={styles.retryText}>{t('mobile.gst.notices.retry')}</Text>
@@ -145,7 +147,7 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
           {notices.length === 0 ? (
             <View style={styles.emptyWrap}>
               <View style={styles.emptyIconWrap}>
-                <Ionicons name="document-text-outline" size={40} color={Colors.gst} />
+                <Ionicons name="document-text-outline" size={40} color={tokens.gstAccent} />
               </View>
               <Text style={styles.emptyTitle}>{t('mobile.gst.notices.emptyTitle')}</Text>
               <Text style={styles.emptyText}>{t('mobile.gst.notices.emptyBody')}</Text>
@@ -180,23 +182,24 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -210,11 +213,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     letterSpacing: -0.2,
   },
   badgeWrap: {
-    backgroundColor: Colors.error[500],
+    backgroundColor: tk.errorCta,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -225,12 +228,12 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#FFFFFF', // white on errorCta, AA both modes
   },
   tabsContainer: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
-    backgroundColor: Colors.surface.default,
+    borderBottomColor: tk.border,
+    backgroundColor: tk.raised,
     maxHeight: 52,
   },
   tabsRow: {
@@ -243,21 +246,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     minHeight: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tabActive: {
-    backgroundColor: Colors.gst,
+    backgroundColor: tk.gstAccent,
   },
   tabText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
   },
   loadingWrap: {
     flex: 1,
@@ -267,7 +270,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
   },
   errorWrap: {
     flex: 1,
@@ -278,20 +281,20 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 15,
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     textAlign: 'center',
   },
   retryBtn: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: Colors.gst,
+    backgroundColor: tk.gstAccent,
     borderRadius: 12,
     minHeight: 44,
   },
   retryText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
   },
   listContent: {
     padding: 16,
@@ -307,20 +310,21 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: Colors.gst + '12',
+    backgroundColor: tk.gstAccent + '12',
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
   },
   emptyText: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     paddingHorizontal: 24,
   },
-});
+  }),
+);

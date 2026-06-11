@@ -9,7 +9,7 @@ import type { LinkingOptions, NavigationContainerRef } from '@react-navigation/n
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { AuthNavigator } from './AuthNavigator';
 import { AppNavigator } from './AppNavigator';
-import { Colors } from '../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../contexts/ThemeContext';
 import { useAuthStore } from '../store/authStore';
 import { initPushNotifications, configureForegroundNotificationHandler } from '../notifications/pushTokenManager';
 import { wireNotificationRouter } from '../notifications/notificationRouter';
@@ -48,6 +48,8 @@ function buildLinking(isAuthenticated: boolean): LinkingOptions<RootLinkParamLis
 }
 
 export function RootNavigator() {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { isAuthenticated, isLoading, setLoading } = useAuthStore();
   const navigationRef = useRef<NavigationContainerRef<Record<string, object | undefined>>>(null);
   // Build the linking config for the currently-mounted navigator so the
@@ -86,7 +88,7 @@ export function RootNavigator() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.brand[500]} />
+        <ActivityIndicator size="large" color={tokens.brand500} />
       </View>
     );
   }
@@ -98,11 +100,13 @@ export function RootNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.bg.base,
+    backgroundColor: tk.canvas,
   },
-});
+  }),
+);

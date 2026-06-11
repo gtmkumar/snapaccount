@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useBiometricGate } from '../../hooks/useBiometricGate';
 import type { RouteProp } from '@react-navigation/native';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { submitFilingForReview } from '../../api/itr';
 import type { ItrStackParamList } from '../../navigation/ItrStack';
@@ -44,6 +44,8 @@ const DISCLAIMER_PARAGRAPHS = [
 ];
 
 export function UserApprovalScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { trigger: triggerBiometric } = useBiometricGate();
@@ -110,7 +112,7 @@ export function UserApprovalScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.itr.approval.title')}</Text>
         <View style={{ width: 40 }} />
@@ -122,7 +124,7 @@ export function UserApprovalScreen({ navigation, route }: Props) {
           <Ionicons
             name={hasScrolledToBottom ? 'checkmark-circle' : 'document-text-outline'}
             size={18}
-            color={hasScrolledToBottom ? Colors.success[600] : Colors.neutral[400]}
+            color={hasScrolledToBottom ? tokens.successFg : tokens.textTertiary}
           />
           <Text style={[styles.progressLabel, hasScrolledToBottom && styles.progressLabelDone]}>
             {t('mobile.itr.approval.stepRead')}
@@ -133,7 +135,7 @@ export function UserApprovalScreen({ navigation, route }: Props) {
           <Ionicons
             name={biometricPassed ? 'checkmark-circle' : 'finger-print-outline'}
             size={18}
-            color={biometricPassed ? Colors.success[600] : Colors.neutral[400]}
+            color={biometricPassed ? tokens.successFg : tokens.textTertiary}
           />
           <Text style={[styles.progressLabel, biometricPassed && styles.progressLabelDone]}>
             {t('mobile.itr.approval.stepVerify')}
@@ -160,13 +162,13 @@ export function UserApprovalScreen({ navigation, route }: Props) {
         ))}
         {!hasScrolledToBottom && (
           <View style={styles.scrollHint}>
-            <Ionicons name="arrow-down-circle" size={20} color={Colors.neutral[400]} />
+            <Ionicons name="arrow-down-circle" size={20} color={tokens.textTertiary} />
             <Text style={styles.scrollHintText}>{t('mobile.itr.approval.scrollHint')}</Text>
           </View>
         )}
         {hasScrolledToBottom && (
           <View style={styles.readConfirm}>
-            <Ionicons name="checkmark-circle" size={20} color={Colors.success[600]} />
+            <Ionicons name="checkmark-circle" size={20} color={tokens.successFg} />
             <Text style={styles.readConfirmText}>{t('mobile.itr.approval.readConfirmed')}</Text>
           </View>
         )}
@@ -181,7 +183,7 @@ export function UserApprovalScreen({ navigation, route }: Props) {
             accessibilityRole="button"
             accessibilityLabel={t('mobile.itr.approval.biometricCta')}
           >
-            <Ionicons name="finger-print" size={20} color={Colors.brand[600]} />
+            <Ionicons name="finger-print" size={20} color={tokens.brandCta} />
             <Text style={styles.biometricText}>{t('mobile.itr.approval.biometricCta')}</Text>
           </Pressable>
         )}
@@ -194,10 +196,10 @@ export function UserApprovalScreen({ navigation, route }: Props) {
           accessibilityLabel={t('mobile.itr.approval.approveCta')}
         >
           {submitMutation.isPending ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={tokens.textOnBrand} />
           ) : (
             <>
-              <Ionicons name="shield-checkmark" size={20} color={canApprove ? '#FFFFFF' : Colors.neutral[400]} />
+              <Ionicons name="shield-checkmark" size={20} color={canApprove ? tokens.textOnBrand : tokens.textTertiary} />
               <Text style={[styles.approveBtnText, !canApprove && styles.approveBtnTextDisabled]}>
                 {t('mobile.itr.approval.approveCta')}
               </Text>
@@ -209,50 +211,52 @@ export function UserApprovalScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
 
   progressRow: {
     flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
   progressStep: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   progressStepDone: {},
-  progressLabel: { fontSize: 13, fontWeight: '600', color: Colors.neutral[400] },
-  progressLabelDone: { color: Colors.success[700] },
-  progressConnector: { width: 24, height: 1, backgroundColor: Colors.neutral[200] },
+  progressLabel: { fontSize: 13, fontWeight: '600', color: tk.textTertiary },
+  progressLabelDone: { color: tk.successFg },
+  progressConnector: { width: 24, height: 1, backgroundColor: tk.border },
 
   disclaimerScroll: { flex: 1 },
   disclaimerContent: { padding: 20, gap: 16 },
-  disclaimerHeading: { fontSize: 17, fontWeight: '800', color: Colors.neutral[900], letterSpacing: -0.2 },
-  disclaimerPara: { fontSize: 14, color: Colors.neutral[700], lineHeight: 22 },
+  disclaimerHeading: { fontSize: 17, fontWeight: '800', color: tk.textPrimary, letterSpacing: -0.2 },
+  disclaimerPara: { fontSize: 14, color: tk.textSecondary, lineHeight: 22 },
   scrollHint: { flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: 'center', paddingVertical: 16 },
-  scrollHintText: { fontSize: 13, color: Colors.neutral[400] },
-  readConfirm: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.success[50], borderRadius: 10, padding: 12 },
-  readConfirmText: { fontSize: 13, fontWeight: '600', color: Colors.success[700] },
+  scrollHintText: { fontSize: 13, color: tk.textTertiary },
+  readConfirm: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: tk.successTint, borderRadius: 10, padding: 12 },
+  readConfirmText: { fontSize: 13, fontWeight: '600', color: tk.successFg },
 
   footer: {
     padding: 16, gap: 12,
-    borderTopWidth: 1, borderTopColor: Colors.neutral[100], backgroundColor: Colors.surface.default,
+    borderTopWidth: 1, borderTopColor: tk.border, backgroundColor: tk.raised,
   },
   biometricBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    minHeight: 52, borderRadius: 14, borderWidth: 1.5, borderColor: Colors.brand[300],
-    backgroundColor: Colors.brand[50],
+    minHeight: 52, borderRadius: 14, borderWidth: 1.5, borderColor: tk.brand400,
+    backgroundColor: tk.brandTint,
   },
-  biometricText: { fontSize: 15, fontWeight: '600', color: Colors.brand[700] },
+  biometricText: { fontSize: 15, fontWeight: '600', color: tk.brandFg },
   approveBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    minHeight: 56, borderRadius: 14, backgroundColor: Colors.itr,
+    minHeight: 56, borderRadius: 14, backgroundColor: tk.itrAccent,
   },
   approveBtnDisabled: { opacity: 0.4 },
-  approveBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  approveBtnTextDisabled: { color: Colors.neutral[400] },
-});
+  approveBtnText: { fontSize: 16, fontWeight: '700', color: tk.textOnBrand },
+  approveBtnTextDisabled: { color: tk.textTertiary },
+  }),
+);

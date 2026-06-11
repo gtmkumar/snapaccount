@@ -8,7 +8,7 @@ import React from 'react';
 import { Clipboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 interface PackageMetaStripProps {
   pageCount: number;
@@ -27,6 +27,8 @@ export function PackageMetaStrip({
   onCopyId,
   testID,
 }: PackageMetaStripProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
 
   const handleCopy = () => {
@@ -56,7 +58,7 @@ export function PackageMetaStrip({
           accessibilityLabel={t('mobile.loan.preview.meta.copyId')}
           hitSlop={8}
         >
-          <Ionicons name="copy-outline" size={14} color={Colors.brand[500]} />
+          <Ionicons name="copy-outline" size={14} color={tokens.brand500} />
           <Text style={styles.copyText}>{t('mobile.loan.preview.meta.copyId')}</Text>
         </Pressable>
       </View>
@@ -64,11 +66,12 @@ export function PackageMetaStrip({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   strip: {
-    backgroundColor: Colors.neutral[50],
+    backgroundColor: tk.canvas,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
     paddingHorizontal: 16,
     paddingVertical: 10,
     gap: 4,
@@ -79,7 +82,7 @@ const styles = StyleSheet.create({
   },
   meta: {
     fontSize: 12,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     fontWeight: '500',
   },
   idRow: {
@@ -89,7 +92,7 @@ const styles = StyleSheet.create({
   },
   idLabel: {
     fontSize: 11,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     fontFamily: 'monospace',
     flex: 1,
   },
@@ -101,7 +104,8 @@ const styles = StyleSheet.create({
   },
   copyText: {
     fontSize: 11,
-    color: Colors.brand[500],
+    color: tk.brand500,
     fontWeight: '600',
   },
-});
+  }),
+);

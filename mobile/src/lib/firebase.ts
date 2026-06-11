@@ -27,7 +27,7 @@ const mockUser: FirebaseAuthTypes['User'] = {
 // Start logged OUT so the phone-OTP signup flow runs against the real backend.
 // (Auth state is driven by the backend token in the auth store, not this mock.)
 let _currentUser: FirebaseAuthTypes['User'] | null = null;
-const _listeners: Array<(user: FirebaseAuthTypes['User'] | null) => void> = [];
+const _listeners: ((user: FirebaseAuthTypes['User'] | null) => void)[] = [];
 
 export const auth = () => ({
   currentUser: _currentUser,
@@ -46,10 +46,10 @@ export const auth = () => ({
 });
 
 export const FirebaseAuth = {
-  sendOTP: async (phoneNumber: string): Promise<FirebaseAuthTypes['ConfirmationResult']> => {
+  sendOTP: async (_phoneNumber: string): Promise<FirebaseAuthTypes['ConfirmationResult']> => {
     return {
       verificationId: 'mock-verification-id',
-      confirm: async (otp: string) => {
+      confirm: async (_otp: string) => {
         _currentUser = mockUser;
         _listeners.forEach(fn => fn(mockUser));
         return { user: mockUser };

@@ -25,7 +25,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import {
   checkLoanEligibility,
@@ -65,14 +65,16 @@ function scoreHeadlineKey(score: number): string {
   return 'mobile.loan.eligibility.result.headline.weak';
 }
 
-function scoreColor(score: number): string {
-  if (score >= 80) return Colors.success[500];
-  if (score >= 60) return Colors.brand[500];
-  if (score >= 40) return Colors.warning[500];
-  return Colors.error[500];
+function scoreColor(score: number, tk: ThemeTokens): string {
+  if (score >= 80) return tk.successFg;
+  if (score >= 60) return tk.brand500;
+  if (score >= 40) return tk.warningFg;
+  return tk.errorFg;
 }
 
 export function LoanEligibilityScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
 
@@ -113,7 +115,7 @@ export function LoanEligibilityScreen({ navigation }: Props) {
 
   // ── STEP 2 RESULT ──────────────────────────────────────────────────────────
   if (result) {
-    const color = scoreColor(result.score);
+    const color = scoreColor(result.score, tokens);
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -123,7 +125,7 @@ export function LoanEligibilityScreen({ navigation }: Props) {
             hitSlop={8}
             accessibilityLabel={t('mobile.common.back')}
           >
-            <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+            <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
           </Pressable>
           <Text style={styles.headerTitle}>{t('mobile.loan.eligibility.title')}</Text>
           <View style={{ width: 40 }} />
@@ -161,7 +163,7 @@ export function LoanEligibilityScreen({ navigation }: Props) {
               </Text>
               {result.qualifyReasons.map((r, i) => (
                 <View key={i} style={styles.reasonRow} accessibilityRole="text">
-                  <Ionicons name="checkmark-circle" size={16} color={Colors.success[600]} />
+                  <Ionicons name="checkmark-circle" size={16} color={tokens.successFg} />
                   <Text style={styles.reasonText}>{r}</Text>
                 </View>
               ))}
@@ -176,7 +178,7 @@ export function LoanEligibilityScreen({ navigation }: Props) {
               </Text>
               {result.improveReasons.map((r, i) => (
                 <View key={i} style={styles.reasonRow} accessibilityRole="text">
-                  <Ionicons name="warning" size={16} color={Colors.warning[600]} />
+                  <Ionicons name="warning" size={16} color={tokens.warningFg} />
                   <Text style={styles.reasonText}>{r}</Text>
                 </View>
               ))}
@@ -243,7 +245,7 @@ export function LoanEligibilityScreen({ navigation }: Props) {
           {result.qualifiedProducts.length === 0 &&
             result.nearMatchProducts.length === 0 && (
               <View style={styles.emptyState}>
-                <Ionicons name="business-outline" size={36} color={Colors.neutral[300]} />
+                <Ionicons name="business-outline" size={36} color={tokens.textTertiary} />
                 <Text style={styles.emptyTitle}>
                   {t('mobile.loan.eligibility.empty.headline')}
                 </Text>
@@ -267,7 +269,7 @@ export function LoanEligibilityScreen({ navigation }: Props) {
           hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.loan.eligibility.title')}</Text>
         <View style={{ width: 40 }} />
@@ -287,7 +289,7 @@ export function LoanEligibilityScreen({ navigation }: Props) {
               accessibilityRole="button"
               accessibilityLabel="Decrease amount"
             >
-              <Ionicons name="remove" size={20} color={Colors.neutral[700]} />
+              <Ionicons name="remove" size={20} color={tokens.textSecondary} />
             </Pressable>
             <View style={styles.amountTrack}>
               <View
@@ -305,7 +307,7 @@ export function LoanEligibilityScreen({ navigation }: Props) {
               accessibilityRole="button"
               accessibilityLabel="Increase amount"
             >
-              <Ionicons name="add" size={20} color={Colors.neutral[700]} />
+              <Ionicons name="add" size={20} color={tokens.textSecondary} />
             </Pressable>
           </View>
           <View style={styles.amountRangeRow}>
@@ -372,7 +374,7 @@ export function LoanEligibilityScreen({ navigation }: Props) {
           accessibilityState={{ checked: softCheckConsent }}
         >
           <View style={[styles.checkbox, softCheckConsent && styles.checkboxChecked]}>
-            {softCheckConsent && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+            {softCheckConsent && <Ionicons name="checkmark" size={14} color={tokens.textOnBrand} />}
           </View>
           <View style={styles.consentTextWrap}>
             <Text style={styles.consentText}>
@@ -404,13 +406,13 @@ export function LoanEligibilityScreen({ navigation }: Props) {
           accessibilityLabel={t('mobile.loan.eligibility.cta.check')}
         >
           {eligibilityMutation.isPending ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={tokens.textOnBrand} />
           ) : (
             <>
               <Ionicons
                 name="sparkles"
                 size={18}
-                color={softCheckConsent ? '#FFFFFF' : Colors.neutral[400]}
+                color={softCheckConsent ? tokens.textOnBrand : tokens.textTertiary}
               />
               <Text style={[styles.checkBtnText, !softCheckConsent && styles.checkBtnTextDisabled]}>
                 {t('mobile.loan.eligibility.cta.check')}
@@ -449,37 +451,38 @@ export function LoanEligibilityScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
   scrollContent: { padding: 20, gap: 20, paddingBottom: 24 },
-  stepLabel: { fontSize: 13, fontWeight: '600', color: Colors.neutral[500] },
+  stepLabel: { fontSize: 13, fontWeight: '600', color: tk.textSecondary },
   fieldGroup: { gap: 10 },
-  fieldLabel: { fontSize: 15, fontWeight: '700', color: Colors.neutral[800] },
+  fieldLabel: { fontSize: 15, fontWeight: '700', color: tk.textPrimary },
 
   // Amount
   amountDisplay: {
     fontSize: 28,
     fontWeight: '800',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     letterSpacing: -1,
   },
   amountStepRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -487,20 +490,20 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
   amountTrack: {
     flex: 1,
     height: 8,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     borderRadius: 4,
     overflow: 'hidden',
   },
-  amountFill: { height: 8, backgroundColor: Colors.loan, borderRadius: 4 },
+  amountFill: { height: 8, backgroundColor: tk.loanAccent, borderRadius: 4 },
   amountRangeRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  amountRangeText: { fontSize: 12, color: Colors.neutral[400], fontWeight: '500' },
+  amountRangeText: { fontSize: 12, color: tk.textTertiary, fontWeight: '500' },
 
   // Tenure
   tenureRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
@@ -508,16 +511,16 @@ const styles = StyleSheet.create({
     width: 52,
     height: 44,
     borderRadius: 10,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
-  tenureChipActive: { backgroundColor: Colors.loan, borderColor: Colors.loan },
-  tenureChipText: { fontSize: 14, fontWeight: '700', color: Colors.neutral[600] },
-  tenureChipTextActive: { color: '#FFFFFF' },
-  tenureUnit: { fontSize: 13, color: Colors.neutral[500], fontWeight: '500' },
+  tenureChipActive: { backgroundColor: tk.loanAccent, borderColor: tk.loanAccent },
+  tenureChipText: { fontSize: 14, fontWeight: '700', color: tk.textSecondary },
+  tenureChipTextActive: { color: tk.textOnBrand },
+  tenureUnit: { fontSize: 13, color: tk.textSecondary, fontWeight: '500' },
 
   // Purpose
   purposeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -525,22 +528,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
-  purposeChipActive: { backgroundColor: Colors.loan + '18', borderColor: Colors.loan },
-  purposeChipText: { fontSize: 13, fontWeight: '600', color: Colors.neutral[600] },
-  purposeChipTextActive: { color: Colors.loan },
+  purposeChipActive: { backgroundColor: tk.loanAccent + '18', borderColor: tk.loanAccent },
+  purposeChipText: { fontSize: 13, fontWeight: '600', color: tk.textSecondary },
+  purposeChipTextActive: { color: tk.loanAccent },
 
   // Consent
   consentRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    backgroundColor: Colors.neutral[50],
+    backgroundColor: tk.canvas,
     borderRadius: 12,
     padding: 14,
   },
@@ -549,18 +552,18 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: Colors.neutral[300],
+    borderColor: tk.border,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
     marginTop: 1,
   },
-  checkboxChecked: { backgroundColor: Colors.loan, borderColor: Colors.loan },
+  checkboxChecked: { backgroundColor: tk.loanAccent, borderColor: tk.loanAccent },
   consentTextWrap: { flex: 1, gap: 4 },
-  consentText: { fontSize: 13, color: Colors.neutral[700], lineHeight: 19 },
+  consentText: { fontSize: 13, color: tk.textSecondary, lineHeight: 19 },
   consentLink: {
     fontSize: 13,
-    color: Colors.brand[500],
+    color: tk.brand500,
     fontWeight: '600',
     textDecorationLine: 'underline',
   },
@@ -568,9 +571,9 @@ const styles = StyleSheet.create({
   // Sticky footer
   stickyFooter: {
     padding: 16,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
+    borderTopColor: tk.border,
   },
   checkBtn: {
     flexDirection: 'row',
@@ -579,68 +582,69 @@ const styles = StyleSheet.create({
     gap: 10,
     minHeight: 56,
     borderRadius: 14,
-    backgroundColor: Colors.loan,
+    backgroundColor: tk.loanAccent,
   },
   checkBtnDisabled: { opacity: 0.4 },
-  checkBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  checkBtnTextDisabled: { color: Colors.neutral[400] },
+  checkBtnText: { fontSize: 16, fontWeight: '700', color: tk.textOnBrand },
+  checkBtnTextDisabled: { color: tk.textTertiary },
 
   // Result page
   scoreCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 20,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 16,
     padding: 20,
-    shadowColor: '#0F172A',
+    shadowColor: tk.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 2,
   },
   scoreTextWrap: { flex: 1, gap: 6 },
-  scoreHeadline: { fontSize: 17, fontWeight: '800', color: Colors.neutral[900], letterSpacing: -0.2 },
-  scoreSubline: { fontSize: 13, color: Colors.neutral[500], lineHeight: 18 },
+  scoreHeadline: { fontSize: 17, fontWeight: '800', color: tk.textPrimary, letterSpacing: -0.2 },
+  scoreSubline: { fontSize: 13, color: tk.textSecondary, lineHeight: 18 },
 
   reasonSection: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 14,
     padding: 16,
     gap: 10,
   },
-  reasonSectionTitle: { fontSize: 14, fontWeight: '700', color: Colors.neutral[800] },
+  reasonSectionTitle: { fontSize: 14, fontWeight: '700', color: tk.textPrimary },
   reasonRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  reasonText: { flex: 1, fontSize: 13, color: Colors.neutral[700], lineHeight: 18 },
+  reasonText: { flex: 1, fontSize: 13, color: tk.textSecondary, lineHeight: 18 },
 
   productSection: { gap: 4 },
-  productSectionTitle: { fontSize: 14, fontWeight: '700', color: Colors.neutral[600], marginBottom: 4 },
+  productSectionTitle: { fontSize: 14, fontWeight: '700', color: tk.textSecondary, marginBottom: 4 },
 
   emptyState: { alignItems: 'center', padding: 32, gap: 12 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: Colors.neutral[700] },
-  emptyBody: { fontSize: 14, color: Colors.neutral[500], textAlign: 'center', lineHeight: 20 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: tk.textSecondary },
+  emptyBody: { fontSize: 14, color: tk.textSecondary, textAlign: 'center', lineHeight: 20 },
 
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: Colors.surface.overlay,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'flex-end',
   },
   modalSheet: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
     gap: 16,
   },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: Colors.neutral[900] },
-  modalBody: { fontSize: 14, color: Colors.neutral[600], lineHeight: 22 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: tk.textPrimary },
+  modalBody: { fontSize: 14, color: tk.textSecondary, lineHeight: 22 },
   modalCloseBtn: {
-    backgroundColor: Colors.loan,
+    backgroundColor: tk.loanAccent,
     borderRadius: 12,
     minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalCloseBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
-});
+  modalCloseBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);

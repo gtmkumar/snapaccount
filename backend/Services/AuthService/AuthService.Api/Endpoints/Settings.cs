@@ -1,5 +1,6 @@
 using AuthService.Application.Config.Commands.UpdatePlatformConfig;
 using AuthService.Application.Config.Queries.GetPlatformConfig;
+using AuthService.Application.Config.Queries.GetPrivacyContact;
 using AuthService.Application.FeatureFlags.Commands.SetFeatureFlag;
 using AuthService.Application.FeatureFlags.Queries.GetFeatureFlags;
 using AuthService.Application.Organizations.Commands.UpdateOrgSettings;
@@ -17,14 +18,15 @@ namespace AuthService.Api.Endpoints;
 /// pages were calling without a backend implementation.
 ///
 /// Endpoints:
-///   GET  /auth/org/settings                  — self-service org settings (business name, address, logo)
-///   PATCH /auth/org/settings                 — update mutable org settings
+///   GET  /auth/org/settings                  — self-service org settings (name, address, logo; addressLine2 fix)
+///   PATCH /auth/org/settings                 — update mutable org settings (name editable; GSTIN explicitly rejected)
 ///   GET  /auth/feature-flags                 — list all platform feature flags
 ///   PATCH /auth/feature-flags/{flag}         — enable or disable a feature flag
 ///   GET  /auth/config/language               — platform language / locale config
 ///   PATCH /auth/config/language              — update language config
 ///   GET  /auth/config/whatsapp               — WhatsApp integration config
 ///   PATCH /auth/config/whatsapp              — update WhatsApp config
+///   GET  /auth/config/privacy-contact        — DPDP DPO / privacy-contact details (DPDP Act 2023, Task #4)
 /// </summary>
 public sealed class Settings : EndpointGroupBase
 {
@@ -69,6 +71,13 @@ public sealed class Settings : EndpointGroupBase
         groupBuilder.MapMethods("/config/whatsapp", ["PATCH"], PatchWhatsAppConfig)
             .RequireAuthorization()
             .WithSummary("Update WhatsApp Business API integration configuration.");
+
+        // ── Privacy Contact (DPDP Act 2023) ──────────────────────────────────
+        groupBuilder.MapGet("/config/privacy-contact", GetPrivacyContact)
+            .RequireAuthorization()
+            .WithSummary("Return DPDP-mandated DPO / privacy-contact details from server configuration. " +
+                         "Required by DPDP Act 2023 Section 8(7). No permission gate — " +
+                         "authenticated users may always read DPO contact information.");
     }
 
     // ── Org Settings ─────────────────────────────────────────────────────────────
@@ -83,12 +92,14 @@ public sealed class Settings : EndpointGroupBase
         PatchOrgSettingsRequest req, ISender sender, CancellationToken ct)
     {
         var cmd = new UpdateOrgSettingsCommand(
+            req.Name,
             req.LogoUrl,
             req.AddressLine1,
             req.AddressLine2,
             req.City,
             req.State,
-            req.Pincode);
+            req.Pincode,
+            req.Gstin);
 
         var result = await sender.Send(cmd, ct);
         return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
@@ -139,6 +150,14 @@ public sealed class Settings : EndpointGroupBase
         return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
     }
 
+    // ── Privacy Contact ───────────────────────────────────────────────────────────
+
+    private static async Task<IResult> GetPrivacyContact(ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetPrivacyContactQuery(), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+    }
+
     // ── Shared error mapper ───────────────────────────────────────────────────────
 
     private static IResult MapError(Error error) => error.Type switch
@@ -152,14 +171,23 @@ public sealed class Settings : EndpointGroupBase
 
 // ── Request DTOs ─────────────────────────────────────────────────────────────────
 
-/// <summary>Body for PATCH /auth/org/settings. All fields are optional (null = keep existing).</summary>
+/// <summary>
+/// Body for PATCH /auth/org/settings. All fields are optional (null = keep existing value).
+/// <para>
+/// <c>Gstin</c> is accepted in the request body but explicitly rejected by the validator
+/// with the message "GSTIN changes require re-verification — contact support."
+/// This makes the read-only contract discoverable rather than silently ignored.
+/// </para>
+/// </summary>
 public sealed record PatchOrgSettingsRequest(
+    string? Name = null,
     string? LogoUrl = null,
     string? AddressLine1 = null,
     string? AddressLine2 = null,
     string? City = null,
     string? State = null,
-    string? Pincode = null);
+    string? Pincode = null,
+    string? Gstin = null);
 
 /// <summary>Body for PATCH /auth/feature-flags/{flag}.</summary>
 public sealed record FeatureFlagPatchRequest(bool Enabled);

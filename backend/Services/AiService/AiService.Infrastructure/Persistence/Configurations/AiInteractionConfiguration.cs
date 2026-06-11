@@ -25,6 +25,10 @@ public sealed class AiInteractionConfiguration : IEntityTypeConfiguration<AiInte
         builder.Property(i => i.OutputTokens).HasColumnName("output_tokens").IsRequired();
         builder.Property(i => i.LatencyMs).HasColumnName("latency_ms").IsRequired();
         builder.Property(i => i.BudgetExceeded).HasColumnName("budget_exceeded").IsRequired();
+        // RV-03 (SEC-AI-02): Reservation flag — true while the AI call is in-flight.
+        // The daily-sum budget query includes reservation rows so concurrent requests see each other.
+        builder.Property(i => i.IsReservation).HasColumnName("is_reservation").IsRequired()
+            .HasDefaultValue(false);
         builder.Property(i => i.CreatedAt).HasColumnName("created_at");
         builder.Property(i => i.UpdatedAt).HasColumnName("updated_at");
         builder.Property(i => i.DeletedAt).HasColumnName("deleted_at");

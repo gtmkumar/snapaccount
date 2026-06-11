@@ -64,7 +64,8 @@ describe('CallbackKpiPage', () => {
   it('shows loading skeleton before data arrives', () => {
     vi.spyOn(callbackApi, 'getCallbackKpi').mockReturnValue(new Promise(() => {}))
     renderPage()
-    const skeletons = document.querySelectorAll('.animate-pulse')
+    // Skeleton component uses skeleton-shimmer class (replaced animate-pulse — S3 elevation pass)
+    const skeletons = document.querySelectorAll('.skeleton-shimmer')
     expect(skeletons.length).toBeGreaterThan(0)
   })
 
@@ -119,8 +120,8 @@ describe('CallbackKpiPage', () => {
       dailyVolume: [],
     })
     renderPage()
-    // Charts show empty state rather than crashing
-    const noDatas = await screen.findAllByText('No data')
+    // Charts show empty state rather than crashing — text comes from i18n key callbackKpi.chart.noData
+    const noDatas = await screen.findAllByText('No data for this range')
     expect(noDatas.length).toBeGreaterThan(0)
     // Metric cards still render
     expect(screen.getByText('42')).toBeTruthy()

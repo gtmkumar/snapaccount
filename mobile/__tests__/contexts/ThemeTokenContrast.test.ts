@@ -60,6 +60,13 @@ function textPairs(tk: ThemeTokens): [string, string, number, string][] {
     [tk.errorFg, tk.raised, 3.0, 'errorFg on raised (icon/UI)'],
     [tk.successFg, tk.raised, 3.0, 'successFg on raised (icon/UI)'],
     [tk.warningFg, tk.raised, 3.0, 'warningFg on raised (icon/UI)'],
+    // WP-D1..D4: textOnBrand pairs with every solid status/module fill used by
+    // the migrated screens (fills are lifted in dark, so the label flips dark).
+    [tk.textOnBrand, tk.successFg, 4.5, 'textOnBrand on successFg fill'],
+    [tk.textOnBrand, tk.warningFg, 4.5, 'textOnBrand on warningFg fill'],
+    [tk.textOnBrand, tk.gstAccent, 4.5, 'textOnBrand on gstAccent fill'],
+    [tk.textOnBrand, tk.itrAccent, 4.5, 'textOnBrand on itrAccent fill'],
+    [tk.textOnBrand, tk.loanAccent, 4.5, 'textOnBrand on loanAccent fill'],
   ];
 }
 
@@ -93,5 +100,27 @@ describe.each([
       expect(tk[key].shadowOpacity).toBeGreaterThanOrEqual(0.04);
       expect(tk[key].elevation).toBeGreaterThanOrEqual(1);
     }
+  });
+});
+
+// ── tokens.json v2.1.0 — dark tertiary override ──────────────────────────────
+// neutral-500 (#64748B) failed 3.07:1 on dark raised surfaces; dark tertiary is
+// overridden to neutral-400 and therefore must stay readable as TEXT (≥4.5:1).
+// In dark mode tertiary === secondary in colour — differentiate by weight/size.
+
+describe('dark tokens — tertiary text override (tokens.json v2.1.0)', () => {
+  it('dark textTertiary is #94A3B8 (neutral-400 override, not neutral-500)', () => {
+    expect(DARK_TOKENS.textTertiary.toUpperCase()).toBe('#94A3B8');
+  });
+
+  it.each([
+    [DARK_TOKENS.textTertiary, DARK_TOKENS.canvas, 'dark textTertiary on canvas'],
+    [DARK_TOKENS.textTertiary, DARK_TOKENS.raised, 'dark textTertiary on raised'],
+  ])('%s on %s ≥ 4.5:1 (%s)', (fg, bg, label) => {
+    const ratio = contrast(fg, bg);
+    if (ratio < 4.5) {
+      throw new Error(`${label}: ${fg} on ${bg} = ${ratio.toFixed(2)}:1, needs ≥ 4.5:1`);
+    }
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
   });
 });

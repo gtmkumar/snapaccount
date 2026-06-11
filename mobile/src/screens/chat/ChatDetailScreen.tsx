@@ -12,8 +12,6 @@
 
 import React, {
   useCallback,
-  useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -51,7 +49,7 @@ import {
   type ChatMessage,
   type ChatThread,
 } from '../../api/chat';
-import { Colors } from '../../constants/colors';
+import { createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { newClientMessageId } from '../../lib/ids';
 import { useHaptics } from '../../hooks/useHaptics';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -73,6 +71,7 @@ interface BubbleProps {
 }
 
 function ChatBubble({ message, isSelf, showAvatar, onRetry }: BubbleProps) {
+  const styles = useStyles();
   const { tokens } = useTheme();
   const { t } = useTranslation();
 
@@ -131,7 +130,7 @@ function ChatBubble({ message, isSelf, showAvatar, onRetry }: BubbleProps) {
         <Text
           style={[
             styles.bubbleText,
-            { color: isSelf ? '#FFFFFF' : tokens.textPrimary },
+            { color: isSelf ? tokens.textOnBrand : tokens.textPrimary },
           ]}
         >
           {message.body}
@@ -141,7 +140,7 @@ function ChatBubble({ message, isSelf, showAvatar, onRetry }: BubbleProps) {
           <Text
             style={[
               styles.bubbleTime,
-              { color: isSelf ? 'rgba(255,255,255,0.7)' : tokens.textTertiary },
+              { color: isSelf ? tokens.textOnBrand + 'B3' : tokens.textTertiary },
             ]}
           >
             {timeStr}
@@ -152,9 +151,9 @@ function ChatBubble({ message, isSelf, showAvatar, onRetry }: BubbleProps) {
               size={12}
               color={
                 message.localStatus === 'failed'
-                  ? Colors.error[400]
+                  ? tokens.errorFg
                   : isSelf
-                    ? 'rgba(255,255,255,0.7)'
+                    ? tokens.textOnBrand + 'B3'
                     : tokens.textTertiary
               }
             />
@@ -175,6 +174,7 @@ function ChatBubble({ message, isSelf, showAvatar, onRetry }: BubbleProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function TypingIndicator({ typingUserId }: { typingUserId: string }) {
+  const styles = useStyles();
   const { tokens } = useTheme();
   const { t } = useTranslation();
 
@@ -201,10 +201,12 @@ function TypingIndicator({ typingUserId }: { typingUserId: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function OfflineBanner() {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   return (
     <View style={styles.offlineBanner}>
-      <Ionicons name="cloud-offline-outline" size={14} color={Colors.neutral[600]} />
+      <Ionicons name="cloud-offline-outline" size={14} color={tokens.textSecondary} />
       <Text style={styles.offlineBannerText}>
         {t('mobile.chat.mobile.offline.banner')}
       </Text>
@@ -224,6 +226,7 @@ const TYPING_DEBOUNCE_MS = 600;
 const TYPING_STOP_TIMEOUT_MS = 3_000;
 
 export function ChatDetailScreen() {
+  const styles = useStyles();
   const { t } = useTranslation();
   const route = useRoute<RouteProps>();
   const { threadId } = route.params;
@@ -240,7 +243,7 @@ export function ChatDetailScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [composerText, setComposerText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
+  const [isOffline] = useState(false);
   const [typingUserId, setTypingUserId] = useState<string | null>(null);
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -619,7 +622,8 @@ export function ChatDetailScreen() {
 // Styles
 // ─────────────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   flex: { flex: 1 },
   container: { flex: 1 },
 
@@ -653,7 +657,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerAvatarText: {
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -673,11 +677,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
   },
   offlineBannerText: {
     fontSize: 12,
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     fontWeight: '500',
   },
 
@@ -708,7 +712,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 6,
   },
-  avatarSmallText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  avatarSmallText: { color: tk.textOnBrand, fontSize: 11, fontWeight: '700' },
   avatarSpacer: { width: 34 },
   bubble: {
     maxWidth: '78%',
@@ -719,7 +723,7 @@ const styles = StyleSheet.create({
   },
   bubbleSelf: { borderBottomRightRadius: 4 },
   bubbleOther: { borderBottomLeftRadius: 4, borderWidth: StyleSheet.hairlineWidth },
-  bubbleFailed: { borderWidth: 1, borderColor: Colors.error[400] },
+  bubbleFailed: { borderWidth: 1, borderColor: tk.errorFg },
   bubbleFailedCaption: { fontSize: 11, fontWeight: '600', marginTop: 4 },
   bubbleText: { fontSize: 14, lineHeight: 20 },
   bubbleMeta: {
@@ -759,7 +763,7 @@ const styles = StyleSheet.create({
     borderRadius: 100,
   },
   newMessagesPillText: {
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -797,4 +801,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+  }),
+);

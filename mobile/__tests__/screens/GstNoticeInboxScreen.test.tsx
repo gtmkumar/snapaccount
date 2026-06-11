@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act, within } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 jest.mock('../../src/lib/api', () => ({
@@ -121,12 +121,14 @@ describe('GstNoticeInboxScreen', () => {
   });
 
   it('switching to Open tab calls listGstNotices with status=Open', async () => {
-    const { getByText } = render(
+    const { getByText, getAllByRole } = render(
       <GstNoticeInboxScreen navigation={mockNavigation} route={mockRoute} />,
       { wrapper: makeWrapper() },
     );
     await waitFor(() => expect(getByText('All')).toBeTruthy());
-    fireEvent.press(getByText('Open'));
+    // Press the tab (role="tab"), not a notice-row status chip with same text.
+    const openTab = getAllByRole('tab').find((tab) => within(tab).queryByText('Open'));
+    fireEvent.press(openTab!);
     await waitFor(() =>
       expect(mockListGstNotices).toHaveBeenCalledWith(
         expect.objectContaining({ orgId: 'org-abc', status: 'Open' }),
@@ -135,12 +137,14 @@ describe('GstNoticeInboxScreen', () => {
   });
 
   it('switching to Closed tab calls listGstNotices with status=Closed', async () => {
-    const { getByText } = render(
+    const { getByText, getAllByRole } = render(
       <GstNoticeInboxScreen navigation={mockNavigation} route={mockRoute} />,
       { wrapper: makeWrapper() },
     );
     await waitFor(() => expect(getByText('All')).toBeTruthy());
-    fireEvent.press(getByText('Closed'));
+    // Press the tab (role="tab"), not a notice-row status chip with same text.
+    const closedTab = getAllByRole('tab').find((tab) => within(tab).queryByText('Closed'));
+    fireEvent.press(closedTab!);
     await waitFor(() =>
       expect(mockListGstNotices).toHaveBeenCalledWith(
         expect.objectContaining({ orgId: 'org-abc', status: 'Closed' }),

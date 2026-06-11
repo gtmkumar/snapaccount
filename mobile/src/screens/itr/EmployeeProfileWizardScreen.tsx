@@ -26,7 +26,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { Stepper } from '../../components/shared/Stepper';
 import { PanInput } from '../../components/shared/PanInput';
 import { SummaryList } from '../../components/shared/SummaryList';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { updateItrProfile } from '../../api/itr';
 import type { AssesseeType } from '../../api/itr';
@@ -67,6 +67,8 @@ interface WizardState {
 const STEPS = ['Personal', 'Employment', 'Deductions', 'Investments', 'Review'];
 
 export function EmployeeProfileWizardScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { userId, assesseeId } = route.params;
@@ -138,7 +140,7 @@ export function EmployeeProfileWizardScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={handleBack} hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.itr.wizard.title')}</Text>
         <View style={{ width: 40 }} />
@@ -205,6 +207,7 @@ function FieldGroup({
   label: string;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.fieldGroup}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -222,6 +225,8 @@ function StepPersonal({
   set: (k: keyof WizardState, v: string) => void;
   t: (key: string) => string;
 }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>{t('mobile.itr.wizard.step0Title')}</Text>
@@ -231,7 +236,7 @@ function StepPersonal({
           value={state.fullName}
           onChangeText={(v) => set('fullName', v)}
           placeholder="e.g. Ramesh Kumar"
-          placeholderTextColor={Colors.neutral[400]}
+          placeholderTextColor={tokens.textTertiary}
           autoCapitalize="words"
           accessibilityLabel={t('mobile.itr.wizard.fullName')}
         />
@@ -247,7 +252,7 @@ function StepPersonal({
           value={state.email}
           onChangeText={(v) => set('email', v)}
           placeholder="name@email.com"
-          placeholderTextColor={Colors.neutral[400]}
+          placeholderTextColor={tokens.textTertiary}
           keyboardType="email-address"
           autoCapitalize="none"
           accessibilityLabel={t('mobile.itr.wizard.email')}
@@ -259,7 +264,7 @@ function StepPersonal({
           value={state.phone}
           onChangeText={(v) => set('phone', v)}
           placeholder="+91 98765 43210"
-          placeholderTextColor={Colors.neutral[400]}
+          placeholderTextColor={tokens.textTertiary}
           keyboardType="phone-pad"
           accessibilityLabel={t('mobile.itr.wizard.phone')}
         />
@@ -270,7 +275,7 @@ function StepPersonal({
           value={state.dob}
           onChangeText={(v) => set('dob', v)}
           placeholder="YYYY-MM-DD"
-          placeholderTextColor={Colors.neutral[400]}
+          placeholderTextColor={tokens.textTertiary}
           accessibilityLabel={t('mobile.itr.wizard.dob')}
         />
       </FieldGroup>
@@ -280,7 +285,7 @@ function StepPersonal({
           value={state.address}
           onChangeText={(v) => set('address', v)}
           placeholder={t('mobile.itr.wizard.addressPlaceholder')}
-          placeholderTextColor={Colors.neutral[400]}
+          placeholderTextColor={tokens.textTertiary}
           multiline
           numberOfLines={3}
           textAlignVertical="top"
@@ -300,6 +305,8 @@ function StepEmployment({
   set: (k: keyof WizardState, v: string) => void;
   t: (key: string) => string;
 }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>{t('mobile.itr.wizard.step1Title')}</Text>
@@ -309,7 +316,7 @@ function StepEmployment({
           value={state.annualSalary}
           onChangeText={(v) => set('annualSalary', v.replace(/[^0-9]/g, ''))}
           placeholder="0"
-          placeholderTextColor={Colors.neutral[400]}
+          placeholderTextColor={tokens.textTertiary}
           keyboardType="number-pad"
           accessibilityLabel={t('mobile.itr.wizard.annualSalary')}
         />
@@ -320,7 +327,7 @@ function StepEmployment({
           value={state.employerName}
           onChangeText={(v) => set('employerName', v)}
           placeholder="e.g. ABC Pvt Ltd"
-          placeholderTextColor={Colors.neutral[400]}
+          placeholderTextColor={tokens.textTertiary}
           accessibilityLabel={t('mobile.itr.wizard.employerName')}
         />
       </FieldGroup>
@@ -330,7 +337,7 @@ function StepEmployment({
           value={state.employerTan}
           onChangeText={(v) => set('employerTan', v.toUpperCase())}
           placeholder="AAAA99999A"
-          placeholderTextColor={Colors.neutral[400]}
+          placeholderTextColor={tokens.textTertiary}
           autoCapitalize="characters"
           maxLength={10}
           accessibilityLabel={t('mobile.itr.wizard.employerTan')}
@@ -349,11 +356,13 @@ function StepDeductions({
   set: (k: keyof WizardState, v: string) => void;
   t: (key: string) => string;
 }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>{t('mobile.itr.wizard.step2Title')}</Text>
       <View style={styles.infoNote}>
-        <Ionicons name="information-circle-outline" size={16} color={Colors.brand[600]} />
+        <Ionicons name="information-circle-outline" size={16} color={tokens.brandCta} />
         <Text style={styles.infoNoteText}>{t('mobile.itr.wizard.deductionNote')}</Text>
       </View>
       {[
@@ -367,7 +376,7 @@ function StepDeductions({
             value={state[key] as string}
             onChangeText={(v) => set(key, v.replace(/[^0-9]/g, ''))}
             placeholder="0"
-            placeholderTextColor={Colors.neutral[400]}
+            placeholderTextColor={tokens.textTertiary}
             keyboardType="number-pad"
             accessibilityLabel={label}
           />
@@ -389,6 +398,8 @@ function StepInvestments({
   set: (k: keyof WizardState, v: string) => void;
   t: (key: string) => string;
 }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>{t('mobile.itr.wizard.step3Title')}</Text>
@@ -403,7 +414,7 @@ function StepInvestments({
             value={state[key] as string}
             onChangeText={(v) => set(key, v.replace(/[^0-9-]/g, ''))}
             placeholder="0"
-            placeholderTextColor={Colors.neutral[400]}
+            placeholderTextColor={tokens.textTertiary}
             keyboardType="number-pad"
             accessibilityLabel={label}
           />
@@ -422,6 +433,7 @@ function StepReview({
   onEdit: (step: number) => void;
   t: (key: string) => string;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>{t('mobile.itr.wizard.step4Title')}</Text>
@@ -440,30 +452,31 @@ function StepReview({
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     letterSpacing: -0.2,
   },
   scrollContent: { padding: 16, gap: 16 },
@@ -471,21 +484,21 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     letterSpacing: -0.3,
   },
   fieldGroup: { gap: 8 },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.neutral[700] },
-  fieldHint: { fontSize: 12, color: Colors.neutral[400] },
+  fieldLabel: { fontSize: 13, fontWeight: '600', color: tk.textSecondary },
+  fieldHint: { fontSize: 12, color: tk.textTertiary },
   input: {
     height: 48,
     borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     fontSize: 15,
-    color: Colors.neutral[900],
-    backgroundColor: Colors.surface.default,
+    color: tk.textPrimary,
+    backgroundColor: tk.raised,
   },
   textArea: {
     height: 88,
@@ -494,7 +507,7 @@ const styles = StyleSheet.create({
   infoNote: {
     flexDirection: 'row',
     gap: 8,
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
     borderRadius: 10,
     padding: 12,
     alignItems: 'flex-start',
@@ -502,22 +515,23 @@ const styles = StyleSheet.create({
   infoNoteText: {
     flex: 1,
     fontSize: 12,
-    color: Colors.brand[700],
+    color: tk.brandFg,
     lineHeight: 17,
   },
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
-    backgroundColor: Colors.surface.default,
+    borderTopColor: tk.border,
+    backgroundColor: tk.raised,
   },
   nextBtn: {
-    backgroundColor: Colors.itr,
+    backgroundColor: tk.itrAccent,
     borderRadius: 14,
     minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
   nextBtnDisabled: { opacity: 0.4 },
-  nextBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-});
+  nextBtnText: { fontSize: 16, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);
