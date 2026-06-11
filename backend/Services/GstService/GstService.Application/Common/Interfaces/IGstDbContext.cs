@@ -74,6 +74,14 @@ public interface IGstDbContext
     /// </summary>
     DbSet<Gstr1aAmendment> Gstr1aAmendments { get; }
 
+    // ── GAP-108: Notice deadline rules (config-driven, FY-versioned) ──────────
+
+    /// <summary>
+    /// Config-driven statutory deadline rules per form type and financial year.
+    /// GAP-108: migration 084. Never hardcode response windows — read from this table.
+    /// </summary>
+    DbSet<GstNoticeDeadlineRule> GstNoticeDeadlineRules { get; }
+
     /// <summary>Persists changes to the gst schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

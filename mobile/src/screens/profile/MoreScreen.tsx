@@ -38,6 +38,8 @@ export function MoreScreen({ navigation }: Props) {
     route: keyof MoreStackParamList;
     color: string;
     desc: string;
+    /** Optional nested screen inside the target stack (e.g. ChatStack). */
+    nestedScreen?: string;
   }[] = [
     { label: t('mobile.more.expertChat'), icon: 'chatbubble-ellipses-outline', route: 'Chat', color: tokens.brand500, desc: t('mobile.more.expertChatDesc') },
     { label: t('mobile.more.itrFiling'), icon: 'document-text-outline', route: 'ITRDashboard', color: tokens.itrAccent, desc: t('mobile.more.itrFilingDesc') },
@@ -51,6 +53,8 @@ export function MoreScreen({ navigation }: Props) {
           desc: t('mobile.team.menuDesc'),
         }]
       : []),
+    // Wave 7A (GAP-031): My appointments (CA consultations) — nested in ChatStack.
+    { label: t('mobile.ca.appts.title'), icon: 'calendar-outline', route: 'Chat', color: tokens.itrAccent, desc: t('mobile.ca.appts.moreDesc'), nestedScreen: 'MyAppointments' },
     { label: t('mobile.more.notifications'), icon: 'notifications-outline', route: 'NotificationCenter', color: tokens.loanAccent, desc: t('mobile.more.notificationsDesc') },
     { label: t('mobile.more.privacyData'), icon: 'shield-outline', route: 'PrivacyCenter', color: tokens.brandFg, desc: t('mobile.more.privacyDataDesc') },
     { label: t('mobile.more.profileSettings'), icon: 'person-circle-outline', route: 'Profile', color: tokens.textSecondary, desc: t('mobile.more.profileSettingsDesc') },
@@ -122,7 +126,14 @@ export function MoreScreen({ navigation }: Props) {
             <Pressable
               key={item.label}
               style={styles.gridItem}
-              onPress={() => (navigation.navigate as (route: string) => void)(item.route)}
+              onPress={() =>
+                item.nestedScreen
+                  ? (navigation.navigate as (route: string, params?: object) => void)(
+                      item.route,
+                      { screen: item.nestedScreen },
+                    )
+                  : (navigation.navigate as (route: string) => void)(item.route)
+              }
             >
               <View style={[styles.gridIcon, { backgroundColor: item.color + '12' }]}>
                 <Ionicons name={item.icon} size={24} color={item.color} />

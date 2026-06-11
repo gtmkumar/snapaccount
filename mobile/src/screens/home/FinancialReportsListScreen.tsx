@@ -194,42 +194,51 @@ export function FinancialReportsListScreen({ navigation }: Props) {
           numColumns={2}
           scrollEnabled={false}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <Pressable
-              style={styles.reportCard}
-              onPress={() =>
-                navigation.navigate('ReportDetail', {
-                  reportType: item.apiId ?? item.id,
-                })
-              }
-              accessibilityRole="button"
-              accessibilityLabel={t('mobile.reports.viewA11y', { report: t(item.labelKey) })}
-            >
-              <View style={[styles.reportIconBg, { backgroundColor: item.color + '20' }]}>
-                <Ionicons name={item.icon} size={22} color={item.color} />
-              </View>
-              <View style={styles.reportCardContent}>
-                <Text style={styles.reportLabel}>{t(item.labelKey)}</Text>
-                {item.badgeKey && (
-                  <View style={[styles.reportBadge, item.id === 'forecast' && styles.reportBadgeAI]}>
-                    <Text style={styles.reportBadgeText}>{t(item.badgeKey)}</Text>
-                  </View>
-                )}
-                {item.apiId ? (
-                  <Text style={styles.reportUpdated}>
-                    {isLoading
-                      ? t('mobile.reports.loading')
-                      : lastUpdated
-                        ? t('mobile.reports.updatedAt', { time: lastUpdated })
-                        : t('mobile.reports.tapToLoad')}
-                  </Text>
-                ) : (
-                  <Text style={styles.reportUpdated}>{t('mobile.reports.comingSoon')}</Text>
-                )}
-              </View>
-              {item.apiId && <Text style={styles.viewText}>{t('mobile.reports.view')} →</Text>}
-            </Pressable>
-          )}
+          renderItem={({ item }) => {
+            // Wave 7 (GAP-044): comparative is a real chart screen now.
+            const isComparative = item.id === 'comparative';
+            const isLive = Boolean(item.apiId) || isComparative;
+            return (
+              <Pressable
+                style={styles.reportCard}
+                onPress={() =>
+                  isComparative
+                    ? navigation.navigate('ComparativeReport')
+                    : navigation.navigate('ReportDetail', {
+                        reportType: item.apiId ?? item.id,
+                      })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.reports.viewA11y', { report: t(item.labelKey) })}
+              >
+                <View style={[styles.reportIconBg, { backgroundColor: item.color + '20' }]}>
+                  <Ionicons name={item.icon} size={22} color={item.color} />
+                </View>
+                <View style={styles.reportCardContent}>
+                  <Text style={styles.reportLabel}>{t(item.labelKey)}</Text>
+                  {item.badgeKey && (
+                    <View style={[styles.reportBadge, item.id === 'forecast' && styles.reportBadgeAI]}>
+                      <Text style={styles.reportBadgeText}>{t(item.badgeKey)}</Text>
+                    </View>
+                  )}
+                  {isComparative ? (
+                    <Text style={styles.reportUpdated}>{t('mobile.reports.comparative.subtitle')}</Text>
+                  ) : item.apiId ? (
+                    <Text style={styles.reportUpdated}>
+                      {isLoading
+                        ? t('mobile.reports.loading')
+                        : lastUpdated
+                          ? t('mobile.reports.updatedAt', { time: lastUpdated })
+                          : t('mobile.reports.tapToLoad')}
+                    </Text>
+                  ) : (
+                    <Text style={styles.reportUpdated}>{t('mobile.reports.comingSoon')}</Text>
+                  )}
+                </View>
+                {isLive && <Text style={styles.viewText}>{t('mobile.reports.view')} →</Text>}
+              </Pressable>
+            );
+          }}
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={styles.gridContent}
         />

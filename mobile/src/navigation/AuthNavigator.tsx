@@ -17,6 +17,9 @@ import { IndividualProfileWizardScreen } from '../screens/auth/IndividualProfile
 import { LanguageSelectionScreen } from '../screens/auth/LanguageSelectionScreen';
 import { PermissionRequestsScreen } from '../screens/auth/PermissionRequestsScreen';
 import { AcceptInviteScreen } from '../screens/auth/AcceptInviteScreen';
+// Wave 7A (GAP-047): new-device approval gate
+import { DeviceWaitingScreen } from '../screens/auth/DeviceWaitingScreen';
+import { DeviceDeniedScreen } from '../screens/auth/DeviceDeniedScreen';
 
 export type AuthStackParamList = {
   Splash: undefined;
@@ -36,6 +39,10 @@ export type AuthStackParamList = {
   PermissionRequests: undefined;
   /** Invitee org-join — reached via deep link snapaccount://invite/{token} or manual entry. */
   AcceptInvite: { token?: string } | undefined;
+  /** GAP-047: NEW device waits for old-device approval (enforce mode). */
+  DeviceWaiting: { requestId: string };
+  /** GAP-047: NEW device blocked — denied on the old device or window expired. */
+  DeviceDenied: { cause: 'denied' | 'expired' };
   App: undefined;
 };
 
@@ -60,6 +67,8 @@ export function AuthNavigator() {
       <Stack.Screen name="LanguageSelection" component={LanguageSelectionScreen} />
       <Stack.Screen name="PermissionRequests" component={PermissionRequestsScreen} />
       <Stack.Screen name="AcceptInvite" component={AcceptInviteScreen} />
+      <Stack.Screen name="DeviceWaiting" component={DeviceWaitingScreen} />
+      <Stack.Screen name="DeviceDenied" component={DeviceDeniedScreen} />
     </Stack.Navigator>
   );
 }

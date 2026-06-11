@@ -1,8 +1,11 @@
 using ChatService.Infrastructure;
+using ChatService.Infrastructure.Jobs;
 using ChatService.Infrastructure.Services;
 using ChatService.Infrastructure.SignalR;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.RateLimiting;
 using Scalar.AspNetCore;
 using Serilog;
@@ -27,6 +30,12 @@ try
         .Enrich.WithProperty("Service", "ChatService"));
 
     builder.Services.AddChatInfrastructure(builder.Configuration);
+
+    // Hangfire — persistent job storage in PostgreSQL (chat schema)
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    builder.Services.AddHangfire(config => config
+        .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connStr)));
+    builder.Services.AddHangfireServer();
 
     builder.Services.AddOpenApi();
     builder.Services.AddHealthChecks();
@@ -111,6 +120,21 @@ try
     // Warm up routing rule cache at startup
     var routingEngine = app.Services.GetRequiredService<RoutingRuleEngine>();
     await routingEngine.RefreshAsync();
+
+    // Wave 7A addendum: Hangfire recurring job for slot generation from availability rules.
+    // Registered via ApplicationStarted so JobStorage.Current is fully initialised.
+    // (Static RecurringJob.AddOrUpdate() at build time throws InvalidOperationException.)
+    app.Lifetime.ApplicationStarted.Register(() =>
+    {
+        var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
+        // Every Sunday at 01:00 IST = Saturday at 19:30 UTC
+        recurringJobs.AddOrUpdate<GenerateSlotsFromRulesJob>(
+            recurringJobId: "generate-slots-from-rules-weekly",
+            methodCall: job => job.RunAsync(),
+            cronExpression: "30 19 * * 6", // Saturday 19:30 UTC = Sunday 01:00 IST
+            options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+        Log.Information("ChatService: Hangfire recurring job 'generate-slots-from-rules-weekly' registered.");
+    });
 
     // GAP-005: Fail-fast in non-Development when SESSION_JWT_SECRET is absent.
     SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);

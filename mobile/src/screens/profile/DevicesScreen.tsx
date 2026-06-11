@@ -26,7 +26,14 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { timeAgo } from '../../lib/utils';
-import { getDevices, revokeDevice, type DeviceDto } from '../../api/auth';
+import { formatIstDateTime } from '../../lib/ist';
+import {
+  getDevices,
+  listPendingDeviceApprovals,
+  revokeDevice,
+  type DeviceApprovalRequest,
+  type DeviceDto,
+} from '../../api/auth';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
 type NavProp = NativeStackNavigationProp<MoreStackParamList, 'Devices'>;
@@ -45,6 +52,8 @@ export function DevicesScreen({ navigation }: Props) {
   const styles = useStyles();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  // Wave 7A (GAP-047): soft-launch notify-only banner dismissal (session-local).
+  const [dismissedNotices, setDismissedNotices] = React.useState<string[]>([]);
 
   const {
     data: devices = [],
@@ -56,6 +65,26 @@ export function DevicesScreen({ navigation }: Props) {
     queryKey: ['auth', 'devices'],
     queryFn: getDevices,
   });
+
+  // Wave 7A (GAP-047): pending approval requests for this (old) device.
+  // ENFORCE rows are actionable (→ DeviceApprovalScreen); NOTIFY rows render
+  // the soft-launch info banner only (no gate, no approve/deny).
+  const { data: approvalRequests = [] } = useQuery<DeviceApprovalRequest[]>({
+    queryKey: ['auth', 'device-approvals', 'pending'],
+    queryFn: listPendingDeviceApprovals,
+  });
+
+  // Mode is server-side config (DeviceApproval:Enforce); the pending-approvals
+  // DTO does not carry it per-request — treat every pending request as
+  // actionable. The NOTIFY_ONLY branch ships forward-compatible for when the
+  // flag is surfaced on this DTO (the NEW device already reads it from
+  // GET /auth/devices/my-approval-status — Wave 7 recon).
+  const enforceRequests = approvalRequests.filter(
+    (r) => r.status === 'PENDING' && r.mode !== 'NOTIFY_ONLY',
+  );
+  const notifyRequests = approvalRequests.filter(
+    (r) => r.mode === 'NOTIFY_ONLY' && !dismissedNotices.includes(r.requestId),
+  );
 
   const revokeMutation = useMutation({
     mutationFn: (id: string) => revokeDevice(id),
@@ -167,7 +196,67 @@ export function DevicesScreen({ navigation }: Props) {
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
-            <Text style={styles.subtitle}>{t('mobile.auth.devices.subtitle')}</Text>
+            <View style={styles.listHeader}>
+              {/* GAP-047: pending ENFORCE approval requests (actionable) */}
+              {enforceRequests.map((req) => (
+                <Pressable
+                  key={req.requestId}
+                  style={styles.approvalCard}
+                  onPress={() =>
+                    navigation.navigate('DeviceApproval', { requestId: req.requestId })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={t('mobile.device.pendingCardA11y', {
+                    model: req.deviceModel ?? t('mobile.device.meta.unknown'),
+                  })}
+                  testID={`device-approval-pending-${req.requestId}`}
+                >
+                  <Ionicons name="shield-half-outline" size={20} color={tokens.warningFg} />
+                  <View style={styles.approvalCardBody}>
+                    <Text style={styles.approvalCardTitle}>
+                      {t('mobile.device.pendingCardTitle')}
+                    </Text>
+                    <Text style={styles.approvalCardMeta} numberOfLines={2}>
+                      {[req.deviceModel, req.cityApprox].filter(Boolean).join(' · ')}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={tokens.warningFg} />
+                </Pressable>
+              ))}
+
+              {/* GAP-047 soft-launch: notify-only banner (dismissible, no gate) */}
+              {notifyRequests.map((req) => (
+                <View
+                  key={req.requestId}
+                  style={styles.noticeBanner}
+                  accessibilityLiveRegion="polite"
+                  testID={`device-signin-notice-${req.requestId}`}
+                >
+                  <Ionicons name="information-circle-outline" size={18} color={tokens.infoFg} />
+                  <Text style={styles.noticeBannerText}>
+                    {t('mobile.device.softLaunchBanner', {
+                      model: req.deviceModel ?? t('mobile.device.meta.unknown'),
+                      location: req.cityApprox ?? t('mobile.device.meta.unknown'),
+                      time: formatIstDateTime(req.requestedAt),
+                    })}
+                  </Text>
+                  <Pressable
+                    onPress={() =>
+                      setDismissedNotices((prev) => [...prev, req.requestId])
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={t('mobile.common.close')}
+                    style={styles.noticeDismiss}
+                    hitSlop={6}
+                    testID={`device-signin-notice-dismiss-${req.requestId}`}
+                  >
+                    <Ionicons name="close" size={16} color={tokens.infoFg} />
+                  </Pressable>
+                </View>
+              ))}
+
+              <Text style={styles.subtitle}>{t('mobile.auth.devices.subtitle')}</Text>
+            </View>
           }
           ListEmptyComponent={
             <View style={styles.centered}>
@@ -198,7 +287,40 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
   listContent: { padding: 16, gap: 12 },
+  listHeader: { gap: 10 },
   subtitle: { fontSize: 13, color: tk.textSecondary, marginBottom: 4 },
+  // GAP-047: pending approval card + soft-launch notice banner
+  approvalCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: tk.warningTint,
+    borderColor: tk.warningTintBorder,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 56,
+  },
+  approvalCardBody: { flex: 1, gap: 2 },
+  approvalCardTitle: { fontSize: 14, fontWeight: '700', color: tk.warningFg },
+  approvalCardMeta: { fontSize: 12, color: tk.warningFg, lineHeight: 17 },
+  noticeBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: tk.infoTint,
+    borderRadius: 12,
+    padding: 12,
+  },
+  noticeBannerText: { flex: 1, fontSize: 12, color: tk.infoFg, lineHeight: 18 },
+  noticeDismiss: {
+    width: 44,
+    height: 44,
+    marginTop: -12,
+    marginRight: -8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
   emptyText: { fontSize: 14, color: tk.textSecondary, textAlign: 'center' },
   retryBtn: { marginTop: 8 },

@@ -1,9 +1,12 @@
 using ChatService.Application;
+using ChatService.Application.Appointments.Commands.GenerateSlotsFromRules;
 using ChatService.Application.Common.Interfaces;
+using ChatService.Infrastructure.Jobs;
 using ChatService.Infrastructure.Messaging;
 using ChatService.Infrastructure.Persistence;
 using ChatService.Infrastructure.Services;
 using ChatService.Infrastructure.SignalR;
+using IMeetingLinkProvider = ChatService.Application.Common.Interfaces.IMeetingLinkProvider;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -81,6 +84,18 @@ public static class DependencyInjection
 
         // Presence service
         services.AddSingleton<PresenceService>();
+
+        // Wave 7A addendum: Slot generation service (used by Hangfire job + on-demand command)
+        services.AddScoped<ISlotGenerationService, SlotGenerationService>();
+        services.AddTransient<GenerateSlotsFromRulesJob>();
+
+        // GAP-031: Meeting link provider — MockMeetingLinkProvider by default (house: mock-first).
+        // Set MeetingLink:Provider=GoogleCalendar in config + provision credentials for real Meet links.
+        var meetingLinkProvider = configuration["MeetingLink:Provider"] ?? "Mock";
+        if (meetingLinkProvider.Equals("GoogleCalendar", StringComparison.OrdinalIgnoreCase))
+            services.AddTransient<IMeetingLinkProvider, GoogleCalendarMeetingLinkProvider>();
+        else
+            services.AddTransient<IMeetingLinkProvider, MockMeetingLinkProvider>();
 
         // DPDP: account deletion erasure subscriber
         if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();

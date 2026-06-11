@@ -1,2 +1,3 @@
 - [GAP-007 org-context token refresh](project_gap007_refresh_context.md) — refreshContextAndSwap hook-in points, pattern for future org-membership flows
 - [Phase 7 Wave 2 Batch 2 decisions](project_phase7_wave2_batch2.md) — KFS kfsId required, /consents plural, Privacy Center paths, CAMERA-only perms, useBiometricGate
+- [Wave 7 residual reconciliation](project_wave7_residual_reconciliation.md) — all 6 appointments/auth/notice residuals CLOSED (GET /appointments/{id}, first-class topic, slots/day-map, enriched bookmarks + role fallback, my-approval-status polling + NOTIFY_ONLY, canonical notice statuses); deferred: cityApprox + resend-push

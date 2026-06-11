@@ -1153,3 +1153,633 @@ No new public API routes. Internal changes:
 - **E-invoicing:** Mandatory for turnover > 5 Crore — enforced before `/gst/e-invoices` call
 - **Document retention:** 7 years minimum at GCS layer; DB trigger prevents consent hard-delete (`trg_consents_no_delete`)
 - **Financial values:** All monetary amounts as `decimal` INR — never `float`/`double`
+
+---
+
+## Wave 7A — Chat/Report/Notification
+
+**Branch:** `2026-06-10-s5t4` | **Migrations:** 080, 081 | **GAPs:** 031, 032, 037, 043
+
+### GAP-031: CA Appointments (ChatService)
+
+Base URL: `http://localhost:5103` (via Aspire: `chat-service`)
+
+| Method | Route | Auth | Permission | Description |
+|--------|-------|------|------------|-------------|
+| POST | `/appointments/slots` | Required | `chat.slots.manage` | Create a CA availability slot |
+| GET | `/appointments/slots` | Required | — | List available slots (query: `caProfileId`, `date`) |
+| POST | `/appointments` | Required | `chat.appointments.book` | Book an appointment (reserves slot, generates meet link, raises AppointmentBookedEvent) |
+| GET | `/appointments` | Required | `chat.appointments.book` | List org appointments (query: `status`, `page`, `pageSize`) |
+| POST | `/appointments/{id}/reschedule` | Required | `chat.appointments.book` | Reschedule (≥2h rule enforced) |
+| POST | `/appointments/{id}/cancel` | Required | `chat.appointments.book` | Cancel (≥2h rule; `Error.Validation` if within window) |
+| POST | `/appointments/{id}/rate` | Required | `chat.appointments.book` | Rate completed appointment (1–5 stars, once per appointment; updates CA aggregate) |
+
+**Request/Response notes:**
+- `BookAppointment` → 201 `{ appointmentId, slotId, meetLink, slotStartUtc, slotEndUtc, status }`
+- `Cancel` within 2h → 400 `{ code: "Appointment.TooLateToCancel" }`
+- `Reschedule` within 2h → 400 `{ code: "Appointment.TooLateToReschedule" }`
+- `Rate` on non-completed → 400; second rate attempt → 409 `{ code: "Appointment.AlreadyRated" }`
+- `BookAppointment` publishes `AppointmentBookedEvent` to Pub/Sub for reminder scheduling
+
+**Meeting link provider:** `IMeetingLinkProvider` — default `MockMeetingLinkProvider` (deterministic fake `https://meet.google.com/snap-{appointmentId:short}`). Set `MeetingLink:Provider=GoogleCalendar` to activate real provider (requires `GoogleCalendar:*` secrets in Secret Manager).
+
+**New permissions seeded (migration 080):**
+- `chat.appointments.book` → SUPER_ADMIN, ORG_ADMIN, ORG_MEMBER
+- `chat.slots.manage` → SUPER_ADMIN, ORG_ADMIN
+
+### GAP-043: Message Bookmarks (ChatService)
+
+| Method | Route | Auth | Permission | Description |
+|--------|-------|------|------------|-------------|
+| POST | `/appointments/bookmarks/toggle` | Required | `chat.read` | Toggle bookmark on a message (create or soft-delete) |
+| GET | `/appointments/bookmarks` | Required | `chat.read` | List current user's bookmarks (paginated, joined with message body) |
+
+**Request/Response notes:**
+- `ToggleBookmark` → `{ messageId, isBookmarked, bookmarkId? }` (200 for both on/off)
+- `ListBookmarks` query params: `page` (default 1), `pageSize` (default 20, max 100)
+- Bookmark uniqueness enforced by partial UNIQUE index: `(user_id, message_id) WHERE deleted_at IS NULL`
+
+### GAP-032: Tally XML Export (ReportService)
+
+Base URL: `http://localhost:5105` (via Aspire: `report-service`)
+
+| Method | Route | Auth | Permission | Description |
+|--------|-------|------|------------|-------------|
+| POST | `/reports/tally-export` | Required | `reports.generate` | Generate Tally-importable XML (or CSV fallback) for org + date range |
+
+**Request body:** `{ periodStart?: DateTime, periodEnd?: DateTime }`
+**Response:** `{ jobId, status, gcsUri, sha256HashHex, pageCount }` — async job pattern; GCS URI for download.
+
+**Feature flag:** `Report:TallyExportEnabled=true` in config/Secret Manager. When `false` (default), returns CSV with columns: `Date, VoucherType, ReferenceNumber, DebitLedger, CreditLedger, Amount, Narration`.
+
+**Tally XML structure:** `ENVELOPE → HEADER (VERSION/TALLYREQUEST/TYPE/SUBTYPE) + BODY → IMPORTDATA (Masters: LEDGER per account) + IMPORTDATA (Vouchers: VOUCHER per journal entry)`. Currency: `INR`. Double-entry: each voucher has two `ALLLEDGERENTRIES.LIST` (debit: `ISDEEMEDPOSITIVE=Yes`, credit: `ISDEEMEDPOSITIVE=No`).
+
+**Cross-schema reads:** `accounting.chart_of_accounts` + `accounting.journal_entries` via raw Npgsql (read-only, same DB, no EF coupling).
+
+### GAP-043: Chat Thread PDF Export (ReportService)
+
+| Method | Route | Auth | Permission | Description |
+|--------|-------|------|------------|-------------|
+| POST | `/reports/chat-thread-pdf` | Required | `reports.generate` | Export a chat thread as PDF |
+
+**Request body:** `{ threadId: Guid }`
+**Response:** `{ jobId, status, gcsUri, sha256HashHex, pageCount }`
+
+**IDOR guard:** verifies `chat.threads.organization_id` matches calling user's org before reading messages.
+**QuestPDF output:** header (org name, thread subject, export date) + per-message blocks (timestamp, sender role, body). License: `LicenseType.Community`.
+**Cross-schema reads:** `chat.threads` + `chat.messages` via raw Npgsql.
+
+### GAP-037: Notification Template Manager (NotificationService)
+
+Base URL: `http://localhost:5109` (via Aspire: `notification-service`)
+
+| Method | Route | Auth | Permission | Description |
+|--------|-------|------|------------|-------------|
+| GET | `/notifications/templates` | Required | `notification.templates.manage` | List templates (query: `eventCode`, `channel`, `locale`, `page`, `pageSize`) |
+| GET | `/notifications/templates/{id}` | Required | `notification.templates.manage` | Get template detail (includes extracted placeholder names) |
+| POST | `/notifications/templates` | Required | `notification.templates.manage` | Create template → 201 (retires previous current for same event+channel+locale) |
+| PUT | `/notifications/templates/{id}` | Required | `notification.templates.manage` | In-place update (body, subject, DLT template ID, sender name) |
+| DELETE | `/notifications/templates/{id}` | Required | `notification.templates.manage` | Soft-delete template |
+| POST | `/notifications/templates/{id}/test-send` | Required | `notification.templates.manage` | Test-send to calling admin only; returns rendered body + missing variable warnings |
+
+**Request/Response notes:**
+- `CreateTemplate` body: `{ eventCode, channel (Push|Sms|Email|InApp), locale (en|hi|bn), body, subject?, dltTemplateId?, senderName?, name? }` → `{ templateId, code, replacedPrevious }`
+- `GetTemplate` includes `placeholderNames: string[]` (extracted `{{tokens}}` from body+subject)
+- `TestSend` body: `{ variables: Record<string,string>, recipientEmail?, recipientPhone? }` → `{ templateId, renderedBody, missingVariables, channelsAttempted, status }`
+- Missing variables are substituted with `[MISSING:varName]` in rendered body
+- Versioning: `Retire()` sets `IsCurrent=false` + `EffectiveTo=today`; dispatch always queries `IsCurrent=true`
+
+**New permission seeded (migration 081):**
+- `notification.templates.manage` → SUPER_ADMIN only
+
+**Migration 081 side effect:** backfills `effective_from = '2024-04-01'` for pre-existing template rows with NULL `effective_from` (required by non-nullable EF mapping).
+
+### New Domain Entities (migration 080)
+
+| Table | Schema | Description |
+|-------|--------|-------------|
+| `ca_profiles` | `chat` | CA staff metadata, rating aggregate (NUMERIC(3,2)), availability flag |
+| `appointment_slots` | `chat` | CA availability windows, CHECK(end_utc > start_utc) |
+| `appointments` | `chat` | Bookings; status CHECK IN ('DRAFT','CONFIRMED','COMPLETED','CANCELLED','NO_SHOW') |
+| `message_bookmarks` | `chat` | Per-user message bookmarks; UNIQUE(user_id, message_id) WHERE deleted_at IS NULL |
+
+All tables: UUID PKs, `created_by`/`updated_by` UUID (not TEXT), `set_updated_at` trigger, RLS enabled.
+
+### Test Summary (Wave 7A)
+
+| Suite | Unit | EfSmoke | Total |
+|-------|------|---------|-------|
+| ChatService.Tests | 50 | 12 | 62 |
+| NotificationService.Tests | 80 | 9 | 89 |
+| ReportService.Tests | 28 | 0 | 28 |
+| **Total** | **158** | **21** | **179** |
+
+All tests green vs live PostgreSQL 17 (`localhost:5432/snapaccount`).
+
+---
+
+### Wave 7A addendum — CA residuals
+
+**Service**: ChatService (`:5107`)
+**Migration**: `085_chat_ca_availability_rules.sql`
+
+#### New endpoints
+
+| Method | Route | Permission | Description |
+|--------|-------|-----------|-------------|
+| GET | `/appointments/ca-profiles` | `chat.appointments.book` | List CA profiles (activeOnly=true default, paginated). Replaces `/auth/admin/team-members?role=CA` workaround. Response: `{ items: [{ caProfileId, userId, displayName, bio, specialisations, averageRating, ratingCount, isActive, createdAt }], totalCount, page, pageSize }` |
+| POST | `/appointments/{id}/cancel-by-ca` | `chat.slots.manage` | CA-initiated cancel — no 2h rule. Body: `{ reason: string }`. Marks `cancelledByCa=true`, fires `AppointmentCancelledByCaEvent` (NotificationService push to user). Response: `{ appointmentId, status, cancelledByCa }` |
+| POST | `/appointments/availability-rules` | `chat.slots.manage` | Create recurring weekly rule. Body: `{ weekday (0–6), startTimeIst, endTimeIst, slotDurationMinutes (15–480), effectiveFrom, effectiveTo? }`. Response: `{ ruleId, caProfileId, weekday, startTimeIst, endTimeIst, slotDurationMinutes, effectiveFrom, effectiveTo, isActive, createdAt }` |
+| GET | `/appointments/availability-rules` | `chat.slots.manage` | List rules for a CA. Query: `?caProfileId=&activeOnly=true`. |
+| DELETE | `/appointments/availability-rules/{id}` | `chat.slots.manage` | Soft-delete (deactivate) a rule. Does NOT delete already-generated slots. |
+| POST | `/appointments/availability-rules/generate` | `chat.slots.manage` | On-demand slot generation from active rules. Body: `{ caProfileId?, weeksAhead? (1–52, default 4) }`. Idempotent. Response: `{ caProfileId, rulesProcessed, slotsCreated, slotsSkipped }` |
+
+#### Domain changes
+
+- `Appointment.CancelByCa(reason)` — new domain method, bypasses 2h rule, raises `AppointmentCancelledByCaEvent`
+- `Appointment.CancelledByCa` (bool) + `Appointment.CaCancellationReason` (string?) — new properties, migration 085 columns
+- `CaAvailabilityRule` — new domain entity: `(weekday, startTimeIst, endTimeIst, slotDurationMinutes, effectiveFrom, effectiveTo, isActive)`
+- `AppointmentSlot.CreateFromRule(...)` — new public factory, bypasses "must be future" guard (caller has already checked)
+
+#### Hangfire recurring job
+
+`GenerateSlotsFromRulesJob` — weekly, every **Sunday 01:00 IST** (Saturday 19:30 UTC, cron `30 19 * * 6`).  
+Generates 4-week slot horizon for all CAs with active rules. Idempotent: skips existing slots.  
+Registered via `app.Lifetime.ApplicationStarted` (same pattern as `ImsDeemedAcceptanceJob` in GstService).
+
+#### Infrastructure
+
+- `ISlotGenerationService` / `SlotGenerationService` — shared generation logic used by both the command handler (HTTP) and the Hangfire job (system-level, bypasses PermissionBehavior)
+- New EF config: `CaAvailabilityRuleConfiguration` (table `chat.ca_availability_rules`)
+
+#### Migration 085 DDL handoff
+
+| Object | Change |
+|--------|--------|
+| `chat.ca_availability_rules` | New table (uuid PK, `weekday`, `start_time_ist`/`end_time_ist` INTERVAL, `slot_duration_minutes`, `effective_from`/`effective_to` DATE, `is_active`, audit cols, RLS) |
+| `chat.appointments.cancelled_by_ca` | New BOOLEAN column (DEFAULT FALSE) |
+| `chat.appointments.ca_cancellation_reason` | New VARCHAR(1000) column (nullable) |
+
+#### Test summary (Wave 7A addendum)
+
+| Suite | New Unit | New EfSmoke | Total (suite) |
+|-------|----------|-------------|---------------|
+| ChatService.Tests | +29 | +6 | 79 unit + 17 EfSmoke |
+
+All 79 unit + 17 EfSmoke tests green vs live PostgreSQL 17.
+
+---
+
+## Wave 7B — Loan/Accounting/Auth
+
+Board #44 — GAP-044, GAP-047, GAP-051, GAP-110, Board-#42-polish.
+Migrations: 082 (`loan.fraud_checks`), 083 (`auth.device_approval_requests`).
+
+### GAP-110 — Fraud Pre-Submission Stage (LoanService)
+
+| Method | Route | Auth | Permission | Description |
+|--------|-------|------|------------|-------------|
+| POST | `/loans/applications/{id}/fraud-check` | Firebase JWT | `loan.application.submit` | Run all 6 fraud checks before submission. FLAG → 200 with note; FAIL → 422 blocks submission. |
+| GET | `/loans/applications/{id}/fraud-summary` | Firebase JWT | `loan.fraud.view` | Fraud check results for an application (operator/admin tier). IDOR: org-scoped. |
+
+**POST /loans/applications/{id}/fraud-check request:**
+```json
+{ "applicantPan": "ABCDE1234F", "applicantPhone": "+919876543210", "deviceId": "android-abc", "bankAccountNumber": "1234567890", "ifscCode": "HDFC0001234", "declaredName": "Rajesh Kumar" }
+```
+
+**200 response (Pass/Flag):**
+```json
+{ "allPassed": false, "hasFlags": true, "fraudSummaryNote": "1 flag(s) detected: DuplicatePhone.", "checkResults": [...] }
+```
+
+**422 response (FAIL blocks):**
+```json
+{ "code": "FraudCheck.HardFail", "message": "Application blocked: DuplicatePan FAIL." }
+```
+
+**Checks:** DuplicatePan, DuplicatePhone, DuplicateDevice (cross-org counts only), VelocityPan, VelocityPhone (30-day rolling), PennyDrop (mock; real provider TL-gated).
+
+**Config thresholds (`FraudCheck` section):** `VelocityPanFlagThreshold`=3, `VelocityPanFailThreshold`=5, `VelocityPhoneFlagThreshold`=3, `VelocityPhoneFailThreshold`=5, `VelocityWindowDays`=30, `DuplicatePanOrgThreshold`=2, `DuplicatePhoneOrgThreshold`=2, `PennyDropMinSimilarity`=0.80.
+
+**New permission:** `loan.fraud.view` — granted to ORG_ADMIN, SUPER_ADMIN, OPERATIONS_MANAGER (migration 082).
+
+---
+
+### GAP-044 — Comparative Financial Analysis (AccountingService)
+
+| Method | Route | Auth | Permission | Description |
+|--------|-------|------|------------|-------------|
+| GET | `/accounting/reports/comparative` | Firebase JWT | `accounting.reports.read` | YoY and MoM revenue/expense/profit by month over Indian FY. Chart-ready DTO. |
+
+**Query params:** `orgId` (Guid, required), `baseYear` (int 2020–2100), `priorYear` (int, optional, default baseYear-1), `categoryFilter` (INCOME|EXPENSE|ASSET|LIABILITY, optional).
+
+**Response shape:** `labels` (12 Apr–Mar strings), `baseRevenue[]`, `priorRevenue[]`, `baseExpense[]`, `priorExpense[]`, `baseProfit[]`, `priorProfit[]`, `yoYRevenueGrowth[]` (null when prior=0), `moMBaseRevenue[]` (null for April), `topMovers[]` (top 10 by absolute change).
+
+Indian FY: April = period 1, March = period 12. No AI dependency — pure LINQ over `accounting.ledger_entries`.
+
+---
+
+### GAP-051 — Admin Web Token Security (AuthService)
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | `/auth/admin/login` | None | Browser login. Access token in body; `sa_admin_rt` httpOnly cookie. CSRF header required. |
+| POST | `/auth/admin/refresh` | Cookie `sa_admin_rt` | Rotate refresh token. New access token in body; cookie rotated. CSRF header required. |
+| POST | `/auth/admin/logout` | Cookie `sa_admin_rt` | Revoke + clear cookie. Idempotent. CSRF header required. |
+
+**CSRF:** `SameSite=Strict` (primary) + `X-Requested-With: XMLHttpRequest` header (defence-in-depth). Missing header → 400. Mobile flow (POST /auth/refresh-token) **untouched**.
+
+**Cookie:** `sa_admin_rt; HttpOnly; Secure; SameSite=Strict; Path=/auth/admin; Max-Age=604800`
+
+**Token lifetimes:** Admin access = 1 hour; admin refresh = 7 days (both shorter than mobile for added security).
+
+---
+
+### GAP-047 — Old-Device Approval Backend (AuthService)
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| GET | `/auth/devices/pending-approvals` | Firebase JWT | List active (non-expired, non-resolved) device approval requests for current user. |
+| POST | `/auth/devices/{id}/approve` | Firebase JWT | Approve new-device login from a different registered device. |
+| POST | `/auth/devices/{id}/deny` | Firebase JWT | Deny new-device login. Revokes session when `DeviceApproval:Enforce=true`. |
+
+**Trigger:** `POST /auth/devices` (AddDevice) — if user has ≥1 existing device, creates `DeviceApprovalRequest` (10-min expiry) and publishes `DeviceApprovalRequestedEvent` to `device-approval-requests` Pub/Sub topic (NotificationService pushes to existing devices, excluding new device).
+
+**Soft-launch:** `DeviceApproval:Enforce=false` (default) = log/notify only, no session revocation on denial.
+
+**Request (approve/deny):** `{ "reviewingDeviceEntityId": "uuid" }` — reviewing device must belong to authenticated user and differ from new device.
+
+---
+
+### Board #42 — RefreshContext 500 Fix (AuthService)
+
+`POST /auth/token/refresh-context` — DEV_AUTH_BYPASS canned GUID previously returned HTTP 500 "User not found". Fixed: `NotFound` → 401 with message "Session user not found. Please sign in again."
+
+---
+
+### Migrations (Wave 7B)
+
+| # | File | Tables | Notes |
+|---|------|--------|-------|
+| 082 | `082_loan_fraud_checks.sql` | `loan.fraud_checks` | Append-only fraud decision log; JSONB details; GIN index; `loan.fraud.view` permission. Idempotent. |
+| 083 | `083_auth_device_approval_requests.sql` | `auth.device_approval_requests` | Pending device approval table; RLS via `app.current_user_id`; FKs to `auth.user` + `auth.user_device`. Idempotent. |
+
+### Test Coverage (Wave 7B)
+
+| Service | Tests | Notes |
+|---------|-------|-------|
+| LoanService | 166 pass | 9 EfSmoke incl. FraudCheck full-materialization |
+| AuthService | 738 pass | 8 EfSmoke incl. DeviceApprovalRequest full-materialization |
+| AccountingService | 60 pass | Comparative analysis validator, Indian FY label contract |
+
+All EfSmoke tests run against live PostgreSQL 17 (`localhost:5432/snapaccount`) with migrations 082 + 083 applied and scratch-replayed (idempotent).
+
+## Wave 7C — GST Notice Engine (GAP-108, migration 084)
+
+Base URL: `http://localhost:5100` (GstService)
+Auth: Firebase JWT required on all endpoints unless noted.
+
+### New Endpoints
+
+| Method | Route | Permission | Rate Limit | Description |
+|--------|-------|-----------|------------|-------------|
+| `PATCH` | `/gst/notices/{id}/form-type` | `gst.notices.update` | gst-write-strict (30/min) | Set CGST form-type (ASMT_10/DRC_01/01A/01B/01C/ADT_01/OTHER) + stamp statutory deadline |
+| `GET` | `/gst/notices/{id}/deadline` | `gst.notices.read` | standard (100/min) | Get statutory + effective deadline, days-remaining, overdue flag, GSTAT backlog flag |
+| `PATCH` | `/gst/notices/{id}/appeal-stage` | `gst.notices.update` | gst-write-strict (30/min) | Update GSTAT appeal stage (forward-only state machine); sets appeal deadline on ORDER_RECEIVED |
+| `GET` | `/gst/notices/simulate-drc` | `gst.notices.read` | standard (100/min) | Pre-filing DRC-01B/01C simulator; returns wouldTrigger + mismatch lines |
+| `GET` | `/gst/notice-deadline-rules` | `gst.notices.read` | standard (100/min) | List all active statutory deadline rules (FY-versioned config) |
+
+### Changed Endpoints (additive, backward-compatible)
+
+| Method | Route | Change |
+|--------|-------|--------|
+| `GET` | `/gst/notices` | Added query params: `formType`, `appealStage`, `gstatBacklogOnly`. Added response fields: `formType`, `statutoryDeadline`, `deadlineOverridden`, `appealStage`, `appealDeadline`, `isGstatBacklogFlagged` |
+| `GET` | `/gst/notices/{id}` | Added response fields: `formType`, `statutoryDeadline`, `deadlineOverridden`, `daysRemaining`, `isOverdue`, `appealStage`, `appealDeadline`, `appealDaysRemaining`, `isGstatBacklogFlagged` |
+| `POST` | `/gst/notices` | Added optional body field: `formType` (default: `OTHER`). Response now includes `formType`, `statutoryDeadline`, `effectiveDeadline` |
+
+### PATCH /gst/notices/{id}/form-type
+
+**Request body:**
+```json
+{
+  "formType": "DRC_01B",
+  "explicitDeadlineOverride": null
+}
+```
+
+**Response:**
+```json
+{
+  "noticeId": "uuid",
+  "formType": "DRC_01B",
+  "statutoryDeadline": "2026-01-14",
+  "effectiveDeadline": "2026-01-14",
+  "deadlineOverridden": false
+}
+```
+
+### GET /gst/notices/{id}/deadline
+
+**Response:**
+```json
+{
+  "noticeId": "uuid",
+  "formType": "DRC_01B",
+  "noticeDate": "2026-01-07",
+  "financialYear": "2025-26",
+  "statutoryDeadline": "2026-01-14",
+  "effectiveDeadline": "2026-01-14",
+  "deadlineOverridden": false,
+  "daysRemaining": -3,
+  "isOverdue": true,
+  "appealStage": "NONE",
+  "appealDeadline": null,
+  "appealDaysRemaining": null,
+  "isGstatBacklogFlagged": false,
+  "gstatBacklogDeadline": "2026-06-30"
+}
+```
+
+### PATCH /gst/notices/{id}/appeal-stage
+
+**Request body:**
+```json
+{
+  "newStage": "ORDER_RECEIVED",
+  "orderDate": "2026-03-01",
+  "appealWindowDaysOverride": null
+}
+```
+Valid stages (forward-only): `NONE` → `REPLY_FILED` → `ORDER_RECEIVED` → `APPEAL_FILED` → `GSTAT_PENDING` → `RESOLVED`
+
+**Response:**
+```json
+{
+  "noticeId": "uuid",
+  "appealStage": "ORDER_RECEIVED",
+  "appealDeadline": "2026-05-30",
+  "isGstatBacklogFlagged": true
+}
+```
+
+### GET /gst/notices/simulate-drc
+
+**Query params:** `orgId` (required), `formType` (DRC_01B|DRC_01C), `fy` (e.g. 2025-26), `month` (1-12)
+
+**Response:**
+```json
+{
+  "formType": "DRC_01B",
+  "financialYear": "2025-26",
+  "periodMonth": 4,
+  "dataAvailable": true,
+  "wouldTrigger": true,
+  "verdictSummary": "DRC-01B would be triggered. GSTR-1 reported tax ₹500,000 exceeds GSTR-3B paid tax ₹450,000 by ₹50,000.",
+  "mismatchLines": [
+    {
+      "description": "IGST mismatch",
+      "gstr1OrGstr2bAmount": 300000,
+      "gstr3bAmount": 270000,
+      "differenceAmount": 30000,
+      "mismatchType": "IGST_UNDERPAYMENT"
+    }
+  ],
+  "totalExposureAmount": 50000
+}
+```
+
+When `dataAvailable=false`, `wouldTrigger=false` and `verdictSummary` explains what data is missing.
+
+### GET /gst/notice-deadline-rules
+
+**Query params:** `fy` (optional, e.g. `2025-26`)
+
+**Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "financialYear": "2025-26",
+    "formType": "DRC_01B",
+    "responseWindowDays": 7,
+    "allowsNoticeTextOverride": true,
+    "legalBasis": "Rule 88C CGST Rules 2017 — Notification 38/2023 dt. 04-Aug-2023",
+    "isActive": true
+  }
+]
+```
+
+### Statutory Deadline Rules (migration 084 seed data)
+
+| Form Type | Response Window | Legal Basis |
+|-----------|----------------|-------------|
+| ASMT_10 | 30 days | Rule 99 CGST Rules 2017 |
+| DRC_01 | 30 days | Rule 142 CGST Rules 2017 |
+| DRC_01A | 30 days | Rule 142(1a) CGST Rules 2017 |
+| DRC_01B | **7 days** | Rule 88C — Notification 38/2023 dt. 04-Aug-2023 |
+| DRC_01C | **7 days** | Rule 88D — Notification 38/2023 dt. 04-Aug-2023 |
+| ADT_01 | 30 days | Section 65(3) CGST Act 2017 |
+| OTHER | 30 days | Conservative default |
+
+Config key: `GstService:GstatBacklogAppealDeadline` (default: `2026-06-30`). Rules seeded for FY 2025-26, 2026-27, and "ALL" sentinel rows.
+
+### Deadline engine config shape
+
+```json
+// appsettings.json / Secret Manager
+{
+  "GstService": {
+    "GstatBacklogAppealDeadline": "2026-06-30"
+  }
+}
+```
+
+The deadline rules table (`gst.notice_deadline_rules`) is the primary config store. Operators can add FY-specific rows via the database without code changes.
+
+### Test results (Wave 7C)
+
+| Suite | Count | Notes |
+|-------|-------|-------|
+| GstService Unit | 164 pass | Includes 30 new GAP-108 tests: form-type domain, deadline, appeal stage, DRC simulator validator, `GetFinancialYear` FY derivation |
+| GstService EfSmoke | 16 pass | Includes 4 new: `GstNotices_NewGap108Columns`, `GstNoticeDeadlineRules_CanQuery`, `GstNoticeDeadlineRules_HasSeededRows_For2025_26`, `GstNotices_FullEntityMaterialise_WithGap108Fields` |
+
+Migration 084 applied and scratch-replayed (idempotent, all `IF NOT EXISTS` guards pass).
+
+---
+
+## Wave 7 Mobile Reconciliation — ChatService + AuthService + GstService (migration 086)
+
+Closes mobile client residuals documented in `mobile/src/api/appointments.ts` and `mobile/src/api/auth.ts`.
+
+Base URLs: ChatService `:5107`, AuthService `:5101`, GstService `:5100`.
+
+---
+
+### Item 1 — GET /appointments/{id} (ChatService)
+
+Single-appointment detail. IDOR-guarded by organisation (appointment must belong to caller's org; 404 otherwise). Replaces the client-side list-scan workaround in `getAppointment()`.
+
+| Method | Route | Auth | Permission | Rate Limit |
+|--------|-------|------|------------|------------|
+| GET | `/appointments/{id}` | Firebase JWT | — (org-scoped via middleware) | standard (100/min) |
+
+**Response (200):** `AppointmentDetailDto` — superset of the list item DTO.
+```json
+{
+  "appointmentId": "uuid",
+  "caProfileId": "uuid",
+  "caDisplayName": "Priya Sharma",
+  "slotStartUtc": "2026-06-15T10:00:00Z",
+  "slotEndUtc": "2026-06-15T10:30:00Z",
+  "status": "CONFIRMED",
+  "meetLink": "https://meet.google.com/...",
+  "ratingStars": null,
+  "createdAt": "2026-06-11T09:00:00Z",
+  "topic": "GST",
+  "notes": "GSTR-3B query for Apr",
+  "ratingComment": null,
+  "ratedAt": null,
+  "cancelledByCa": false,
+  "caCancellationReason": null
+}
+```
+**Error:** 404 `Appointment.NotFound` when id not found or belongs to another org.
+
+---
+
+### Item 2 — topic on booking (ChatService, migration 086)
+
+`topic` is now a first-class field on the booking command and response DTOs. The mobile no longer embeds it as a `[TOPIC]` prefix in `notes`.
+
+**Migration 086 (additive):** `chat.appointments.topic VARCHAR(50) NULL CHECK (topic IN ('ACCOUNTING','GST','ITR','LOAN','OTHER'))`.
+
+**POST /appointments — updated request body:**
+```json
+{ "caProfileId": "uuid", "slotId": "uuid", "notes": "optional free text", "topic": "GST" }
+```
+Valid topic values: `ACCOUNTING`, `GST`, `ITR`, `LOAN`, `OTHER`. Null/omitted is allowed (backward compat for pre-086 rows).
+
+**GET /appointments (list) — updated DTO:** `AppointmentSummaryDto` now includes `topic` and `notes` fields.
+
+---
+
+### Item 3 — GET /appointments/slots/day-map (ChatService)
+
+Per-day availability map for the DateStrip. Returns `{ date, availableCount }` per day so the mobile can grey out fully-booked or slot-free days without fetching every individual slot.
+
+| Method | Route | Auth | Rate Limit |
+|--------|-------|------|------------|
+| GET | `/appointments/slots/day-map` | Firebase JWT | standard (100/min) |
+
+**Query params:**
+- `caProfileId` (required, UUID) — the CA to query
+- `from` (required, `YYYY-MM-DD`) — range start (inclusive)
+- `to` (required, `YYYY-MM-DD`) — range end (inclusive; max 90 days from `from`)
+
+**Response (200):**
+```json
+{
+  "days": [
+    { "date": "2026-06-15", "availableCount": 4 },
+    { "date": "2026-06-16", "availableCount": 0 },
+    { "date": "2026-06-17", "availableCount": 2 }
+  ]
+}
+```
+`availableCount = 0` = fully booked or no slots — DateStrip should grey out that day.
+Only future (`StartUtc > now`) available (`IsAvailable = true`) slots are counted.
+
+**Errors:** 400 when `to < from` or range > 90 days.
+
+---
+
+### Item 4 — GET /auth/devices/my-approval-status (AuthService)
+
+NEW-device waiting screen polls this endpoint. Returns the caller's most recent device approval request status without inferring from session disappearance. Also surfaces the `mode` so mobile can branch ENFORCE vs NOTIFY_ONLY.
+
+| Method | Route | Auth | Rate Limit |
+|--------|-------|------|------------|
+| GET | `/auth/devices/my-approval-status` | Firebase JWT | standard (100/min) |
+
+**Response (200):**
+```json
+{
+  "approvalRequestId": "uuid",
+  "status": "PENDING",
+  "decidedAt": null,
+  "expiresAt": "2026-06-11T10:10:00Z",
+  "mode": "NOTIFY_ONLY"
+}
+```
+`status` values: `PENDING`, `APPROVED`, `DENIED`, `EXPIRED`, `UNKNOWN`.
+`mode` values: `ENFORCE` (denial revokes session), `NOTIFY_ONLY` (soft-launch; denial only logs).
+`decidedAt`: UTC timestamp when approved/denied/expired; null while pending.
+`approvalRequestId`: null when no request found (status = UNKNOWN).
+
+**Polling guidance:** Mobile should stop polling once `status != "PENDING"`.
+
+**Deferred (product-gated, NOT in this release):**
+- Approximate location field on approval request — requires IP geolocation integration (TL decision pending).
+- Resend-push action — requires idempotency check on notification delivery (TL decision pending).
+- Both are noted in `mobile/src/api/auth.ts` residual comments.
+
+---
+
+### Item 5 — BookmarkDto enrichment (ChatService)
+
+`GET /appointments/bookmarks` response enriched with thread and sender context. Joins: `message_bookmarks → messages → threads`.
+
+**Updated BookmarkDto:**
+```json
+{
+  "bookmarkId": "uuid",
+  "messageId": "uuid",
+  "threadId": "uuid",
+  "messageBody": "Here is your GSTR-3B summary...",
+  "note": "save for filing",
+  "bookmarkedAt": "2026-06-11T09:00:00Z",
+  "messageCreatedAt": "2026-06-10T14:30:00Z",
+  "senderUserId": "uuid",
+  "senderRole": "CA",
+  "threadSubject": "GST filing query June 2026"
+}
+```
+**Note on `senderDisplayName`:** Cross-schema join to `auth.*` violates schema-per-service isolation. Mobile resolves display names from its local user/profile cache using `senderUserId` + `senderRole` (USER → auth cache; CA → CA profile from booking context). `senderUserId` is null for DPDP-erased senders.
+
+---
+
+### Item 6 — GST notice legacy status shim (GstService)
+
+Legacy mobile values (`Open`, `Overdue`) pre-Wave-7C are mapped to canonical status vocabulary at the endpoint layer (before the query validator runs). Old app builds in the field will continue to receive 200 instead of 400.
+
+**Mapping (DEPRECATED — will be removed when all app builds are ≥ Wave-7C):**
+
+| Legacy (mobile pre-Wave-7C) | Canonical (server) |
+|-----------------------------|--------------------|
+| `Open` | `RECEIVED` |
+| `Overdue` | `UNDER_REVIEW` |
+| `Responded` | `RESPONDED` |
+| `Closed` | `CLOSED` |
+
+Canonical values pass through unchanged. `null` (no filter) passes through unchanged. Unknown values fall through to the validator (400 with clear message).
+
+---
+
+### Migration (Wave 7 Reconciliation)
+
+| # | File | Change |
+|---|------|--------|
+| 086 | `086_chat_appointment_topic.sql` | Additive: `chat.appointments.topic VARCHAR(50) NULL` with CHECK; index `ix_appointments_topic`. Replay-safe. |
+
+---
+
+### Test Coverage (Wave 7 Mobile Reconciliation)
+
+| Suite | Before | After | New tests |
+|-------|--------|-------|-----------|
+| ChatService Unit | 79 | 97 | +18 (Wave7ReconciliationTests) |
+| ChatService EfSmoke | 17 | 20 | +3 (topic column: list, firstOrDefault, filter) |
+| AuthService Unit | 627 | 641 | +14 (GetMyApprovalStatusTests) |
+| GstService Unit | 164 | 182 | +18 (NoticeStatusShimTests) |
+
+All EfSmoke tests run against live PostgreSQL 17 (`localhost:5432/snapaccount`) with migration 086 applied and scratch-replayed (idempotent).

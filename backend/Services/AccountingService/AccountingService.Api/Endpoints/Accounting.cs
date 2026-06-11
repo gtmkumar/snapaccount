@@ -6,6 +6,7 @@ using AccountingService.Application.JournalBatches.Commands.ReviewPosting;
 using AccountingService.Application.JournalBatches.Commands.ReversePosting;
 using AccountingService.Application.Organizations.Commands.BootstrapCoa;
 using AccountingService.Application.Reports.Queries.GetBalanceSheet;
+using AccountingService.Application.Reports.Queries.GetComparativeAnalysis;
 using AccountingService.Application.Reports.Queries.GetLedgerByAccount;
 using AccountingService.Application.Reports.Queries.GetProfitAndLoss;
 using AccountingService.Application.Reports.Queries.GetTaxLiability;
@@ -67,6 +68,19 @@ public sealed class Accounting : EndpointGroupBase
         groupBuilder.MapPost("/postings/{id:guid}/reverse", ReversePosting)
             .RequireAuthorization()
             .RequireRateLimiting("standard");
+
+        // GAP-044 / Comparative analysis ─────────────────────────────────────
+
+        // GET /accounting/reports/comparative?baseYear=2026&priorYear=2025&categoryFilter=INCOME
+        // RBAC: accounting.reports.read (PermissionBehavior enforces)
+        // Shape: chart-friendly { labels[], baseRevenue[], priorRevenue[], … , topMovers[] }
+        groupBuilder.MapGet("/reports/comparative", GetComparativeAnalysis)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GetComparativeAnalysis")
+            .WithSummary("YoY + MoM comparative analysis of revenue/expense/profit (GAP-044). " +
+                         "Chart-friendly series arrays aligned to Indian FY month labels (Apr–Mar). " +
+                         "Permission: accounting.reports.read.");
 
         // GAP-100 / MCA edit-log ─────────────────────────────────────────────
 
@@ -224,6 +238,25 @@ public sealed class Accounting : EndpointGroupBase
         var export = result.Value;
         var bytes = System.Text.Encoding.UTF8.GetBytes(export.Csv);
         return Results.File(bytes, MediaTypeNames.Text.Csv, export.FileName);
+    }
+
+    private static async Task<IResult> GetComparativeAnalysis(
+        ISender sender,
+        ICurrentUser currentUser,
+        int baseYear = 2026,
+        int? priorYear = null,
+        string? categoryFilter = null)
+    {
+        if (currentUser.OrganizationId is null)
+            return Results.BadRequest(new { error = "No organisation associated with this user." });
+
+        var result = await sender.Send(
+            new GetComparativeAnalysisQuery(currentUser.OrganizationId.Value, baseYear, priorYear, categoryFilter));
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.Type == ErrorType.Forbidden
+                ? Results.Forbid()
+                : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
     }
 
     private static async Task<IResult> HandleQuery<T>(Task<Result<T>> queryTask)

@@ -421,6 +421,50 @@ export function ChatListScreen({ navigation }: Props) {
             { backgroundColor: tokens.canvas },
             filtered.length === 0 && styles.listEmpty,
           ]}
+          ListHeaderComponent={
+            /* Wave 7A (GAP-031): CA video-consultation entry (spec §1.1 — primary
+               card above the threads) + "My appointments" row. */
+            <View style={styles.caEntryWrap}>
+              <Pressable
+                style={[styles.caEntryCard, { backgroundColor: tokens.brandTint, borderColor: tokens.brandTintBorder }]}
+                onPress={() => {
+                  haptics.lightTap();
+                  (navigation.navigate as (route: string) => void)('CaSelect');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.ca.book.cta')}
+                testID="ca-book-entry"
+              >
+                <View style={[styles.caEntryIcon, { backgroundColor: tokens.brand500 }]}>
+                  <Ionicons name="videocam" size={22} color={tokens.textOnBrand} />
+                </View>
+                <View style={styles.caEntryBody}>
+                  <Text style={[styles.caEntryTitle, { color: tokens.textPrimary }]}>
+                    {t('mobile.ca.book.cta')}
+                  </Text>
+                  <Text style={[styles.caEntrySub, { color: tokens.textSecondary }]} numberOfLines={2}>
+                    {t('mobile.ca.book.subtitle')}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={tokens.brand500} />
+              </Pressable>
+              <Pressable
+                style={[styles.caApptsRow, { backgroundColor: tokens.raised, borderColor: tokens.border }]}
+                onPress={() =>
+                  (navigation.navigate as (route: string) => void)('MyAppointments')
+                }
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.ca.appts.title')}
+                testID="ca-my-appointments-entry"
+              >
+                <Ionicons name="calendar-outline" size={18} color={tokens.brand500} />
+                <Text style={[styles.caApptsRowText, { color: tokens.textPrimary }]}>
+                  {t('mobile.ca.appts.title')}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={tokens.textTertiary} />
+              </Pressable>
+            </View>
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIconWrap, { backgroundColor: tokens.brand500 + '18' }]}>
@@ -470,6 +514,38 @@ export function ChatListScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
+  // Wave 7A (GAP-031): CA booking entry card + appointments row
+  caEntryWrap: { gap: 10, marginBottom: 14 },
+  caEntryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    minHeight: 64,
+  },
+  caEntryIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  caEntryBody: { flex: 1, gap: 2 },
+  caEntryTitle: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  caEntrySub: { fontSize: 12, lineHeight: 17 },
+  caApptsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    minHeight: 48,
+  },
+  caApptsRowText: { flex: 1, fontSize: 14, fontWeight: '600' },
 
   // Header
   header: {

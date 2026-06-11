@@ -1,4 +1,6 @@
 using LoanService.Application.LoanApplications.Commands.AssignToBank;
+using LoanService.Application.LoanApplications.Commands.RunFraudChecks;
+using LoanService.Application.LoanApplications.Queries.GetFraudSummary;
 using LoanService.Application.LoanApplications.Commands.AttachDocument;
 using LoanService.Application.LoanApplications.Commands.CheckEligibility;
 using LoanService.Application.LoanApplications.Commands.CloseApplication;
@@ -124,6 +126,35 @@ public sealed class Loans : EndpointGroupBase
         groupBuilder.MapPost("/applications/{id:guid}/consents", RecordConsent)
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("RecordConsent");
+
+        // ── GAP-110: Fraud pre-submission stage ───────────────────────────────
+
+        /// <summary>
+        /// POST /loans/applications/{id}/fraud-check — Run fraud pre-submission checks.
+        /// Must be called before submit. FLAG verdicts allow submission with operator note.
+        /// FAIL verdicts return 422 and block submission.
+        /// Permission: loan.application.submit (same as submit).
+        /// Rate limit: standard.
+        /// </summary>
+        groupBuilder.MapPost("/applications/{id:guid}/fraud-check", RunFraudChecks)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("RunLoanFraudChecks")
+            .WithSummary("Run fraud pre-submission checks (GAP-110)")
+            .WithDescription(
+                "Executes 6 fraud checks: duplicate PAN/phone/device across orgs (aggregate counts only, " +
+                "never leaks other-org PII), velocity rules (config-driven thresholds), and penny-drop name match. " +
+                "FLAG: submission allowed + operator review note. " +
+                "FAIL: 422 — submission blocked. " +
+                "All results persisted to loan.fraud_checks.");
+
+        /// <summary>
+        /// GET /loans/applications/{id}/fraud-summary — Retrieve fraud check results.
+        /// Permission: loan.fraud.view (operator tier).
+        /// </summary>
+        groupBuilder.MapGet("/applications/{id:guid}/fraud-summary", GetFraudSummary)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetLoanFraudSummary")
+            .WithSummary("Retrieve fraud check decision log for an application (operator tier, GAP-110)");
 
         /// <summary>POST /loans/applications/{id}/submit — Submit for bank review.</summary>
         groupBuilder.MapPost("/applications/{id:guid}/submit", SubmitApplication)
@@ -485,6 +516,33 @@ public sealed class Loans : EndpointGroupBase
         return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound(result.Error.Message);
     }
 
+    // ── GAP-110: Fraud check handlers ─────────────────────────────────────────
+
+    private static async Task<IResult> RunFraudChecks(
+        Guid id, RunFraudChecksRequest req, ISender sender, CancellationToken ct)
+    {
+        var command = new RunFraudChecksCommand(
+            id,
+            req.ApplicantPan,
+            req.ApplicantPhone,
+            req.DeviceId,
+            req.BankAccountNumber,
+            req.IfscCode,
+            req.DeclaredName);
+
+        var result = await sender.Send(command, ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
+    private static async Task<IResult> GetFraudSummary(
+        Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetFraudSummaryQuery(id), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
     private static int MapError(SnapAccount.Shared.Domain.Error error)
         => error.Type switch
         {
@@ -537,6 +595,18 @@ internal record GeneratePackageRequest(string OrgName);
 
 /// <summary>Request body for eligibility check.</summary>
 internal record CheckEligibilityRequest(Guid OrgId, Guid? LoanProductId = null);
+
+/// <summary>
+/// GAP-110: Request body for running fraud pre-submission checks.
+/// PAN is validated to format XXXXX9999X (FluentValidation in RunFraudChecksCommandValidator).
+/// </summary>
+internal record RunFraudChecksRequest(
+    string ApplicantPan,
+    string? ApplicantPhone = null,
+    string? DeviceId = null,
+    string? BankAccountNumber = null,
+    string? IfscCode = null,
+    string? DeclaredName = null);
 
 /// <summary>Request body for updating a partner bank.</summary>
 internal record UpdatePartnerBankRequest(

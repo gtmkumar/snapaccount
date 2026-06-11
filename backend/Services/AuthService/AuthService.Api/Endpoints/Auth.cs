@@ -20,7 +20,11 @@ using AuthService.Application.Users.Commands.RequestAccountDeletion;
 using AuthService.Application.Users.Commands.UpdateUserProfile;
 using AuthService.Application.Users.Queries.GetCurrentUser;
 using AuthService.Application.Devices.Commands.AddDevice;
+using AuthService.Application.Devices.Commands.ApproveDevice;
+using AuthService.Application.Devices.Commands.DenyDevice;
 using AuthService.Application.Devices.Commands.RemoveDevice;
+using AuthService.Application.Devices.Queries.GetMyApprovalStatus;
+using AuthService.Application.Devices.Queries.GetPendingApproval;
 using AuthService.Application.Devices.Queries.GetUserDevices;
 using AuthService.Application.Organizations.Commands.CreateOrganization;
 using AuthService.Application.Organizations.Queries.GetOrganizations;
@@ -124,6 +128,57 @@ public sealed class Auth : EndpointGroupBase
         groupBuilder.MapPut("/profile", UpdateProfile).RequireAuthorization();
         groupBuilder.MapGet("/devices", GetDevices).RequireAuthorization();
         groupBuilder.MapDelete("/devices/{deviceId:guid}", RemoveDevice).RequireAuthorization();
+
+        // ── GAP-047: Device approval endpoints ────────────────────────────────
+
+        // GET /auth/devices/pending-approvals — list active approval requests for the caller
+        groupBuilder.MapGet("/devices/pending-approvals", GetPendingApprovals)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GetPendingDeviceApprovals")
+            .WithSummary("List pending new-device approval requests for the authenticated user (GAP-047).")
+            .WithDescription(
+                "Mobile polls this after receiving a push notification to render the approve/deny screen. " +
+                "Returns only active (non-expired, non-resolved) requests. Soft-launch: " +
+                "DeviceApproval:Enforce=false (default) means existing sessions are not blocked.");
+
+        // POST /auth/devices/{approvalId}/approve — approve from an existing device
+        groupBuilder.MapPost("/devices/{approvalId:guid}/approve", ApproveDevice)
+            .RequireAuthorization()
+            .RequireRateLimiting("otp") // rate-limit like OTP — security-sensitive
+            .WithName("ApproveDeviceRequest")
+            .WithSummary("Approve a pending new-device login from an existing device (GAP-047).")
+            .WithDescription(
+                "Body: { reviewingDeviceEntityId: UUID }. " +
+                "The reviewing device must be registered to the caller's account and must differ " +
+                "from the device being approved. Returns 409 if expired or already resolved. " +
+                "Returns 403 if the reviewing device is not registered to this account.");
+
+        // POST /auth/devices/{approvalId}/deny — deny from an existing device
+        groupBuilder.MapPost("/devices/{approvalId:guid}/deny", DenyDevice)
+            .RequireAuthorization()
+            .RequireRateLimiting("otp")
+            .WithName("DenyDeviceRequest")
+            .WithSummary("Deny a pending new-device login from an existing device (GAP-047).")
+            .WithDescription(
+                "Body: { reviewingDeviceEntityId: UUID, reason?: string }. " +
+                "Enforce=true: deactivates new device + revokes its refresh token. " +
+                "Enforce=false (default): records denial + logs only (soft-launch).");
+
+        // GET /auth/devices/my-approval-status — NEW device's waiting-screen poll endpoint
+        // GAP-047 mobile residual: the new device polls this instead of inferring approval
+        // from session disappearance. Returns status + decidedAt + mode (ENFORCE/NOTIFY_ONLY).
+        groupBuilder.MapGet("/devices/my-approval-status", GetMyApprovalStatus)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GetMyDeviceApprovalStatus")
+            .WithSummary("NEW device polls its own approval status (PENDING/APPROVED/DENIED/EXPIRED) — GAP-047 mobile residual.")
+            .WithDescription(
+                "Authenticated as the pending device's own session JWT. " +
+                "Returns: { approvalRequestId, status, decidedAt, expiresAt, mode }. " +
+                "mode: ENFORCE — denial will have revoked the session; NOTIFY_ONLY — soft-launch, session remains valid. " +
+                "The waiting screen should stop polling once status != PENDING. " +
+                "Deferred items (out of scope, product-gated): approximate-location field, resend-push action.");
         groupBuilder.MapGet("/organizations", GetOrganizations).RequireAuthorization();
         groupBuilder.MapPost("/organizations", CreateOrganization).RequireAuthorization();
         // DPDP Act 2023: Right to Erasure
@@ -231,17 +286,32 @@ public sealed class Auth : EndpointGroupBase
     // GAP-007 / BUG-5: Re-issue session JWT with current org claims (no refresh token rotation).
     // ORG-SWITCHER (mobile Wave 6): optional { organizationId } body param selects a specific org.
     // Security: membership validated before token is minted — non-member → 403.
+    // Board #42 FIX: NotFound (DEV_AUTH_BYPASS canned GUID with no auth.user row) → 401.
+    // Previously fell through to Results.Problem → 500.
     private static async Task<IResult> RefreshContext(
         RefreshContextRequest req, ISender sender)
     {
         var result = await sender.Send(new RefreshContextCommand(req.OrganizationId));
-        return result.IsSuccess
-            ? Results.Ok(result.Value)
-            : result.Error.Type == ErrorType.Unauthorized
-                ? Results.Unauthorized()
-                : result.Error.Type == ErrorType.Forbidden
-                    ? Results.Json(new { error = result.Error.Message, code = result.Error.Code }, statusCode: 403)
-                    : Results.Problem(result.Error.Message);
+        if (result.IsSuccess)
+            return Results.Ok(result.Value);
+
+        return result.Error.Type switch
+        {
+            // Board #42: user not found (e.g. DEV_AUTH_BYPASS canned GUID) → 401, not 500
+            ErrorType.Unauthorized => Results.Unauthorized(),
+            ErrorType.NotFound => Results.Json(
+                new { error = "Session user not found. Please sign in again.", code = result.Error.Code },
+                statusCode: 401),
+            ErrorType.Forbidden => Results.Json(
+                new { error = result.Error.Message, code = result.Error.Code },
+                statusCode: 403),
+            ErrorType.Validation => Results.Json(
+                new { error = result.Error.Message, code = result.Error.Code },
+                statusCode: 400),
+            _ => Results.Json(
+                new { error = result.Error.Message, code = result.Error.Code },
+                statusCode: 400)
+        };
     }
 
     // GET /auth/me [Authorize]
@@ -287,6 +357,54 @@ public sealed class Auth : EndpointGroupBase
         return result.IsSuccess
             ? Results.NoContent()
             : Results.BadRequest(new { error = result.Error.Message });
+    }
+
+    // ── GAP-047: Device approval handlers ────────────────────────────────────
+
+    // GET /auth/devices/pending-approvals [Authorize]
+    private static async Task<IResult> GetPendingApprovals(ISender sender)
+    {
+        var result = await sender.Send(new GetPendingApprovalsQuery());
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    // GET /auth/devices/my-approval-status [Authorize] — GAP-047 mobile residual
+    private static async Task<IResult> GetMyApprovalStatus(ISender sender)
+    {
+        var result = await sender.Send(new GetMyApprovalStatusQuery());
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    // POST /auth/devices/{approvalId}/approve [Authorize]
+    private static async Task<IResult> ApproveDevice(
+        Guid approvalId, ApproveDeviceRequest req, ISender sender)
+    {
+        var result = await sender.Send(new ApproveDeviceCommand(approvalId, req.ReviewingDeviceEntityId));
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.Type switch
+            {
+                ErrorType.NotFound => Results.NotFound(new { error = result.Error.Message, code = result.Error.Code }),
+                ErrorType.Forbidden => Results.Json(new { error = result.Error.Message, code = result.Error.Code }, statusCode: 403),
+                ErrorType.Conflict => Results.Conflict(new { error = result.Error.Message, code = result.Error.Code }),
+                _ => Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code })
+            };
+    }
+
+    // POST /auth/devices/{approvalId}/deny [Authorize]
+    private static async Task<IResult> DenyDevice(
+        Guid approvalId, DenyDeviceRequest req, ISender sender)
+    {
+        var result = await sender.Send(new DenyDeviceCommand(approvalId, req.ReviewingDeviceEntityId, req.Reason));
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.Type switch
+            {
+                ErrorType.NotFound => Results.NotFound(new { error = result.Error.Message, code = result.Error.Code }),
+                ErrorType.Forbidden => Results.Json(new { error = result.Error.Message, code = result.Error.Code }, statusCode: 403),
+                ErrorType.Conflict => Results.Conflict(new { error = result.Error.Message, code = result.Error.Code }),
+                _ => Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code })
+            };
     }
 
     // GET /auth/organizations [Authorize]
@@ -421,3 +539,12 @@ internal record UpdatePreferencesRequest(
     bool? SmsNotificationsEnabled,
     bool? EmailNotificationsEnabled,
     bool? WhatsappNotificationsEnabled);
+
+/// <summary>
+/// GAP-047: Request body for POST /auth/devices/{approvalId}/approve.
+/// The reviewing device entity ID must differ from the device being approved.
+/// </summary>
+internal record ApproveDeviceRequest(Guid ReviewingDeviceEntityId);
+
+/// <summary>GAP-047: Request body for POST /auth/devices/{approvalId}/deny.</summary>
+internal record DenyDeviceRequest(Guid ReviewingDeviceEntityId, string? Reason = null);

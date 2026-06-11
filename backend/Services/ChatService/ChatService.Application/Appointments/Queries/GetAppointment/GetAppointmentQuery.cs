@@ -1,0 +1,99 @@
+using ChatService.Application.Appointments.Queries.ListAppointments;
+using ChatService.Application.Common.Interfaces;
+using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using SnapAccount.Shared.Application;
+using SnapAccount.Shared.Domain;
+
+namespace ChatService.Application.Appointments.Queries.GetAppointment;
+
+/// <summary>
+/// Returns a single appointment by id, IDOR-guarded by the caller's organisation.
+/// Equivalent shape to <see cref="AppointmentSummaryDto"/> (same list-item DTO),
+/// plus any detail-only fields (Notes, Topic, RatingComment, CaCancellationReason).
+///
+/// Mobile residual fix: replaces the client-side list-scan workaround.
+/// </summary>
+public record GetAppointmentQuery(Guid AppointmentId) : IQuery<AppointmentDetailDto>;
+
+/// <summary>
+/// Full appointment detail DTO — superset of <see cref="AppointmentSummaryDto"/>.
+/// </summary>
+public record AppointmentDetailDto(
+    Guid AppointmentId,
+    Guid CaProfileId,
+    string CaDisplayName,
+    DateTime SlotStartUtc,
+    DateTime SlotEndUtc,
+    string Status,
+    string? MeetLink,
+    int? RatingStars,
+    DateTime CreatedAt,
+    string? Topic,
+    string? Notes,
+    string? RatingComment,
+    DateTime? RatedAt,
+    bool CancelledByCa,
+    string? CaCancellationReason);
+
+/// <summary>Validates GetAppointmentQuery.</summary>
+public sealed class GetAppointmentQueryValidator : AbstractValidator<GetAppointmentQuery>
+{
+    public GetAppointmentQueryValidator()
+    {
+        RuleFor(x => x.AppointmentId).NotEmpty();
+    }
+}
+
+/// <summary>
+/// Handles GetAppointmentQuery.
+/// IDOR guard: the appointment must belong to the caller's organisation.
+/// </summary>
+public sealed class GetAppointmentQueryHandler(
+    IChatServiceDbContext db,
+    ICurrentUser currentUser) : IQueryHandler<GetAppointmentQuery, AppointmentDetailDto>
+{
+    /// <inheritdoc />
+    public async Task<Result<AppointmentDetailDto>> Handle(
+        GetAppointmentQuery request,
+        CancellationToken cancellationToken)
+    {
+        if (!currentUser.OrganizationId.HasValue)
+            return Result<AppointmentDetailDto>.Failure(
+                Error.Unauthorized("Appointment.Unauthenticated", "User is not authenticated."));
+
+        var row = await db.Appointments
+            .Where(a => a.Id == request.AppointmentId
+                     && a.OrganizationId == currentUser.OrganizationId.Value)
+            .Join(db.AppointmentSlots,
+                a => a.SlotId,
+                s => s.Id,
+                (a, s) => new { a, s })
+            .Join(db.CaProfiles,
+                x => x.a.CaProfileId,
+                p => p.Id,
+                (x, p) => new AppointmentDetailDto(
+                    x.a.Id,
+                    p.Id,
+                    p.DisplayName,
+                    x.s.StartUtc,
+                    x.s.EndUtc,
+                    x.a.Status.ToString(),
+                    x.a.MeetLink,
+                    x.a.RatingStars,
+                    x.a.CreatedAt,
+                    x.a.Topic,
+                    x.a.Notes,
+                    x.a.RatingComment,
+                    x.a.RatedAt,
+                    x.a.CancelledByCa,
+                    x.a.CaCancellationReason))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+            return Result<AppointmentDetailDto>.Failure(
+                Error.NotFound("Appointment.NotFound", "Appointment not found."));
+
+        return Result<AppointmentDetailDto>.Success(row);
+    }
+}

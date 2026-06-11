@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { AmountDisplay } from '@/components/ui/AmountDisplay'
 import { AlertBanner } from '@/components/shared/AlertBanner'
+import { SimulatorEntryBanner } from '@/components/ui/SimulatorEntryBanner'
 import { cn } from '@/lib/utils'
 import {
   getItcMismatches,
@@ -308,6 +309,11 @@ export default function ItcMismatchPage() {
               {t('itcMismatch.runReconciliation')}
             </Button>
           }
+        />
+
+        {/* GAP-108 Wave 7: DRC-01B/01C pre-filing simulator entry banner */}
+        <SimulatorEntryBanner
+          onRun={() => setShowReconcile(true)}
         />
 
         {/* Load error */}

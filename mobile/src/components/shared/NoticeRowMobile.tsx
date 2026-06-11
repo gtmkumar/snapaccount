@@ -14,8 +14,14 @@ import {
   AccessibilityActionEvent,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { isNoticeOverdue, isNoticeSettled } from '../../lib/noticeStatus';
 import { DueDateChip } from './DueDateChip';
+// Wave 7B (GAP-108): statutory taxonomy + GSTAT appeal stage
+import { NoticeFormTypeBadge } from '../gst/NoticeFormTypeBadge';
+import { GstatStageChip } from '../gst/GstatStageChip';
+import type { GstNoticeFormType, GstatStage } from '../../api/gst';
 
 export interface NoticeRowMobileProps {
   id: string;
@@ -30,8 +36,22 @@ export interface NoticeRowMobileProps {
   onMarkRead?: () => void;
   /** When true, swipe-to-archive is disabled (e.g. awaiting response) */
   archiveGated?: boolean;
+  /** Wave 7B (GAP-108): statutory form-type badge (ASMT-10 / DRC-01…). */
+  formType?: GstNoticeFormType;
+  /** Wave 7B (GAP-108): statutory response deadline (preferred over dueDate). */
+  statutoryDeadline?: string;
+  /** Wave 7B (GAP-108): GSTAT appeal stage when escalated. */
+  gstatStage?: GstatStage;
   testID?: string;
 }
+
+/** Localized labels for the canonical status pill (raw value = fallback). */
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  RECEIVED: 'mobile.gst.notices.filter.received',
+  UNDER_REVIEW: 'mobile.gst.notices.filter.underReview',
+  RESPONDED: 'mobile.gst.notices.filter.responded',
+  CLOSED: 'mobile.gst.notices.filter.closed',
+};
 
 export function NoticeRowMobile({
   noticeNumber,
@@ -44,20 +64,29 @@ export function NoticeRowMobile({
   onArchive,
   onMarkRead,
   archiveGated = false,
+  formType,
+  statutoryDeadline,
+  gstatStage,
   testID,
 }: NoticeRowMobileProps) {
   const { tokens } = useTheme();
   const styles = useStyles();
+  const { t } = useTranslation();
   const [slideAnim] = useState(() => new Animated.Value(0));
 
-  const isOpen = status === 'Open' || status === 'Overdue';
-  const isOverdue = status === 'Overdue';
+  // Canonical server statuses (RECEIVED/UNDER_REVIEW/RESPONDED/CLOSED);
+  // "overdue" is derived from the deadline (never a server status).
+  const isOpen = !isNoticeSettled(status);
+  const isOverdue = isNoticeOverdue(status, statutoryDeadline ?? dueDate);
 
   const statusColor = isOverdue
     ? tokens.errorFg
     : isOpen
     ? tokens.warningFg
     : tokens.successFg;
+
+  const statusLabelKey = STATUS_LABEL_KEYS[status];
+  const statusLabel = statusLabelKey ? t(statusLabelKey) : status;
 
   const handleAccessibilityAction = (event: AccessibilityActionEvent) => {
     if (event.nativeEvent.actionName === 'archive' && onArchive && !archiveGated) {
@@ -78,7 +107,7 @@ export function NoticeRowMobile({
         style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={`Notice ${noticeNumber}, type ${noticeType}, status ${status}`}
+        accessibilityLabel={`Notice ${noticeNumber}, type ${noticeType}, status ${statusLabel}`}
         accessibilityHint="Tap to view notice details"
         accessibilityActions={[
           { name: 'activate', label: 'View details' },
@@ -96,9 +125,16 @@ export function NoticeRowMobile({
           {/* Header row */}
           <View style={styles.headerRow}>
             <View style={styles.headerLeft}>
-              <View style={styles.typeBadge}>
-                <Text style={styles.typeBadgeText}>{noticeType}</Text>
-              </View>
+              {/* GAP-108: statutory form-type badge takes precedence; the
+                  legacy free-text type chip remains the fallback (incl. the
+                  server's OTHER default, which has no statutory badge). */}
+              {formType && formType !== 'OTHER' ? (
+                <NoticeFormTypeBadge formType={formType} />
+              ) : (
+                <View style={styles.typeBadge}>
+                  <Text style={styles.typeBadgeText}>{noticeType}</Text>
+                </View>
+              )}
               <Text style={styles.noticeNumber} numberOfLines={1}>
                 {noticeNumber}
               </Text>
@@ -107,7 +143,7 @@ export function NoticeRowMobile({
               style={[styles.statusPill, { backgroundColor: statusColor + '18' }]}
             >
               <Text style={[styles.statusText, { color: statusColor }]}>
-                {status}
+                {statusLabel}
               </Text>
             </View>
           </View>
@@ -119,11 +155,18 @@ export function NoticeRowMobile({
             </Text>
           ) : null}
 
-          {/* Footer row */}
+          {/* Footer row — GAP-108: statutory deadline preferred over dueDate */}
           <View style={styles.footerRow}>
             <Text style={styles.issuedDate}>Issued {issuedDate}</Text>
-            {dueDate ? <DueDateChip dueDate={dueDate} /> : null}
+            {statutoryDeadline || dueDate ? (
+              <DueDateChip dueDate={(statutoryDeadline ?? dueDate) as string} />
+            ) : null}
           </View>
+
+          {/* GAP-108: GSTAT appeal-stage chip (only when escalated; NONE hides) */}
+          {gstatStage && gstatStage !== 'NONE' ? (
+            <GstatStageChip stage={gstatStage} testID={`gstat-chip-${noticeNumber}`} />
+          ) : null}
 
           {/* Action buttons */}
           <View style={styles.actionRow}>

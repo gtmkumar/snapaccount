@@ -51,7 +51,7 @@ public sealed class GstNoticeOptionalOrgTests : IDisposable
 
         // Act: explicit orgId overrides caller's org
         var result = await handler.Handle(
-            new ListNoticesQuery(_orgId, null, 1, 20),
+            new ListNoticesQuery(_orgId),
             CancellationToken.None);
 
         // Assert
@@ -69,7 +69,7 @@ public sealed class GstNoticeOptionalOrgTests : IDisposable
 
         // Act: organizationId = null → should default to caller's org
         var result = await handler.Handle(
-            new ListNoticesQuery(null, null, 1, 20),
+            new ListNoticesQuery(null),
             CancellationToken.None);
 
         // Assert: only _orgId's notices returned
@@ -89,7 +89,7 @@ public sealed class GstNoticeOptionalOrgTests : IDisposable
 
         // Act
         var result = await handler.Handle(
-            new ListNoticesQuery(null, null, 1, 20),
+            new ListNoticesQuery(null),
             CancellationToken.None);
 
         // Assert: should fail with a validation error, NOT throw a NullReferenceException
@@ -113,7 +113,7 @@ public sealed class GstNoticeOptionalOrgTests : IDisposable
 
         // Act: filter by RESPONDED
         var result = await handler.Handle(
-            new ListNoticesQuery(null, "RESPONDED", 1, 20),
+            new ListNoticesQuery(null, Status: "RESPONDED"),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();

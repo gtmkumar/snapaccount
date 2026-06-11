@@ -23,6 +23,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { DueDateChip } from '../../components/shared/DueDateChip';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
+import { isNoticeSettled } from '../../lib/noticeStatus';
 import { respondToItrNotice } from '../../api/itr';
 import type { ItrNotice } from '../../api/itr';
 import type { ItrStackParamList } from '../../navigation/ItrStack';
@@ -85,6 +86,11 @@ export function ItrNoticeDetailScreen({ navigation, route }: Props) {
 
   const noticeInfo = notice ? NOTICE_TYPE_INFO[notice.noticeType] ?? NOTICE_TYPE_INFO['Other'] : null;
 
+  // Canonical server enum (RECEIVED/UNDER_REVIEW/RESPONDED/CLOSED) — legacy
+  // mobile spellings removed (Wave 7 recon: server vocabulary is canonical).
+  const isClosed = !!notice && notice.status === 'CLOSED';
+  const responsePending = !!notice && !isNoticeSettled(notice.status);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -113,13 +119,13 @@ export function ItrNoticeDetailScreen({ navigation, route }: Props) {
               <View
                 style={[
                   styles.statusBadge,
-                  { backgroundColor: notice.status === 'Closed' ? tokens.successTint : tokens.warningTint },
+                  { backgroundColor: isClosed ? tokens.successTint : tokens.warningTint },
                 ]}
               >
                 <Text
                   style={[
                     styles.statusText,
-                    { color: notice.status === 'Closed' ? tokens.successFg : tokens.warningFg },
+                    { color: isClosed ? tokens.successFg : tokens.warningFg },
                   ]}
                 >
                   {notice.status}
@@ -177,7 +183,7 @@ export function ItrNoticeDetailScreen({ navigation, route }: Props) {
             )}
 
             {/* Respond form */}
-            {(notice.status === 'Open' || notice.status === 'Overdue') && !notice.responseText && (
+            {responsePending && !notice.responseText && (
               <>
                 {!showResponseForm ? (
                   <Pressable

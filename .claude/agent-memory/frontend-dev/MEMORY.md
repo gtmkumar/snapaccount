@@ -22,3 +22,4 @@
 - [Wave 5 QA bugfixes BUG-MCA-ETYPE-005 + BUG-DASH-KB-004](project_wave5_bugfixes.md) — entityType snake_case regression tests; Tier3TabBar ARIA keyboard nav (roving tabIndex + Arrow/Home/End); 1007→1022 tests
 - [Wave 6 batch #39 completion](project_wave6_batch39.md) — GAP-023 callback gating, GAP-036 subscriber/invoice pages, GAP-038 health page, GAP-035 upgrade CTA, GAP-052 UX fixes; +91 i18n keys; 1022 tests, 0 lint
 - [GAP-022 GST Tax Rate Config](project_gap022_tax_rates.md) — effective-dated rate admin page; GST_SLABS constant; computeTaxBreakdown; EmptyState uses variant not icon; 1022→1047 tests
+- [Wave 7 + 7A Residual Reconciliation](project_wave7_completion.md) — GAP-037/031/108/032/051 + all 3 CA residuals wired to real contracts; 2140 i18n keys; 1078 tests, 0 lint

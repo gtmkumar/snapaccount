@@ -26,6 +26,7 @@ import { useHaptics } from '../../hooks/useHaptics';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import type { GstNoticeStatus } from '../../api/gst';
 import { listGstNotices, respondToGstNotice } from '../../api/gst';
+import { isNoticeOverdue, isNoticeSettled } from '../../lib/noticeStatus';
 import type { GstStackParamList } from '../../navigation/GstStack';
 
 type NavProp = NativeStackNavigationProp<GstStackParamList, 'GstNoticeInbox'>;
@@ -36,12 +37,20 @@ interface Props {
   route: RoutePropType;
 }
 
-const FILTER_TABS: { key: GstNoticeStatus | 'All'; labelKey: string }[] = [
+/**
+ * Filter vocabulary = canonical server statuses + two client-side views:
+ * "All" (no status param) and "Overdue" (derived — deadline passed and not
+ * RESPONDED/CLOSED; never sent to the server).
+ */
+type NoticeFilter = GstNoticeStatus | 'All' | 'Overdue';
+
+const FILTER_TABS: { key: NoticeFilter; labelKey: string }[] = [
   { key: 'All', labelKey: 'mobile.gst.notices.filter.all' },
-  { key: 'Open', labelKey: 'mobile.gst.notices.filter.open' },
+  { key: 'RECEIVED', labelKey: 'mobile.gst.notices.filter.received' },
+  { key: 'UNDER_REVIEW', labelKey: 'mobile.gst.notices.filter.underReview' },
   { key: 'Overdue', labelKey: 'mobile.gst.notices.filter.overdue' },
-  { key: 'Responded', labelKey: 'mobile.gst.notices.filter.responded' },
-  { key: 'Closed', labelKey: 'mobile.gst.notices.filter.closed' },
+  { key: 'RESPONDED', labelKey: 'mobile.gst.notices.filter.responded' },
+  { key: 'CLOSED', labelKey: 'mobile.gst.notices.filter.closed' },
 ];
 
 export function GstNoticeInboxScreen({ navigation, route }: Props) {
@@ -52,14 +61,19 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
   const haptics = useHaptics();
   const { orgId } = route.params;
   const qc = useQueryClient();
-  const [activeFilter, setActiveFilter] = useState<GstNoticeStatus | 'All'>('All');
+  const [activeFilter, setActiveFilter] = useState<NoticeFilter>('All');
+
+  // "Overdue" is a client-side derived filter — fetch unfiltered, then
+  // narrow locally. Only canonical statuses are ever sent as a status param.
+  const serverStatus: GstNoticeStatus | undefined =
+    activeFilter === 'All' || activeFilter === 'Overdue' ? undefined : activeFilter;
 
   const { data, isLoading, isRefetching, refetch, error } = useQuery({
     queryKey: ['gst-notices', orgId, activeFilter],
     queryFn: () =>
       listGstNotices({
         orgId,
-        status: activeFilter === 'All' ? undefined : activeFilter,
+        status: serverStatus,
         page: 1,
         pageSize: 50,
       }),
@@ -73,8 +87,14 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
     },
   });
 
-  const notices = data?.items ?? [];
-  const openCount = notices.filter((n) => n.status === 'Open' || n.status === 'Overdue').length;
+  const fetched = data?.items ?? [];
+  const notices =
+    activeFilter === 'Overdue'
+      ? fetched.filter((n) =>
+          isNoticeOverdue(n.status, n.statutoryDeadline ?? n.dueDate),
+        )
+      : fetched;
+  const openCount = fetched.filter((n) => !isNoticeSettled(n.status)).length;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -112,7 +132,7 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
             <Pressable
               key={tab.key}
               style={[styles.tab, isActive && styles.tabActive]}
-              onPress={() => setActiveFilter(tab.key as GstNoticeStatus | 'All')}
+              onPress={() => setActiveFilter(tab.key)}
               accessibilityRole="tab"
               accessibilityState={{ selected: isActive }}
             >
@@ -174,15 +194,19 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
                 issuedDate={notice.issuedDate}
                 dueDate={notice.dueDate}
                 description={notice.description}
+                // Wave 7B/7C (GAP-108): taxonomy badge + statutory deadline + GSTAT stage
+                formType={notice.formType}
+                statutoryDeadline={notice.statutoryDeadline}
+                gstatStage={notice.appealStage}
                 onPress={() =>
                   navigation.navigate('GstNoticeDetail', { noticeId: notice.id })
                 }
                 onMarkRead={
-                  notice.status === 'Open'
+                  !isNoticeSettled(notice.status)
                     ? () => respondMutation.mutate({ id: notice.id, userId: '' })
                     : undefined
                 }
-                archiveGated={notice.status === 'Open' || notice.status === 'Overdue'}
+                archiveGated={!isNoticeSettled(notice.status)}
                 testID={`notice-row-${notice.id}`}
               />
             ))

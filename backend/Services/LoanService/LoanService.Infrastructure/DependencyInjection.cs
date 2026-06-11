@@ -4,9 +4,9 @@ using LoanService.Application;
 using LoanService.Application.Common.Interfaces;
 using LoanService.Application.Services;
 using LoanService.Infrastructure.BankAdapters;
+using LoanService.Infrastructure.Services;
 using LoanService.Infrastructure.Messaging;
 using LoanService.Infrastructure.Persistence;
-using LoanService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -129,6 +129,24 @@ public static class DependencyInjection
                     "GAP-041: ILoanPdfGenerator is not configured for non-Development environments. " +
                     "Wire the real QuestPDF generator via ReportService before deploying. " +
                     "Set ASPNETCORE_ENVIRONMENT=Development to use the stub locally."));
+        }
+
+        // GAP-110: Fraud check config — config-driven thresholds, never hardcoded.
+        services.AddSingleton<IFraudCheckConfig, LoanFraudCheckConfig>();
+
+        // GAP-110: Penny-drop verifier — mock in Development (TL-gated for real provider).
+        if (isDevelopment)
+        {
+            services.AddScoped<IPennyDropVerifier, MockPennyDropVerifier>();
+        }
+        else
+        {
+            // Non-Development: fail-fast until the real penny-drop provider is wired.
+            // Contact orchestrator for the bank API credentials (GAP-110 TL-gate).
+            services.AddScoped<IPennyDropVerifier>(_ =>
+                throw new InvalidOperationException(
+                    "GAP-110: IPennyDropVerifier is not configured for non-Development environments. " +
+                    "Wire the real penny-drop bank adapter and set ASPNETCORE_ENVIRONMENT=Development to use the mock."));
         }
 
         // SEC-007: Cross-service events via Pub/Sub (ILoanEventPublisher — avoids collision with Shared.Infrastructure.IPubSubPublisher)

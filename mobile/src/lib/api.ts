@@ -68,6 +68,8 @@ const SERVICE_PORTS: Record<string, number> = {
   '/loans': 5105,
   '/itr': 5106,
   '/chat': 5107,
+  // Wave 7A: CA appointments + message bookmarks live in ChatService under /appointments
+  '/appointments': 5107,
   '/notifications': 5108,
   '/reports': 5109,
   '/subscription': 5110,

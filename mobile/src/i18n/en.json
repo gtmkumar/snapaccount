@@ -291,6 +291,19 @@
         "title": "Export for CA / Auditor",
         "tally": "Tally XML Export",
         "csv": "Standard CSV Export"
+      },
+      "comparative": {
+        "title": "Comparative Analysis",
+        "subtitle": "YoY & MoM trends",
+        "mom": "Month on month",
+        "yoy": "Year on year",
+        "revenue": "Revenue",
+        "expenses": "Expenses",
+        "profit": "Net profit",
+        "error": "Couldn't load the comparative report.",
+        "emptyTitle": "Not enough data yet",
+        "emptyBody": "Upload documents and record transactions to see trends.",
+        "groupA11y": "{{period}}: revenue {{revenue}}, expenses {{expenses}}, net profit {{profit}}"
       }
     },
     "common": {
@@ -306,7 +319,9 @@
         "body": "This screen hit an unexpected error. Try again, or go back to the previous screen."
       },
       "comingSoon": "Coming soon",
-      "goBack": "Go back"
+      "goBack": "Go back",
+      "done": "Done",
+      "continue": "Continue"
     },
     "gst": {
       "notices": {
@@ -319,7 +334,8 @@
         "archiveGated": "Respond to notice before archiving.",
         "filter": {
           "all": "All",
-          "open": "Open",
+          "received": "Received",
+          "underReview": "Under review",
           "overdue": "Overdue",
           "responded": "Responded",
           "closed": "Closed"
@@ -339,7 +355,11 @@
         "successTitle": "Response Submitted",
         "successBody": "Your response has been recorded.",
         "errorTitle": "Submission Failed",
-        "errorBody": "Could not submit your response. Please try again."
+        "errorBody": "Could not submit your response. Please try again.",
+        "statutoryDeadline": "Response deadline",
+        "respondedOn": "Responded on {{date}}",
+        "actionInAdmin": "Reply to this notice in the web admin or message your CA.",
+        "messageCa": "Message your CA"
       },
       "nilReturn": {
         "title": "File Nil Return",
@@ -561,6 +581,39 @@
         "successBody": "Our team will file your return within 24 hours of the deadline.",
         "errorBody": "Could not submit approval. Please try again.",
         "biometricPrompt": "Verify to approve GST return"
+      },
+      "formType": {
+        "asmt10": {
+          "meaning": "Scrutiny of returns — discrepancy notice"
+        },
+        "drc01": {
+          "meaning": "Show-cause notice (demand)"
+        },
+        "drc01a": {
+          "meaning": "Pre-SCN intimation of liability"
+        },
+        "drc01b": {
+          "meaning": "Liability mismatch (GSTR-1 vs 3B)"
+        },
+        "drc01c": {
+          "meaning": "ITC mismatch (GSTR-2B vs 3B)"
+        },
+        "adt01": {
+          "meaning": "Audit notice (departmental audit)"
+        }
+      },
+      "gstat": {
+        "stepShort": "Stage {{current}}/{{total}}",
+        "stageA11y": "Appeal stage {{current}} of {{total}}: {{label}}",
+        "ladderTitle": "Appeal progress",
+        "backlogFlag": "GSTAT backlog appeal — file by 30/06/2026",
+        "stage": {
+          "appealFiled": "Appeal filed",
+          "replyFiled": "Reply filed",
+          "orderReceived": "Order received",
+          "gstatPending": "GSTAT pending",
+          "resolved": "Resolved"
+        }
       }
     },
     "itr": {
@@ -1190,6 +1243,37 @@
           "tapRetry": "Failed · tap to retry"
         },
         "newMessages": "{{count}} new messages"
+      },
+      "bookmark": {
+        "add": "Bookmark",
+        "remove": "Remove bookmark",
+        "added": "Bookmarked"
+      },
+      "bookmarks": {
+        "title": "Bookmarks",
+        "empty": {
+          "title": "No bookmarks yet",
+          "guidance": "Long-press any message to save it here."
+        },
+        "error": "Couldn't load your bookmarks.",
+        "jumped": "Jumped to bookmarked message",
+        "rowA11y": "Bookmarked message from {{sender}}: {{snippet}}",
+        "rowHint": "Opens the conversation at this message",
+        "sender": {
+          "you": "You",
+          "member": "Team member",
+          "ca": "CA",
+          "admin": "SnapAccount team",
+          "system": "System",
+          "ai": "AI assistant"
+        }
+      },
+      "export": {
+        "action": "Export chat as PDF",
+        "hint": "The PDF is a copy of this conversation for your records.",
+        "preparing": "Preparing your PDF…",
+        "ready": "Your PDF is ready",
+        "failed": "Couldn't generate the PDF"
       }
     },
     "celebration": {
@@ -2044,6 +2128,166 @@
       "error": {
         "loadFailed": "Couldn't load notifications. Check your connection and try again."
       }
+    },
+    "ca": {
+      "book": {
+        "cta": "Book a video consultation",
+        "subtitle": "Talk face-to-face with your CA over Google Meet"
+      },
+      "select": {
+        "title": "Choose your CA",
+        "error": "Couldn't load your CAs.",
+        "emptyTitle": "No CA available yet",
+        "emptyBody": "Your CA will appear here once assigned. Need help? Message support.",
+        "caA11y": "Book a consultation with {{caName}}"
+      },
+      "slot": {
+        "title": "Pick a slot",
+        "rescheduleTitle": "Pick a new slot",
+        "allTimesIst": "All times shown in IST",
+        "empty": "No slots available on this day — try another date",
+        "error": "Couldn't load available slots.",
+        "partOfDay": {
+          "morning": "Morning",
+          "afternoon": "Afternoon",
+          "evening": "Evening"
+        },
+        "dayFullA11y": "{{date}}, fully booked",
+        "slotA11y": "Slot at {{time}}",
+        "bookedA11y": "{{time}}, unavailable",
+        "confirmReschedule": "Confirm new slot"
+      },
+      "confirm": {
+        "title": "Confirm your consultation",
+        "ca": "CA",
+        "date": "Date",
+        "time": "Time",
+        "duration": "Duration",
+        "durationValue": "{{minutes}} min",
+        "channel": "Channel",
+        "channelValue": "Google Meet",
+        "topicLabel": "Consultation topic",
+        "topic": {
+          "accounting": "Accounting",
+          "gst": "GST",
+          "itr": "ITR",
+          "loan": "Loan",
+          "other": "Other"
+        },
+        "topicShort": "Topic",
+        "notesLabel": "What would you like to discuss?",
+        "notesPlaceholder": "Share anything that helps your CA prepare (optional)",
+        "submit": "Confirm booking",
+        "error": "Couldn't complete the booking. Please try again."
+      },
+      "confirmed": {
+        "title": "You're booked",
+        "subtitle": "{{date}} at {{time}}",
+        "reminderNote": "We'll remind you 30 minutes and 5 minutes before.",
+        "viewAppointment": "View appointment"
+      },
+      "appts": {
+        "title": "My appointments",
+        "moreDesc": "Your CA video consultations",
+        "tab": {
+          "upcoming": "Upcoming",
+          "past": "Past"
+        },
+        "empty": {
+          "upcoming": "No upcoming consultations",
+          "upcomingBody": "Book a video consultation with your CA.",
+          "past": "No past consultations yet"
+        },
+        "error": "Couldn't load your consultations.",
+        "cardA11y": "{{caName}}, {{date}}, {{status}}",
+        "callbackEscape": "Request a callback"
+      },
+      "appt": {
+        "join": "Join call",
+        "joinA11y": "Join video call with {{caName}}",
+        "manage": "Manage",
+        "cutoffOpen": "You can reschedule or cancel until {{time}} (2 hours before).",
+        "cutoffClosed": "Rescheduling and cancellation are closed — it's within 2 hours of your appointment.",
+        "cutoffClosedHelp": "Need help? Message your CA in chat.",
+        "reschedule": "Reschedule",
+        "cancel": "Cancel",
+        "cancelConfirm": "Cancel this consultation?",
+        "cancelConsequence": "Your CA will be notified and the slot will be released.",
+        "cancelConfirmCta": "Yes, cancel it",
+        "keep": "Keep appointment",
+        "messageCa": "Message CA"
+      },
+      "rating": {
+        "title": "How was your consultation with {{caName}}?",
+        "commentLabel": "Add a comment (optional)",
+        "submit": "Submit",
+        "later": "Maybe later",
+        "cta": "Rate",
+        "starsA11y": "Rating",
+        "valueA11y": "{{value}} of {{max}} stars"
+      },
+      "detail": {
+        "title": "Appointment",
+        "status": "Status",
+        "reminderNote": "Reminders: 30 min and 5 min before, via push."
+      },
+      "status": {
+        "requested": "Requested",
+        "confirmed": "Confirmed",
+        "inProgress": "In progress",
+        "completed": "Completed",
+        "cancelled": "Cancelled",
+        "noShow": "No show"
+      }
+    },
+    "device": {
+      "meta": {
+        "model": "Device",
+        "location": "Approximate location",
+        "time": "Time",
+        "unknown": "Unknown"
+      },
+      "countdown": {
+        "expiresIn": "Expires in {{time}}",
+        "expired": "Request expired",
+        "milestone": "{{time}} remaining"
+      },
+      "waiting": {
+        "title": "Approve this device",
+        "body": "We sent a request to your other device. Open SnapAccount there to approve this login.",
+        "thisDevice": "This device",
+        "resend": "Resend request",
+        "otherWay": "Can't access your other device? Contact support"
+      },
+      "approval": {
+        "title": "New sign-in attempt",
+        "body": "Someone is trying to sign in to your account from a new device.",
+        "loadError": "Couldn't load the sign-in request.",
+        "denyHint": "Didn't try to sign in? Deny — your account stays protected.",
+        "approve": "Approve",
+        "deny": "Deny",
+        "approveA11y": "Approve sign-in from {{model}}",
+        "denyA11y": "Deny and block this sign-in",
+        "approved": "Device approved",
+        "denied": "Sign-in blocked",
+        "deniedBody": "We blocked the sign-in. Secure your account by reviewing your devices.",
+        "secure": "Review your devices",
+        "later": "Decide later"
+      },
+      "denied": {
+        "title": "Sign-in blocked",
+        "cause": {
+          "denied": "The request was denied on your other device.",
+          "expired": "The request expired."
+        },
+        "support": "If this was you, try again or contact support.",
+        "retry": "Try again",
+        "startAgain": "Start again",
+        "contactSupport": "Contact support"
+      },
+      "pendingCardTitle": "New device wants access",
+      "pendingCardA11y": "Review sign-in request from {{model}}",
+      "softLaunchBanner": "A new device signed in: {{model}}, {{location}}, {{time}}. Not you? Review your devices."
     }
   }
 }

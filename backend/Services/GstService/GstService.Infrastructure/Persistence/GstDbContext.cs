@@ -67,6 +67,11 @@ public class GstDbContext(DbContextOptions<GstDbContext> options)
     /// <inheritdoc />
     public DbSet<Gstr1aAmendment> Gstr1aAmendments => Set<Gstr1aAmendment>();
 
+    // ── GAP-108: Notice deadline rules (config-driven, FY-versioned, migration 084) ──
+
+    /// <inheritdoc />
+    public DbSet<GstNoticeDeadlineRule> GstNoticeDeadlineRules => Set<GstNoticeDeadlineRule>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

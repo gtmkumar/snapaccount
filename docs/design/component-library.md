@@ -1575,3 +1575,103 @@ All pairs WCAG AA ≥ 4.5:1 text / ≥ 3:1 UI; icon + text always, never color-o
 - **`DpoContactBlock`** — `Card` with labeled rows (name/email/phone/address/hours) + `Email`/`Call` actions in ≥44pt hit areas + SLA line. DPDP Rules 2025 published India-based contact (admin-configurable, never hardcoded).
 - Reuses: `FilterTabs` (mobile), `Select`, `TextInput`, `FileUpload`, `EmptyState`, `ErrorState`, `Toast`, `Dialog`-style confirm (default focus on Cancel for destructive withdraw).
 
+---
+
+## Wave 7 Additions (2026-06-11)
+> Wave 7 features (GAP-031 CA booking, GAP-037 notification templates, GAP-043 chat bookmarks/export, GAP-047 old-device approval, GAP-108 GST notice taxonomy). Full IA/flows/states/a11y/i18n in `docs/design/wave7-feature-specs.md`. Appended; do NOT replace prior entries. **No new tokens** — all new components compose existing primitives + tokens.json v2.1.0; map-only entries are semantic re-uses of existing color scales (same rule as IMS/MCA maps). Fields marked `[confirm 7A/7B]` reconcile against `docs/api/endpoints.md` when contracts land.
+
+### New components — CA appointment booking (GAP-031)
+
+#### DateStrip / DateChip (mobile)
+- Horizontal scroll of date chips for the slot picker. **Props:** `dates: { date, hasSlots }[]`, `selected`, `onSelect`.
+- **DateChip:** ≥44pt wide × 56pt tall; shows weekday + day-of-month; today = `brand.500` ring; selected = `brand.500` fill / `text.onBrand`; no-slots day = `text.disabled`, not tappable.
+- **A11y:** `accessibilityRole="button"`, `accessibilityState={{selected, disabled}}`; disabled label includes reason ("fully booked"). Availability never color-only (also drops opacity + tap).
+
+#### SlotGrid / SlotChip (mobile)
+- Time-slot grid grouped by part-of-day. **Props (SlotGrid):** `slots: { id, startIso, available }[]`, `selected`, `onSelect`, `groupByPartOfDay?: true`.
+- **SlotChip:** local **IST** time label (`10:30 AM`); ≥44pt; booked/past = disabled. "All times IST" caption is meaningful text → `text.tertiary` (never `neutral[400]`).
+- **States:** loading = skeleton chip grid; per-day empty = inline "No slots"; error = `ListStates` error.
+
+#### AppointmentCard (mobile)
+- Row for MyAppointments (Upcoming/Past). **Props:** `appointment`, `onJoin?`, `onManage?`, `onRate?`.
+- Composition: `Avatar` + CA name + topic `Tag` + date/time (IST, `DD/MM/YYYY`) + Appointment `StatusBadge` + a context CTA (Join / Manage / Rate / read-only ★).
+- **A11y:** Join button "Join video call with {{caName}}"; whole card `accessibilityRole` summarizing state.
+
+#### StarRatingInput (mobile + admin)
+- 1–5 star rating input for the post-call `RatingSheet`. **Props:** `value`, `onChange`, `max?: 5`, `size?` (≥44pt each).
+- **A11y:** `accessibilityRole="adjustable"`, `accessibilityValue` announces "{{n}} of 5 stars"; swipe to adjust.
+
+#### AvailabilityRuleEditor (admin)
+- Rule-based CA availability editor. **Props:** `rules: { weekday, start, end, slotLengthMin }[]`, `blocks: DateRange[]`, `onChange`. Live resolved-slot preview column for next 7 days. Add/edit/delete rules + ad-hoc blocks.
+
+#### Appointment StatusBadge map (append to StatusBadge §2.5)
+| Status `[confirm 7A]` | Variant | Icon |
+|---|---|---|
+| REQUESTED / PENDING | warning | clock |
+| CONFIRMED / SCHEDULED | info | calendar-check |
+| IN_PROGRESS | brand | video |
+| COMPLETED | success (text `success[700]`) | check-circle |
+| CANCELLED | neutral | x-circle |
+| NO_SHOW | error | user-x |
+
+### New components — Notification template manager (GAP-037, admin)
+
+#### TemplateSourceChip
+- Indicates whether a cell is a custom override or the code default. **Props:** `source: 'custom'|'default'`. custom = `brand` tint; default = `neutral`. Drives the "falls back to code default" banner.
+
+#### TemplateBodyEditor
+- Multiline message-body editor with cursor-aware `{{variable}}` insertion + channel-aware constraints. **Props:** `value`, `onChange`, `channel: 'push'|'sms'|'email'|'inapp'`, `validVariables: string[]`, `dltTemplateId?` (SMS). Unknown variables flagged inline ("won't substitute"). SMS shows segment counter + DLT template-ID field; Push shows length caps; Email allows richer body `[confirm 7B]`.
+
+#### VariablePalette
+- Chips of variables valid for the current event; click inserts at cursor. **Props:** `variables: { token, sampleValue }[]`, `onInsert`. **A11y:** each chip `accessibilityRole="button"` label "Insert variable {{token}}".
+
+#### TemplatePreviewPane
+- Live preview with sample-data substitution + channel-accurate chrome (push bubble / SMS bubble / email frame / in-app toast) + language-accurate render (hi/bn line-height + wrapping). **Props:** `body`, `subject?`, `channel`, `language`, `sampleData`, `showDiffVsDefault?`. Diff reuses `DiffViewer` (6D) as `TemplateDiffView` (color + `+/-`). **A11y:** `aria-live="polite"` "Preview updated" (debounced).
+
+#### CharCounter
+- Inline character/segment counter (SMS DLT 160-char segments, Push caps). **Props:** `value`, `limit?`, `mode: 'chars'|'sms-segments'`.
+
+> Editor shell reuses `DualPaneEditor` (6D); list reuses `DataTable`/`Select`/`MultiSelect`/`Toggle`; `TestSendDialog` = `Modal` + `Select`.
+
+### New components — Chat bookmarks + export (GAP-043, mobile)
+
+#### BookmarkRow
+- Row in `ChatBookmarksScreen`: `Avatar` + sender + 2-line snippet + timestamp (`DD/MM/YYYY HH:mm`) + source thread. Tap → jump-to-message. Swipe/trailing icon to un-bookmark.
+
+#### ChatBubble extensions
+- Add `bookmarked?: boolean` (corner glyph `brand.500`, in accessible name) + transient `highlightPulse` state (flash `info.100` ~800ms on jump-to; respects reduce-motion → static highlight). Long-press exposes Bookmark via an **accessible custom action** (not long-press-only). Export-thread action lives in the thread overflow menu → confirm sheet → async progress (`Toast`/inline `Spinner`) → OS share sheet (`expo-sharing`). No new export component.
+
+### New components — Old-device approval (GAP-047, mobile)
+
+#### DeviceMetaCard
+- Card showing the NEW device's metadata on the OLD device's approval screen. **Props:** `model`, `os`, `cityApprox`, `time` `[confirm 7A]`. Location labeled **"Approximate location"** (don't imply precise tracking). Used on `DeviceApprovalScreen` (old) + echoed on `DeviceWaitingScreen` (new).
+- Reuses `CountdownCard` (6D) for the 10-min window (warn ≤2min); `ResultScreen` for waiting/denied; `Alert Banner` (info) for soft-launch notify-only mode. `DeviceApprovalScreen` is focus-trapped, Approve/Deny labeled with consequence, never color-only; assisted-callback escape on waiting/denied.
+
+### New components — GST notice taxonomy & deadlines (GAP-108, admin + mobile read-only)
+
+#### NoticeFormTypeBadge (map-only — no new tokens)
+> Statutory form code + plain-language tooltip. Distinct from the Phase 6B Notice `StatusBadge` (lifecycle). Semantic re-uses of existing scales.
+
+| Form code (verbatim) | Meaning (tooltip) | Variant | Icon |
+|---|---|---|---|
+| ASMT-10 | Scrutiny of returns | warning | file-search |
+| DRC-01 | Show-cause / demand | error | alert-octagon |
+| DRC-01A | Pre-SCN intimation | warning | alert-triangle |
+| DRC-01B | GSTR-1 vs 3B mismatch | accent (brand) | git-compare |
+| DRC-01C | GSTR-2B vs 3B / ITC mismatch | accent (brand) | git-compare |
+| ADT-01 | Departmental audit | info | clipboard-check |
+
+- Label = form code verbatim (never relabel). Accessible name = code **+** meaning ("D R C 0 1 B, ITC mismatch notice"). DRC-01B/01C `accent` signals an available pre-filing simulate action.
+
+#### GstatStageChip + GstatStageTracker
+- Compact appeal-stage chip for the list ("Stage 3 of 6: Appellate order"); full ladder in detail reuses `StatusTimeline`/`Stepper` (6D/6E). Stages `[confirm 7B]`: ORIGINAL_ORDER → APPEAL_FILED → APPELLATE_ORDER → GSTAT_FILED → GSTAT_HEARING → GSTAT_ORDER → CLOSED. Backlog-appeal eligibility → prominent `Alert Banner` (error/warning) "file by 30/06/2026".
+
+#### SimulatorEntryBanner
+- Entry-point banner (info/accent) on the reconciliation/ITC-mismatch page + DRC-01B/01C notice detail: "Avoid a DRC-01B/01C notice — check before you file." CTA "Run pre-filing check". Simulator result reuses `ItcMismatchPage` patterns `[confirm 7B]`.
+
+#### DueDateChip — statutory-deadline reuse (no new component)
+- Reuse `DueDateChip` (6B) for notice statutory response deadlines. Thresholds: ≤3d error, 4–7d warning, >7d neutral/info, overdue = error-filled, responded/closed = static "Responded on {{date}}". Source field `[confirm 7B]`; graceful-degrade to "Deadline: {{date}}" (no countdown) if server doesn't compute `daysLeft`. Accessible label = urgency phrase, not a bare number.
+
+> Mobile read-only parity: `NoticeRowMobile` (6B) + `GstNoticeDetailScreen` gain the form-type badge, deadline chip, GSTAT stage; **no reply/simulate on mobile** this wave (route to "open in admin / message your CA", no Coming-Soon stub).
+
+

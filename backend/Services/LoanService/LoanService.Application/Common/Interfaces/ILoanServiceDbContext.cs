@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LoanService.Application.Common.Interfaces;
 
+
 /// <summary>
 /// Application-layer abstraction over the loan schema database context.
 /// Query handlers use this for direct LINQ projections (Jason Taylor pattern).
@@ -26,6 +27,9 @@ public interface ILoanServiceDbContext
 
     /// <summary>GAP-021: RBI Key Facts Statements (immutable, HMAC-signed).</summary>
     DbSet<KeyFactsStatement> KeyFactsStatements { get; }
+
+    /// <summary>GAP-110: Fraud check decision log (migration 082). Append-only rows.</summary>
+    DbSet<FraudCheck> FraudChecks { get; }
 
     /// <summary>Persists changes to the loan schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);

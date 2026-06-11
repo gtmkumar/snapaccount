@@ -1,4 +1,5 @@
 using FluentAssertions;
+using GstService.Application.Interfaces;
 using GstService.Application.Notices.Commands.AssignNoticeToCa;
 using GstService.Application.Notices.Commands.RespondToNotice;
 using GstService.Application.Notices.Queries.GetNotice;
@@ -44,11 +45,18 @@ public sealed class GstNoticeIdorTests : IDisposable
 
     // ── GetNoticeQuery ────────────────────────────────────────────────────────
 
+    private static IGstServiceOptions DefaultOptions()
+    {
+        var mock = new Mock<IGstServiceOptions>();
+        mock.Setup(o => o.GstatBacklogAppealDeadline).Returns(new DateOnly(2026, 6, 30));
+        return mock.Object;
+    }
+
     [Fact]
     public async Task GetNotice_SameOrg_ReturnsDto()
     {
         var currentUser = MockCurrentUser(_orgId);
-        var handler = new GetNoticeQueryHandler(_db, currentUser.Object);
+        var handler = new GetNoticeQueryHandler(_db, currentUser.Object, DefaultOptions());
 
         var result = await handler.Handle(new GetNoticeQuery(_noticeId), CancellationToken.None);
 
@@ -61,7 +69,7 @@ public sealed class GstNoticeIdorTests : IDisposable
     {
         // SEC-038: attacker from a different org queries a notice they don't own
         var currentUser = MockCurrentUser(_otherOrgId);
-        var handler = new GetNoticeQueryHandler(_db, currentUser.Object);
+        var handler = new GetNoticeQueryHandler(_db, currentUser.Object, DefaultOptions());
 
         var result = await handler.Handle(new GetNoticeQuery(_noticeId), CancellationToken.None);
 
@@ -73,7 +81,7 @@ public sealed class GstNoticeIdorTests : IDisposable
     public async Task GetNotice_NonExistentId_ReturnsNotFound()
     {
         var currentUser = MockCurrentUser(_orgId);
-        var handler = new GetNoticeQueryHandler(_db, currentUser.Object);
+        var handler = new GetNoticeQueryHandler(_db, currentUser.Object, DefaultOptions());
 
         var result = await handler.Handle(new GetNoticeQuery(Guid.NewGuid()), CancellationToken.None);
 

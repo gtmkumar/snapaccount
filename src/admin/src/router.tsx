@@ -62,6 +62,12 @@ import EditLogPage from '@/pages/compliance/EditLogPage'
 // GAP-036 — Subscriber list + Invoice management
 import SubscriberListPage from '@/pages/subscriptions/SubscriberListPage'
 import InvoiceManagementPage from '@/pages/subscriptions/InvoiceManagementPage'
+// Wave 7 — GAP-037 Notification Templates
+import TemplateListPage from '@/pages/notifications/TemplateListPage'
+import TemplateEditorPage from '@/pages/notifications/TemplateEditorPage'
+// Wave 7 — GAP-031 CA Appointments
+import CaAvailabilityPage from '@/pages/ca/CaAvailabilityPage'
+import CaAppointmentsPage from '@/pages/ca/CaAppointmentsPage'
 
 // Layout wrapper for protected routes
 // KeyboardShortcutsProvider uses useNavigate() so it must live inside the
@@ -496,6 +502,43 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedLayout>
         <CallbackDetailPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // Wave 7 — GAP-037 Notification Templates
+  {
+    path: '/notifications/templates',
+    element: (
+      <ProtectedLayout>
+        <TemplateListPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    // Editor: /notifications/templates/:id (UUID — reconciled to backend id:guid routing)
+    path: '/notifications/templates/:id',
+    element: (
+      <ProtectedLayout>
+        <TemplateEditorPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // Wave 7 — GAP-031 CA Consultations
+  {
+    path: '/ca/availability',
+    element: (
+      <ProtectedLayout>
+        <CaAvailabilityPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    path: '/ca/appointments',
+    element: (
+      <ProtectedLayout>
+        <CaAppointmentsPage />
       </ProtectedLayout>
     ),
   },

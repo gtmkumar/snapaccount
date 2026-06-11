@@ -24,6 +24,7 @@ import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/T
 import { useHaptics } from '../../hooks/useHaptics';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { apiClient } from '../../lib/api';
+import { isNoticeOverdue, isNoticeSettled } from '../../lib/noticeStatus';
 import type { ItrNotice, ItrNoticeStatus } from '../../api/itr';
 import type { ItrStackParamList } from '../../navigation/ItrStack';
 
@@ -35,12 +36,19 @@ interface Props {
   route: RoutePropType;
 }
 
-const FILTER_TABS: { key: ItrNoticeStatus | 'All'; labelKey: string }[] = [
+/**
+ * Canonical server statuses + client-side views ("All", derived "Overdue") —
+ * same vocabulary as GstNoticeInboxScreen (Wave 7 residual #7).
+ */
+type NoticeFilter = ItrNoticeStatus | 'All' | 'Overdue';
+
+const FILTER_TABS: { key: NoticeFilter; labelKey: string }[] = [
   { key: 'All', labelKey: 'mobile.gst.notices.filter.all' },
-  { key: 'Open', labelKey: 'mobile.gst.notices.filter.open' },
+  { key: 'RECEIVED', labelKey: 'mobile.gst.notices.filter.received' },
+  { key: 'UNDER_REVIEW', labelKey: 'mobile.gst.notices.filter.underReview' },
   { key: 'Overdue', labelKey: 'mobile.gst.notices.filter.overdue' },
-  { key: 'Responded', labelKey: 'mobile.gst.notices.filter.responded' },
-  { key: 'Closed', labelKey: 'mobile.gst.notices.filter.closed' },
+  { key: 'RESPONDED', labelKey: 'mobile.gst.notices.filter.responded' },
+  { key: 'CLOSED', labelKey: 'mobile.gst.notices.filter.closed' },
 ];
 
 export function ItrNoticeInboxScreen({ navigation, route }: Props) {
@@ -50,22 +58,30 @@ export function ItrNoticeInboxScreen({ navigation, route }: Props) {
   const { t } = useTranslation();
   const haptics = useHaptics();
   const { filingId } = route.params;
-  const [activeFilter, setActiveFilter] = useState<ItrNoticeStatus | 'All'>('All');
+  const [activeFilter, setActiveFilter] = useState<NoticeFilter>('All');
 
-  const { data: notices = [], isLoading, refetch, isRefetching, error } = useQuery<ItrNotice[]>({
+  // "Overdue" is client-side derived — fetch unfiltered, narrow locally.
+  // Only canonical statuses are ever serialized as the status query param.
+  const serverStatus: ItrNoticeStatus | undefined =
+    activeFilter === 'All' || activeFilter === 'Overdue' ? undefined : activeFilter;
+
+  const { data: fetched = [], isLoading, refetch, isRefetching, error } = useQuery<ItrNotice[]>({
     queryKey: ['itr-notices', filingId, activeFilter],
     queryFn: async () => {
       const res = await apiClient.get<{ items: ItrNotice[] }>(`/itr/filings/${filingId}/notices`, {
-        params: { status: activeFilter === 'All' ? undefined : activeFilter },
+        params: { status: serverStatus },
       });
       return res.data.items;
     },
     placeholderData: [],
   });
 
-  const openCount = notices.filter(
-    (n) => n.status === 'Open' || n.status === 'Overdue',
-  ).length;
+  const notices =
+    activeFilter === 'Overdue'
+      ? fetched.filter((n) => isNoticeOverdue(n.status, n.dueDate))
+      : fetched;
+
+  const openCount = fetched.filter((n) => !isNoticeSettled(n.status)).length;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -98,7 +114,7 @@ export function ItrNoticeInboxScreen({ navigation, route }: Props) {
             <Pressable
               key={tab.key}
               style={[styles.tab, isActive && styles.tabActive]}
-              onPress={() => setActiveFilter(tab.key as ItrNoticeStatus | 'All')}
+              onPress={() => setActiveFilter(tab.key)}
               accessibilityRole="tab"
               accessibilityState={{ selected: isActive }}
             >
@@ -161,7 +177,7 @@ export function ItrNoticeInboxScreen({ navigation, route }: Props) {
                 onPress={() =>
                   navigation.navigate('ItrNoticeDetail', { noticeId: notice.id, filingId })
                 }
-                archiveGated={notice.status === 'Open' || notice.status === 'Overdue'}
+                archiveGated={!isNoticeSettled(notice.status)}
                 testID={`itr-notice-${notice.id}`}
               />
             ))

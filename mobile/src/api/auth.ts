@@ -73,6 +73,166 @@ export async function revokeDevice(id: string): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Wave 7A — GAP-047 device approval
+// RECONCILED 2026-06-12 against docs/api/endpoints.md "Wave 7B → GAP-047" and
+// AuthService.Application/Devices/* :
+//  - GET  /auth/devices/pending-approvals → { pending: DeviceApprovalDto[] }
+//  - POST /auth/devices/{approvalId}/approve { reviewingDeviceEntityId }
+//  - POST /auth/devices/{approvalId}/deny    { reviewingDeviceEntityId }
+//  - GET  /auth/devices/my-approval-status   (NEW-device waiting-screen poll)
+//      → { approvalRequestId, status, decidedAt, expiresAt, mode }
+//  - Trigger is POST /auth/devices (AddDevice) when the user already has ≥1
+//    device; soft-launch is the server-side DeviceApproval:Enforce flag,
+//    surfaced per-poll as `mode` (ENFORCE | NOTIFY_ONLY).
+// RESIDUALS CLOSED (Wave 7 mobile reconciliation): the NEW device polls
+// my-approval-status for a real PENDING/APPROVED/DENIED/EXPIRED verdict — the
+// old "pending-list disappearance + still-valid session = approval" heuristic
+// is gone.
+// Still deferred (product-gated, TL decision pending): approximate-location on
+// approval requests; resend-push action.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type DeviceApprovalStatus = 'PENDING' | 'APPROVED' | 'DENIED' | 'EXPIRED';
+
+/**
+ * Soft-launch mode (server `DeviceApproval:Enforce` config, surfaced by
+ * GET /auth/devices/my-approval-status). ENFORCE — denial revokes the new
+ * session; NOTIFY_ONLY — no gate, old devices get an info banner only
+ * (spec §4.2: both code paths ship together).
+ */
+export type DeviceApprovalMode = 'ENFORCE' | 'NOTIFY_ONLY';
+
+/** UI shape mapped from the server DeviceApprovalDto. */
+export interface DeviceApprovalRequest {
+  requestId: string;
+  status: DeviceApprovalStatus;
+  /** See DeviceApprovalMode — pending-approvals DTO does not carry it; use getMyApprovalStatus(). */
+  mode?: DeviceApprovalMode;
+  /** Id of the NEW device entity (must differ from the reviewing device). */
+  newDeviceId: string;
+  /** NEW-device metadata shown to the OLD device. */
+  deviceModel?: string | null;
+  deviceOs?: string | null;
+  /** Deferred (product-gated, TL decision pending) — always null for now. */
+  cityApprox?: string | null;
+  /** Sign-in attempt time, UTC ISO. */
+  requestedAt: string;
+  /** 10-minute window end, UTC ISO. */
+  expiresAt: string;
+}
+
+interface DeviceApprovalDto {
+  approvalRequestId: string;
+  newDeviceId: string;
+  newDeviceIdentifier: string;
+  newDeviceName?: string | null;
+  newDevicePlatform: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+function mapApproval(dto: DeviceApprovalDto): DeviceApprovalRequest {
+  return {
+    requestId: dto.approvalRequestId,
+    status: 'PENDING', // endpoint returns only active pending requests
+    newDeviceId: dto.newDeviceId,
+    deviceModel: dto.newDeviceName ?? dto.newDeviceIdentifier,
+    deviceOs: dto.newDevicePlatform,
+    cityApprox: null,
+    requestedAt: dto.createdAt,
+    expiresAt: dto.expiresAt,
+  };
+}
+
+/** GET /auth/devices/pending-approvals — active requests for this user. */
+export async function listPendingDeviceApprovals(): Promise<DeviceApprovalRequest[]> {
+  const res = await apiClient.get<{ pending: DeviceApprovalDto[] }>(
+    '/auth/devices/pending-approvals',
+  );
+  return (res.data.pending ?? []).map(mapApproval);
+}
+
+/**
+ * Single-request lookup over the pending list — used by the OLD (reviewing)
+ * device's approval screen to show the new-device metadata, and by the NEW
+ * device's waiting screen for the metadata echo only. Returns the request
+ * while PENDING; null once resolved/expired. The NEW device's verdict comes
+ * from getMyApprovalStatus(), never from this list disappearing.
+ */
+export async function getDeviceApprovalRequest(
+  id: string,
+): Promise<DeviceApprovalRequest | null> {
+  const pending = await listPendingDeviceApprovals();
+  return pending.find((r) => r.requestId === id) ?? null;
+}
+
+/** Verdict of GET /auth/devices/my-approval-status. */
+export type MyApprovalStatus = DeviceApprovalStatus | 'UNKNOWN';
+
+/** Response of GET /auth/devices/my-approval-status (NEW-device poll). */
+export interface MyApprovalStatusResponse {
+  /** Approval request id; null when no request was found (status UNKNOWN). */
+  approvalRequestId: string | null;
+  /** PENDING | APPROVED | DENIED | EXPIRED | UNKNOWN (EXPIRED-by-clock computed server-side). */
+  status: MyApprovalStatus;
+  /** UTC ISO when approved/denied/expired; null while pending. */
+  decidedAt: string | null;
+  /** UTC ISO end of the 10-minute approval window; null if unknown. */
+  expiresAt: string | null;
+  /** Soft-launch mode from DeviceApproval:Enforce config. */
+  mode: DeviceApprovalMode;
+}
+
+/**
+ * GET /auth/devices/my-approval-status — the NEW device's waiting screen polls
+ * this (authenticated as its own held session) for a real approval verdict.
+ * Replaces the pending-list disappearance heuristic.
+ */
+export async function getMyApprovalStatus(): Promise<MyApprovalStatusResponse> {
+  const res = await apiClient.get<MyApprovalStatusResponse>(
+    '/auth/devices/my-approval-status',
+  );
+  return res.data;
+}
+
+/**
+ * POST /auth/devices/{approvalId}/approve — the reviewing (old) device entity
+ * id must belong to the caller and differ from the new device. 409 when
+ * expired or already resolved.
+ */
+export async function approveDeviceRequest(
+  id: string,
+  reviewingDeviceEntityId: string,
+): Promise<void> {
+  await apiClient.post(`/auth/devices/${id}/approve`, { reviewingDeviceEntityId });
+}
+
+/** POST /auth/devices/{approvalId}/deny — revokes the new session in enforce mode. */
+export async function denyDeviceRequest(
+  id: string,
+  reviewingDeviceEntityId: string,
+): Promise<void> {
+  await apiClient.post(`/auth/devices/${id}/deny`, { reviewingDeviceEntityId });
+}
+
+/**
+ * Resolve the device entity id (auth.user_device PK) for THIS device so it
+ * can act as the reviewing device. Best-effort match on the hardware model id
+ * the app registers via POST /auth/devices; excludes the request's new device.
+ */
+export async function findReviewingDeviceEntityId(
+  thisDeviceModelId: string,
+  excludeDeviceEntityId?: string,
+): Promise<string | null> {
+  const devices = await getDevices();
+  const candidates = devices.filter(
+    (d) => d.isActive && d.id !== excludeDeviceEntityId,
+  );
+  const exact = candidates.find((d) => d.deviceId === thisDeviceModelId);
+  return (exact ?? candidates[0])?.id ?? null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // KYC
 // ─────────────────────────────────────────────────────────────────────────────
 

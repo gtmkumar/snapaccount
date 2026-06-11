@@ -21,6 +21,7 @@ import {
   updatePreferences,
   getDevices,
   revokeDevice,
+  getMyApprovalStatus,
   verifyPan,
   sendAadhaarOtp,
   verifyAadhaarOtp,
@@ -72,6 +73,20 @@ describe('devices', () => {
     mockDelete.mockResolvedValue({ data: undefined });
     await revokeDevice('dev-123');
     expect(mockDelete).toHaveBeenCalledWith('/auth/devices/dev-123');
+  });
+
+  // Wave 7 recon: NEW-device waiting screen polls a real verdict endpoint.
+  it('GET /auth/devices/my-approval-status returns the verdict body as-is', async () => {
+    const body = {
+      approvalRequestId: 'req-1',
+      status: 'PENDING',
+      decidedAt: null,
+      expiresAt: '2026-06-12T05:10:00Z',
+      mode: 'ENFORCE',
+    };
+    mockGet.mockResolvedValue({ data: body });
+    await expect(getMyApprovalStatus()).resolves.toEqual(body);
+    expect(mockGet).toHaveBeenCalledWith('/auth/devices/my-approval-status');
   });
 });
 

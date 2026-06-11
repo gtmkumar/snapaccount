@@ -107,6 +107,9 @@ public class AuthDbContext(DbContextOptions<AuthDbContext> options)
     /// <inheritdoc />
     public DbSet<PlatformConfig> PlatformConfigs => Set<PlatformConfig>();
 
+    /// <summary>GAP-047: Device approval requests (migration 083).</summary>
+    public DbSet<DeviceApprovalRequest> DeviceApprovalRequests => Set<DeviceApprovalRequest>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

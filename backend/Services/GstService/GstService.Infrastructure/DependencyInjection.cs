@@ -70,6 +70,11 @@ public static class DependencyInjection
         services.AddScoped<IItcMismatchReadRepository, ItcMismatchReadRepository>();
         services.AddScoped<IGstCalculationService, GstCalculationService>();
 
+        // GAP-108: Config-driven statutory deadline service for GST notices
+        services.AddScoped<IGstNoticeDeadlineService, GstNoticeDeadlineService>();
+        // GAP-108: Config options abstraction (keeps IConfiguration out of Application layer)
+        services.AddSingleton<IGstServiceOptions, GstServiceOptions>();
+
         // Phase 6B: GSTN/IRP/EWB adapter selection — config-driven, never hardcoded
         var productionApisEnabled = string.Equals(
             configuration["GST_PRODUCTION_APIS_ENABLED"], "true",

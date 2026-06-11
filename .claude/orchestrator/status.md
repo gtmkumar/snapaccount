@@ -1,6 +1,22 @@
 # SnapAccount — Orchestrator Status
 
-## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 6 COMPLETE — 2026-06-11)
+## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 7 BUILD COMPLETE — 2026-06-12, live QA pending)
+
+### Phase 7 Wave 7 — Feature wave: CA consultations, templates, notice engine, fraud/auth hardening (2026-06-12, BUILD COMPLETE — unit/component gates green, live QA pending)
+
+Closes GAP-031/032/037/043/044/047/051/108/110 + board #42/#44/#45/#46 + full client-contract reconciliation. Session was interrupted (window closed) mid-wave 2026-06-12; reconstructed from agent memories + git state, then completed.
+
+- **Backend 7A** (GAP-031/032/037/043, migrations 080/081): ChatService CA appointments (CaProfile/AppointmentSlot/Appointment, 7 endpoints, IMeetingLinkProvider mock-first, 2h cancel/reschedule domain rule, rating aggregate) + MessageBookmark; ReportService TallyExportGenerator (feature-flagged, XML+CSV) + ChatThreadPdfGenerator; NotificationService template CRUD (6 endpoints, test-send to caller only, effective_from backfill lesson).
+- **Backend 7A addendum** (CA residuals, migration 085): GET /appointments/ca-profiles, POST /{id}/cancel-by-ca (mandatory reason, no 2h rule), availability-rules CRUD + generate; CaAvailabilityRule aggregate + ISlotGenerationService (Hangfire weekly job bypasses MediatR/PermissionBehavior).
+- **Backend 7B** (GAP-044/047/051/110 + #42, migrations 082/083): loan.fraud_checks (6 check types, FLAG soft/FAIL 422, config-driven thresholds, MockPennyDrop dev-only); AccountingService GET /accounting/reports/comparative (Indian FY, chart-ready, top-10 movers); AuthService admin cookie auth (sa_admin_rt HttpOnly SameSite=Strict + X-Requested-With CSRF, 1h access/7d refresh, mobile path untouched); device approval (10-min expiry, DeviceApproval:Enforce soft-launch flag, Pub/Sub event).
+- **Backend 7C** (GAP-108, migration 084): GST notice engine — form-type taxonomy (ASMT-10/DRC-01/01A/01B/01C/ADT-01), DB-driven FY-versioned statutory deadline rules (21 seeded + "ALL" sentinel), DRC-01B/01C simulator (dataAvailable=false when source absent), forward-only GSTAT appeal-stage machine w/ 30-Jun-2026 backlog flag.
+- **Backend mobile-reconciliation** (migration 086): GET /appointments/{id} (IDOR-guarded), first-class appointment topic, slots/day-map, enriched BookmarkDto, GET /auth/devices/my-approval-status (ENFORCE/NOTIFY_ONLY), GST legacy-status shim.
+- **UI/UX (#45)**: docs/design/wave7-feature-specs.md (5 sections, no new tokens, [confirm 7A/7B] markers all reconciled).
+- **Admin frontend (#46 + residual reconciliation)**: Template Manager (26-event catalog, DLT/segment counter), CA availability (rule-based editor + GenerateSlotsPanel; weekday=DayOfWeek int, TimeSpan↔"HH:mm" client conversion) + appointments page w/ cancel-by-ca reason dialog, GST notice taxonomy components, Tally export, GAP-051 in-memory token + silent refresh + CSRF header. i18n 2140 keys en/hi/bn parity.
+- **Mobile (build + residual reconciliation)**: CA booking flow (SlotPicker w/ server day-map, topic first-class — notes-prefix workaround removed), bookmarks (enriched DTO, role-based sender fallback), device approval (real my-approval-status polling, NOTIFY_ONLY no-gate branch), GST/ITR notice parity (canonical statuses only), comparative report screen. Deferred per TL gate: approximate-location, resend-push.
+- **Verification (orchestrator, independent)**: backend 1,452 unit tests green across the 7 changed services (Chat 157, Auth 752, Gst 198, Loan 166, Accounting 60, Notification 91, Report 28); admin vitest 1078/1078, lint 0/0, build pass; mobile jest 715/715 (76 suites), lint clean, type-check 0 new.
+- **Migrations 080–086** all applied + scratch-replayed (idempotent).
+- **Open**: Wave 7 live QA pass (web + Android + iOS) not yet run; TL queue unchanged (#24); deferred GAP-064 + decision-gated 105/109 (GAP-104), 039 (GAP-073); Wave 6 OTP-lockout-pending live re-checks still queued.
 
 ### Phase 7 Wave 6 — Medium/Low gap tail (2026-06-11, COMPLETE & live-verified)
 

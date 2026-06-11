@@ -79,6 +79,31 @@ public class NotificationTemplate : BaseAuditableEntity
             EffectiveFrom = DateOnly.FromDateTime(DateTime.UtcNow)
         };
 
+    /// <summary>
+    /// Retires this template (sets IsCurrent=false) when a newer version is created
+    /// for the same (event_code, channel, locale) combination.
+    /// </summary>
+    public void Retire()
+    {
+        IsCurrent = false;
+        EffectiveTo = DateOnly.FromDateTime(DateTime.UtcNow);
+    }
+
+    /// <summary>Activates or deactivates this template.</summary>
+    public void SetActive(bool active) => IsCurrent = active;
+
+    /// <summary>
+    /// Updates the template body and metadata.
+    /// Caller is responsible for retiring the previous template first if versioning.
+    /// </summary>
+    public void Update(string body, string? subject, string? dltTemplateId, string? senderName)
+    {
+        Body = body;
+        Subject = subject;
+        DltTemplateId = dltTemplateId;
+        SenderName = senderName;
+    }
+
     /// <summary>Renders the template body by replacing {{key}} tokens with values.</summary>
     public string Render(IReadOnlyDictionary<string, string> variables)
     {
@@ -86,5 +111,21 @@ public class NotificationTemplate : BaseAuditableEntity
         foreach (var (key, value) in variables)
             rendered = rendered.Replace($"{{{{{key}}}}}", value, StringComparison.OrdinalIgnoreCase);
         return rendered;
+    }
+
+    /// <summary>
+    /// Renders the template and returns warnings for any {{placeholder}} tokens
+    /// that are present in the template but missing from the variables dictionary.
+    /// </summary>
+    public (string RenderedBody, IReadOnlyList<string> MissingVariables) RenderWithWarnings(
+        IReadOnlyDictionary<string, string> variables)
+    {
+        var matches = System.Text.RegularExpressions.Regex.Matches(Body, @"\{\{(\w+)\}\}");
+        var missing = matches
+            .Select(m => m.Groups[1].Value)
+            .Where(key => !variables.ContainsKey(key))
+            .ToList();
+
+        return (Render(variables), missing);
     }
 }

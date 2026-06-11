@@ -118,6 +118,9 @@ public interface IAuthDbContext
     /// <summary>SEC-056 — generic key-value platform config (language, WhatsApp) in <c>auth.platform_config</c>.</summary>
     DbSet<PlatformConfig> PlatformConfigs { get; }
 
+    /// <summary>GAP-047: Pending device approval requests in <c>auth.device_approval_requests</c> (migration 083).</summary>
+    DbSet<DeviceApprovalRequest> DeviceApprovalRequests { get; }
+
     /// <summary>Persists changes to the auth schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

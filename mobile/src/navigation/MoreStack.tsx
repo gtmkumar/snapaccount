@@ -3,6 +3,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MoreScreen } from '../screens/profile/MoreScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { DevicesScreen } from '../screens/profile/DevicesScreen';
+// Wave 7A (GAP-047): old-device approval (push deep-link target)
+import { DeviceApprovalScreen } from '../screens/profile/DeviceApprovalScreen';
 import { IdentityDocumentsScreen } from '../screens/profile/IdentityDocumentsScreen';
 import { NotificationPreferencesScreen } from '../screens/profile/NotificationPreferencesScreen';
 import { NotificationCenterScreen } from '../screens/notifications/NotificationCenterScreen';
@@ -36,6 +38,8 @@ export type MoreStackParamList = {
   Profile: undefined;
   /** Logged-in device management (GET/DELETE /auth/devices) */
   Devices: undefined;
+  /** Wave 7A (GAP-047): OLD device approves/denies a NEW device sign-in. */
+  DeviceApproval: { requestId: string };
   /** Tax/identity documents collection (GET/POST /auth/me/documents …) */
   IdentityDocuments: undefined;
   /** Notification + language preferences (GET/PATCH /auth/me/preferences) */
@@ -90,6 +94,7 @@ const SafeBillingScreen = withScreenErrorBoundary(BillingScreen);
 const SafeHelpScreen = withScreenErrorBoundary(HelpScreen);
 const SafeEditBusinessScreen = withScreenErrorBoundary(EditBusinessScreen);
 const SafeOrganizationSwitcherScreen = withScreenErrorBoundary(OrganizationSwitcherScreen);
+const SafeDeviceApprovalScreen = withScreenErrorBoundary(DeviceApprovalScreen);
 
 export function MoreStack() {
   return (
@@ -97,6 +102,12 @@ export function MoreStack() {
       <Stack.Screen name="More" component={MoreScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Devices" component={DevicesScreen} />
+      {/* GAP-047: security-critical modal — explicit Approve/Deny/Decide later */}
+      <Stack.Screen
+        name="DeviceApproval"
+        component={SafeDeviceApprovalScreen}
+        options={{ presentation: 'modal', gestureEnabled: false }}
+      />
       <Stack.Screen name="IdentityDocuments" component={IdentityDocumentsScreen} />
       <Stack.Screen name="NotificationPreferences" component={NotificationPreferencesScreen} />
       <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />

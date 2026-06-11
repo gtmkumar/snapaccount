@@ -261,4 +261,107 @@ public sealed class GstEfModelSmokeTests
         await act.Should().NotThrowAsync(
             "EF mapping for gst.gst_tax_rate must be correct (GAP-022, migration 078)");
     }
+
+    // ── GAP-108: Notice form-type + deadline + appeal (migration 084) ──────
+
+    [Fact]
+    public async Task GstNotices_NewGap108Columns_CanQuery_WithoutError()
+    {
+        using var db = CreateDbContext();
+        // Full projection of ALL columns including the 6 new GAP-108 columns.
+        // House rule: include every mapped column so EF↔DB mismatches surface.
+        var act = async () => await db.GstNotices
+            .Select(n => new
+            {
+                n.Id,
+                n.OrganizationId,
+                n.NoticeNumber,
+                n.NoticeType,
+                // GAP-108 new columns:
+                n.FormType,
+                n.StatutoryDeadline,
+                n.DeadlineOverridden,
+                n.AppealStage,
+                n.AppealDeadline,
+                n.IsGstatBacklogFlagged,
+                // existing columns:
+                n.IssuedDate,
+                n.DueDate,
+                n.Status,
+                n.Description,
+                n.AssignedCaId,
+                n.RespondedAt,
+                n.RespondedBy,
+                n.CreatedAt,
+                n.UpdatedAt,
+                n.DeletedAt,
+                n.CreatedBy,
+                n.UpdatedBy
+            })
+            .ToListAsync();
+        await act.Should().NotThrowAsync(
+            "EF mapping for gst.notices must include all GAP-108 columns (migration 084)");
+    }
+
+    [Fact]
+    public async Task GstNoticeDeadlineRules_CanQuery_WithoutError()
+    {
+        using var db = CreateDbContext();
+        // Full projection — verifies new gst.notice_deadline_rules table (migration 084).
+        var act = async () => await db.GstNoticeDeadlineRules
+            .Select(r => new
+            {
+                r.Id,
+                r.FinancialYear,
+                r.FormType,
+                r.ResponseWindowDays,
+                r.AllowsNoticeTextOverride,
+                r.LegalBasis,
+                r.IsActive,
+                r.CreatedAt,
+                r.UpdatedAt,
+                r.DeletedAt,
+                r.CreatedBy,
+                r.UpdatedBy
+            })
+            .ToListAsync();
+        await act.Should().NotThrowAsync(
+            "EF mapping for gst.notice_deadline_rules must be correct (GAP-108, migration 084)");
+    }
+
+    [Fact]
+    public async Task GstNoticeDeadlineRules_HasSeededRows_For2025_26()
+    {
+        using var db = CreateDbContext();
+        // Verify migration 084 seeded the 7 expected rows for FY 2025-26.
+        var act = async () =>
+        {
+            var rules = await db.GstNoticeDeadlineRules
+                .Where(r => r.FinancialYear == "2025-26" && r.IsActive)
+                .Select(r => new { r.FormType, r.ResponseWindowDays })
+                .ToListAsync();
+            rules.Should().HaveCountGreaterOrEqualTo(7, "7 form types seeded for FY 2025-26");
+            rules.Should().Contain(r =>
+                r.ResponseWindowDays == 7,
+                "DRC_01B/01C rules must have 7-day window");
+        };
+        await act.Should().NotThrowAsync(
+            "Seeded deadline rules for 2025-26 must be queryable (migration 084)");
+    }
+
+    [Fact]
+    public async Task GstNotices_FullEntityMaterialise_WithGap108Fields_WithoutError()
+    {
+        // Full entity load (FirstOrDefaultAsync) — replicates GetNoticeQueryHandler's exact pattern.
+        // This catches any converter issues on FormType/AppealStage enum↔string mapping.
+        using var db = CreateDbContext();
+        var act = async () =>
+        {
+            _ = await db.GstNotices
+                .IgnoreQueryFilters() // bypass soft-delete so empty table doesn't short-circuit
+                .FirstOrDefaultAsync();
+        };
+        await act.Should().NotThrowAsync(
+            "Full GstNotice entity materialisation must not throw (GAP-108 enum converter check)");
+    }
 }

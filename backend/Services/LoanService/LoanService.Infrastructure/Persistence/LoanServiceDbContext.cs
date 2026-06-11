@@ -2,6 +2,7 @@ using LoanService.Application.Common.Interfaces;
 using LoanService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Infrastructure.Persistence;
+using System.Text.Json;
 
 namespace LoanService.Infrastructure.Persistence;
 
@@ -41,6 +42,9 @@ public class LoanServiceDbContext(DbContextOptions<LoanServiceDbContext> options
 
     /// <inheritdoc />
     public DbSet<KeyFactsStatement> KeyFactsStatements => Set<KeyFactsStatement>();
+
+    /// <summary>GAP-110: Fraud check decision log (migration 082). Append-only.</summary>
+    public DbSet<FraudCheck> FraudChecks => Set<FraudCheck>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

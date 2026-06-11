@@ -1,5 +1,6 @@
 using FluentValidation;
 using GstService.Application.Common.Interfaces;
+using GstService.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Domain;
@@ -10,6 +11,7 @@ namespace GstService.Application.Notices.Queries.ListNotices;
 /// Returns paginated GST notices for an organisation.
 /// Filters by status (RECEIVED, UNDER_REVIEW, RESPONDED, CLOSED) if provided.
 /// Phase 6B: replaces the 501 stub for GET /gst/notices.
+/// GAP-108: adds FormType, AppealStage, GstatBacklogOnly filters.
 ///
 /// WEB-FIX: <see cref="OrganizationId"/> is now nullable.
 /// When absent the handler defaults to <see cref="ICurrentUser.OrganizationId"/> (the caller's own org).
@@ -21,6 +23,9 @@ namespace GstService.Application.Notices.Queries.ListNotices;
 public record ListNoticesQuery(
     Guid? OrganizationId,
     string? Status = null,
+    string? FormType = null,
+    string? AppealStage = null,
+    bool? GstatBacklogOnly = null,
     int Page = 1,
     int PageSize = 20) : IQuery<ListNoticesResponse>;
 
@@ -31,22 +36,30 @@ public record ListNoticesResponse(
     int Page,
     int PageSize);
 
-/// <summary>Notice summary DTO for list view.</summary>
+/// <summary>Notice summary DTO for list view. GAP-108: includes FormType, deadline, appeal fields.</summary>
 public record NoticeDto(
     Guid Id,
     string NoticeNumber,
     string NoticeType,
+    string FormType,
     string Status,
     DateOnly IssuedDate,
+    DateOnly? StatutoryDeadline,
     DateOnly? DueDate,
+    bool DeadlineOverridden,
     string? Description,
     Guid? AssignedCaId,
-    DateTime? RespondedAt);
+    DateTime? RespondedAt,
+    string AppealStage,
+    DateOnly? AppealDeadline,
+    bool IsGstatBacklogFlagged);
 
 /// <summary>Validator for list notices query.</summary>
 public sealed class ListNoticesQueryValidator : AbstractValidator<ListNoticesQuery>
 {
     private static readonly string[] ValidStatuses = ["RECEIVED", "UNDER_REVIEW", "RESPONDED", "CLOSED"];
+    private static readonly string[] ValidFormTypes = Enum.GetNames<GstNoticeFormType>();
+    private static readonly string[] ValidAppealStages = Enum.GetNames<GstNoticeAppealStage>();
 
     public ListNoticesQueryValidator()
     {
@@ -56,6 +69,12 @@ public sealed class ListNoticesQueryValidator : AbstractValidator<ListNoticesQue
         When(x => x.Status is not null, () =>
             RuleFor(x => x.Status).Must(s => ValidStatuses.Contains(s!))
                 .WithMessage($"Status must be one of: {string.Join(", ", ValidStatuses)}"));
+        When(x => x.FormType is not null, () =>
+            RuleFor(x => x.FormType).Must(f => ValidFormTypes.Contains(f!))
+                .WithMessage($"FormType must be one of: {string.Join(", ", ValidFormTypes)}"));
+        When(x => x.AppealStage is not null, () =>
+            RuleFor(x => x.AppealStage).Must(a => ValidAppealStages.Contains(a!))
+                .WithMessage($"AppealStage must be one of: {string.Join(", ", ValidAppealStages)}"));
     }
 }
 
@@ -81,6 +100,22 @@ public sealed class ListNoticesQueryHandler(IGstDbContext dbContext, ICurrentUse
         if (request.Status is not null)
             query = query.Where(n => n.Status == request.Status);
 
+        // GAP-108: new filters
+        if (request.FormType is not null)
+        {
+            var ft = Enum.Parse<GstNoticeFormType>(request.FormType);
+            query = query.Where(n => n.FormType == ft);
+        }
+
+        if (request.AppealStage is not null)
+        {
+            var stage = Enum.Parse<GstNoticeAppealStage>(request.AppealStage);
+            query = query.Where(n => n.AppealStage == stage);
+        }
+
+        if (request.GstatBacklogOnly == true)
+            query = query.Where(n => n.IsGstatBacklogFlagged);
+
         var totalCount = await query.CountAsync(cancellationToken);
 
         var items = await query
@@ -93,12 +128,18 @@ public sealed class ListNoticesQueryHandler(IGstDbContext dbContext, ICurrentUse
             n.Id,
             n.NoticeNumber,
             n.NoticeType,
+            n.FormType.ToString(),
             n.Status,
             n.IssuedDate,
+            n.StatutoryDeadline,
             n.DueDate,
+            n.DeadlineOverridden,
             n.Description,
             n.AssignedCaId,
-            n.RespondedAt)).ToList();
+            n.RespondedAt,
+            n.AppealStage.ToString(),
+            n.AppealDeadline,
+            n.IsGstatBacklogFlagged)).ToList();
 
         return new ListNoticesResponse(dtos, totalCount, request.Page, request.PageSize);
     }

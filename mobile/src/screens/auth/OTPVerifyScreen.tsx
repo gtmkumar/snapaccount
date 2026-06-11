@@ -86,9 +86,22 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
           userId: string;
           refreshToken?: string | null;
           refreshExpiresAt?: string | null;
+          /**
+           * Wave 7A (GAP-047) — RESIDUAL after contract reconcile: the landed
+           * backend triggers approval from POST /auth/devices (device
+           * registration), NOT from otp/verify, so this field is absent today
+           * and the gate below stays dormant (absent → legacy behaviour).
+           * Kept forward-compatible for a login-time gate; see api/auth.ts.
+           */
+          deviceApproval?: {
+            required: boolean;
+            requestId: string;
+            mode: 'ENFORCE' | 'NOTIFY_ONLY';
+          } | null;
         }>('/auth/otp/verify', { phoneNumber: phone, otp: otpValue });
 
-        const { isNewUser, firebaseCustomToken, userId, refreshToken } = response.data;
+        const { isNewUser, firebaseCustomToken, userId, refreshToken, deviceApproval } =
+          response.data;
         if (!firebaseCustomToken) {
           throw new Error('No session token returned.');
         }
@@ -110,6 +123,16 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
           // Auth stack until the user picks a persona and completes onboarding.
           setSession(firebaseCustomToken, profile, refreshToken ?? null);
           navigation.replace('PersonaSelection');
+          return;
+        }
+
+        // Wave 7A (GAP-047): ENFORCE-mode device approval gates entry. Hold the
+        // session (token usable for the approval poll) and wait on DeviceWaiting.
+        // NOTIFY (soft-launch) and absent flag proceed unchanged — old devices
+        // are informed via push + Devices-screen banner only.
+        if (deviceApproval?.required && deviceApproval.mode === 'ENFORCE') {
+          setSession(firebaseCustomToken, profile, refreshToken ?? null);
+          navigation.replace('DeviceWaiting', { requestId: deviceApproval.requestId });
           return;
         }
 

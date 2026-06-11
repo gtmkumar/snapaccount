@@ -8,7 +8,8 @@ import {
 } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import api from '@/lib/api'
-import { setToken, clearSession } from '@/lib/authToken'
+import { setToken, clearSession, getStoredUser, setStoredUser } from '@/lib/authToken'
+import { revokeAdminSession } from '@/lib/api'
 
 export type AdminRole =
   | 'SUPER_ADMIN'
@@ -61,7 +62,6 @@ const DEV_ROLE = (import.meta.env.VITE_DEV_USER_ROLE ?? 'SUPER_ADMIN') as AdminR
 
 // LOCAL_AUTH: real username/password login against the local DB (Firebase off in dev).
 const LOCAL_AUTH = import.meta.env.VITE_LOCAL_AUTH === 'true'
-const USER_KEY = 'sa_admin_user'
 
 const VALID_ROLES: AdminRole[] = [
   'SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE', 'DATA_ENTRY_OPERATOR', 'PARTNER_BANK_REP',
@@ -74,8 +74,8 @@ function pickRole(roles: string[]): AdminRole {
 
 function readStoredUser(): AdminUser | null {
   try {
-    const raw = localStorage.getItem(USER_KEY)
-    return raw ? (JSON.parse(raw) as AdminUser) : null
+    const stored = getStoredUser()
+    return stored ? (stored as AdminUser) : null
   } catch {
     return null
   }
@@ -193,7 +193,7 @@ export function useAuth(): AuthState & {
         photoURL: null,
         role: pickRole(data.roles ?? []),
       }
-      localStorage.setItem(USER_KEY, JSON.stringify(user))
+      setStoredUser(user)
       setState({ user, loading: false, error: null })
     } catch (err) {
       const apiError = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
@@ -224,7 +224,7 @@ export function useAuth(): AuthState & {
         photoURL: null,
         role: 'SUPER_ADMIN',
       }
-      localStorage.setItem(USER_KEY, JSON.stringify({ ...user, uid: data.userId }))
+      setStoredUser({ ...user, uid: data.userId })
       setTwoFaChallenge(null)
       setState({ user: { ...user, uid: data.userId }, loading: false, error: null })
     } catch (err) {
@@ -238,8 +238,13 @@ export function useAuth(): AuthState & {
     if (LOCAL_AUTH || DEV_BYPASS) {
       clearSession()
       setState({ user: null, loading: false, error: null })
+      return
     }
+    // Production path: revoke httpOnly cookie server-side (GAP-051)
+    await revokeAdminSession().catch(() => undefined)
+    clearSession()
     await firebaseSignOut(auth).catch(() => undefined)
+    setState({ user: null, loading: false, error: null })
   }
 
   return { ...state, signInWithGoogle, signInWithEmailPassword, submit2FaChallenge, signOut, twoFaChallenge }

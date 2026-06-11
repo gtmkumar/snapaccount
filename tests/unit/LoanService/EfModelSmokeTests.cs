@@ -99,4 +99,40 @@ public sealed class LoanEfModelSmokeTests
         var act = async () => await db.KeyFactsStatements.AnyAsync();
         await act.Should().NotThrowAsync("EF mapping for loan.key_facts_statement must be correct");
     }
+
+    /// <summary>
+    /// GAP-110: EfSmoke for loan.fraud_checks (migration 082).
+    /// Validates FraudCheckConfiguration, check_type/verdict string conversions, details JSONB column.
+    /// </summary>
+    [Fact]
+    public async Task FraudChecks_CanQuery_WithoutError()
+    {
+        using var db = CreateDbContext();
+        var act = async () => await db.FraudChecks.AnyAsync();
+        await act.Should().NotThrowAsync("EF mapping for loan.fraud_checks must be correct (migration 082)");
+    }
+
+    /// <summary>
+    /// Full-materialization EfSmoke: load first FraudCheck row (if any) and verify all columns round-trip.
+    /// </summary>
+    [Fact]
+    public async Task FraudChecks_CanMaterialize_FirstRow()
+    {
+        using var db = CreateDbContext();
+        var act = async () =>
+        {
+            var row = await db.FraudChecks.FirstOrDefaultAsync();
+            if (row is not null)
+            {
+                _ = row.Id;
+                _ = row.ApplicationId;
+                _ = row.CheckType;
+                _ = row.Verdict;
+                _ = row.DecisionNote;
+                _ = row.CheckedAt;
+                _ = row.CreatedAt;
+            }
+        };
+        await act.Should().NotThrowAsync("Full materialization of FraudCheck must succeed — no UUID↔varchar cast errors");
+    }
 }

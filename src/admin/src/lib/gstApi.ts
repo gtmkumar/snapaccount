@@ -115,11 +115,27 @@ export const GstNoticeTypeSchema = z.enum([
   'ASMT-10',
   'ASMT-11',
   'DRC-01',
+  'DRC-01A',
+  'DRC-01B',
+  'DRC-01C',
   'DRC-03',
+  'ADT-01',
   'REG-17',
   'OTHER',
 ])
 export type GstNoticeType = z.infer<typeof GstNoticeTypeSchema>
+
+// GAP-108 Wave 7: GSTAT appeal stage enum [confirm 7B]
+export const GstatStageEnum = z.enum([
+  'ORIGINAL_ORDER',
+  'APPEAL_FILED',
+  'APPELLATE_ORDER',
+  'GSTAT_FILED',
+  'GSTAT_HEARING',
+  'GSTAT_ORDER',
+  'CLOSED',
+]).optional()
+export type GstatStageType = z.infer<typeof GstatStageEnum>
 
 export const GstNoticeAttachmentSchema = z.object({
   id: z.string(),
@@ -142,6 +158,9 @@ export const GstNoticeSchema = z.object({
   noticeType: GstNoticeTypeSchema,
   noticeDate: z.string(),
   dueDate: z.string().nullable(),
+  // GAP-108 Wave 7: statutory response deadline [confirm 7B] field name may differ
+  statutoryDeadline: z.string().nullable().optional(),
+  responseDueDate: z.string().nullable().optional(),
   status: GstNoticeStatusSchema,
   description: z.string().nullable().optional(),
   assignedCaId: z.string().nullable().optional(),
@@ -151,6 +170,10 @@ export const GstNoticeSchema = z.object({
   respondedBy: z.string().nullable().optional(),
   submissionChannel: z.string().nullable().optional(),
   attachments: z.array(GstNoticeAttachmentSchema).optional(),
+  // GAP-108 Wave 7: GSTAT appeal stage [confirm 7B]
+  gstatStage: GstatStageEnum,
+  gstatStageTimestamps: z.record(z.string(), z.string()).optional(),
+  isGstatBacklogEligible: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
