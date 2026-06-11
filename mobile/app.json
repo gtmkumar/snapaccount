@@ -69,6 +69,8 @@
       },
       "apiBaseUrl": "http://localhost:5101",
       "documentsBaseUrl": "http://localhost:5102",
+      "chatBaseUrl": "http://localhost:5107",
+      "integrityCloudProjectNumber": "",
       "firebase": {
         "apiKey": "AIzaSyBQ1xgWAWRIXPFKwcM3yR6GZEfW99G53L4",
         "authDomain": "snap-account.firebaseapp.com",

@@ -2,6 +2,7 @@ using AuthService.Api;
 using AuthService.Application;
 using AuthService.Application.Common.Interfaces;
 using AuthService.Infrastructure;
+using AuthService.Infrastructure.Auth;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.RateLimiting;
@@ -125,6 +126,11 @@ try
     app.UseRateLimiter(); // SEC-011
     // Firebase JWT validation
     app.UseMiddleware<FirebaseAuthMiddleware>();
+
+    // GAP-064: Device integrity attestation — runs after Firebase so user context is available.
+    // Soft-fail by default (DeviceIntegrity:Enforce=false). Telemetry always written.
+    app.UseMiddleware<DeviceIntegrityMiddleware>();
+
     app.UseAuthorization();
     app.UseExceptionHandler();
 

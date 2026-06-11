@@ -1,6 +1,17 @@
 # SnapAccount — Orchestrator Status
 
-## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 7 COMPLETE & LIVE-VERIFIED — 2026-06-12)
+## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 8 COMPLETE — 2026-06-12; all delegable gaps closed, remaining queue is TL-gated)
+
+### Phase 7 Wave 8 — GAP-064 device integrity attestation + SignalR local-dev fix (2026-06-12, COMPLETE — live-verified on local stack)
+
+Closes the last OPEN-delegable gap (GAP-064) + BUG-W7-IOS-001 from Wave 7 iOS QA.
+- **Backend (AuthService)**: `IDeviceIntegrityVerifier` — `MockDeviceIntegrityVerifier` dev default ("mock-fail"→FAIL, absent→SKIPPED, else PASS) + credential-gated `PlayIntegrityVerifier`/`AppAttestVerifier` stubs (NotConfigured verdict when creds absent, never throw; KYC-adapter pattern). `DeviceIntegrityMiddleware` after FirebaseAuthMiddleware: soft-fail default (`DeviceIntegrity:Enforce=false`), enforce mode → 403 `DeviceIntegrity.Failed`; all outcomes → `auth.device_integrity_checks` telemetry (fire-and-forget). Contract: `X-Device-Integrity` + `X-Device-Integrity-Platform` headers on OTP-send/login/loan-apply/loan-consent.
+- **Mobile**: `@expo/app-integrity@~56.0.3` (official Expo module — Play Integrity + App Attest), `deviceIntegrity.ts` service (never throws; `__DEV__`→`mock-dev-token`; 5-min cache + in-flight dedupe; sticky unavailable flag; tokens in-memory only); axios-interceptor URL allowlist for exactly the 4 contract routes (KYC OTP routes test-pinned as non-matches). ⚠️ Native module — real attestation needs a fresh dev build (`expo run:android/ios`) + TL items: GCP project number (`integrityCloudProjectNumber`), Play/App Attest credentials; until then soft-fails by design. Deferred markers documented in-code: server challenge endpoint for replay-binding when real providers get wired.
+- **BUG-W7-IOS-001 (SignalR)**: root cause = mobile `HUB_BASE_URL` used `apiBaseUrl` (:5101 AuthService — no hub) → negotiate 404. Fixed: `CHAT_HUB_BASE_URL` (HOST_ROOT:5107 pattern, app.json `chatBaseUrl`) + ChatService Redis `AbortOnConnectFail=false` so the hub serves negotiate without Redis locally. Live: negotiate → 401 (hub alive, auth required), not 404.
+- **Migration 089** (`auth.device_integrity_checks` + 3 indexes) formalized, applied, replay-verified idempotent, no drift vs ad-hoc DDL.
+- **Live verification (orchestrator, real stack)**: OTP-send + valid token → 200 + PASS row; + `mock-fail` → 200 (soft-fail) + FAIL row; enforce-mode 403 verified by backend-agent on side instance; hub negotiate 401-not-404.
+- **Gates**: AuthService 780 (+139), ChatService 199 (+4) — orchestrator re-run; mobile jest/lint/type-check re-run at commit.
+- **Open after Wave 8**: entire remaining queue is TL-gated — CI billing, Firebase key rotation (GAP-001), DPO appointment, Razorpay webhook secret, KYC sandbox creds, GAP-104 product decision (gates 105/109), GAP-073 bank pilots (gates 039), Play Integrity/App Attest credentials + GCP project number (activates GAP-064 real verification), approximate-location + resend-push.
 
 ### Phase 7 Wave 7 — Feature wave: CA consultations, templates, notice engine, fraud/auth hardening (2026-06-12, COMPLETE & LIVE-VERIFIED web + Android + iOS)
 

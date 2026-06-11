@@ -33,6 +33,7 @@
       "^expo/src/async-require/messageSocket$": "<rootDir>/src/__mocks__/expoMessageSocket.js",
       "^@tanstack/react-query$": "<rootDir>/src/__mocks__/reactQueryTracked.js",
       "^tanstack-react-query-actual$": "<rootDir>/node_modules/@tanstack/react-query",
+      "^@expo/app-integrity$": "<rootDir>/src/__mocks__/expoAppIntegrity.ts",
       "^@expo/vector-icons$": "<rootDir>/src/__mocks__/vectorIcons.js",
       "^@expo/vector-icons/(.*)$": "<rootDir>/src/__mocks__/vectorIcons.js",
       "^@react-native-async-storage/async-storage$": "<rootDir>/src/__mocks__/asyncStorage.ts",
@@ -59,6 +60,7 @@
     "resolver": "react-native-worklets/jest/resolver.js"
   },
   "dependencies": {
+    "@expo/app-integrity": "~56.0.3",
     "@expo/config-plugins": "^56.0.8",
     "@expo/vector-icons": "^15.0.2",
     "@hookform/resolvers": "^3.3.4",

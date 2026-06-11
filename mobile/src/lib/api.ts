@@ -17,6 +17,7 @@ import axios, {
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useAuthStore } from '../store/authStore';
+import { getIntegrityToken } from '../services/deviceIntegrity';
 
 // Augment InternalAxiosRequestConfig to carry the retry sentinel.
 declare module 'axios' {
@@ -84,6 +85,53 @@ function baseUrlForPath(url?: string): string {
   return prefix ? `${HOST_ROOT}:${SERVICE_PORTS[prefix]}` : API_BASE_URL;
 }
 
+/**
+ * Base URL for the ChatService SignalR hub (`{base}/hubs/chat`).
+ *
+ * BUG-W7-IOS-001: the hub lives on ChatService (:5107), NOT on the auth host
+ * that `extra.apiBaseUrl` points at — negotiating against apiBaseUrl 404s.
+ * Resolve it like REST chat calls: optional `extra.chatBaseUrl` override in
+ * app.json (same pattern as documentsBaseUrl), else HOST_ROOT + the pinned
+ * chat port. Both paths get the Android `10.0.2.2` loopback rewrite.
+ */
+export const CHAT_HUB_BASE_URL: string = (() => {
+  const override = extra.chatBaseUrl as string | undefined;
+  return override ? resolveHost(override) : `${HOST_ROOT}:${SERVICE_PORTS['/chat']}`;
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAP-064 — device integrity attestation headers (Wave 8 pinned contract).
+//
+// EXACTLY these four POST call sites carry `X-Device-Integrity` +
+// `X-Device-Integrity-Platform`; do NOT blanket-add to other requests:
+//   1. POST /auth/otp/send                                (OTP send / resend)
+//   2. POST /auth/otp/verify                              (OTP verify / login)
+//   3. POST /loans/applications/{id}/submit               (loan application submit)
+//   4. POST /loans/applications/{id}/consents             (loan consent record)
+//
+// Soft-fail: when getIntegrityToken() resolves null (emulator, dev client
+// without the native module, unsupported device) we send NO header — backend
+// telemetry handles absence. The request itself is never blocked or delayed
+// beyond the (cached / sticky-unavailable) token lookup.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const INTEGRITY_HEADER = 'X-Device-Integrity';
+const INTEGRITY_PLATFORM_HEADER = 'X-Device-Integrity-Platform';
+
+const INTEGRITY_ROUTES: RegExp[] = [
+  /^\/auth\/otp\/send$/,
+  /^\/auth\/otp\/verify$/,
+  /^\/loans\/applications\/[^/]+\/submit$/,
+  /^\/loans\/applications\/[^/]+\/consents$/,
+];
+
+/** True when a request matches one of the 4 attestation-bearing call sites. */
+export function requiresDeviceIntegrity(method?: string, url?: string): boolean {
+  if ((method ?? '').toLowerCase() !== 'post' || !url) return false;
+  const path = url.split('?')[0];
+  return INTEGRITY_ROUTES.some((route) => route.test(path));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Create axios instance
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,7 +151,7 @@ export const apiClient: AxiosInstance = axios.create({
 // ─────────────────────────────────────────────────────────────────────────────
 
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  async (config: InternalAxiosRequestConfig) => {
     config.baseURL = baseUrlForPath(config.url);
 
     // For multipart uploads, let React Native set Content-Type itself so it
@@ -117,6 +165,22 @@ apiClient.interceptors.request.use(
     const token = useAuthStore.getState().firebaseToken;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // GAP-064: attach attestation headers on the 4 pinned call sites only.
+    // getIntegrityToken() never throws and resolves null when attestation is
+    // unavailable — the try/catch is a pure backstop so an interceptor bug can
+    // never block auth/loan requests.
+    if (requiresDeviceIntegrity(config.method, config.url)) {
+      try {
+        const integrity = await getIntegrityToken();
+        if (integrity) {
+          config.headers[INTEGRITY_HEADER] = integrity.token;
+          config.headers[INTEGRITY_PLATFORM_HEADER] = integrity.platform;
+        }
+      } catch {
+        // Soft-fail: proceed without integrity headers.
+      }
     }
     return config;
   },

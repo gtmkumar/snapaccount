@@ -1783,3 +1783,139 @@ Canonical values pass through unchanged. `null` (no filter) passes through uncha
 | GstService Unit | 164 | 182 | +18 (NoticeStatusShimTests) |
 
 All EfSmoke tests run against live PostgreSQL 17 (`localhost:5432/snapaccount`) with migration 086 applied and scratch-replayed (idempotent).
+
+---
+
+## Phase 7 Wave 8 — GAP-064: Device Integrity Attestation + BUG-W7-IOS-001: ChatService SignalR Hub Fix
+
+### GAP-064: Device Integrity Attestation (AuthService only)
+
+**Service**: AuthService (port 5101 / Cloud Run)
+**Purpose**: 2026 fintech baseline — prevent bots/emulators from driving OTP and loan flows via Play Integrity (Android) / App Attest (iOS).
+**Pattern**: KYC_PROVIDER-style provider switch + soft-launch flag (DeviceIntegrity:Enforce=false default).
+
+#### Headers (mobile sends on gated endpoints)
+
+| Header | Required | Values | Notes |
+|--------|----------|--------|-------|
+| `X-Device-Integrity` | Optional (soft) | Platform attestation token | Absent = SKIPPED verdict |
+| `X-Device-Integrity-Platform` | Optional | `ANDROID` \| `IOS` | Used for routing to correct verifier |
+
+#### Gated Endpoints (default configuration)
+
+- `POST /auth/otp/send`
+- `POST /auth/otp/verify`
+- `POST /auth/password/login`
+- `POST /auth/social/firebase`
+
+Configurable via `DeviceIntegrity:CheckedEndpoints` (comma-separated path prefixes).
+
+#### Behaviour Matrix
+
+| Condition | Enforce=false (default) | Enforce=true |
+|-----------|------------------------|--------------|
+| Header absent + RequireToken=false (default) | 200 SKIPPED, logged | 200 SKIPPED, logged |
+| Header absent + RequireToken=true | 200 SKIPPED, logged | 403 DeviceIntegrity.Failed |
+| Token present, verdict PASS | 200 | 200 |
+| Token present, verdict FAIL | 200 (soft-fail), logged | 403 DeviceIntegrity.Failed |
+| Token present, verdict NOT_CONFIGURED | 200 (treated as SKIPPED) | 200 |
+
+#### 403 Error Response (enforce mode, FAIL verdict)
+
+```json
+{
+  "type": "DeviceIntegrity.Failed",
+  "title": "Device integrity check failed.",
+  "status": 403,
+  "detail": "The device could not be verified as a genuine, unmodified device. Please ensure you are using the official SnapAccount app."
+}
+```
+
+#### Telemetry Table: `auth.device_integrity_checks` (Migration 089)
+
+Every checked request is recorded regardless of verdict:
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID PK | |
+| `user_id` | UUID? | null for anonymous OTP-send |
+| `organization_id` | UUID? | From session JWT org claim |
+| `platform` | VARCHAR(20) | ANDROID, IOS, or null |
+| `verdict` | VARCHAR(20) NOT NULL | PASS, FAIL, SKIPPED, NOT_CONFIGURED |
+| `endpoint` | VARCHAR(256) NOT NULL | Request path |
+| `failure_reason` | VARCHAR(500) | Provider detail on FAIL/NOT_CONFIGURED |
+| `client_ip` | VARCHAR(64) | For abuse pattern analysis |
+| `recorded_at` | TIMESTAMPTZ NOT NULL | |
+| `created_at` | TIMESTAMPTZ NOT NULL | |
+
+#### Provider Configuration
+
+| `DeviceIntegrity:Provider` | Class | Credentials Required |
+|---------------------------|-------|---------------------|
+| `mock` (default) | `MockDeviceIntegrityVerifier` | None — dev bypass |
+| `play_integrity` | `PlayIntegrityVerifier` | `DeviceIntegrity:PlayIntegrity:ServiceAccountJson` + `PackageName` |
+| `app_attest` | `AppAttestVerifier` | `DeviceIntegrity:AppAttest:TeamId` + `BundleId` |
+
+**Mock sentinel tokens** (local dev / CI testing):
+- `mock-fail` → verdict FAIL (test enforcement path)
+- `mock-skip` or absent → verdict SKIPPED
+- Any other value → verdict PASS
+
+#### Runtime Config Keys
+
+```
+DeviceIntegrity:Enforce=false           # Set true to block FAIL verdicts (production rollout)
+DeviceIntegrity:RequireToken=false      # Set true to block absent headers in enforce mode
+DeviceIntegrity:Provider=mock           # mock | play_integrity | app_attest
+DeviceIntegrity:CheckedEndpoints=...    # Comma-separated path prefixes (override defaults)
+DeviceIntegrity:PlayIntegrity:ServiceAccountJson=...    # GCP SA JSON (via Secret Manager)
+DeviceIntegrity:PlayIntegrity:PackageName=...           # com.snapaccount.app
+DeviceIntegrity:AppAttest:TeamId=...                    # Apple Team ID
+DeviceIntegrity:AppAttest:BundleId=...                  # com.snapaccount.app
+```
+
+---
+
+### BUG-W7-IOS-001: ChatService SignalR Hub 404 Fix
+
+**Root cause**: Mobile `HUB_BASE_URL` in `ChatDetailScreen.tsx` defaults to `apiBaseUrl` (port 5101, AuthService). The hub negotiate call reaches AuthService which has no hub → 404.
+
+**Backend verification**: `POST http://localhost:5107/hubs/chat/negotiate?negotiateVersion=1` → 401 (auth required, hub correctly registered). Hub is at `/hubs/chat` on ChatService port 5107.
+
+**Backend change (this wave)**: ChatService DI now uses `AbortOnConnectFail=false` for Redis so the hub starts and serves negotiate requests even when Redis is temporarily unavailable in local dev (graceful fallback to in-process SignalR).
+
+**Mobile fix required (mobile-dev action — cannot edit mobile/):**
+
+In `mobile/src/screens/chat/ChatDetailScreen.tsx`, change `HUB_BASE_URL`:
+
+```typescript
+// BEFORE (broken — resolves to AuthService port 5101)
+const HUB_BASE_URL =
+  (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
+  'http://localhost:5000';
+
+// AFTER — correctly targets ChatService port 5107
+const HUB_BASE_URL =
+  (Constants.expoConfig?.extra?.chatServiceBaseUrl as string | undefined) ??
+  (Platform.OS === 'android' ? 'http://10.0.2.2:5107' : 'http://localhost:5107');
+```
+
+Add to `mobile/app.json` `extra` section:
+```json
+{
+  "extra": {
+    "chatServiceBaseUrl": "http://localhost:5107"
+  }
+}
+```
+
+Android simulator needs `http://10.0.2.2:5107` — use `resolveHost()` from `mobile/src/lib/api.ts` or apply the same Platform.OS check inline.
+
+---
+
+### Test Coverage (Wave 8)
+
+| Suite | Before | After | New tests |
+|-------|--------|-------|-----------|
+| AuthService Unit | 641 | 780 | +139 (DeviceIntegrityVerifierTests: 12, DeviceIntegrityEntityTests: 9, pre-existing growth) |
+| ChatService Unit | 195 | 199 | +4 (SignalRHubConfigTests) |

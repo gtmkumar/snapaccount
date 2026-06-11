@@ -35,12 +35,17 @@ jest.mock('@react-navigation/native', () => {
 
 // ── Mock: lib/api (prevents real Axios calls from ThemeContext debounce) ──────
 
+// BUG-W7-IOS-001: the screen must take its hub host from lib/api's
+// CHAT_HUB_BASE_URL (ChatService :5107), never from extra.apiBaseUrl.
+const MOCK_CHAT_HUB_BASE_URL = 'http://chat-host.test:5107';
+
 jest.mock('../../src/lib/api', () => ({
   apiClient: {
     get: jest.fn(() => Promise.resolve({ data: null })),
     post: jest.fn(() => Promise.resolve({ data: {} })),
     patch: jest.fn(() => Promise.resolve({ data: {} })),
   },
+  CHAT_HUB_BASE_URL: 'http://chat-host.test:5107',
 }));
 
 // ── Captured SignalR handlers ─────────────────────────────────────────────────
@@ -93,7 +98,7 @@ jest.mock('../../src/api/chat', () => ({
   HubConnectionState: { Disconnected: 'Disconnected', Connected: 'Connected' },
 }));
 
-import { subscribeChatHub } from '../../src/api/chat';
+import { subscribeChatHub, buildChatHubConnection } from '../../src/api/chat';
 import { ChatDetailScreen } from '../../src/screens/chat/ChatDetailScreen';
 
 // ── Wrapper ───────────────────────────────────────────────────────────────────
@@ -168,6 +173,21 @@ describe('ChatDetailScreen', () => {
       </Wrapper>,
     );
     expect(usePreventScreenCapture).toHaveBeenCalled();
+  });
+
+  // ── BUG-W7-IOS-001: hub targets ChatService host, not apiBaseUrl ──────────
+
+  it('builds the SignalR hub against CHAT_HUB_BASE_URL (ChatService), not apiBaseUrl', () => {
+    (buildChatHubConnection as jest.Mock).mockReturnValue(mockHub);
+    render(
+      <Wrapper>
+        <ChatDetailScreen />
+      </Wrapper>,
+    );
+    expect(buildChatHubConnection).toHaveBeenCalledWith(
+      MOCK_CHAT_HUB_BASE_URL,
+      expect.any(Function),
+    );
   });
 
   // ── SignalR: messageReceived ──────────────────────────────────────────────

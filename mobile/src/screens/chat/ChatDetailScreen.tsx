@@ -37,8 +37,8 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import type { NavigationProp, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import Constants from 'expo-constants';
 import { FirebaseAuth } from '../../lib/firebase';
+import { CHAT_HUB_BASE_URL } from '../../lib/api';
 
 import {
   buildChatHubConnection,
@@ -260,9 +260,9 @@ function OfflineBanner() {
 // Main Screen
 // ─────────────────────────────────────────────────────────────────────────────
 
-const HUB_BASE_URL =
-  (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
-  'http://localhost:5000';
+// BUG-W7-IOS-001: hub negotiate must target the ChatService host (:5107) —
+// extra.apiBaseUrl is the AuthService host and has no /hubs/chat endpoint.
+const HUB_BASE_URL = CHAT_HUB_BASE_URL;
 
 const TYPING_DEBOUNCE_MS = 600;
 const TYPING_STOP_TIMEOUT_MS = 3_000;

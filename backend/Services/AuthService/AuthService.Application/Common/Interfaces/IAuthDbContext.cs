@@ -121,6 +121,9 @@ public interface IAuthDbContext
     /// <summary>GAP-047: Pending device approval requests in <c>auth.device_approval_requests</c> (migration 083).</summary>
     DbSet<DeviceApprovalRequest> DeviceApprovalRequests { get; }
 
+    /// <summary>GAP-064: Device integrity attestation telemetry in <c>auth.device_integrity_checks</c> (migration 089).</summary>
+    DbSet<DeviceIntegrityCheck> DeviceIntegrityChecks { get; }
+
     /// <summary>Persists changes to the auth schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

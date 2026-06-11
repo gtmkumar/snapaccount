@@ -166,6 +166,17 @@ public static class DependencyInjection
             services.AddScoped<IDocumentVerificationProvider>(sp => sp.GetRequiredService<MockDocumentVerificationProvider>());
         }
 
+        // GAP-064: Device integrity verifier — selected by DeviceIntegrity:Provider config key.
+        // Default: "mock" (accepts all tokens, returns PASS; "mock-fail" sentinel → FAIL for testing).
+        // "play_integrity" / "app_attest" → credential-gated stubs; return NotConfigured when creds absent.
+        var integrityProvider = configuration["DeviceIntegrity:Provider"] ?? "mock";
+        if (string.Equals(integrityProvider, "play_integrity", StringComparison.OrdinalIgnoreCase))
+            services.AddScoped<IDeviceIntegrityVerifier, PlayIntegrityVerifier>();
+        else if (string.Equals(integrityProvider, "app_attest", StringComparison.OrdinalIgnoreCase))
+            services.AddScoped<IDeviceIntegrityVerifier, AppAttestVerifier>();
+        else
+            services.AddScoped<IDeviceIntegrityVerifier, MockDeviceIntegrityVerifier>();
+
         // Lightweight provider connection tester ("Test with Sample Query").
         services.AddHttpClient<IAiProviderTester, HttpAiProviderTester>();
 

@@ -110,6 +110,9 @@ public class AuthDbContext(DbContextOptions<AuthDbContext> options)
     /// <summary>GAP-047: Device approval requests (migration 083).</summary>
     public DbSet<DeviceApprovalRequest> DeviceApprovalRequests => Set<DeviceApprovalRequest>();
 
+    /// <summary>GAP-064: Device integrity attestation telemetry (migration 089).</summary>
+    public DbSet<DeviceIntegrityCheck> DeviceIntegrityChecks => Set<DeviceIntegrityCheck>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

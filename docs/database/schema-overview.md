@@ -1400,6 +1400,28 @@ Migration **`088_report_status_check_realign_and_fy_widen.sql`** fixes the `repo
 
 ---
 
+## Phase 7 — `auth.device_integrity_checks` device-integrity soft-fail telemetry (GAP-064, `089`, 2026-06-12)
+
+Migration **`089_auth_device_integrity_checks.sql`** formalizes the GAP-064 device-integrity telemetry table that backend-agent had **already applied ad-hoc to the local DB** while building the soft-fail middleware. The file is the canonical DDL; it was reconciled against the ad-hoc state and applied + replayed to prove idempotency.
+
+- **Table** `auth.device_integrity_checks` — append-only log, one row per Play Integrity / App Attest attestation evaluated by `DeviceIntegrityMiddleware` on a protected endpoint. Columns: `id` (uuid PK), `user_id` (nullable FK → `auth."user"(id)` ON DELETE SET NULL), `organization_id` (uuid, no FK — denormalized), `platform` (varchar 20, nullable), `verdict` (varchar 20, NOT NULL — `PASS | FAIL | UNAVAILABLE | SKIPPED`), `endpoint` (varchar 256, NOT NULL), `failure_reason` (varchar 500), `client_ip` (varchar 64), `recorded_at` (timestamptz), plus the standard uuid audit columns (`created_at`/`updated_at`/`deleted_at`/`created_by`/`updated_by`).
+- **Soft-fail design (GAP-064):** the middleware **never blocks** a request during soft-launch — it records the verdict so abuse patterns can be observed and an enforcement threshold tuned before any hard block. Server-side security telemetry, admin-consumed; **not** user-facing.
+- **RLS — intentionally NOT enabled.** Follows the auth/security **log-table precedent** (`auth.otp_request`, `auth.ai_usage_log`, `loan.fraud_checks`): `user_id` is nullable (attestation can run before auth resolves, e.g. OTP-send), the backend is the sole writer, and the only read path is admin/security dashboards that aggregate across **all** users — per-user isolation would break that read path. Documented in the migration header and a guard comment.
+- **Indexes (3):** `ix_device_integrity_checks_recorded_at` (time-series), `ix_device_integrity_checks_user_id_recorded_at` (per-user timeline), `ix_device_integrity_checks_verdict` (verdict-bucketed dashboards).
+- **EF pairing:** `AuthService.Domain/Entities/DeviceIntegrityCheck.cs` + `Configurations/DeviceIntegrityCheckConfiguration.cs` map the table 1:1 (columns, lengths, the 3 indexes, and the nullable `auth.user` FK with `OnDelete(SetNull)`).
+
+#### Drift found & reconciled (089)
+
+The ad-hoc-applied table matched the canonical structure exactly — **no structural drift**: same columns/types/nullability, same 3 indexes, and the FK already resolved to `auth."user"(id)` even though the ad-hoc DDL wrote it **unquoted** (`auth.user`) — Postgres normalizes the unquoted reserved word to the same quoted relation, so no DB fix was required. The migration file uses the **quoted** `auth."user"(id)` form to match the house convention (cf. `083`). The **only** reconciled difference: the ad-hoc table carried **no `COMMENT ON TABLE/COLUMN`**; applying `089` added all 8 comments, aligning the live DB to the documented file.
+
+#### Verification summary (089)
+
+- `\d auth.device_integrity_checks` before authoring confirmed the ad-hoc table existed (6 rows) with the expected shape and `FK → auth."user"(id) ON DELETE SET NULL`.
+- Applied to live `snapaccount` under `ON_ERROR_STOP=1`: `CREATE TABLE`/3×`CREATE INDEX` skipped (already exist, expected), 8×`COMMENT` applied, `APPLY_EXIT=0`. Replayed **twice** back-to-back — `REPLAY_EXIT=0` both times with identical post-state (idempotent; `IF NOT EXISTS` guards + always-safe `COMMENT`).
+- Post-state `\d` confirms 14 columns, 3 indexes + PK, FK `auth."user"(id) ON DELETE SET NULL`; `rowsecurity = f` (log-table, no RLS); table comment present; existing rows preserved (8 — table is live-writing).
+
+---
+
 ## Local dev seed — the two seed mechanisms and apply order (GAP-072, Wave 6, 2026-06-11)
 
 A fresh developer environment is seeded by **two independent mechanisms**. Confusing them is the source of most "why is my local DB empty / orphaned" reports.
