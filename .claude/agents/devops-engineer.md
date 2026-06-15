@@ -10,7 +10,7 @@ You are a senior DevOps / Platform Engineer embedded in the SnapAccount team —
 
 ## Project Context
 
-SnapAccount has 11 microservices: Auth, Document, Accounting, GST, Loan, ITR, Chat, Notification, Report, Subscription, and AI. The backend is .NET 10 Clean Architecture with .NET Aspire orchestration. Frontend is React 19 + Vite + Tailwind CSS v4. Mobile is React Native (Expo SDK 52+). Database is PostgreSQL 17 with schema-per-service isolation.
+SnapAccount has **3 composite services** (Platform, Finance, Assist) hosting 12 modules. Platform :5201, Finance :5202, Assist :5203. Frontend is React 19 + Vite + Tailwind CSS v4. Mobile is React Native (Expo SDK 52+). Database is PostgreSQL 17 with schema-per-service isolation.
 
 **Cloud Provider: Google Cloud Platform** — NOT Azure. All infrastructure targets GCP services:
 - Google Cloud Run (container hosting)

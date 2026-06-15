@@ -14,7 +14,7 @@
 SnapAccount uses **Razorpay** as its sole payment processor for subscription billing. The integration is server-initiated (not a client-embedded SDK):
 
 1. **Order/subscription creation** — `SubscriptionService` calls the Razorpay REST API (`https://api.razorpay.com/v1/`) to create an order or subscription object. The response is a Razorpay-managed identifier (e.g. `sub_XXXX`, `order_XXXX`). No card data is involved at this step.  
-   - File: `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/Razorpay/RazorpayHttpClient.cs`
+   - File: `backend/Services/PlatformService/Platform.Infrastructure/Subscription/Razorpay/RazorpayHttpClient.cs`
 
 2. **Checkout** — The mobile `BillingScreen` and admin `PaymentGatewaySettings` display subscription plans and pricing. There is **no in-app card-entry form**. No Razorpay JavaScript SDK (Checkout.js) or React Native Razorpay SDK is embedded in the mobile app or admin frontend.  
    - Verified: `mobile/package.json` — no `react-native-razorpay` or equivalent dependency.  
@@ -24,11 +24,11 @@ SnapAccount uses **Razorpay** as its sole payment processor for subscription bil
 3. **Payment completion** — Razorpay Hosted Checkout (web redirect or Razorpay-managed WebView) handles all card-entry, authentication (3DS), and payment authorization entirely within Razorpay's PCI-compliant environment.
 
 4. **Webhook notification** — Razorpay posts `subscription.charged` / `subscription.cancelled` events to `POST /subscriptions/webhooks/razorpay`. This endpoint receives Razorpay's event payload (subscription ID, payment ID, amount in paise). It **never receives card data**.  
-   - File: `backend/Services/SubscriptionService/SubscriptionService.Api/Endpoints/RazorpayWebhook.cs`
+   - File: `backend/Services/PlatformService/Platform.WebApi/Endpoints/Subscription/RazorpayWebhook.cs`
 
 5. **Credential storage** — Razorpay API key ID (`rzp_live_*` / `rzp_test_*`) is stored in plaintext in the `subscription.razorpay_config` table. The API key **secret** and the webhook **signing secret** are stored AES-256-GCM encrypted at rest using `AesCredentialEncryptionService`.  
-   - File: `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/Services/AesCredentialEncryptionService.cs`  
-   - File: `backend/Services/SubscriptionService/SubscriptionService.Domain/Entities/RazorpayConfig.cs`
+   - File: `backend/Services/PlatformService/Platform.Infrastructure/Subscription/Services/AesCredentialEncryptionService.cs`  
+   - File: `backend/Services/PlatformService/Platform.Domain/Subscription/Entities/RazorpayConfig.cs`
 
 ---
 
@@ -94,14 +94,14 @@ The following changes or gaps would cause SnapAccount to exit SAQ A eligibility:
 
 ### GAP-PCI-01 (LOW) — `IRazorpayClient.VerifyWebhookSignature` uses non-constant-time comparison
 
-**File:** `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/Razorpay/RazorpayHttpClient.cs`, line 159  
+**File:** `backend/Services/PlatformService/Platform.Infrastructure/Subscription/Razorpay/RazorpayHttpClient.cs`, line 159  
 **Description:** The production `RazorpayHttpClient.VerifyWebhookSignature` method compares HMAC signatures using `string.Equals(computed64, signature, StringComparison.OrdinalIgnoreCase)`, which is not constant-time. However, **this method is not called from any production code path** — the webhook endpoint (`RazorpayWebhook.cs`) uses its own private static `VerifyHmac()` method that correctly uses `CryptographicOperations.FixedTimeEquals`. This is dead code with a dangerous implementation that could be accidentally promoted.  
 **Risk:** If a future refactor routes the webhook through `IRazorpayClient.VerifyWebhookSignature`, timing attacks become possible.  
 **Recommended Fix:** Remove `VerifyWebhookSignature` from `IRazorpayClient` interface and both implementations. Signature verification is a transport-layer concern that belongs only in the endpoint.
 
 ### GAP-PCI-02 (LOW) — No startup guard preventing MockRazorpayClient in production
 
-**File:** `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/DependencyInjection.cs`, line 64  
+**File:** `backend/Services/PlatformService/Platform.Infrastructure/Subscription/DependencyInjection.cs`, line 64  
 **Description:** `MockRazorpayClient` is registered unconditionally as the `IRazorpayClient` implementation. The real client is only registered lazily when `UpdateRazorpayConfig` is called. There is no startup validation that fails the service if a live-mode config row is absent in production, similar to the guard pattern used for `ENCRYPTION_KEY` in `AesCredentialEncryptionService`.  
 **Risk:** Production deployment with mock client would silently succeed all subscription operations without processing real payments.  
 **Recommended Fix:** On startup in non-Development environments, check if a `RazorpayConfig` row exists with `IsEnabled = true` and `TestMode = false`. Log a WARNING if absent. For hard enforcement, consider a health check endpoint.
@@ -132,7 +132,7 @@ The webhook endpoint security chain is verified correct:
 | HMAC-SHA256 verification | `CryptographicOperations.FixedTimeEquals` on UTF-8 hex bytes | `RazorpayWebhook.cs` | 116–140 |
 | Idempotency deduplication | `IDistributedCache` keyed on `X-Razorpay-Event-Id`, TTL 24h | `RazorpayWebhook.cs` | 77–93 |
 | Event body size limit | `MaximumLength(65536)` in `HandleRazorpayWebhookCommandValidator` | `HandleRazorpayWebhookCommand.cs` | 28 |
-| Rate limiting | Standard rate limiter applied at service level | `SubscriptionService.Api/Program.cs` | — |
+| Rate limiting | Standard rate limiter applied at service level | `Platform.WebApi/Program.cs` | — |
 
 **Note:** `VerifyHmac` compares UTF-8 bytes of hex strings (both sides lowercased), not decoded binary bytes. This is functionally correct and constant-time, but deviates from the standard pattern of comparing decoded byte arrays. It was previously flagged as NEW-001 (MEDIUM) in Phase 5. If `CryptographicOperations.FixedTimeEquals` is called on equal-length hex strings this is not exploitable, but a malformed (non-hex) signature in the header would need the `try/catch` at line 137 to handle `Convert.FromHexString` failures — the current code catches all exceptions and returns `false`, which is correct.
 

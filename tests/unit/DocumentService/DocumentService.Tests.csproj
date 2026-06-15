@@ -27,8 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\backend\Services\DocumentService\DocumentService.Domain\DocumentService.Domain.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\DocumentService\DocumentService.Application\DocumentService.Application.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/FinanceService/Finance.Domain/Finance.Domain.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/FinanceService/Finance.Application/Finance.Application.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Application\SnapAccount.Shared.Application.csproj" />
   </ItemGroup>

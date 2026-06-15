@@ -112,16 +112,16 @@ Same as Session 1 — `mobile/app.json` has Firebase plugins and EAS projectId t
 
 ```
 backend/AppHost/AppHost.cs                                                         (helper + WithDevLoopDefaults wrapping + endpoint rename)
-backend/Services/CallbackService/CallbackService.Application/DependencyInjection.cs    (MediatR DI bug)
-backend/Services/AccountingService/AccountingService.Application/DependencyInjection.cs (MediatR DI bug)
-backend/Services/NotificationService/NotificationService.Application/DependencyInjection.cs (MediatR DI bug)
+backend/Services/AssistService/Assist.Application/Callback/DependencyInjection.cs    (MediatR DI bug)
+backend/Services/FinanceService/Finance.Application/Accounting/DependencyInjection.cs (MediatR DI bug)
+backend/Services/PlatformService/Platform.Application/Notification/DependencyInjection.cs (MediatR DI bug)
 backend/Services/*/[A-Z]*.Infrastructure/DependencyInjection.cs                    (×12 — DefaultConnection fallback)
 ```
 
 ## Session 1 files modified (carried over)
 ```
-backend/Services/AuthService/AuthService.Application/DependencyInjection.cs
-backend/Services/AuthService/AuthService.Api/Program.cs
+backend/Services/PlatformService/Platform.Application/Auth/DependencyInjection.cs
+backend/Services/PlatformService/Platform.WebApi/Program.cs
 backend/Shared/SnapAccount.Shared.Infrastructure/Auth/PassthroughAuthHandler.cs    (new)
 database/migrations/026_loan_products_applications.sql
 database/migrations/027_loan_documents_consents.sql

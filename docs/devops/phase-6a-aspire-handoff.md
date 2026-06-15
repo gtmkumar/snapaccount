@@ -98,7 +98,7 @@ No changes needed to Cloud Run scripts for AccountingService in Phase 6A.
 | Dead-letter topic | Provisioned (auto-created per topic loop) | `infra/setup.sh` line 371 |
 | AccountingService Cloud Run definition | Provisioned | `infra/cloud-run-services.sh` line 143 |
 | `accounting-service-sa` IAM roles | Provisioned (pubsub.publisher, subscriber, secretmanager.secretAccessor) | `infra/setup.sh` line 513 |
-| Dockerfile (shared `backend/Dockerfile`) | Existing — use `--build-arg SERVICE_NAME=AccountingService` | `backend/Dockerfile` |
+| Dockerfile (shared `backend/Dockerfile`) | Existing — use `--build-arg COMPOSITE_NAME=AccountingService` | `backend/Dockerfile` |
 
 ---
 

@@ -4,53 +4,50 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Scope
 
-This is the backend directory for SnapAccount — 11 .NET 10 microservices using Clean Architecture, MediatR CQRS, and EF Core 10. The root `CLAUDE.md` has the full project overview; this file adds backend-specific detail.
+This is the backend directory for SnapAccount — **3 composite services** (.NET 10) using Clean Architecture, MediatR CQRS, and EF Core 10. The root `CLAUDE.md` has the full project overview; this file adds backend-specific detail.
 
 ## Commands
 
 ```bash
 # Run all services via Aspire (preferred — starts postgres + redis automatically)
-dotnet run --project AppHost
-# Dashboard: http://localhost:15888
+dotnet run --project Services/AppHost
+# Dashboard: https://localhost:17241
 
-# Run a single service (requires postgres + redis already running)
-cd Services/AuthService/AuthService.Api && dotnet run
+# Run a single composite
+cd Services/PlatformService/Platform.WebApi && dotnet run   # :5201
+cd Services/FinanceService/Finance.WebApi && dotnet run    # :5202
+cd Services/AssistService/Assist.WebApi && dotnet run     # :5203
 
-# Set DB password secret (once per service, required before first run)
-cd Services/<ServiceName>/<ServiceName>.Api
+# Set DB password secret (once per composite WebApi)
+cd Services/PlatformService/Platform.WebApi
 dotnet user-secrets init && dotnet user-secrets set "DB_PASSWORD" "postgresql"
 
 # Run all tests
 dotnet test
 
-# Run unit tests only
-dotnet test --filter "Category=Unit"
-
-# Run tests for a specific service
-dotnet test Services/<ServiceName>/<ServiceName>.Tests/
-
-# Add an EF Core migration for a service
-cd Services/<ServiceName>/<ServiceName>.Infrastructure
-dotnet ef migrations add <MigrationName> --startup-project ../<ServiceName>.Api
+# Add an EF Core migration (example: Auth under Platform)
+cd Services/PlatformService/Platform.Infrastructure
+dotnet ef migrations add <MigrationName> --startup-project ../Platform.WebApi
 ```
 
 ## Solution Structure
 
 ```
-AppHost/            — .NET Aspire orchestrator (wires all 11 services + postgres + redis)
-ServiceDefaults/    — shared Aspire defaults (health checks, telemetry, service discovery)
-Services/           — 11 microservices, each with 4-layer Clean Architecture
+Services/
+  AppHost/          — Aspire orchestrator (api-gateway + platform + finance + assist)
+  Gateway/          — YARP reverse proxy (:5000)
+  PlatformService/  — Platform.{Domain,Application,Infrastructure,WebApi} (:5201)
+  FinanceService/   — Finance.* (:5202)
+  AssistService/    — Assist.* (:5203)
+ServiceDefaults/    — shared Aspire defaults
 Shared/
-  SnapAccount.Shared.Domain/        — BaseEntity, Result<T>, Error, ValueObject, IDomainEvent
-  SnapAccount.Shared.Application/   — ICommand, IQuery, ICommandHandler, IQueryHandler, ICurrentUser, pipeline behaviors
-  SnapAccount.Shared.Infrastructure/ — BaseDbContext, FirebaseAuthMiddleware, GoogleCloudStorageService, GooglePubSubPublisher
+  SnapAccount.Shared.Domain/
+  SnapAccount.Shared.Application/
+  SnapAccount.Shared.Infrastructure/
+  SnapAccount.Shared.Api/
 ```
 
-Each service follows this exact 4-layer pattern:
-- `<Name>Service.Api` — Minimal API endpoints (no controllers), DI wiring in `Program.cs`, Hangfire jobs, request/response record DTOs defined at bottom of `Program.cs`
-- `<Name>Service.Application` — MediatR commands/queries/handlers, FluentValidation validators, CQRS behaviors
-- `<Name>Service.Domain` — Entities, domain events, value objects (zero external dependencies)
-- `<Name>Service.Infrastructure` — EF Core DbContext, entity configurations, repositories, external service adapters, `DependencyInjection.cs` extension method
+Each composite has 4 layer projects; module code lives in subfolders (`Auth/`, `Gst/`, etc.) with original namespaces preserved.
 
 ## MediatR Pipeline Order
 

@@ -157,7 +157,7 @@ Batch 2 (queued): mobile M3 (KFS screen + Privacy Center) + M4 (biometric step-u
 ## Decisions Log
 
 1. Added 3 new modules beyond project doc: Subscription & Billing, Audit & Compliance, Analytics & BI, TDS Management
-2. Added 11 microservices (original 9 + Subscription Service + AI Service)
+2. Added 3 composite services (original 9 + Subscription Service + AI Service)
 3. Database-per-service via PostgreSQL schemas within shared cluster
 4. Technology versions: .NET 10, React 19, Expo SDK 52+, PostgreSQL 17
 5. **Cloud changed from Azure to GCP + Firebase** — Cloud Run, Cloud SQL, Cloud Storage, Pub/Sub, Secret Manager, Artifact Registry; GCP asia-south1 (Mumbai) for DPDP Act compliance

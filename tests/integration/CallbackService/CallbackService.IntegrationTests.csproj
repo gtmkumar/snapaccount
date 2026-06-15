@@ -27,9 +27,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\backend\Services\CallbackService\CallbackService.Api\CallbackService.Api.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\CallbackService\CallbackService.Application\CallbackService.Application.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\CallbackService\CallbackService.Domain\CallbackService.Domain.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.WebApi/Assist.WebApi.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.Application/Assist.Application.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.Domain/Assist.Domain.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
   </ItemGroup>
 

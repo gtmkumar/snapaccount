@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <NoWarn>NU1608</NoWarn>
+    <RootNamespace>Finance.Infrastructure</RootNamespace>
+    <AssemblyName>Finance.Infrastructure</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.*">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.*" />
+    <PackageReference Include="Npgsql" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.*" />
+    <PackageReference Include="Google.Cloud.DocumentAI.V1" Version="3.*" />
+    <PackageReference Include="Google.Cloud.PubSub.V1" Version="3.*" />
+    <PackageReference Include="Google.Cloud.Storage.V1" Version="4.*" />
+    <PackageReference Include="Google.Cloud.SecretManager.V1" Version="2.*" />
+    <PackageReference Include="Dapper" Version="2.*" />
+    <PackageReference Include="MediatR" Version="12.*" />
+    <PackageReference Include="QuestPDF" Version="2025.*" />
+    <PackageReference Include="Hangfire.Core" Version="1.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Finance.Application/Finance.Application.csproj" />
+    <ProjectReference Include="../Finance.Domain/Finance.Domain.csproj" />
+    <ProjectReference Include="../../../Shared/SnapAccount.Shared.Infrastructure/SnapAccount.Shared.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

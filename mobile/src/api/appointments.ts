@@ -2,7 +2,7 @@
  * CA Appointment API — GAP-031 (Wave 7A, ChatService).
  *
  * RECONCILED 2026-06-12 against docs/api/endpoints.md "Wave 7A" (+ addendum)
- * and backend/Services/ChatService/ChatService.Api/Endpoints/Appointments.cs:
+ * and backend/Services/AssistService/Assist.WebApi/Endpoints/Chat/Appointments.cs:
  *  - Base path /appointments (ChatService :5107 — see lib/api SERVICE_PORTS)
  *  - GET  /appointments/ca-profiles                  → { items: CaProfileDto[] }
  *  - GET  /appointments/slots?caProfileId&date       → { slots: AvailableSlotDto[] }

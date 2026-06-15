@@ -178,7 +178,7 @@ Verified-state summary (2026-06-10): backend has 12 services, ~236 endpoints, ~7
 ## Category D — Missing / Incomplete Features vs Requirements
 
 ### GAP-030 — AI Service is 100% unimplemented (5 endpoints all return 501)
-- **Issue:** `AiService.Api/Endpoints/Ai.cs` — chat, message, embed, search, tax-advice all 501. No handlers, no DbSets, no pgvector wiring, no Semantic Kernel, no Vertex/Gemini client, no Sarvam client. Dependent features dead: AI first-response chat (7.7), RAG document search, AI smart ITR checklist (6.3), cash-flow forecasting (3.10), anomaly detection, regime-recommendation AI augmentation.
+- **Issue:** `Assist.WebApi/Endpoints/Ai/Ai.cs` — chat, message, embed, search, tax-advice all 501. No handlers, no DbSets, no pgvector wiring, no Semantic Kernel, no Vertex/Gemini client, no Sarvam client. Dependent features dead: AI first-response chat (7.7), RAG document search, AI smart ITR checklist (6.3), cash-flow forecasting (3.10), anomaly detection, regime-recommendation AI augmentation.
 - **Impact:** A whole differentiating module from the brief is missing; market leaders (2026) ship AI receipt-scanning + reconciliation as standard. The 20 req/min `ai` rate limiter and admin AI-config UI exist with nothing behind them.
 - **Solution:** Phased build: (P7a) embeddings + pgvector HNSW + document RAG search; (P7b) AI chat first-response with escalate-to-CA handoff into ChatService; (P7c) smart checklist + anomaly flags. Use the existing admin-configurable AI provider settings (`/auth/config/ai`). Never return raw model output (per AGENTS.md rule — map to DTOs).
 - **Owner:** backend-agent (+ db-engineer for `ai` schema DbSets/HNSW)
@@ -475,7 +475,7 @@ Verified-state summary (2026-06-10): backend has 12 services, ~236 endpoints, ~7
 ### GAP-092 — `status.md` stale — **corrected 2026-06-10** (post-Phase-6 review section added; current-state pointer updated).
 
 ### GAP-093 — Service-count and stack inconsistencies in top-level docs
-- **Issue:** AGENTS.md says 11 microservices and references Azure/Azurite/pnpm in places; CLAUDE.md says 12 + GCP; project plan says .NET 8; repo is .NET 10 + GCP + npm.
+- **Issue:** AGENTS.md says 3 composite services and references Azure/Azurite/pnpm in places; CLAUDE.md says 12 + GCP; project plan says .NET 8; repo is .NET 10 + GCP + npm.
 - **Impact:** New agents/contributors get conflicting onboarding facts.
 - **Solution:** Reconcile AGENTS.md to 12 services / GCP / actual commands.
 - **Owner:** orchestrator

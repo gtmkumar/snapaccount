@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SnapAccount — Deploy all 11 Cloud Run services
+# SnapAccount — Deploy all 3 Cloud Run composite services
 # Run after infra/setup.sh has been executed.
 #
 # Usage:
@@ -114,153 +114,57 @@ deploy_service() {
 }
 
 # ─────────────────────────────────────────────
-# Auth Service
+# Platform Service (Auth + Subscription + Notification)
 # ─────────────────────────────────────────────
-section "Auth Service"
+section "Platform Service"
 deploy_service \
-    "auth-service" \
-    "auth-service-sa" \
-    "${MIN_DEFAULT}" "${MAX_DEFAULT}" \
-    "FIREBASE_CREDENTIALS_JSON=firebase-service-account-json:latest,MSG91_API_KEY=msg91-api-key:latest,JWT_SECRET_KEY=jwt-secret-key:latest" \
-    "SERVICE_NAME=AuthService,PUBSUB_TOPIC_PREFIX=snapaccount" \
-    "internal-and-cloud-load-balancing" "false" "1" "512Mi"
-
-# ─────────────────────────────────────────────
-# Document Service
-# ─────────────────────────────────────────────
-section "Document Service"
-deploy_service \
-    "document-service" \
-    "document-service-sa" \
-    "${MIN_DEFAULT}" "${MAX_DEFAULT}" \
-    "FIREBASE_CREDENTIALS_JSON=firebase-service-account-json:latest,GCS_BUCKET_NAME=gcs-documents-bucket:latest" \
-    "SERVICE_NAME=DocumentService,PUBSUB_TOPIC_PREFIX=snapaccount" \
-    "internal-and-cloud-load-balancing" "false" "1" "1Gi"
-
-# ─────────────────────────────────────────────
-# Accounting Service
-# ─────────────────────────────────────────────
-section "Accounting Service"
-deploy_service \
-    "accounting-service" \
-    "accounting-service-sa" \
-    "${MIN_DEFAULT}" "${MAX_DEFAULT}" \
-    "" \
-    "SERVICE_NAME=AccountingService,PUBSUB_TOPIC_PREFIX=snapaccount" \
-    "internal-and-cloud-load-balancing" "false" "1" "512Mi"
-
-# ─────────────────────────────────────────────
-# GST Service
-# Phase 6B: added GSTN sandbox credentials (gstn-client-id, gstn-client-secret),
-#   per-GSTIN credentials template, IRP credentials (e-invoicing), EWB credentials,
-#   and production-api feature flag. Mock adapter remains active until
-#   feature-flag-gst-production-apis-enabled = "true" (P6-FLAG-04).
-# ─────────────────────────────────────────────
-section "GST Service"
-deploy_service \
-    "gst-service" \
-    "gst-service-sa" \
-    "${MIN_DEFAULT}" "${MAX_DEFAULT}" \
-    "GST_PORTAL_CLIENT_ID=gst-portal-client-id:latest,GST_PORTAL_CLIENT_SECRET=gst-portal-client-secret:latest,NIC_EINVOICE_CREDENTIALS=nic-einvoice-credentials:latest,GSTN_CLIENT_ID=gstn-client-id:latest,GSTN_CLIENT_SECRET=gstn-client-secret:latest,IRP_CLIENT_ID=irp-client-id:latest,IRP_CLIENT_SECRET=irp-client-secret:latest,EWB_CLIENT_ID=ewb-client-id:latest,EWB_CLIENT_SECRET=ewb-client-secret:latest,GST_PRODUCTION_APIS_ENABLED=feature-flag-gst-production-apis-enabled:latest" \
-    "SERVICE_NAME=GstService,PUBSUB_TOPIC_PREFIX=snapaccount,GST_PORTAL_URL=https://api.gst.gov.in,NIC_EINVOICE_URL=https://einvoice1.gst.gov.in,EWB_URL=https://ewaybillgst.gov.in" \
-    "internal-and-cloud-load-balancing" "false" "1" "512Mi"
-
-# ─────────────────────────────────────────────
-# Loan Service
-# Phase 6C: Partner bank credential secrets (partner-bank-creds-template acts as the
-#   reference; actual per-bank secrets partner-bank-creds-{bankId} are created by ops
-#   and read at runtime via Secret Manager API — not mounted as individual env vars).
-#   Webhook shared secrets (partner-bank-webhook-secret-{bankId}) similarly read at runtime.
-#   GCS loan-packages bucket: LoanService writes sanction letters + executed agreements.
-#   Pub/Sub: publishes to snapaccount.loan.events (Loan Approved, Loan Disbursed events).
-#   Memory: bumped to 1Gi — QuestPDF document generation is memory-intensive.
-# ─────────────────────────────────────────────
-section "Loan Service"
-deploy_service \
-    "loan-service" \
-    "loan-service-sa" \
+    "platform-service" \
+    "platform-service-sa" \
     "${MIN_DEFAULT}" "$([ "${ENVIRONMENT}" = "production" ] && echo 5 || echo 3)" \
-    "GCS_LOAN_PACKAGES_BUCKET=gcs-loan-packages-bucket:latest,PARTNER_BANK_CREDS_TEMPLATE=partner-bank-creds-template:latest" \
-    "SERVICE_NAME=LoanService,PUBSUB_TOPIC_PREFIX=snapaccount,LOAN_EVENTS_TOPIC=snapaccount.loan.events" \
-    "internal-and-cloud-load-balancing" "false" "1" "1Gi"
-
-# ─────────────────────────────────────────────
-# ITR Service
-# Phase 6D: added google-document-ai-config for Form 16 OCR extraction.
-#   Document AI quota note: see docs/devops/document-ai-quota-itr.md.
-#   Tax slab versioning: managed by ops via itr-tax-slab-rollover-runbook.md (April 1 each AY).
-# ─────────────────────────────────────────────
-section "ITR Service"
-deploy_service \
-    "itr-service" \
-    "itr-service-sa" \
-    "${MIN_DEFAULT}" "${MAX_DEFAULT}" \
-    "IT_PORTAL_CREDENTIALS=it-portal-credentials:latest,GOOGLE_DOCUMENT_AI_CONFIG=google-document-ai-config:latest" \
-    "SERVICE_NAME=ItrService,PUBSUB_TOPIC_PREFIX=snapaccount,IT_PORTAL_URL=https://efileapi.incometax.gov.in" \
+    "FIREBASE_CREDENTIALS_JSON=firebase-service-account-json:latest,FIREBASE_ADMIN_JSON=firebase-admin-json:latest,MSG91_API_KEY=msg91-api-key:latest,MSG91_SENDER_ID=msg91-sender-id:latest,SENDGRID_API_KEY=sendgrid-api-key:latest,RAZORPAY_KEY_ID=razorpay-key-id:latest,RAZORPAY_KEY_SECRET=razorpay-key-secret:latest,JWT_SECRET_KEY=jwt-secret-key:latest" \
+    "COMPOSITE_NAME=Platform,PUBSUB_TOPIC_PREFIX=snapaccount,FEATURES_WHATSAPP_ENABLED=false" \
     "internal-and-cloud-load-balancing" "false" "1" "512Mi"
 
 # ─────────────────────────────────────────────
-# Chat Service (SignalR — sticky sessions + Redis backplane)
-#
-# Phase 6F changes:
-#   --session-affinity  : Cloud Run cookie-based session affinity (AWSALB-equivalent
-#                         _gcss cookie). Required so that WebSocket upgrade requests
-#                         (GET / HTTP/1.1 Upgrade: websocket) always land on the same
-#                         instance that owns the SignalR connection. Without this, the
-#                         negotiate handshake and subsequent WS frames may hit different
-#                         instances, breaking the connection.
-#
-#   min-instances=1     : SignalR hub connections are long-lived. Scale-to-zero would
-#                         terminate all active connections. 1 warm instance keeps
-#                         connections alive during low-traffic periods.
-#
-#   memory=1Gi          : Each connected SignalR client holds an in-memory connection
-#                         object plus any buffered messages. 1Gi supports ~2,000
-#                         concurrent connections before Redis backplane fan-out kicks in.
-#
-#   REDIS_CONNECTION_STRING: StackExchange.Redis connection string for the SignalR
-#                         backplane (Microsoft.AspNetCore.SignalR.StackExchangeRedis).
-#                         Cross-instance fan-out for chat groups and typing indicators.
-#                         Typing indicator presence stored in Redis with 30s TTL.
-#
-#   WebSocket support   : Cloud Run supports WebSocket upgrades natively on port 8080.
-#                         No additional configuration needed — Cloud Run's HTTP/1.1
-#                         upgrade headers (Connection: Upgrade, Upgrade: websocket) are
-#                         passed through to the container. SignalR negotiates WS first,
-#                         falls back to Server-Sent Events, then long-polling.
-#
-# Backend-agent handoff:
-#   NuGet: Microsoft.AspNetCore.SignalR.StackExchangeRedis
-#   Wire up: services.AddSignalR().AddStackExchangeRedis(
-#                Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING"));
-#   Sticky sessions: already enforced at Cloud Run level — app need not handle this.
-#   Typing indicators / presence: store in Redis key `presence:{userId}` with 30s TTL
-#                                 (EXPIRE command on each heartbeat from the client).
+# Finance Service (Document + Accounting + GST + Loan + ITR + Report)
 # ─────────────────────────────────────────────
-section "Chat Service"
+section "Finance Service"
+deploy_service \
+    "finance-service" \
+    "finance-service-sa" \
+    "${MIN_DEFAULT}" "$([ "${ENVIRONMENT}" = "production" ] && echo 5 || echo 3)" \
+    "FIREBASE_CREDENTIALS_JSON=firebase-service-account-json:latest,GCS_BUCKET_NAME=gcs-documents-bucket:latest,GCS_LOAN_PACKAGES_BUCKET=gcs-loan-packages-bucket:latest,GST_PORTAL_CLIENT_ID=gst-portal-client-id:latest,GST_PORTAL_CLIENT_SECRET=gst-portal-client-secret:latest,NIC_EINVOICE_CREDENTIALS=nic-einvoice-credentials:latest,GSTN_CLIENT_ID=gstn-client-id:latest,GSTN_CLIENT_SECRET=gstn-client-secret:latest,IRP_CLIENT_ID=irp-client-id:latest,IRP_CLIENT_SECRET=irp-client-secret:latest,EWB_CLIENT_ID=ewb-client-id:latest,EWB_CLIENT_SECRET=ewb-client-secret:latest,GST_PRODUCTION_APIS_ENABLED=feature-flag-gst-production-apis-enabled:latest,IT_PORTAL_CREDENTIALS=it-portal-credentials:latest,GOOGLE_DOCUMENT_AI_CONFIG=google-document-ai-config:latest" \
+    "COMPOSITE_NAME=Finance,PUBSUB_TOPIC_PREFIX=snapaccount,GST_PORTAL_URL=https://api.gst.gov.in,NIC_EINVOICE_URL=https://einvoice1.gst.gov.in,EWB_URL=https://ewaybillgst.gov.in,IT_PORTAL_URL=https://efileapi.incometax.gov.in,LOAN_EVENTS_TOPIC=snapaccount.loan.events,ServiceUrls__GstService=https://finance-service,ServiceUrls__AccountingService=https://finance-service" \
+    "internal-and-cloud-load-balancing" "false" "1" "1Gi"
 
-CHAT_SERVICE_NAME="chat-service${NAME_SUFFIX}"
-CHAT_SA="chat-service-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
-CHAT_IMAGE=$(image_uri "chat-service")
-CHAT_MIN=1    # Must be ≥1 — SignalR connections die on scale-to-zero
-CHAT_MAX="$([ "${ENVIRONMENT}" = "production" ] && echo 10 || echo 3)"
-CHAT_SECRETS="ASPNETCORE_DB_CONNECTION=${DB_SECRET}:latest,ASPNETCORE_REDIS_CONNECTION=${REDIS_SECRET}:latest,REDIS_CONNECTION_STRING=${REDIS_SECRET}:latest"
-CHAT_ENV="ASPNETCORE_ENVIRONMENT=$([ "${ENVIRONMENT}" = "production" ] && echo Production || echo Staging)"
-CHAT_ENV="${CHAT_ENV},ASPNETCORE_URLS=http://+:8080"
-CHAT_ENV="${CHAT_ENV},GCP_PROJECT_ID=${GCP_PROJECT_ID}"
-CHAT_ENV="${CHAT_ENV},GCP_REGION=${REGION}"
-CHAT_ENV="${CHAT_ENV},SERVICE_NAME=ChatService"
-CHAT_ENV="${CHAT_ENV},PUBSUB_TOPIC_PREFIX=snapaccount"
+# ─────────────────────────────────────────────
+# Assist Service (Chat + AI + Callback — SignalR session affinity)
+# ─────────────────────────────────────────────
+section "Assist Service"
 
-log "Deploying ${CHAT_SERVICE_NAME} (SignalR with session affinity)..."
-gcloud run deploy "${CHAT_SERVICE_NAME}" \
-    --image="${CHAT_IMAGE}" \
+ASSIST_SERVICE_NAME="assist-service${NAME_SUFFIX}"
+ASSIST_SA="assist-service-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+ASSIST_IMAGE=$(image_uri "assist-service")
+ASSIST_MIN=1
+ASSIST_MAX="$([ "${ENVIRONMENT}" = "production" ] && echo 10 || echo 3)"
+ASSIST_SECRETS="ASPNETCORE_DB_CONNECTION=${DB_SECRET}:latest,ASPNETCORE_REDIS_CONNECTION=${REDIS_SECRET}:latest,REDIS_CONNECTION_STRING=${REDIS_SECRET}:latest,SARVAM_AI_API_KEY=sarvam-ai-api-key:latest"
+ASSIST_ENV="ASPNETCORE_ENVIRONMENT=$([ "${ENVIRONMENT}" = "production" ] && echo Production || echo Staging)"
+ASSIST_ENV="${ASSIST_ENV},ASPNETCORE_URLS=http://+:8080"
+ASSIST_ENV="${ASSIST_ENV},GCP_PROJECT_ID=${GCP_PROJECT_ID}"
+ASSIST_ENV="${ASSIST_ENV},GCP_REGION=${REGION}"
+ASSIST_ENV="${ASSIST_ENV},COMPOSITE_NAME=Assist"
+ASSIST_ENV="${ASSIST_ENV},PUBSUB_TOPIC_PREFIX=snapaccount"
+ASSIST_ENV="${ASSIST_ENV},VERTEX_AI_LOCATION=asia-south1,VERTEX_AI_MODEL_ID=gemini-1.5-pro"
+
+log "Deploying ${ASSIST_SERVICE_NAME} (SignalR with session affinity)..."
+gcloud run deploy "${ASSIST_SERVICE_NAME}" \
+    --image="${ASSIST_IMAGE}" \
     --region="${REGION}" \
-    --service-account="${CHAT_SA}" \
+    --service-account="${ASSIST_SA}" \
     --platform=managed \
     --port=8080 \
-    --min-instances="${CHAT_MIN}" \
-    --max-instances="${CHAT_MAX}" \
+    --min-instances="${ASSIST_MIN}" \
+    --max-instances="${ASSIST_MAX}" \
     --concurrency=80 \
     --cpu=1 \
     --memory=1Gi \
@@ -270,81 +174,12 @@ gcloud run deploy "${CHAT_SERVICE_NAME}" \
     --vpc-egress=private-ranges-only \
     --ingress=internal-and-cloud-load-balancing \
     --no-allow-unauthenticated \
-    --set-secrets="${CHAT_SECRETS}" \
-    --set-env-vars="${CHAT_ENV}" \
+    --set-secrets="${ASSIST_SECRETS}" \
+    --set-env-vars="${ASSIST_ENV}" \
     --update-labels="environment=${ENVIRONMENT},app=snapaccount,signalr=enabled" \
     --timeout=300 \
     --quiet
-log "  Deployed: ${CHAT_SERVICE_NAME} (session-affinity=ON, min-instances=1, memory=1Gi)"
-
-# ─────────────────────────────────────────────
-# Notification Service
-# ─────────────────────────────────────────────
-section "Notification Service"
-deploy_service \
-    "notification-service" \
-    "notification-service-sa" \
-    "${MIN_DEFAULT}" "$([ "${ENVIRONMENT}" = "production" ] && echo 5 || echo 3)" \
-    "FIREBASE_CREDENTIALS_JSON=firebase-service-account-json:latest,FIREBASE_ADMIN_JSON=firebase-admin-json:latest,MSG91_API_KEY=msg91-api-key:latest,MSG91_SENDER_ID=msg91-sender-id:latest,SENDGRID_API_KEY=sendgrid-api-key:latest,WHATSAPP_TOKEN=whatsapp-business-token:latest" \
-    "SERVICE_NAME=NotificationService,PUBSUB_TOPIC_PREFIX=snapaccount,FEATURES_WHATSAPP_ENABLED=false" \
-    "internal-and-cloud-load-balancing" "false" "1" "512Mi"
-
-# ─────────────────────────────────────────────
-# Report Service
-# Phase 6C: Added GCS_LOAN_PACKAGES_BUCKET secret — ReportService writes QuestPDF loan
-#   summary reports (amortisation schedules, loan account statements) to the loan-packages
-#   bucket in addition to the general documents bucket.
-#   Memory: already 1Gi — appropriate for QuestPDF in-process rendering.
-#   Fonts bundled in image: Inter (UI), Noto Sans Devanagari (Hindi), Noto Sans Bengali
-#   (Bengali). See docs/devops/questpdf-font-bundling.md for embedding instructions.
-# ─────────────────────────────────────────────
-section "Report Service"
-deploy_service \
-    "report-service" \
-    "report-service-sa" \
-    "0" "$([ "${ENVIRONMENT}" = "production" ] && echo 5 || echo 2)" \
-    "GCS_BUCKET_NAME=gcs-documents-bucket:latest,GCS_LOAN_PACKAGES_BUCKET=gcs-loan-packages-bucket:latest" \
-    "SERVICE_NAME=ReportService,PUBSUB_TOPIC_PREFIX=snapaccount" \
-    "internal-and-cloud-load-balancing" "false" "1" "1Gi"
-
-# ─────────────────────────────────────────────
-# Subscription Service
-# ─────────────────────────────────────────────
-section "Subscription Service"
-deploy_service \
-    "subscription-service" \
-    "subscription-service-sa" \
-    "${MIN_DEFAULT}" "$([ "${ENVIRONMENT}" = "production" ] && echo 5 || echo 3)" \
-    "RAZORPAY_KEY_ID=razorpay-key-id:latest,RAZORPAY_KEY_SECRET=razorpay-key-secret:latest" \
-    "SERVICE_NAME=SubscriptionService,PUBSUB_TOPIC_PREFIX=snapaccount" \
-    "internal-and-cloud-load-balancing" "false" "1" "512Mi"
-
-# ─────────────────────────────────────────────
-# Callback Service (Phase 6E — 12th microservice)
-# Handles callback request lifecycle: PENDING → SCHEDULED → IN_PROGRESS → COMPLETED.
-# Emits domain events consumed by NotificationService (callback.*.event topic).
-# Same scale settings as NotificationService — operational hours, not bursty.
-# ─────────────────────────────────────────────
-section "Callback Service"
-deploy_service \
-    "callback-service" \
-    "callback-service-sa" \
-    "${MIN_DEFAULT}" "$([ "${ENVIRONMENT}" = "production" ] && echo 5 || echo 3)" \
-    "" \
-    "SERVICE_NAME=CallbackService,PUBSUB_TOPIC_PREFIX=snapaccount" \
-    "internal-and-cloud-load-balancing" "false" "1" "512Mi"
-
-# ─────────────────────────────────────────────
-# AI Service
-# ─────────────────────────────────────────────
-section "AI Service"
-deploy_service \
-    "ai-service" \
-    "ai-service-sa" \
-    "0" "${MAX_DEFAULT}" \
-    "SARVAM_AI_API_KEY=sarvam-ai-api-key:latest" \
-    "SERVICE_NAME=AiService,PUBSUB_TOPIC_PREFIX=snapaccount,VERTEX_AI_LOCATION=asia-south1,VERTEX_AI_MODEL_ID=gemini-1.5-pro" \
-    "internal-and-cloud-load-balancing" "false" "1" "1Gi"
+log "  Deployed: ${ASSIST_SERVICE_NAME} (session-affinity=ON, min-instances=1, memory=1Gi)"
 
 # ─────────────────────────────────────────────
 # Admin Panel (public-facing — allow unauthenticated)
@@ -381,7 +216,7 @@ echo " Region: ${REGION}"
 echo "═══════════════════════════════════════════════"
 echo ""
 echo "Deployed services:"
-SERVICES=(auth-service document-service accounting-service gst-service loan-service itr-service chat-service notification-service report-service subscription-service ai-service callback-service admin-panel)
+SERVICES=(platform-service finance-service assist-service admin-panel)
 for svc in "${SERVICES[@]}"; do
     URL=$(gcloud run services describe "${svc}${NAME_SUFFIX}" \
         --region="${REGION}" \

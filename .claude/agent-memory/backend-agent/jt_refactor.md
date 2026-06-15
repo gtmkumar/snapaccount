@@ -122,8 +122,8 @@ All 26 pairs were namespace-only diffs — no body differences found.
 
 ### External references fixed before deletion
 
-- `DocumentService.Api/Endpoints/Documents.cs` — `using DocumentService.Application.Commands.UploadDocument` → `using DocumentService.Application.Documents.Commands.UploadDocument`
-- `GstService.Api/Endpoints/Gst.cs` — 6 using directives updated to GstReturns/EWayBills/EInvoices/ItcReconciliation feature namespaces
+- `Finance.WebApi/Endpoints/Document/Documents.cs` — `using DocumentService.Application.Commands.UploadDocument` → `using DocumentService.Application.Documents.Commands.UploadDocument`
+- `Finance.WebApi/Endpoints/Gst/Gst.cs` — 6 using directives updated to GstReturns/EWayBills/EInvoices/ItcReconciliation feature namespaces
 - `GstService.Application/Interfaces/IItcMismatchReadRepository.cs` — updated to ItcReconciliation namespace
 - `GstService.Infrastructure/Persistence/Repositories/ItcMismatchReadRepository.cs` — updated to ItcReconciliation namespace
 - `tests/unit/AuthService/SendOtpCommandValidatorTests.cs` — updated to Otp.Commands.SendOtp namespace

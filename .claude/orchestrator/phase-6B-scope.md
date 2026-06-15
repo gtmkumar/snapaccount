@@ -49,7 +49,7 @@ GstService is 50% wired today. Stubs remain on: list returns, list/create invoic
    - Upload notice (PDF) → GCS → notice record with `status=RECEIVED`.
    - Assign to CA → Callback event + Notification event.
 7. **Auto-calculation engine confirmation** (plan E2): GSTR-3B summary auto-computed from invoices. Idempotent recompute endpoint.
-8. All TODO markers in `backend/Services/GstService/GstService.Api/Endpoints/` resolved (target: 0 remaining).
+8. All TODO markers in `backend/Services/FinanceService/Finance.WebApi/Endpoints/Gst/` resolved (target: 0 remaining).
 9. Tests: unit ≥80%, integration with real Postgres.
 
 ### ui-ux-agent (docs/design/)

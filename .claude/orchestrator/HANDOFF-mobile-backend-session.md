@@ -56,10 +56,10 @@ Base: `main` @ `f6a88d3`. Merge to main: `git checkout main && git merge --ff-on
 ```
 # Backend (from backend/, each its own terminal)
 ASPNETCORE_ENVIRONMENT=Development LOCAL_AUTH=true ASPNETCORE_URLS=http://localhost:5101 \
-  dotnet run --no-launch-profile --project Services/AuthService/AuthService.Api
+  dotnet run --no-launch-profile --project Services/PlatformService/Platform.WebApi
 ASPNETCORE_ENVIRONMENT=Development LOCAL_AUTH=true ASPNETCORE_URLS=http://localhost:5047 \
   ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=snapaccount;Username=postgres;Password=postgres;Search Path=document" \
-  dotnet run --no-launch-profile --project Services/DocumentService/DocumentService.Api
+  dotnet run --no-launch-profile --project Services/FinanceService/Finance.WebApi
 # Mobile:  cd mobile && npx expo run:ios   (or run:android — JAVA_HOME=openjdk@17, AVD snap_pixel/android-36)
 # Admin:   already on :3000 (Vite proxies /api/auth -> :5101). Login admin@snapaccount.local / Admin@12345
 # OTP in dev: grep the AuthService console for "OTP for <phone>:"

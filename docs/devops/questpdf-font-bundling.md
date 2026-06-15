@@ -65,7 +65,7 @@ Steps for backend-agent:
 
 ## Dockerfile Build Instructions
 
-The shared backend Dockerfile is at `backend/Dockerfile` and uses `--build-arg SERVICE_NAME=<Name>`.
+The shared backend Dockerfile is at `backend/Dockerfile` and uses `--build-arg COMPOSITE_NAME=<Name>`.
 The fonts are built into the image during the `build` stage and copied to the `runtime` stage.
 
 Add the following to `backend/Dockerfile` (backend-agent owns the file; this is the
@@ -115,8 +115,8 @@ The path `/app/fonts/` matches the `COPY` destination in the Dockerfile above.
 | **LoanService** | Sanction letter, loan agreement, disbursement advice generation at loan origination |
 | **ReportService** | Loan account statement, amortisation schedule, loan summary report |
 
-Both services share the same `backend/Dockerfile` (built with different `SERVICE_NAME`
-build args). The font layer is shared and does not increase per-service image size.
+Both modules live in the **Finance** composite and share `backend/Dockerfile` (built with `COMPOSITE_NAME=Finance`).
+The font layer is shared and does not increase per-deploy image size.
 
 ---
 

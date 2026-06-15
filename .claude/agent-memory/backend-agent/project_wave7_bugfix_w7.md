@@ -8,7 +8,7 @@ metadata:
 Wave 7 live-QA (2026-06-12) found 5 HIGH backend bugs, all fixed in commit on branch `2026-06-10-s5t4`.
 
 ## BUG-W7-01 — NotificationService: string enum deserialization
-- Root cause: `JsonStringEnumConverter` not registered in `NotificationService.Api/Program.cs`.
+- Root cause: `JsonStringEnumConverter` not registered in `Platform.WebApi/Program.cs`.
 - Fix: `builder.Services.ConfigureHttpJsonOptions(opts => opts.SerializerOptions.Converters.Add(new JsonStringEnumConverter()))`.
 - Pattern: `UpperSnakeEnumConverter` in EF config is DB-only; has NO effect on API JSON binding.
 - 16 new tests in `tests/unit/NotificationService/Wave7BugFixTests.cs`.
@@ -22,7 +22,7 @@ Wave 7 live-QA (2026-06-12) found 5 HIGH backend bugs, all fixed in commit on br
 - 18 new tests (up from original 16): includes two EF model-inspection tests that assert `ClrType == Guid?`, `IsNullable == true`, and `GetDefaultValue() == null` without hitting the DB.
 
 ## BUG-W7-03 — GstService: string enum deserialization (same class as W7-01)
-- Root cause: `JsonStringEnumConverter` not registered in `GstService.Api/Program.cs`.
+- Root cause: `JsonStringEnumConverter` not registered in `Finance.WebApi/Program.cs`.
 - Fix: same pattern as W7-01.
 - Also covers `GstNoticeAppealStage` (same class of bug in `UpdateAppealStageRequest`).
 - 19 new tests in `tests/unit/GstService/Wave7BugFixTests.cs`.

@@ -13,7 +13,7 @@ Phase 6F security hotfix applied 2026-04-25.
 ## SEC-051 (HIGH) — Razorpay HMAC webhook FIXED
 
 New endpoint: `POST /subscriptions/webhooks/razorpay`
-- File: `SubscriptionService.Api/Endpoints/RazorpayWebhook.cs`
+- File: `Platform.WebApi/Endpoints/Subscription/RazorpayWebhook.cs`
 - Reads raw body before model-binding via `EnableBuffering()`
 - HMAC-SHA256 with `CryptographicOperations.FixedTimeEquals` (constant-time, timing-attack safe)
 - Secret from `RAZORPAY_WEBHOOK_SECRET` config key
@@ -36,7 +36,7 @@ New file: `SubscriptionService.Infrastructure/Messaging/AccountDeletionSubscribe
 
 ## SEC-053 (MEDIUM) — ChatService SendMessage rate-limit FIXED
 
-ChatService.Api/Program.cs:
+Assist.WebApi/Program.cs:
 - Added `chat-send-strict` fixed-window limiter: 60 msg/min, queue limit 0
 - `POST /chat/threads/{id}/messages` now uses `.RequireRateLimiting("chat-send-strict")`
 

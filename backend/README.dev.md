@@ -14,13 +14,12 @@ real password. This prevents credentials from being committed to version control
 **Set the database password via dotnet user-secrets (run once per service):**
 
 ```bash
-cd backend/Services/AuthService/AuthService.Api
+cd backend/Services/PlatformService/Platform.WebApi
 dotnet user-secrets init
 dotnet user-secrets set "DB_PASSWORD" "postgresql"
 ```
 
-Repeat for each service you run locally. The runtime replaces `#{DB_PASSWORD}#` with the
-user-secrets value via the `AddUserSecrets` configuration provider.
+Set once per composite WebApi host you run locally (Platform, Finance, or Assist).
 
 **Alternative: environment variable**
 
@@ -48,10 +47,10 @@ The Cloud Run service injects it as the `PanEncryption__Key` environment variabl
 
 ```bash
 cd backend
-dotnet run --project AppHost
+dotnet run --project Services/AppHost
 ```
 
-Aspire dashboard: http://localhost:15888
+Aspire dashboard: https://localhost:17241
 
 ## Environment Variables Summary (local dev)
 

@@ -1,6 +1,0 @@
-@GstService.Api_HostAddress = http://localhost:5034
-
-GET {{GstService.Api_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

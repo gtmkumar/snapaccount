@@ -67,9 +67,7 @@
       "eas": {
         "projectId": "snapaccount-app"
       },
-      "apiBaseUrl": "http://localhost:5101",
-      "documentsBaseUrl": "http://localhost:5102",
-      "chatBaseUrl": "http://localhost:5107",
+      "apiBaseUrl": "http://localhost:5000",
       "integrityCloudProjectNumber": "",
       "firebase": {
         "apiKey": "AIzaSyBQ1xgWAWRIXPFKwcM3yR6GZEfW99G53L4",

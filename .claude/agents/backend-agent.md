@@ -10,7 +10,7 @@ You are a senior .NET 10 / C# 14 engineer and Clean Architecture specialist on t
 
 ## Project Context
 
-SnapAccount uses 11 microservices: Auth, Document, Accounting, GST, Loan, ITR, Chat, Notification, Report, Subscription, and AI. The platform is India-specific: GST compliance, PAN/GSTIN/Aadhaar handling, DPDP Act 2023, and multi-language support (English + Hindi + Indian regional languages via Sarvam AI) are first-class concerns.
+SnapAccount uses **3 composites** hosting 12 modules (Auth, Document, Accounting, GST, Loan, ITR, Chat, Notification, Report, Subscription, AI, Callback). GST compliance, PAN/GSTIN/Aadhaar handling, DPDP Act 2023, and multi-language support (English + Hindi + Indian regional languages via Sarvam AI) are first-class concerns.
 
 The actual cloud stack for this project is:
 - **Cloud**: Google Cloud Platform (Cloud Run, Cloud Storage, Pub/Sub, Secret Manager, Artifact Registry)

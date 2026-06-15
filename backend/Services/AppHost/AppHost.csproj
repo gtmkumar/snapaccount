@@ -1,0 +1,26 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.1.1">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>98700002-37ef-4ced-804b-be8d22067f9e</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="9.*" />
+    <PackageReference Include="Aspire.Hosting.Redis" Version="9.*" />
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 3-service modular monolith (Option A) -->
+    <ProjectReference Include="../Gateway/Gateway.csproj" />
+    <ProjectReference Include="../PlatformService/Platform.WebApi/Platform.WebApi.csproj" />
+    <ProjectReference Include="../FinanceService/Finance.WebApi/Finance.WebApi.csproj" />
+    <ProjectReference Include="../AssistService/Assist.WebApi/Assist.WebApi.csproj" />
+    <ProjectReference Include="../../ServiceDefaults/ServiceDefaults.csproj" IsAspireProjectResource="false" />
+  </ItemGroup>
+
+</Project>

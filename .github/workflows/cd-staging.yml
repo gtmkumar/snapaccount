@@ -64,28 +64,12 @@ jobs:
       fail-fast: false
       matrix:
         service:
-          - name: AuthService
-            cloud_run_name: auth-service
-          - name: DocumentService
-            cloud_run_name: document-service
-          - name: AccountingService
-            cloud_run_name: accounting-service
-          - name: GstService
-            cloud_run_name: gst-service
-          - name: LoanService
-            cloud_run_name: loan-service
-          - name: ItrService
-            cloud_run_name: itr-service
-          - name: ChatService
-            cloud_run_name: chat-service
-          - name: NotificationService
-            cloud_run_name: notification-service
-          - name: ReportService
-            cloud_run_name: report-service
-          - name: SubscriptionService
-            cloud_run_name: subscription-service
-          - name: AiService
-            cloud_run_name: ai-service
+          - name: Platform
+            cloud_run_name: platform-service
+          - name: Finance
+            cloud_run_name: finance-service
+          - name: Assist
+            cloud_run_name: assist-service
 
     steps:
       - name: Checkout
@@ -111,7 +95,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          build-args: SERVICE_NAME=${{ matrix.service.name }}
+          build-args: COMPOSITE_NAME=${{ matrix.service.name }}
           push: true
           tags: |
             ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/${{ matrix.service.cloud_run_name }}:${{ needs.prepare.outputs.image_tag }}
@@ -216,39 +200,18 @@ jobs:
       fail-fast: false
       matrix:
         service:
-          - cloud_run_name: auth-service
-            sa: auth-service-sa
+          - cloud_run_name: platform-service
+            sa: platform-service-sa
             port: 8080
-          - cloud_run_name: document-service
-            sa: document-service-sa
+            memory: 512Mi
+          - cloud_run_name: finance-service
+            sa: finance-service-sa
             port: 8080
-          - cloud_run_name: accounting-service
-            sa: accounting-service-sa
+            memory: 1Gi
+          - cloud_run_name: assist-service
+            sa: assist-service-sa
             port: 8080
-          - cloud_run_name: gst-service
-            sa: gst-service-sa
-            port: 8080
-          - cloud_run_name: loan-service
-            sa: loan-service-sa
-            port: 8080
-          - cloud_run_name: itr-service
-            sa: itr-service-sa
-            port: 8080
-          - cloud_run_name: chat-service
-            sa: chat-service-sa
-            port: 8080
-          - cloud_run_name: notification-service
-            sa: notification-service-sa
-            port: 8080
-          - cloud_run_name: report-service
-            sa: report-service-sa
-            port: 8080
-          - cloud_run_name: subscription-service
-            sa: subscription-service-sa
-            port: 8080
-          - cloud_run_name: ai-service
-            sa: ai-service-sa
-            port: 8080
+            memory: 1Gi
 
     steps:
       - name: Authenticate to GCP via OIDC
@@ -273,7 +236,7 @@ jobs:
             --max-instances=3
             --concurrency=80
             --cpu=1
-            --memory=512Mi
+            --memory=${{ matrix.service.memory }}
             --vpc-connector=snapaccount-vpc-connector
             --vpc-egress=private-ranges-only
             --ingress=internal-and-cloud-load-balancing

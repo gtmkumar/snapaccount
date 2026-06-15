@@ -21,7 +21,7 @@ Task B15/NEW-D03 implemented 2026-06-11.
 - `DocumentService.Application/Documents/Commands/RequestClarification/RequestClarificationCommand.cs` — NEW: [RequiresPermission("document.review")]
 - `DocumentService.Infrastructure/Services/DocumentEventPublisher.cs` — NEW: publishes to snapaccount.document.ocr.completed
 - `DocumentService.Infrastructure/DependencyInjection.cs` — registers IDocumentEventPublisher
-- `DocumentService.Api/Endpoints/Documents.cs` — 4 new routes wired (approve/reject/request-clarification/archive)
+- `Finance.WebApi/Endpoints/Document/Documents.cs` — 4 new routes wired (approve/reject/request-clarification/archive)
 - `tests/unit/DocumentService/DocumentService.Tests.csproj` — NEW test project
 - `tests/unit/DocumentService/DocumentReviewCommandTests.cs` — 25 unit tests
 

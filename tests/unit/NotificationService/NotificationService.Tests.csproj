@@ -25,9 +25,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\backend\Services\NotificationService\NotificationService.Domain\NotificationService.Domain.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\NotificationService\NotificationService.Application\NotificationService.Application.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\NotificationService\NotificationService.Infrastructure\NotificationService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.Domain/Platform.Domain.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.Application/Platform.Application.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.Infrastructure/Platform.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Application\SnapAccount.Shared.Application.csproj" />
   </ItemGroup>

@@ -12,7 +12,7 @@
   <!--
     NOTE FOR BACKEND-AGENT (P6-INT-02):
     Before these tests can be run, add the following to
-    backend/Services/LoanService/LoanService.Api/LoanService.Api.csproj:
+    backend/Services/FinanceService/Finance.WebApi/Finance.WebApi.csproj:
 
       <ItemGroup>
         <InternalsVisibleTo Include="LoanService.IntegrationTests" />
@@ -45,10 +45,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\backend\Services\LoanService\LoanService.Api\LoanService.Api.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\LoanService\LoanService.Application\LoanService.Application.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\LoanService\LoanService.Domain\LoanService.Domain.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\LoanService\LoanService.Infrastructure\LoanService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/FinanceService/Finance.WebApi/Finance.WebApi.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/FinanceService/Finance.Application/Finance.Application.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/FinanceService/Finance.Domain/Finance.Domain.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/FinanceService/Finance.Infrastructure/Finance.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
   </ItemGroup>
 

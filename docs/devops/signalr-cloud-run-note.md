@@ -102,7 +102,7 @@ deploy_service \
     "chat-service-sa" \
     "${MIN_DEFAULT}" "${MAX_DEFAULT}" \   # min=1 prod, min=0 staging — already correct
     "" \
-    "SERVICE_NAME=ChatService,PUBSUB_TOPIC_PREFIX=snapaccount" \
+    "COMPOSITE_NAME=ChatService,PUBSUB_TOPIC_PREFIX=snapaccount" \
     "internal-and-cloud-load-balancing" "false" "1" "512Mi"
 ```
 

@@ -28,10 +28,10 @@
 
   <ItemGroup>
     <!-- NotificationService.Api transitively pulls in Application, Domain, Infrastructure -->
-    <ProjectReference Include="..\..\..\backend\Services\NotificationService\NotificationService.Api\NotificationService.Api.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.WebApi/Platform.WebApi.csproj" />
     <!-- AccountingService.Application and CallbackService.Infrastructure needed for SEC-026/027 attribute/type assertions -->
-    <ProjectReference Include="..\..\..\backend\Services\AccountingService\AccountingService.Application\AccountingService.Application.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\CallbackService\CallbackService.Infrastructure\CallbackService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/FinanceService/Finance.Application/Finance.Application.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.Infrastructure/Assist.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Application\SnapAccount.Shared.Application.csproj" />
   </ItemGroup>

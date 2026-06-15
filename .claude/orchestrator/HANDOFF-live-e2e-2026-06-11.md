@@ -35,11 +35,11 @@ Migrations **062, 063, 064 existed on disk but none were applied** to the local 
 
 ### BUG-B (real code bug) — `GetMyConsentsQuery` untranslatable LINQ → 500 → FIXED
 `db.UserConsents...GroupBy(c => c.Purpose).Select(g => g.OrderByDescending(c => c.ActionAt).First())` cannot be translated by EF Core 10 → throws at query-translation regardless of data → **always 500**. The Wave 2 verification agent marked this CLOSED without executing it.
-**Fix applied** (`backend/Services/AuthService/AuthService.Application/Privacy/Queries/GetMyConsents/GetMyConsentsQuery.cs`): materialize the user's (bounded) rows with `ToListAsync`, then group/reduce in memory. Compiles clean.
+**Fix applied** (`backend/Services/PlatformService/Platform.Application/Auth/Privacy/Queries/GetMyConsents/GetMyConsentsQuery.cs`): materialize the user's (bounded) rows with `ToListAsync`, then group/reduce in memory. Compiles clean.
 
 ### BUG-C (real code bug) — data-export NotFound mapped to 500 instead of 404 → FIXED
 `GetDataExportStatus` returns `Error.NotFound` for a user with no export job (normal state). The endpoint mapped every failure via `Results.Problem()` → **HTTP 500**, but the mobile client (`mobile/src/api/privacy.ts:getDataExportStatus`) treats **404** as "no job yet → null".
-**Fix applied** (`backend/Services/AuthService/AuthService.Api/Endpoints/Privacy.cs`): added `using SnapAccount.Shared.Domain;` and map `ErrorType.NotFound → Results.NotFound()`, else `Results.Problem()`. Compiles clean.
+**Fix applied** (`backend/Services/PlatformService/Platform.WebApi/Endpoints/Auth/Privacy.cs`): added `using SnapAccount.Shared.Domain;` and map `ErrorType.NotFound → Results.NotFound()`, else `Results.Problem()`. Compiles clean.
 
 **Verification status of fixes:** `GET /auth/me/data-correction` returned **200** after migrations (proves the table path works). BUG-B/BUG-C fixes are **code-complete + compile-clean but NOT yet runtime-verified** — the AuthService rebuild requires an AppHost restart, which I had just initiated when paused. Token minting via curl was blocked by the OTP rate limiter (SEC-011, 5/10min/IP) late in the session; use a fresh phone or the password path (`POST /auth/password/register {phoneNumber,password}` — not OTP-rate-limited) to re-test.
 
@@ -72,8 +72,8 @@ Migrations **062, 063, 064 existed on disk but none were applied** to the local 
 - Apply-migrations-on-boot for local dev (or document 060–064 in the run runbook) so this DB-drift class doesn't recur.
 
 ## 6. Files changed this session (backend only — uncommitted on `2026-06-10-s5t4`)
-- `backend/Services/AuthService/AuthService.Application/Privacy/Queries/GetMyConsents/GetMyConsentsQuery.cs` — in-memory grouping.
-- `backend/Services/AuthService/AuthService.Api/Endpoints/Privacy.cs` — `using SnapAccount.Shared.Domain;` + NotFound→404 mapping in `GetDataExportStatus`.
+- `backend/Services/PlatformService/Platform.Application/Auth/Privacy/Queries/GetMyConsents/GetMyConsentsQuery.cs` — in-memory grouping.
+- `backend/Services/PlatformService/Platform.WebApi/Endpoints/Auth/Privacy.cs` — `using SnapAccount.Shared.Domain;` + NotFound→404 mapping in `GetDataExportStatus`.
 - Local DB only (not a repo change): applied migrations 062/063/064.
 
 Session task board: Task #20 = this live E2E session (still `in_progress` — Android partial, iOS pending). Tasks #1–#19 = the 2026-06-11 gap-analysis delta assignments.

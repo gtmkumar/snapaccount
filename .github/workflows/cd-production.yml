@@ -68,28 +68,12 @@ jobs:
       fail-fast: false
       matrix:
         service:
-          - name: AuthService
-            cloud_run_name: auth-service
-          - name: DocumentService
-            cloud_run_name: document-service
-          - name: AccountingService
-            cloud_run_name: accounting-service
-          - name: GstService
-            cloud_run_name: gst-service
-          - name: LoanService
-            cloud_run_name: loan-service
-          - name: ItrService
-            cloud_run_name: itr-service
-          - name: ChatService
-            cloud_run_name: chat-service
-          - name: NotificationService
-            cloud_run_name: notification-service
-          - name: ReportService
-            cloud_run_name: report-service
-          - name: SubscriptionService
-            cloud_run_name: subscription-service
-          - name: AiService
-            cloud_run_name: ai-service
+          - name: Platform
+            cloud_run_name: platform-service
+          - name: Finance
+            cloud_run_name: finance-service
+          - name: Assist
+            cloud_run_name: assist-service
 
     steps:
       - name: Checkout
@@ -115,7 +99,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          build-args: SERVICE_NAME=${{ matrix.service.name }}
+          build-args: COMPOSITE_NAME=${{ matrix.service.name }}
           push: true
           tags: |
             ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/${{ matrix.service.cloud_run_name }}:${{ needs.prepare.outputs.image_tag }}
@@ -227,53 +211,24 @@ jobs:
 
     strategy:
       fail-fast: false
-      max-parallel: 4   # rolling deploy — don't restart all 11 at once
+      max-parallel: 3
       matrix:
         service:
-          - cloud_run_name: auth-service
-            sa: auth-service-sa
+          - cloud_run_name: platform-service
+            sa: platform-service-sa
             min_instances: 1
             max_instances: 10
-          - cloud_run_name: document-service
-            sa: document-service-sa
+            memory: 512Mi
+          - cloud_run_name: finance-service
+            sa: finance-service-sa
             min_instances: 1
             max_instances: 10
-          - cloud_run_name: accounting-service
-            sa: accounting-service-sa
-            min_instances: 1
-            max_instances: 8
-          - cloud_run_name: gst-service
-            sa: gst-service-sa
+            memory: 1Gi
+          - cloud_run_name: assist-service
+            sa: assist-service-sa
             min_instances: 1
             max_instances: 10
-          - cloud_run_name: loan-service
-            sa: loan-service-sa
-            min_instances: 1
-            max_instances: 5
-          - cloud_run_name: itr-service
-            sa: itr-service-sa
-            min_instances: 1
-            max_instances: 8
-          - cloud_run_name: chat-service
-            sa: chat-service-sa
-            min_instances: 1
-            max_instances: 10
-          - cloud_run_name: notification-service
-            sa: notification-service-sa
-            min_instances: 1
-            max_instances: 5
-          - cloud_run_name: report-service
-            sa: report-service-sa
-            min_instances: 0
-            max_instances: 5
-          - cloud_run_name: subscription-service
-            sa: subscription-service-sa
-            min_instances: 1
-            max_instances: 5
-          - cloud_run_name: ai-service
-            sa: ai-service-sa
-            min_instances: 0
-            max_instances: 8
+            memory: 1Gi
 
     steps:
       - name: Authenticate to GCP via OIDC
@@ -298,7 +253,7 @@ jobs:
             --max-instances=${{ matrix.service.max_instances }}
             --concurrency=80
             --cpu=1
-            --memory=512Mi
+            --memory=${{ matrix.service.memory }}
             --vpc-connector=snapaccount-vpc-connector
             --vpc-egress=private-ranges-only
             --ingress=internal-and-cloud-load-balancing
@@ -359,7 +314,7 @@ jobs:
 
       - name: Verify Cloud Run services are healthy
         run: |
-          SERVICES=(auth-service document-service accounting-service gst-service loan-service itr-service chat-service notification-service report-service subscription-service ai-service)
+          SERVICES=(platform-service finance-service assist-service)
           for svc in "${SERVICES[@]}"; do
             STATUS=$(gcloud run services describe "${svc}" \
               --region=${{ env.GCP_REGION }} \

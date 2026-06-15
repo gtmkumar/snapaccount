@@ -4,10 +4,10 @@
 **Owner:** devops-engineer (infra) + team lead (Razorpay dashboard access)
 **Last updated:** 2026-06-11
 **References:**
-- `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/DependencyInjection.cs`
-- `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/Razorpay/RazorpayHttpClient.cs`
-- `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/Razorpay/MockRazorpayClient.cs`
-- `backend/Services/SubscriptionService/SubscriptionService.Api/Endpoints/RazorpayWebhook.cs`
+- `backend/Services/PlatformService/Platform.Infrastructure/Subscription/DependencyInjection.cs`
+- `backend/Services/PlatformService/Platform.Infrastructure/Subscription/Razorpay/RazorpayHttpClient.cs`
+- `backend/Services/PlatformService/Platform.Infrastructure/Subscription/Razorpay/MockRazorpayClient.cs`
+- `backend/Services/PlatformService/Platform.WebApi/Endpoints/Subscription/RazorpayWebhook.cs`
 - `infra/secret-manager-external-deps.sh` (Section 9 — razorpay-webhook-secret slot)
 - `docs/devops/external-deps-secret-mapping.md` (mapping table row for razorpay-webhook-secret)
 
@@ -252,5 +252,5 @@ Setting `isEnabled: false` causes the application layer to fall through to `Mock
 
 - `infra/secret-manager-external-deps.sh` — Section 9: razorpay-webhook-secret slot
 - `docs/devops/external-deps-secret-mapping.md` — full secret-name → env-var → config-key mapping
-- `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/DependencyInjection.cs` — DI wiring (read-only)
-- `backend/Services/SubscriptionService/SubscriptionService.Api/Endpoints/RazorpayWebhook.cs` — SEC-051 HMAC verification
+- `backend/Services/PlatformService/Platform.Infrastructure/Subscription/DependencyInjection.cs` — DI wiring (read-only)
+- `backend/Services/PlatformService/Platform.WebApi/Endpoints/Subscription/RazorpayWebhook.cs` — SEC-051 HMAC verification

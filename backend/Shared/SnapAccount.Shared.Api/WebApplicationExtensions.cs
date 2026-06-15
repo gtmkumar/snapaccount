@@ -46,4 +46,18 @@ public static class WebApplicationExtensions
 
         return app;
     }
+
+    /// <summary>
+    /// Registers endpoint groups from multiple assemblies — used by composite modular hosts
+    /// (e.g. AssistService.Api wiring Chat + AI + Callback route groups in one process).
+    /// </summary>
+    public static WebApplication MapEndpoints(this WebApplication app, params Assembly[] assemblies)
+    {
+        foreach (var assembly in assemblies)
+        {
+            app.MapEndpoints(assembly);
+        }
+
+        return app;
+    }
 }

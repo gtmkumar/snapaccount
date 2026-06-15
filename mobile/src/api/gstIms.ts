@@ -1,7 +1,7 @@
 /**
  * GSTN IMS (Invoice Management System) + GSTR-1A API — typed client functions.
  * GAP-101 / board #32. Spec: docs/design/ims-inbox-spec.md
- * Backend: backend/Services/GstService/GstService.Api/Endpoints/GstIms.cs
+ * Backend: backend/Services/FinanceService/Finance.WebApi/Endpoints/Gst/GstIms.cs
  *
  * Status vocabulary is the EXACT backend `ImsInvoice.Status` strings:
  *   PENDING | ACCEPTED | REJECTED | PENDING_KEPT
