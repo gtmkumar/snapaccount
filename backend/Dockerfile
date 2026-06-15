@@ -23,6 +23,26 @@ RUN dotnet publish Services/${COMPOSITE_NAME}Service/${COMPOSITE_NAME}.WebApi/${
     /p:UseAppHost=false \
     /p:PublishTrimmed=false
 
+# Bundle QuestPDF fonts for Finance composite (Report + Loan PDF generation).
+# Fonts are fetched at image build time — not stored in git (SIL OFL 1.1).
+RUN if [ "${COMPOSITE_NAME}" = "Finance" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends curl unzip ca-certificates && \
+      mkdir -p /app/publish/fonts/Inter /app/publish/fonts/NotoSansDevanagari /app/publish/fonts/NotoSansBengali && \
+      curl -fsSL -o /tmp/inter.zip https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip && \
+      unzip -q /tmp/inter.zip extras/ttf/Inter-Regular.ttf extras/ttf/Inter-Medium.ttf extras/ttf/Inter-SemiBold.ttf extras/ttf/Inter-Bold.ttf -d /tmp/inter && \
+      cp /tmp/inter/extras/ttf/Inter-*.ttf /app/publish/fonts/Inter/ && \
+      curl -fsSL -o /app/publish/fonts/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf \
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansdevanagari/NotoSansDevanagari%5Bwdth,wght%5D.ttf" && \
+      cp /app/publish/fonts/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf \
+        /app/publish/fonts/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf && \
+      curl -fsSL -o /app/publish/fonts/NotoSansBengali/NotoSansBengali-Regular.ttf \
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansbengali/NotoSansBengali%5Bwdth,wght%5D.ttf" && \
+      cp /app/publish/fonts/NotoSansBengali/NotoSansBengali-Regular.ttf \
+        /app/publish/fonts/NotoSansBengali/NotoSansBengali-Bold.ttf && \
+      rm -rf /tmp/inter.zip /tmp/inter && \
+      apt-get purge -y unzip && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*; \
+    fi
+
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
 ARG COMPOSITE_NAME
 

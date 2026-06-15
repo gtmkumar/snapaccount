@@ -639,7 +639,7 @@ jobs:
   report-font-verify:
     name: Finance QuestPDF Font Verification
     runs-on: ubuntu-latest
-    # Report + Loan modules live in Finance composite; fonts bundled via Shared/fonts.
+    # Report + Loan modules live in Finance composite; fonts bundled at Docker build time.
 
     steps:
       - name: Checkout
@@ -648,7 +648,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # ── (a) Build the ReportService image ─────────────────────────────────
+      # ── (a) Build the Finance composite image ─────────────────────────────
       - name: Build Finance Docker image
         uses: docker/build-push-action@v6
         with:
@@ -688,6 +688,21 @@ jobs:
           echo "All expected font files are present in the image."
 
       # ── (c) QuestPDF font-registration smoke test (host dotnet process) ────
+      - name: Download fonts for host smoke test
+        run: |
+          set -euo pipefail
+          FONTS="${{ github.workspace }}/backend/Shared/fonts"
+          mkdir -p "$FONTS/Inter" "$FONTS/NotoSansDevanagari" "$FONTS/NotoSansBengali"
+          curl -fsSL -o /tmp/inter.zip https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
+          unzip -q /tmp/inter.zip extras/ttf/Inter-Regular.ttf extras/ttf/Inter-Medium.ttf extras/ttf/Inter-SemiBold.ttf extras/ttf/Inter-Bold.ttf -d /tmp/inter
+          cp /tmp/inter/extras/ttf/Inter-*.ttf "$FONTS/Inter/"
+          curl -fsSL -o "$FONTS/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf" \
+            "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansdevanagari/NotoSansDevanagari%5Bwdth,wght%5D.ttf"
+          cp "$FONTS/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf" "$FONTS/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf"
+          curl -fsSL -o "$FONTS/NotoSansBengali/NotoSansBengali-Regular.ttf" \
+            "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansbengali/NotoSansBengali%5Bwdth,wght%5D.ttf"
+          cp "$FONTS/NotoSansBengali/NotoSansBengali-Regular.ttf" "$FONTS/NotoSansBengali/NotoSansBengali-Bold.ttf"
+
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
         with:
