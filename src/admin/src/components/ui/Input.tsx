@@ -44,7 +44,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={id}
-            className="text-sm font-medium text-neutral-700"
+            className="text-sm font-medium text-[var(--text-secondary)]"
           >
             {label}
             {required && (
@@ -55,7 +55,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
         <div className="relative flex items-center">
           {prefix && (
-            <div className="absolute left-3 flex items-center text-neutral-400 pointer-events-none">
+            <div className="absolute left-3 flex items-center text-[var(--text-disabled)] pointer-events-none">
               {prefix}
             </div>
           )}
@@ -70,13 +70,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               error ? errorId : hint ? hintId : undefined
             }
             className={cn(
-              'w-full rounded-lg border-0 bg-neutral-50 text-neutral-900 transition-all duration-200 outline-none',
-              'placeholder:text-neutral-400',
-              'focus:bg-white focus:ring-2 focus:ring-brand-500/20',
-              'disabled:bg-neutral-100 disabled:text-neutral-400 disabled:cursor-not-allowed',
+              'w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] text-[var(--text-primary)] transition-all duration-200 outline-none',
+              'placeholder:text-[var(--text-disabled)]',
+              'focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--border-focus)]/20',
+              'disabled:bg-[var(--surface-sunken)] disabled:text-[var(--text-disabled)] disabled:cursor-not-allowed',
               error
-                ? 'ring-2 ring-error-600/30 bg-error-50 focus:ring-error-600/30'
-                : 'ring-0',
+                ? 'ring-2 ring-error-600/30 bg-[var(--semantic-error-bg)] focus:ring-error-600/30'
+                : '',
               sizeClasses[size],
               prefix && 'pl-10',
               suffix && 'pr-10',

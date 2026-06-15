@@ -247,6 +247,19 @@ function flattenMenu(nodes: MenuNode[]): RenderItem[] {
   return out
 }
 
+/**
+ * Pick the single most-specific nav href for the current path.
+ * Prevents parent + child both highlighting (e.g. /gst and /gst/notices).
+ */
+export function resolveActiveNavHref(pathname: string, hrefs: string[]): string | null {
+  const matches = hrefs.filter(href => {
+    if (pathname === href) return true
+    return pathname.startsWith(`${href}/`)
+  })
+  if (matches.length === 0) return null
+  return matches.reduce((best, cur) => (cur.length > best.length ? cur : best))
+}
+
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
@@ -286,6 +299,11 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
     [menu, fallbackItems],
   )
 
+  const activeHref = useMemo(
+    () => resolveActiveNavHref(location.pathname, visibleItems.map(item => item.href)),
+    [location.pathname, visibleItems],
+  )
+
   return (
     <aside
       className={cn(
@@ -313,7 +331,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       {/* Nav links */}
       <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto" aria-label="Primary navigation">
         {visibleItems.map((item) => {
-          const isActive = location.pathname.startsWith(item.href)
+          const isActive = item.href === activeHref
           const Icon = item.Icon
 
           return (
@@ -321,10 +339,11 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
               key={item.href}
               to={item.href}
               onClick={onMobileClose}
-              className={({ isActive: navActive }) => cn(
+              isActive={() => isActive}
+              className={() => cn(
                 'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150',
                 'focus-visible:ring-2 focus-visible:ring-[var(--nav-sidebar-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--nav-sidebar-bg)]',
-                (isActive || navActive)
+                isActive
                   ? 'bg-[var(--nav-sidebar-active-bg)] text-[var(--nav-sidebar-text-active)]'
                   : 'text-[var(--nav-sidebar-text)] hover:bg-[var(--nav-sidebar-hover)] hover:text-[var(--nav-sidebar-text-active)]',
                 collapsed && 'justify-center px-0'
@@ -333,7 +352,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
               aria-current={isActive ? 'page' : undefined}
             >
               {/* Active left accent bar */}
-              {location.pathname.startsWith(item.href) && (
+              {isActive && (
                 <span
                   className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-[var(--nav-sidebar-accent)]"
                   aria-hidden="true"

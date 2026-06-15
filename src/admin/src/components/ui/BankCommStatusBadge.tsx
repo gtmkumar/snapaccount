@@ -22,32 +22,32 @@ const variantConfig: Record<
   QUEUED: {
     label: 'Queued',
     icon: Clock,
-    classes: 'bg-neutral-50 text-neutral-600',
+    classes: 'bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)]',
   },
   SENT: {
     label: 'Sent',
     icon: Send,
-    classes: 'bg-info-50 text-info-700',
+    classes: 'bg-[var(--semantic-info-bg)] text-[var(--semantic-info-fg)]',
   },
   DELIVERED: {
     label: 'Delivered',
     icon: CheckCheck,
-    classes: 'bg-info-50 text-info-700',
+    classes: 'bg-[var(--semantic-info-bg)] text-[var(--semantic-info-fg)]',
   },
   RESPONDED: {
     label: 'Responded',
     icon: MessageCircle,
-    classes: 'bg-success-50 text-success-700',
+    classes: 'bg-[var(--semantic-success-bg)] text-[var(--semantic-success-fg)]',
   },
   BOUNCED: {
     label: 'Bounced',
     icon: AlertCircle,
-    classes: 'bg-error-50 text-error-700',
+    classes: 'bg-[var(--semantic-error-bg)] text-[var(--semantic-error-fg)]',
   },
   FAILED: {
     label: 'Failed',
     icon: XCircle,
-    classes: 'bg-error-50 text-error-700',
+    classes: 'bg-[var(--semantic-error-bg)] text-[var(--semantic-error-fg)]',
   },
 }
 

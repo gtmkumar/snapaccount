@@ -60,18 +60,18 @@ export function DataTable<TData>({
 
   return (
     <div className={cn('flex flex-col gap-3', className)}>
-      <div className="overflow-x-auto rounded-xl bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl bg-[var(--surface-raised)] border border-[var(--border-subtle)] shadow-sm">
         <table className="w-full text-sm" role="grid">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="bg-neutral-50">
+              <tr key={headerGroup.id} className="bg-[var(--surface-sunken)] border-b border-[var(--border-subtle)]">
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
                     scope="col"
                     className={cn(
-                      'px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider whitespace-nowrap',
-                      header.column.getCanSort() && 'cursor-pointer select-none hover:text-neutral-700'
+                      'px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider whitespace-nowrap',
+                      header.column.getCanSort() && 'cursor-pointer select-none hover:text-[var(--text-secondary)]'
                     )}
                     onClick={header.column.getToggleSortingHandler()}
                     aria-sort={
@@ -87,7 +87,7 @@ export function DataTable<TData>({
                         ? null
                         : flexRender(header.column.columnDef.header, header.getContext())}
                       {header.column.getCanSort() && (
-                        <span className="text-neutral-400" aria-hidden="true">
+                        <span className="text-[var(--text-disabled)]" aria-hidden="true">
                           {header.column.getIsSorted() === 'asc' ? (
                             <ChevronUp className="h-3 w-3" />
                           ) : header.column.getIsSorted() === 'desc' ? (
@@ -106,7 +106,7 @@ export function DataTable<TData>({
           <tbody>
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className={cn(i % 2 === 1 && 'bg-neutral-50/50')}>
+                <tr key={i} className={cn(i % 2 === 1 && 'bg-[var(--surface-sunken)]/50')}>
                   {columns.map((_, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="h-4 rounded skeleton-shimmer" />
@@ -116,10 +116,10 @@ export function DataTable<TData>({
               ))
             ) : table.getRowModel().rows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-12 text-center text-neutral-500">
+                <td colSpan={columns.length} className="px-4 py-12 text-center text-[var(--text-tertiary)]">
                   {emptyState ?? (
                     <div className="flex flex-col items-center gap-2">
-                      <svg className="h-8 w-8 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <svg className="h-8 w-8 text-[var(--text-disabled)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                       </svg>
                       <p className="text-sm">No records found</p>
@@ -133,8 +133,8 @@ export function DataTable<TData>({
                   key={row.id}
                   className={cn(
                     'transition-colors',
-                    rowIndex % 2 === 1 && 'bg-neutral-50/50',
-                    onRowClick && 'cursor-pointer hover:bg-brand-50/30'
+                    rowIndex % 2 === 1 && 'bg-[var(--surface-sunken)]/40',
+                    onRowClick && 'cursor-pointer hover:bg-[var(--surface-sunken)]'
                   )}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                   tabIndex={onRowClick ? 0 : undefined}
@@ -147,7 +147,7 @@ export function DataTable<TData>({
                   role={onRowClick ? 'button' : undefined}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-3 text-neutral-700">
+                    <td key={cell.id} className="px-4 py-3 text-[var(--text-secondary)]">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
@@ -160,7 +160,7 @@ export function DataTable<TData>({
 
       {showPagination && table.getPageCount() > 1 && (
         <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-[var(--text-tertiary)]">
             Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}–
             {Math.min(
               (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
@@ -178,15 +178,15 @@ export function DataTable<TData>({
                 'inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-150',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
                 table.getCanPreviousPage()
-                  ? 'bg-neutral-100 text-neutral-700 hover:bg-brand-50 hover:text-brand-600'
-                  : 'bg-neutral-50 text-neutral-400'
+                  ? 'bg-[var(--surface-sunken)] text-[var(--text-primary)] hover:bg-[var(--badge-brand-bg)] hover:text-[var(--badge-brand-fg)]'
+                  : 'bg-[var(--surface-raised)] text-[var(--text-disabled)]'
               )}
             >
               <ChevronLeft className="h-3.5 w-3.5" />
               Previous
             </button>
 
-            <span className="text-sm text-neutral-500 px-2 tabular-nums">
+            <span className="text-sm text-[var(--text-tertiary)] px-2 tabular-nums">
               {table.getState().pagination.pageIndex + 1} / {table.getPageCount()}
             </span>
 
@@ -198,8 +198,8 @@ export function DataTable<TData>({
                 'inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-150',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
                 table.getCanNextPage()
-                  ? 'bg-neutral-100 text-neutral-700 hover:bg-brand-50 hover:text-brand-600'
-                  : 'bg-neutral-50 text-neutral-400'
+                  ? 'bg-[var(--surface-sunken)] text-[var(--text-primary)] hover:bg-[var(--badge-brand-bg)] hover:text-[var(--badge-brand-fg)]'
+                  : 'bg-[var(--surface-raised)] text-[var(--text-disabled)]'
               )}
             >
               Next

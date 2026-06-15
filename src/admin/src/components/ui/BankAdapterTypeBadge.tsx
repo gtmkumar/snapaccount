@@ -21,17 +21,17 @@ const variantConfig: Record<
   EMAIL: {
     label: 'Email',
     icon: Mail,
-    classes: 'bg-slate-100 text-slate-700',
+    classes: 'bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)]',
   },
   REST: {
     label: 'REST',
     icon: CloudUpload,
-    classes: 'bg-indigo-50 text-indigo-700',
+    classes: 'bg-[var(--badge-brand-bg)] text-[var(--badge-brand-fg)]',
   },
   OAUTH: {
     label: 'OAuth2',
     icon: LockKeyhole,
-    classes: 'bg-violet-50 text-violet-700',
+    classes: 'bg-[var(--badge-gst-bg)] text-[var(--badge-gst-fg)]',
   },
 }
 
