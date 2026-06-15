@@ -11,9 +11,33 @@ Greppable marker comment (added to live offenders during PR #7):
 
 ---
 
-## 🟢 All known pages migrated (as of 2026-05-17)
+## 🔴 CORRECTION — Open debt re-verified 2026-06-10 (gap-analysis review)
 
-Status verified: greppable scan of `src/admin/src/pages/**/*.tsx` for `const mock`,
+The 2026-05-17 "all migrated" claim below is **stale**. A fresh grep
+(`grep -RnE "const mock[A-Z]" src/admin/src/pages` excluding tests) finds three
+production pages still mock-backed, plus two hardcoded-stat widgets:
+
+| File | Mock | Backend dependency | Tracking |
+|------|------|--------------------|----------|
+| `pages/documents/DocumentQueuePage.tsx:32` | `mockDocuments` (fake `useQuery`, 300ms delay) | `/documents` admin list exists; needs `lib/documentApi.ts` | GAP-010, frontend F1 |
+| `pages/documents/DocumentReviewPage.tsx:31` | `mockFields` (OCR fields + fake doc metadata) | `/documents/{id}` + OCR results exist | GAP-010, frontend F1 |
+| `pages/gst/ItcMismatchPage.tsx:23` | `mockMismatches` (fake `useQuery`) | `GetItcMismatchesQuery` / `ReconcileItcCommand` exist server-side | GAP-011, frontend F2 |
+| `pages/dashboard/DashboardPage.tsx:~446` | Hardcoded System Health metrics (latency/error rate/OCR depth/DB conns) | Needs devops monitoring proxy (D6) | GAP-052, frontend F6 |
+| `pages/settings/SettingsPage.tsx:~85` | Hardcoded Subscription Tier stats (4 plans / 1,247 subscribers / ₹8.4L MRR) | `/subscriptions/mrr` exists | GAP-034, frontend F3 |
+
+Also: `pages/loans/LoanDetailPage.tsx` `handleVerifyHmac` and
+`pages/loans/PartnerBanksSettingsPage.tsx` `handleTestConnection` are simulated
+(always-success) actions, and `pages/settings/sections/PaymentGatewaySettings.tsx`
+holds local-only form state (TODO: `PATCH /subscriptions/config/razorpay`).
+
+See `.claude/orchestrator/gap-analysis-2026-06-10.md` and
+`.claude/orchestrator/phase-7-tasks/frontend-dev.md` for remediation tasks.
+
+---
+
+## ~~🟢 All known pages migrated (as of 2026-05-17)~~ — SUPERSEDED by the correction above
+
+Status as claimed on 2026-05-17: greppable scan of `src/admin/src/pages/**/*.tsx` for `const mock`,
 `mockData`, and `STATIC-DATA-DEBT-7` returns zero matches in production page files
 (test fixtures excluded). See "Resolved in PR …" sections below for the full audit
 trail across PRs #7–#16.

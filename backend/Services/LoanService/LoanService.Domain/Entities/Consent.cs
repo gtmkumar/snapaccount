@@ -23,6 +23,14 @@ public class Consent : BaseAuditableEntity
     /// <summary>Version identifier of the consent text shown to the user.</summary>
     public string ConsentTextVersion { get; init; } = string.Empty;
 
+    /// <summary>
+    /// GAP-040 / P6-HANDOFF-25: Locale of the consent text shown to the user
+    /// (e.g. "en", "hi"). Must match the <see cref="ConsentCatalogEntry.Locale"/> column
+    /// so the DPDP audit trail ties back to the exact language version the user reviewed.
+    /// Defaults to "en" for backward compatibility with pre-existing records.
+    /// </summary>
+    public string ConsentLocale { get; init; } = "en";
+
     /// <summary>UTC timestamp when the user signed the consent.</summary>
     public DateTime SignedAt { get; init; }
 

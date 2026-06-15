@@ -24,10 +24,13 @@ public sealed class LoanApplicationConfiguration : IEntityTypeConfiguration<Loan
         builder.Property(x => x.DisbursedAmount).HasColumnType("numeric(18,2)");
         builder.Property(x => x.AnonymizationReason).HasMaxLength(100);
 
+        // GAP-021: RBI cooling-off window metadata
+        builder.Property(x => x.CoolingOffEndsAt).HasColumnName("cooling_off_ends_at");
+        builder.Property(x => x.CoolingOffDays).HasColumnName("cooling_off_days");
+
         // Indexes
         builder.HasIndex(x => x.OrgId);
         builder.HasIndex(x => x.Status);
-        builder.HasIndex(x => x.AssignedBankId);
         builder.HasIndex(x => x.SubmittedAt);
 
         // Global query filter for soft deletes
@@ -39,9 +42,13 @@ public sealed class LoanApplicationConfiguration : IEntityTypeConfiguration<Loan
             .HasForeignKey(x => x.LoanProductId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Migration 066: assigned_bank_id UUID nullable column confirmed in loan.applications.
+        // FK fk_loan_applications_assigned_bank → loan.partner_banks(id) also confirmed.
+        builder.Property(x => x.AssignedBankId).HasColumnName("assigned_bank_id");
         builder.HasOne(x => x.AssignedBank)
             .WithMany()
             .HasForeignKey(x => x.AssignedBankId)
-            .OnDelete(DeleteBehavior.SetNull);
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired(false);
     }
 }

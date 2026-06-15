@@ -2,6 +2,7 @@ using LoanService.Application.Common.Interfaces;
 using LoanService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Infrastructure.Persistence;
+using System.Text.Json;
 
 namespace LoanService.Infrastructure.Persistence;
 
@@ -40,10 +41,24 @@ public class LoanServiceDbContext(DbContextOptions<LoanServiceDbContext> options
     public DbSet<ConsentCatalogEntry> ConsentCatalog => Set<ConsentCatalogEntry>();
 
     /// <inheritdoc />
+    public DbSet<KeyFactsStatement> KeyFactsStatements => Set<KeyFactsStatement>();
+
+    /// <summary>GAP-110: Fraud check decision log (migration 082). Append-only.</summary>
+    public DbSet<FraudCheck> FraudChecks => Set<FraudCheck>();
+
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("loan");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(LoanServiceDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
+
+        // SWEEP-FIX: loan.consents has NO deleted_at column (immutable 7-year retention table,
+        // protected by DB trigger trg_consents_no_delete). Remove the global soft-delete filter
+        // that BaseDbContext.OnModelCreating applies to all BaseAuditableEntity subtypes AFTER
+        // ApplyConfigurationsFromAssembly runs (base overwrites the HasQueryFilter(c => true) set
+        // in ConsentConfiguration). HasQueryFilter(null) removes the filter entirely.
+        // DDL HANDOFF: db-engineer should NOT add deleted_at to loan.consents per RBI retention rules.
+        modelBuilder.Entity<Consent>().HasQueryFilter(null!);
     }
 }

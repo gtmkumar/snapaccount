@@ -16,7 +16,12 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { useTranslation } from 'react-i18next';
+import {
+  createThemedStyles,
+  useTheme,
+  type ThemeTokens,
+} from '../../contexts/ThemeContext';
 
 interface ConsentSignatureBlockProps {
   /** Text rendered next to the checkbox: "I, {name}, consent to..." */
@@ -41,19 +46,25 @@ export function ConsentSignatureBlock({
   onDecline,
   onSign,
   isSubmitting = false,
-  signLabel = 'Sign & continue',
-  declineLabel = 'Decline',
+  signLabel,
+  declineLabel,
   testID,
 }: ConsentSignatureBlockProps) {
+  // X-2 (a11y): gate hint + disabled AT copy were hardcoded English.
+  const { t } = useTranslation();
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const canSign = scrolledToBottom && checked && !isSubmitting;
+  const resolvedSignLabel = signLabel ?? t('mobile.loan.consent.cta.signContinue');
+  const resolvedDeclineLabel = declineLabel ?? t('mobile.loan.consent.cta.decline');
 
   return (
     <View testID={testID} style={styles.container}>
       {/* Scroll gate hint */}
       {!scrolledToBottom && (
         <View style={styles.gateHint}>
-          <Ionicons name="lock-closed-outline" size={14} color={Colors.neutral[400]} />
-          <Text style={styles.gateHintText}>Scroll to the end to enable acceptance</Text>
+          <Ionicons name="lock-closed-outline" size={14} color={tokens.textTertiary} />
+          <Text style={styles.gateHintText}>{t('mobile.a11y.scrollGateHint')}</Text>
         </View>
       )}
 
@@ -67,7 +78,7 @@ export function ConsentSignatureBlock({
         accessibilityLabel={
           scrolledToBottom
             ? flagText
-            : `Disabled. Scroll to the end of the document to enable. ${flagText}`
+            : `${t('mobile.a11y.scrollGateDisabled')} ${flagText}`
         }
         hitSlop={8}
       >
@@ -78,7 +89,7 @@ export function ConsentSignatureBlock({
             !scrolledToBottom && styles.checkboxDisabled,
           ]}
         >
-          {checked && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+          {checked && <Ionicons name="checkmark" size={14} color={tokens.textOnBrand} />}
         </View>
         <Text
           style={[styles.flagText, !scrolledToBottom && styles.flagTextDisabled]}
@@ -94,10 +105,10 @@ export function ConsentSignatureBlock({
           style={styles.declineBtn}
           onPress={onDecline}
           accessibilityRole="button"
-          accessibilityLabel={declineLabel}
+          accessibilityLabel={resolvedDeclineLabel}
           hitSlop={8}
         >
-          <Text style={styles.declineBtnText}>{declineLabel}</Text>
+          <Text style={styles.declineBtnText}>{resolvedDeclineLabel}</Text>
         </Pressable>
 
         <Pressable
@@ -105,19 +116,20 @@ export function ConsentSignatureBlock({
           onPress={canSign ? onSign : undefined}
           disabled={!canSign}
           accessibilityRole="button"
-          accessibilityLabel={signLabel}
+          accessibilityState={{ disabled: !canSign }}
+          accessibilityLabel={resolvedSignLabel}
         >
           {isSubmitting ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color={tokens.textOnBrand} />
           ) : (
             <>
               <Ionicons
                 name="shield-checkmark"
                 size={16}
-                color={canSign ? '#FFFFFF' : Colors.neutral[400]}
+                color={canSign ? tokens.textOnBrand : tokens.textDisabled}
               />
               <Text style={[styles.signBtnText, !canSign && styles.signBtnTextDisabled]}>
-                {signLabel}
+                {resolvedSignLabel}
               </Text>
             </>
           )}
@@ -127,99 +139,102 @@ export function ConsentSignatureBlock({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: Colors.surface.default,
-    borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
-    padding: 16,
-    gap: 12,
-  },
-  gateHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.neutral[50],
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  gateHintText: {
-    fontSize: 12,
-    color: Colors.neutral[500],
-    fontWeight: '500',
-  },
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: Colors.neutral[300],
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginTop: 1,
-  },
-  checkboxChecked: {
-    backgroundColor: Colors.loan,
-    borderColor: Colors.loan,
-  },
-  checkboxDisabled: {
-    backgroundColor: Colors.neutral[100],
-    borderColor: Colors.neutral[200],
-  },
-  flagText: {
-    flex: 1,
-    fontSize: 13,
-    color: Colors.neutral[700],
-    lineHeight: 19,
-    fontWeight: '500',
-  },
-  flagTextDisabled: {
-    color: Colors.neutral[400],
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  declineBtn: {
-    minHeight: 48,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  declineBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.neutral[600],
-  },
-  signBtn: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 12,
-    backgroundColor: Colors.loan,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  signBtnDisabled: {
-    opacity: 0.4,
-  },
-  signBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  signBtnTextDisabled: {
-    color: Colors.neutral[400],
-  },
-});
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+    container: {
+      backgroundColor: tk.raised,
+      borderTopWidth: 1,
+      borderTopColor: tk.border,
+      padding: 16,
+      gap: 12,
+    },
+    gateHint: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: tk.sunken,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    gateHintText: {
+      fontSize: 12,
+      color: tk.textSecondary,
+      fontWeight: '500',
+    },
+    checkRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+    },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 2,
+      borderColor: tk.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+      marginTop: 1,
+    },
+    checkboxChecked: {
+      // Loan module accent (tokens.json module.loan, themed: lifted in dark).
+      backgroundColor: tk.loanAccent,
+      borderColor: tk.loanAccent,
+    },
+    checkboxDisabled: {
+      backgroundColor: tk.sunken,
+      borderColor: tk.border,
+    },
+    flagText: {
+      flex: 1,
+      fontSize: 13,
+      color: tk.textSecondary,
+      lineHeight: 19,
+      fontWeight: '500',
+    },
+    flagTextDisabled: {
+      color: tk.textDisabled,
+    },
+    actions: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    declineBtn: {
+      minHeight: 48,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: tk.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    declineBtnText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: tk.textSecondary,
+    },
+    signBtn: {
+      flex: 1,
+      minHeight: 48,
+      borderRadius: 12,
+      backgroundColor: tk.loanAccent,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    signBtnDisabled: {
+      opacity: 0.4,
+    },
+    signBtnText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: tk.textOnBrand,
+    },
+    signBtnTextDisabled: {
+      color: tk.textDisabled,
+    },
+  }),
+);

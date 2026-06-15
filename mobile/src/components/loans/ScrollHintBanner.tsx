@@ -4,11 +4,11 @@
  * Phase 6C — docs/design/component-library.md addendum
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 interface ScrollHintBannerProps {
   visible: boolean;
@@ -16,8 +16,10 @@ interface ScrollHintBannerProps {
 }
 
 export function ScrollHintBanner({ visible, testID }: ScrollHintBannerProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
-  const opacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const [opacity] = useState(() => new Animated.Value(visible ? 1 : 0));
 
   useEffect(() => {
     Animated.timing(opacity, {
@@ -34,19 +36,20 @@ export function ScrollHintBanner({ visible, testID }: ScrollHintBannerProps) {
       pointerEvents={visible ? 'none' : 'none'}
       accessibilityLiveRegion="polite"
     >
-      <Ionicons name="arrow-down-circle" size={16} color={Colors.neutral[600]} />
+      <Ionicons name="arrow-down-circle" size={16} color={tokens.textSecondary} />
       <Text style={styles.text}>{t('mobile.loan.consent.scrollHint')}</Text>
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     alignSelf: 'center',
-    backgroundColor: Colors.neutral[800],
+    backgroundColor: tk.textPrimary,
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -55,6 +58,7 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
   },
-});
+  }),
+);

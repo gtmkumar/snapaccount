@@ -20,7 +20,8 @@
       "<rootDir>/src/__mocks__/setup.js"
     ],
     "setupFilesAfterEnv": [
-      "@testing-library/jest-native/extend-expect"
+      "@testing-library/jest-native/extend-expect",
+      "<rootDir>/src/__mocks__/jestAfterEnv.setup.js"
     ],
     "moduleNameMapper": {
       "^react-native/Libraries/BatchedBridge/NativeModules$": "<rootDir>/src/__mocks__/nativeModules.js",
@@ -30,6 +31,9 @@
       "^expo/src/winter$": "<rootDir>/src/__mocks__/expoWinter.js",
       "^expo/src/winter/(.*)$": "<rootDir>/src/__mocks__/expoWinter.js",
       "^expo/src/async-require/messageSocket$": "<rootDir>/src/__mocks__/expoMessageSocket.js",
+      "^@tanstack/react-query$": "<rootDir>/src/__mocks__/reactQueryTracked.js",
+      "^tanstack-react-query-actual$": "<rootDir>/node_modules/@tanstack/react-query",
+      "^@expo/app-integrity$": "<rootDir>/src/__mocks__/expoAppIntegrity.ts",
       "^@expo/vector-icons$": "<rootDir>/src/__mocks__/vectorIcons.js",
       "^@expo/vector-icons/(.*)$": "<rootDir>/src/__mocks__/vectorIcons.js",
       "^@react-native-async-storage/async-storage$": "<rootDir>/src/__mocks__/asyncStorage.ts",
@@ -39,16 +43,24 @@
       "^expo-device$": "<rootDir>/src/__mocks__/expoDevice.ts",
       "^expo-notifications$": "<rootDir>/src/__mocks__/expoNotifications.ts",
       "^expo-haptics$": "<rootDir>/src/__mocks__/expoHaptics.ts",
+      "^expo-crypto$": "<rootDir>/src/__mocks__/expoCrypto.ts",
       "^@microsoft/signalr$": "<rootDir>/src/__mocks__/signalr.ts",
       "^expo-task-manager$": "<rootDir>/src/__mocks__/expoTaskManager.ts",
       "^expo-background-fetch$": "<rootDir>/src/__mocks__/expoBackgroundFetch.ts",
       "^expo-store-review$": "<rootDir>/src/__mocks__/expoStoreReview.ts",
       "^expo-screen-capture$": "<rootDir>/src/__mocks__/expoScreenCapture.ts",
       "^expo-constants$": "<rootDir>/src/__mocks__/expoConstants.ts",
-      "^expo-local-authentication$": "<rootDir>/src/__mocks__/expoLocalAuthentication.ts"
-    }
+      "^expo-local-authentication$": "<rootDir>/src/__mocks__/expoLocalAuthentication.ts",
+      "^react-native-safe-area-context$": "<rootDir>/src/__mocks__/reactNativeSafeAreaContext.js",
+      "^react-native/src/private/featureflags/specs/NativeReactNativeFeatureFlags$": "<rootDir>/src/__mocks__/nativeFeatureFlags.js",
+      "^react-native/src/private/featureflags/ReactNativeFeatureFlagsBase$": "<rootDir>/src/__mocks__/nativeFeatureFlags.js",
+      "^react-native/src/private/featureflags/ReactNativeFeatureFlags$": "<rootDir>/src/__mocks__/nativeFeatureFlags.js",
+      "^nativewind/jsx-runtime$": "react/jsx-runtime"
+    },
+    "resolver": "react-native-worklets/jest/resolver.js"
   },
   "dependencies": {
+    "@expo/app-integrity": "~56.0.3",
     "@expo/config-plugins": "^56.0.8",
     "@expo/vector-icons": "^15.0.2",
     "@hookform/resolvers": "^3.3.4",

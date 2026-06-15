@@ -6,7 +6,6 @@
 
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -21,10 +20,13 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { NoticeRowMobile } from '../../components/shared/NoticeRowMobile';
-import { Colors } from '../../constants/colors';
+import { ListSkeleton, ErrorState } from '../../components/shared/ListStates';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import type { GstNoticeStatus } from '../../api/gst';
 import { listGstNotices, respondToGstNotice } from '../../api/gst';
+import { isNoticeOverdue, isNoticeSettled } from '../../lib/noticeStatus';
 import type { GstStackParamList } from '../../navigation/GstStack';
 
 type NavProp = NativeStackNavigationProp<GstStackParamList, 'GstNoticeInbox'>;
@@ -35,27 +37,43 @@ interface Props {
   route: RoutePropType;
 }
 
-const FILTER_TABS: { key: GstNoticeStatus | 'All'; label: string }[] = [
-  { key: 'All', label: 'All' },
-  { key: 'Open', label: 'Open' },
-  { key: 'Overdue', label: 'Overdue' },
-  { key: 'Responded', label: 'Responded' },
-  { key: 'Closed', label: 'Closed' },
+/**
+ * Filter vocabulary = canonical server statuses + two client-side views:
+ * "All" (no status param) and "Overdue" (derived — deadline passed and not
+ * RESPONDED/CLOSED; never sent to the server).
+ */
+type NoticeFilter = GstNoticeStatus | 'All' | 'Overdue';
+
+const FILTER_TABS: { key: NoticeFilter; labelKey: string }[] = [
+  { key: 'All', labelKey: 'mobile.gst.notices.filter.all' },
+  { key: 'RECEIVED', labelKey: 'mobile.gst.notices.filter.received' },
+  { key: 'UNDER_REVIEW', labelKey: 'mobile.gst.notices.filter.underReview' },
+  { key: 'Overdue', labelKey: 'mobile.gst.notices.filter.overdue' },
+  { key: 'RESPONDED', labelKey: 'mobile.gst.notices.filter.responded' },
+  { key: 'CLOSED', labelKey: 'mobile.gst.notices.filter.closed' },
 ];
 
 export function GstNoticeInboxScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const { orgId } = route.params;
   const qc = useQueryClient();
-  const [activeFilter, setActiveFilter] = useState<GstNoticeStatus | 'All'>('All');
+  const [activeFilter, setActiveFilter] = useState<NoticeFilter>('All');
+
+  // "Overdue" is a client-side derived filter — fetch unfiltered, then
+  // narrow locally. Only canonical statuses are ever sent as a status param.
+  const serverStatus: GstNoticeStatus | undefined =
+    activeFilter === 'All' || activeFilter === 'Overdue' ? undefined : activeFilter;
 
   const { data, isLoading, isRefetching, refetch, error } = useQuery({
     queryKey: ['gst-notices', orgId, activeFilter],
     queryFn: () =>
       listGstNotices({
         orgId,
-        status: activeFilter === 'All' ? undefined : activeFilter,
+        status: serverStatus,
         page: 1,
         pageSize: 50,
       }),
@@ -69,8 +87,14 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
     },
   });
 
-  const notices = data?.items ?? [];
-  const openCount = notices.filter((n) => n.status === 'Open' || n.status === 'Overdue').length;
+  const fetched = data?.items ?? [];
+  const notices =
+    activeFilter === 'Overdue'
+      ? fetched.filter((n) =>
+          isNoticeOverdue(n.status, n.statutoryDeadline ?? n.dueDate),
+        )
+      : fetched;
+  const openCount = fetched.filter((n) => !isNoticeSettled(n.status)).length;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -82,7 +106,7 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
           accessibilityLabel={t('mobile.common.back')}
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t('mobile.gst.notices.title')}</Text>
@@ -108,12 +132,12 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
             <Pressable
               key={tab.key}
               style={[styles.tab, isActive && styles.tabActive]}
-              onPress={() => setActiveFilter(tab.key as GstNoticeStatus | 'All')}
+              onPress={() => setActiveFilter(tab.key)}
               accessibilityRole="tab"
               accessibilityState={{ selected: isActive }}
             >
               <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                {tab.label}
+                {t(tab.labelKey)}
               </Text>
             </Pressable>
           );
@@ -122,30 +146,39 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
 
       {/* Body */}
       {isLoading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={Colors.gst} />
-          <Text style={styles.loadingText}>{t('mobile.gst.notices.loading')}</Text>
+        // §3.1: shaped skeleton matching notice rows
+        <View style={styles.listContent}>
+          <ListSkeleton variant="card" count={6} cardHeight={96} testID="gst-notices-skeleton" />
         </View>
       ) : error ? (
-        <View style={styles.errorWrap}>
-          <Ionicons name="alert-circle-outline" size={40} color={Colors.error[400]} />
-          <Text style={styles.errorText}>{t('mobile.gst.notices.error')}</Text>
-          <Pressable style={styles.retryBtn} onPress={() => void refetch()}>
-            <Text style={styles.retryText}>{t('mobile.gst.notices.retry')}</Text>
-          </Pressable>
-        </View>
+        <ErrorState
+          message={t('mobile.gst.notices.error')}
+          retryLabel={t('mobile.gst.notices.retry')}
+          onRetry={() => void refetch()}
+          secondaryLabel={t('mobile.common.goBack')}
+          onSecondaryPress={() => navigation.goBack()}
+          testID="gst-notices-error-state"
+        />
       ) : (
         <ScrollView
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => {
+                haptics.lightTap();
+                void refetch();
+              }}
+              tintColor={tokens.brand500}
+              colors={[tokens.brand500]}
+            />
           }
           showsVerticalScrollIndicator={false}
         >
           {notices.length === 0 ? (
             <View style={styles.emptyWrap}>
               <View style={styles.emptyIconWrap}>
-                <Ionicons name="document-text-outline" size={40} color={Colors.gst} />
+                <Ionicons name="document-text-outline" size={40} color={tokens.gstAccent} />
               </View>
               <Text style={styles.emptyTitle}>{t('mobile.gst.notices.emptyTitle')}</Text>
               <Text style={styles.emptyText}>{t('mobile.gst.notices.emptyBody')}</Text>
@@ -161,15 +194,19 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
                 issuedDate={notice.issuedDate}
                 dueDate={notice.dueDate}
                 description={notice.description}
+                // Wave 7B/7C (GAP-108): taxonomy badge + statutory deadline + GSTAT stage
+                formType={notice.formType}
+                statutoryDeadline={notice.statutoryDeadline}
+                gstatStage={notice.appealStage}
                 onPress={() =>
                   navigation.navigate('GstNoticeDetail', { noticeId: notice.id })
                 }
                 onMarkRead={
-                  notice.status === 'Open'
+                  !isNoticeSettled(notice.status)
                     ? () => respondMutation.mutate({ id: notice.id, userId: '' })
                     : undefined
                 }
-                archiveGated={notice.status === 'Open' || notice.status === 'Overdue'}
+                archiveGated={!isNoticeSettled(notice.status)}
                 testID={`notice-row-${notice.id}`}
               />
             ))
@@ -180,23 +217,25 @@ export function GstNoticeInboxScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
+  // P6-QA-MOBILE-04: 44×44pt minimum touch target (was 40×40).
   backBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -210,11 +249,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     letterSpacing: -0.2,
   },
   badgeWrap: {
-    backgroundColor: Colors.error[500],
+    backgroundColor: tk.errorCta,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -225,13 +264,14 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#FFFFFF', // white on errorCta, AA both modes
   },
   tabsContainer: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
-    backgroundColor: Colors.surface.default,
-    maxHeight: 52,
+    borderBottomColor: tk.border,
+    backgroundColor: tk.raised,
+    // P6-QA-MOBILE-04: fits the 44pt tabs + 10pt vertical padding (was 52).
+    maxHeight: 66,
   },
   tabsRow: {
     paddingHorizontal: 16,
@@ -243,55 +283,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: Colors.neutral[100],
-    minHeight: 36,
+    backgroundColor: tk.sunken,
+    // P6-QA-MOBILE-04: 44pt minimum touch target (was 36).
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tabActive: {
-    backgroundColor: Colors.gst,
+    backgroundColor: tk.gstAccent,
   },
   tabText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
   },
   tabTextActive: {
-    color: '#FFFFFF',
-  },
-  loadingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: Colors.neutral[500],
-  },
-  errorWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-    padding: 24,
-  },
-  errorText: {
-    fontSize: 15,
-    color: Colors.neutral[600],
-    textAlign: 'center',
-  },
-  retryBtn: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: Colors.gst,
-    borderRadius: 12,
-    minHeight: 44,
-  },
-  retryText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
   },
   listContent: {
     padding: 16,
@@ -307,20 +314,21 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: Colors.gst + '12',
+    backgroundColor: tk.gstAccent + '12',
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
   },
   emptyText: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     paddingHorizontal: 24,
   },
-});
+  }),
+);

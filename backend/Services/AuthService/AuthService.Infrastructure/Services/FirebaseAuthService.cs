@@ -110,13 +110,22 @@ public sealed class FirebaseAuthService(
         // (Firebase Admin is not configured locally; org may not exist yet at signup.)
         if (DevAuthEnabled)
         {
+            // ORG-SWITCHER: if the caller passed an explicit org id (validated by the command handler),
+            // use it directly instead of the most-recently-created membership heuristic.
+            var explicitOrgIdStr = claims is not null && claims.TryGetValue("explicitOrgId", out var expOrgVal)
+                ? expOrgVal?.ToString() : null;
+
             // Resolve the user's active org membership the same way production does, so a
             // dev token issued/refreshed AFTER org creation carries the real organizationId.
             // Without this the org context stays empty and org-scoped calls (e.g. team
             // invite) fail OrgContextGuard even though perms are wildcard. Empty if the
             // user has no membership yet (fresh signup before the org exists).
             Guid? devOrgId = null;
-            if (Guid.TryParse(userIdStr, out var devUserId))
+            if (explicitOrgIdStr is not null && Guid.TryParse(explicitOrgIdStr, out var parsedExplicitOrg))
+            {
+                devOrgId = parsedExplicitOrg;
+            }
+            else if (Guid.TryParse(userIdStr, out var devUserId))
             {
                 devOrgId = await db.OrganizationMembers
                     .Where(m => m.UserId == devUserId && m.IsActive && m.DeletedAt == null)
@@ -145,16 +154,28 @@ public sealed class FirebaseAuthService(
         if (!Guid.TryParse(userIdStr, out var userId))
             return Error.Validation("Session.MissingUser", "Cannot issue a session token without a userId claim.");
 
-        var sessionClaims = await BuildSessionClaimsAsync(userId, uid, email, phone, ct);
+        // ORG-SWITCHER: propagate explicit org id hint to BuildSessionClaimsAsync.
+        var explicitOrgIdProd = claims is not null && claims.TryGetValue("explicitOrgId", out var expProdVal)
+            ? expProdVal?.ToString() : null;
+        Guid? explicitOrgId = explicitOrgIdProd is not null && Guid.TryParse(explicitOrgIdProd, out var parsedProd)
+            ? parsedProd : null;
+
+        var sessionClaims = await BuildSessionClaimsAsync(userId, uid, email, phone, ct, explicitOrgId);
         return LocalJwt.Issue(sessionClaims, SessionSecret, SessionTokenLifetime);
     }
 
     /// <summary>
     /// Resolves the user's roles (platform + org), active organization, and effective permissions
     /// for embedding in a session JWT. SUPER_ADMIN gets the <c>*</c> wildcard.
+    ///
+    /// ORG-SWITCHER: when <paramref name="explicitOrgId"/> is non-null the method uses that org
+    /// instead of the most-recently-created membership heuristic. The membership validity check
+    /// is performed in <see cref="RefreshContextCommandHandler"/> before this is called, so this
+    /// method trusts the hint is already verified.
     /// </summary>
     private async Task<Dictionary<string, object?>> BuildSessionClaimsAsync(
-        Guid userId, string firebaseUid, string? emailHint, string? phoneHint, CancellationToken ct)
+        Guid userId, string firebaseUid, string? emailHint, string? phoneHint, CancellationToken ct,
+        Guid? explicitOrgId = null)
     {
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
 
@@ -170,7 +191,9 @@ public sealed class FirebaseAuthService(
 
         var allRoles = platformRoles.Union(orgRoleNames, StringComparer.OrdinalIgnoreCase).ToList();
 
-        var activeOrgId = await db.OrganizationMembers
+        // ORG-SWITCHER: if an explicit org was requested (and verified), use it directly.
+        // Otherwise fall back to the most-recently-created active membership.
+        var activeOrgId = explicitOrgId ?? await db.OrganizationMembers
             .Where(m => m.UserId == userId && m.IsActive && m.DeletedAt == null)
             .OrderByDescending(m => m.CreatedAt)
             .Select(m => (Guid?)m.OrganizationId)

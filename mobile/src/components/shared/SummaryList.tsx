@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 export interface SummaryItem {
   label: string;
@@ -20,6 +20,7 @@ interface SummaryListProps {
 }
 
 export function SummaryList({ items, testID }: SummaryListProps) {
+  const styles = useStyles();
   return (
     <View testID={testID} style={styles.container}>
       {items.map((item, index) => (
@@ -51,13 +52,14 @@ export function SummaryList({ items, testID }: SummaryListProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.neutral[100],
+    borderColor: tk.border,
   },
   row: {
     flexDirection: 'row',
@@ -70,11 +72,11 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
   label: {
     fontSize: 13,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     flex: 1,
     lineHeight: 20,
   },
@@ -88,7 +90,7 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     textAlign: 'right',
     flex: 1,
   },
@@ -102,6 +104,7 @@ const styles = StyleSheet.create({
   editText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.brand[600],
+    color: tk.brandCta,
   },
-});
+  }),
+);

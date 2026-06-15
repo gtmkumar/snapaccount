@@ -1,4 +1,9 @@
+using AiService.Application;
+using AiService.Application.Common.Interfaces;
+using AiService.Infrastructure.Messaging;
 using AiService.Infrastructure.Persistence;
+using AiService.Infrastructure.Providers;
+using AiService.Infrastructure.Services;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Microsoft.EntityFrameworkCore;
@@ -12,9 +17,15 @@ using SnapAccount.Shared.Infrastructure.Persistence.Interceptors;
 namespace AiService.Infrastructure;
 
 /// <summary>
-/// Registers all AiService infrastructure dependencies including EF Core (pgvector),
-/// Semantic Kernel setup, Vertex AI / Gemini client, Sarvam AI client, and Google Document AI.
-/// JT-pattern: interceptors wired into DbContext.
+/// Registers all AiService infrastructure dependencies:
+/// <list type="bullet">
+///   <item>EF Core DbContext (ai schema)</item>
+///   <item>MockAiProvider (default, GCP-free) + AiProviderResolver</item>
+///   <item>MockSarvamAiService (default) — activated to real when Sarvam API key is present</item>
+///   <item>TextRedactor (SEC-AI-01)</item>
+///   <item>RagIngestionSubscriber (GCP-only: Pub/Sub hosted service)</item>
+///   <item>MediatR pipeline via AddAiApplicationServices</item>
+/// </list>
 /// </summary>
 public static class DependencyInjection
 {
@@ -23,15 +34,20 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("DefaultConnection") ?? configuration.GetConnectionString("snapaccount")
-            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
+        // Application layer (MediatR pipeline, validators, pipeline behaviors).
+        services.AddAiApplicationServices();
+
+        var dbPassword = configuration["DB_PASSWORD"] ?? "postgresql";
+        var connectionString = (configuration.GetConnectionString("DefaultConnection")
+            ?? configuration.GetConnectionString("snapaccount")
+            ?? "Host=localhost;Port=5432;Database=snapaccount;Username=postgres;Password=#{DB_PASSWORD}#")
+            .Replace("#{DB_PASSWORD}#", dbPassword);
 
         services.AddScoped<ISaveChangesInterceptor, AuditableEntityInterceptor>();
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
         services.AddSingleton(TimeProvider.System);
 
         // EF Core — schema isolated to 'ai.*'
-        // TODO Phase 2: add Pgvector NuGet package and call npgsql.UseVector() for HNSW RAG embeddings
         services.AddDbContext<AiServiceDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
@@ -42,7 +58,11 @@ public static class DependencyInjection
                 w.Ignore(RelationalEventId.PendingModelChangesWarning));
         });
 
-        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration) && FirebaseApp.DefaultInstance == null)
+        services.AddScoped<IAiServiceDbContext>(sp => sp.GetRequiredService<AiServiceDbContext>());
+
+        // Firebase Admin SDK (if GCP is enabled).
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)
+            && FirebaseApp.DefaultInstance == null)
         {
             var credentialJson = configuration["Firebase:ServiceAccountJson"];
 #pragma warning disable CS0618
@@ -53,11 +73,33 @@ public static class DependencyInjection
             FirebaseApp.Create(new AppOptions { Credential = credential });
         }
 
-        // TODO Phase 2: Register Semantic Kernel kernel, Vertex AI plugin, Sarvam AI client,
-        // RAG pipeline (chunker, embedder, pgvector store), and IDocumentAiRepository
+        // SEC-AI-01: PII redactor — always registered (singleton, stateless).
+        services.AddSingleton<ITextRedactor, TextRedactor>();
 
+        // SEC-AI-02 H-03: Atomic token budget enforcement via PostgreSQL advisory locks.
+        services.AddScoped<ITokenBudgetService, TokenBudgetService>();
+
+        // MockAiProvider — default, GCP-free. Registered as singleton so the resolver
+        // can hold a reference to it without allocating a new instance per request.
+        services.AddSingleton<MockAiProvider>();
+
+        // AiProviderResolver — reads admin AI config from AuthService, falls back to mock.
+        // Typed HttpClient for AuthService config + Gemini/Vertex API calls.
+        services.AddHttpClient<IAiProviderResolver, AiProviderResolver>();
+
+        // Sarvam AI: mock by default. Real SarvamAiService activated when API key present.
+        // P7b: wire real SarvamAiService here using configuration["Sarvam:ApiKey"].
+        services.AddSingleton<ISarvamAiService, MockSarvamAiService>();
+
+        // Current user — reads Firebase JWT claims from HttpContext.Items.
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, CurrentUser>();
+
+        // RAG ingestion subscriber — only in GCP mode (Pub/Sub not available locally).
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration))
+        {
+            services.AddHostedService<RagIngestionSubscriber>();
+        }
 
         return services;
     }

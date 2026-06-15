@@ -14,9 +14,8 @@
  * - i18n: all strings via t()
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -32,7 +31,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 
-import { Colors } from '../../constants/colors';
 import { timeAgo } from '../../lib/utils';
 import { listThreads, type ChatThread, type ThreadCategory } from '../../api/chat';
 import { RequestCallbackCta } from '../../components/callbacks/RequestCallbackCta';
@@ -179,7 +177,7 @@ function ThreadRow({
 
       {/* Avatar */}
       <View style={[styles.avatar, { backgroundColor: tokens.brand500 }]}>
-        <Text style={styles.avatarText}>
+        <Text style={[styles.avatarText, { color: tokens.textOnBrand }]}>
           {(thread.subject ?? thread.category).charAt(0).toUpperCase()}
         </Text>
       </View>
@@ -206,7 +204,7 @@ function ThreadRow({
           <CategoryBadge category={thread.category} isDark={isDark} />
           {isUnread && (
             <View style={[styles.unreadChip, { backgroundColor: tokens.brand500 }]}>
-              <Text style={styles.unreadChipText}>{unreadLabel}</Text>
+              <Text style={[styles.unreadChipText, { color: tokens.textOnBrand }]}>{unreadLabel}</Text>
             </View>
           )}
         </View>
@@ -279,6 +277,13 @@ export function ChatListScreen({ navigation }: Props) {
     setRefreshing(false);
   }, [queryClient, haptics]);
 
+  // BUG-W7-002: header "+" and FAB open the new-conversation sheet (spec §4.6).
+  const navigateToNewChat = useCallback(() => {
+    haptics.lightTap();
+    // ChatStack is the parent navigator (same cast pattern as CaSelect below).
+    (navigation.navigate as (route: string) => void)('NewChat');
+  }, [navigation, haptics]);
+
   const navigateToDetail = useCallback(
     (threadId: string) => {
       // Navigate to ChatDetail — ChatStack is the parent navigator.
@@ -327,9 +332,11 @@ export function ChatListScreen({ navigation }: Props) {
         </Text>
         <Pressable
           style={[styles.newChatBtn, { backgroundColor: tokens.brand500 + '18' }]}
+          onPress={navigateToNewChat}
           accessibilityRole="button"
           accessibilityLabel={t('mobile.chat.list.fab.new')}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          testID="chat-list-new-header"
         >
           <Ionicons name="add" size={22} color={tokens.brand500} />
         </Pressable>
@@ -375,15 +382,15 @@ export function ChatListScreen({ navigation }: Props) {
               }}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              accessibilityLabel={t(`chat.list.filter.${f}`)}
+              accessibilityLabel={t(`mobile.chat.list.filter.${f}`)}
             >
               <Text
                 style={[
                   styles.filterChipText,
-                  { color: selected ? '#FFFFFF' : tokens.textSecondary },
+                  { color: selected ? tokens.textOnBrand : tokens.textSecondary },
                 ]}
               >
-                {t(`chat.list.filter.${f}`)}
+                {t(`mobile.chat.list.filter.${f}`)}
               </Text>
             </Pressable>
           );
@@ -402,7 +409,7 @@ export function ChatListScreen({ navigation }: Props) {
           </Text>
           <Pressable onPress={() => queryClient.invalidateQueries({ queryKey: ['chat-threads'] })}>
             <Text style={[styles.retryText, { color: tokens.brand500 }]}>
-              {t('common.retry')}
+              {t('mobile.common.retry')}
             </Text>
           </Pressable>
         </View>
@@ -423,6 +430,50 @@ export function ChatListScreen({ navigation }: Props) {
             { backgroundColor: tokens.canvas },
             filtered.length === 0 && styles.listEmpty,
           ]}
+          ListHeaderComponent={
+            /* Wave 7A (GAP-031): CA video-consultation entry (spec §1.1 — primary
+               card above the threads) + "My appointments" row. */
+            <View style={styles.caEntryWrap}>
+              <Pressable
+                style={[styles.caEntryCard, { backgroundColor: tokens.brandTint, borderColor: tokens.brandTintBorder }]}
+                onPress={() => {
+                  haptics.lightTap();
+                  (navigation.navigate as (route: string) => void)('CaSelect');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.ca.book.cta')}
+                testID="ca-book-entry"
+              >
+                <View style={[styles.caEntryIcon, { backgroundColor: tokens.brand500 }]}>
+                  <Ionicons name="videocam" size={22} color={tokens.textOnBrand} />
+                </View>
+                <View style={styles.caEntryBody}>
+                  <Text style={[styles.caEntryTitle, { color: tokens.textPrimary }]}>
+                    {t('mobile.ca.book.cta')}
+                  </Text>
+                  <Text style={[styles.caEntrySub, { color: tokens.textSecondary }]} numberOfLines={2}>
+                    {t('mobile.ca.book.subtitle')}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={tokens.brand500} />
+              </Pressable>
+              <Pressable
+                style={[styles.caApptsRow, { backgroundColor: tokens.raised, borderColor: tokens.border }]}
+                onPress={() =>
+                  (navigation.navigate as (route: string) => void)('MyAppointments')
+                }
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.ca.appts.title')}
+                testID="ca-my-appointments-entry"
+              >
+                <Ionicons name="calendar-outline" size={18} color={tokens.brand500} />
+                <Text style={[styles.caApptsRowText, { color: tokens.textPrimary }]}>
+                  {t('mobile.ca.appts.title')}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={tokens.textTertiary} />
+              </Pressable>
+            </View>
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIconWrap, { backgroundColor: tokens.brand500 + '18' }]}>
@@ -457,8 +508,10 @@ export function ChatListScreen({ navigation }: Props) {
       {/* FAB */}
       <Pressable
         style={[styles.fab, { backgroundColor: tokens.brand500 }]}
+        onPress={navigateToNewChat}
         accessibilityRole="button"
         accessibilityLabel={t('mobile.chat.list.fab.new')}
+        testID="chat-list-new-fab"
       >
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </Pressable>
@@ -472,6 +525,38 @@ export function ChatListScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
+  // Wave 7A (GAP-031): CA booking entry card + appointments row
+  caEntryWrap: { gap: 10, marginBottom: 14 },
+  caEntryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    minHeight: 64,
+  },
+  caEntryIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  caEntryBody: { flex: 1, gap: 2 },
+  caEntryTitle: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  caEntrySub: { fontSize: 12, lineHeight: 17 },
+  caApptsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    minHeight: 48,
+  },
+  caApptsRowText: { flex: 1, fontSize: 14, fontWeight: '600' },
 
   // Header
   header: {
@@ -562,7 +647,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
-  avatarText: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
+  avatarText: { fontSize: 18, fontWeight: '700' },
   rowContent: { flex: 1, gap: 4 },
   rowTop: {
     flexDirection: 'row',
@@ -599,7 +684,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
-  unreadChipText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  unreadChipText: { fontSize: 11, fontWeight: '700' },
 
   // Skeleton
   skeletonAvatar: { width: 48, height: 48, borderRadius: 14, flexShrink: 0 },

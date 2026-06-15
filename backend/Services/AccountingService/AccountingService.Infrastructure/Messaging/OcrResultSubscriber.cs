@@ -137,7 +137,9 @@ public sealed class OcrResultSubscriber(
         });
 
         // Wait until cancellation, then stop the subscriber gracefully
+#pragma warning disable CS0618 // StopAsync(CancellationToken) overload removed in newer SDK; use ShutdownOptions overload
         stoppingToken.Register(() => subscriber.StopAsync(CancellationToken.None));
+#pragma warning restore CS0618
         await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
     }
 

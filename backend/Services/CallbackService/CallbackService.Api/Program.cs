@@ -87,6 +87,9 @@ try
     app.MapHealthChecks("/healthz");
     app.MapEndpoints(Assembly.GetExecutingAssembly());
 
+    // GAP-005: Fail-fast in non-Development when SESSION_JWT_SECRET is absent.
+    SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);
+
     app.Run();
 }
 catch (Exception ex) { Log.Fatal(ex, "CallbackService failed to start."); }

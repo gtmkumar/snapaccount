@@ -2,6 +2,7 @@ using AuthService.Api;
 using AuthService.Application;
 using AuthService.Application.Common.Interfaces;
 using AuthService.Infrastructure;
+using AuthService.Infrastructure.Auth;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.RateLimiting;
@@ -61,6 +62,17 @@ try
     // SEC-011: Rate limiting
     builder.Services.AddRateLimiter(options =>
     {
+        // Standard endpoints: 100 req/min per user/IP (fixed window).
+        // BUG-W6-003: AggregateHealth, Privacy, Search, and refresh-context endpoints all
+        // reference this policy — it MUST be registered before the app starts.
+        options.AddFixedWindowLimiter("standard", opt =>
+        {
+            opt.PermitLimit = 100;
+            opt.Window = TimeSpan.FromMinutes(1);
+            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            opt.QueueLimit = 0;
+        });
+
         // OTP endpoints: 5 req / 10 min per client IP (sliding window)
         options.AddSlidingWindowLimiter("otp", opt =>
         {
@@ -114,6 +126,11 @@ try
     app.UseRateLimiter(); // SEC-011
     // Firebase JWT validation
     app.UseMiddleware<FirebaseAuthMiddleware>();
+
+    // GAP-064: Device integrity attestation — runs after Firebase so user context is available.
+    // Soft-fail by default (DeviceIntegrity:Enforce=false). Telemetry always written.
+    app.UseMiddleware<DeviceIntegrityMiddleware>();
+
     app.UseAuthorization();
     app.UseExceptionHandler();
 
@@ -134,6 +151,28 @@ try
 
     // Auto-discover and register all EndpointGroupBase subclasses in this assembly
     app.MapEndpoints(Assembly.GetExecutingAssembly());
+
+    // GAP-005: Fail-fast in non-Development when SESSION_JWT_SECRET is absent.
+    // A missing secret would cause the service to silently accept tokens signed with the
+    // well-known repo default key (auth bypass risk). Dev is intentionally unaffected.
+    SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);
+
+    // RV-02 (SEC-AI-02): Fail-fast in non-Development when InternalApi:SharedToken is absent.
+    // Without this secret, AiService's AiProviderResolver cannot authenticate its service-to-service
+    // call to /auth/config/ai/effective and silently degrades to MockAiProvider in production.
+    // Dev is intentionally unaffected (local env has no Secret Manager binding).
+    if (!string.Equals(app.Environment.EnvironmentName, "Development", StringComparison.OrdinalIgnoreCase))
+    {
+        var internalToken = app.Configuration["InternalApi:SharedToken"];
+        if (string.IsNullOrWhiteSpace(internalToken) || internalToken.Length < 32)
+        {
+            throw new InvalidOperationException(
+                "InternalApi:SharedToken is not configured or is shorter than 32 characters. " +
+                "In non-Development environments this secret MUST be set (e.g. via GCP Secret Manager) " +
+                "to enable authenticated service-to-service communication between AiService and AuthService. " +
+                "Without it, AiService silently degrades to the mock AI provider in production.");
+        }
+    }
 
     // LOCAL_AUTH: idempotently seed a dev admin (admin@snapaccount.local) for local login.
     var localAuthEnabled =

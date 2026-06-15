@@ -59,7 +59,7 @@ describe('FinancialReportsListScreen', () => {
         <FinancialReportsListScreen navigation={mockNavigation} />
       </Wrapper>,
     );
-    expect(getByText('Profit & Loss')).toBeTruthy();
+    expect(getByText('mobile.reports.types.pnl')).toBeTruthy();
   });
 
   it('shows Trial Balance report card', () => {
@@ -68,6 +68,6 @@ describe('FinancialReportsListScreen', () => {
         <FinancialReportsListScreen navigation={mockNavigation} />
       </Wrapper>,
     );
-    expect(getByText('Trial Balance')).toBeTruthy();
+    expect(getByText('mobile.reports.types.trialBalance')).toBeTruthy();
   });
 });

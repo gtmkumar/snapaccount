@@ -6,7 +6,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import type { QualLevel } from './BadgeQual';
 
 interface EligibilityHintRowProps {
@@ -15,18 +15,20 @@ interface EligibilityHintRowProps {
   testID?: string;
 }
 
-const ICON_MAP: Record<
+const iconMapFor = (tk: ThemeTokens): Record<
   QualLevel,
   { icon: React.ComponentProps<typeof Ionicons>['name']; color: string }
-> = {
-  QUALIFIED: { icon: 'checkmark-circle-outline', color: Colors.success[600] },
-  NEAR_MATCH: { icon: 'warning-outline', color: Colors.warning[600] },
-  NOT_QUALIFIED: { icon: 'information-circle-outline', color: Colors.neutral[400] },
-  UNCHECKED: { icon: 'information-circle-outline', color: Colors.neutral[400] },
-};
+> => ({
+  QUALIFIED: { icon: 'checkmark-circle-outline', color: tk.successFg },
+  NEAR_MATCH: { icon: 'warning-outline', color: tk.warningFg },
+  NOT_QUALIFIED: { icon: 'information-circle-outline', color: tk.textTertiary },
+  UNCHECKED: { icon: 'information-circle-outline', color: tk.textTertiary },
+});
 
 export function EligibilityHintRow({ level, text, testID }: EligibilityHintRowProps) {
-  const { icon, color } = ICON_MAP[level];
+  const styles = useStyles();
+  const { tokens } = useTheme();
+  const { icon, color } = iconMapFor(tokens)[level];
   return (
     <View testID={testID} style={styles.row}>
       <Ionicons name={icon} size={14} color={color} />
@@ -37,7 +39,8 @@ export function EligibilityHintRow({ level, text, testID }: EligibilityHintRowPr
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((_tk: ThemeTokens) =>
+  StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -50,4 +53,5 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 17,
   },
-});
+  }),
+);

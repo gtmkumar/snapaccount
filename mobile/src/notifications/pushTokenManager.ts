@@ -52,7 +52,7 @@ export async function initPushNotifications(): Promise<void> {
     await registerTokenIfNew(tokenData.data);
 
     // Listen for token rotation (P6E-RISK-01)
-    const sub = Notifications.addPushTokenListener(async (newToken) => {
+    Notifications.addPushTokenListener(async (newToken) => {
       await registerTokenIfNew(newToken.data);
     });
 
@@ -99,7 +99,8 @@ async function registerTokenIfNew(token: string): Promise<void> {
 export function configureForegroundNotificationHandler(): void {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: false,
       shouldSetBadge: true,
     }),

@@ -1,3 +1,5 @@
+import { jest } from '@jest/globals';
+
 const mockUser = { uid: 'test-uid', phoneNumber: '+919876543210', displayName: 'Test User' };
 let authCallback: ((u: typeof mockUser | null) => void) | null = null;
 

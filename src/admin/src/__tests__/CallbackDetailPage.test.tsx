@@ -22,6 +22,19 @@ import * as callbackApi from '@/lib/callbackApi'
 import type { Callback, CallNote, CallbackTimelineEvent } from '@/lib/callbackApi'
 import CallbackDetailPage from '@/pages/callbacks/CallbackDetailPage'
 
+// GAP-053: CallbackDetailPage now wraps actions in <Can> — mock usePermission
+// so test env sees all callback.* permissions as granted (mirrors a CA user).
+vi.mock('@/hooks/usePermission', () => ({
+  usePermission: () => ({
+    hasServerPermission: () => true,
+    hasAnyServerPermission: () => true,
+    hasAllServerPermissions: () => true,
+    hasPermission: () => true,
+    permissionsLoaded: true,
+    serverPermissions: ['callback.read', 'callback.update', 'callback.complete', 'callback.cancel'],
+  }),
+}))
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

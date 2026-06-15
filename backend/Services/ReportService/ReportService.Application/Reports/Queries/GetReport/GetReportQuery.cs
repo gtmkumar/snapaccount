@@ -37,20 +37,22 @@ public sealed class GetReportQueryHandler(
     {
         var orgId = currentUser.OrganizationId;
 
+        // SWEEP-FIX WEB-06: Format, Sha256HashHex, StartedAt are EF-ignored (no columns in
+        // report.report). Return safe defaults until DDL handoff adds the columns.
         var job = await db.ReportJobs
             .Where(j => j.Id == request.JobId && j.OrgId == orgId && j.DeletedAt == null)
             .Select(j => new ReportJobDto(
                 j.Id,
                 j.ReportType.ToString(),
-                j.Format.ToString(),
+                "PDF",              // Format — no DB column yet
                 j.Status.ToString(),
                 j.FinancialYear,
                 j.PeriodStart,
                 j.PeriodEnd,
                 j.PageCount,
-                j.Sha256HashHex,
+                (string?)null,      // Sha256HashHex — no DB column yet
                 j.ErrorMessage,
-                j.StartedAt,
+                (DateTime?)null,    // StartedAt — no DB column yet
                 j.CompletedAt,
                 j.CreatedAt))
             .FirstOrDefaultAsync(cancellationToken);

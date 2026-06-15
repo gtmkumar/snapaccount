@@ -42,6 +42,13 @@ public interface IAccountingDbContext
     /// </summary>
     DbSet<FiscalYearClose> FiscalYearCloses { get; }
 
+    /// <summary>
+    /// MCA statutory edit log (migration 071, GAP-100). Read-only from application.
+    /// Rows are written exclusively by DB-level AFTER triggers on the books-of-account tables.
+    /// Permission required: <c>accounting.editlog.read</c>.
+    /// </summary>
+    DbSet<AccountingService.Domain.Entities.EditLog> EditLogs { get; }
+
     /// <summary>Persists changes to the accounting schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

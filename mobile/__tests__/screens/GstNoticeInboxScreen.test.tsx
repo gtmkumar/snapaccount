@@ -1,11 +1,13 @@
 /**
- * GstNoticeInboxScreen — Phase 6B
- * Tests: filter tabs change result set; pull-to-refresh mocks onRefresh;
- *        badge count matches Open+Overdue notice count.
+ * GstNoticeInboxScreen — Phase 6B, re-pinned for Wave 7 residual #7.
+ * Canonical server status vocabulary (RECEIVED/UNDER_REVIEW/RESPONDED/CLOSED)
+ * on the filter chips; "Overdue" is a client-side derived filter (deadline
+ * passed && not settled) and must NEVER be serialized as a status param.
+ * Also: pull-to-refresh, badge count = unsettled notices.
  */
 
 import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act, within } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 jest.mock('../../src/lib/api', () => ({
@@ -48,17 +50,23 @@ jest.mock('../../src/api/gst', () => ({
   respondToGstNotice: jest.fn(() => Promise.resolve()),
 }));
 
-const OPEN_NOTICE = {
-  id: 'n1', noticeNumber: 'GST-2025-001', noticeType: 'ASMT_10', status: 'Open',
-  issuedDate: '2025-06-01', dueDate: '2025-07-01', description: 'Assessment notice',
+// Stable relative dates so the derived-overdue assertions never time-bomb.
+const PAST_DATE = '2020-01-31';
+const FUTURE_DATE = '2099-12-31';
+
+const RECEIVED_NOTICE = {
+  id: 'n1', noticeNumber: 'GST-2025-001', noticeType: 'ASMT_10', status: 'RECEIVED',
+  issuedDate: '2025-06-01', dueDate: FUTURE_DATE, description: 'Assessment notice',
 };
+// Canonical status + past statutory deadline → client-side "Overdue".
 const OVERDUE_NOTICE = {
-  id: 'n2', noticeNumber: 'GST-2025-002', noticeType: 'ASMT_11', status: 'Overdue',
-  issuedDate: '2025-05-01', dueDate: '2025-05-31', description: 'Overdue notice',
+  id: 'n2', noticeNumber: 'GST-2025-002', noticeType: 'ASMT_11', status: 'UNDER_REVIEW',
+  issuedDate: '2025-05-01', dueDate: PAST_DATE, statutoryDeadline: PAST_DATE,
+  description: 'Overdue notice',
 };
 const CLOSED_NOTICE = {
-  id: 'n3', noticeNumber: 'GST-2025-003', noticeType: 'ASMT_12', status: 'Closed',
-  issuedDate: '2025-04-01', description: 'Closed notice',
+  id: 'n3', noticeNumber: 'GST-2025-003', noticeType: 'ASMT_12', status: 'CLOSED',
+  issuedDate: '2025-04-01', dueDate: PAST_DATE, description: 'Closed notice',
 };
 
 import { GstNoticeInboxScreen } from '../../src/screens/gst/GstNoticeInboxScreen';
@@ -73,11 +81,16 @@ function makeWrapper() {
   );
 }
 
+function pressTab(getAllByRole: ReturnType<typeof render>['getAllByRole'], labelKey: string) {
+  const tab = getAllByRole('tab').find((node) => within(node).queryByText(labelKey));
+  fireEvent.press(tab!);
+}
+
 describe('GstNoticeInboxScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockListGstNotices.mockResolvedValue({
-      items: [OPEN_NOTICE, OVERDUE_NOTICE, CLOSED_NOTICE],
+      items: [RECEIVED_NOTICE, OVERDUE_NOTICE, CLOSED_NOTICE],
       totalCount: 3, page: 1, pageSize: 50,
     });
   });
@@ -90,17 +103,26 @@ describe('GstNoticeInboxScreen', () => {
     expect(getByText('mobile.gst.notices.title')).toBeTruthy();
   });
 
-  it('renders all 5 filter tabs', () => {
-    const { getByText } = render(
+  it('renders all 6 filter tabs with the canonical vocabulary', () => {
+    const { getByText, queryByText } = render(
       <GstNoticeInboxScreen navigation={mockNavigation} route={mockRoute} />,
       { wrapper: makeWrapper() },
     );
-    ['All', 'Open', 'Overdue', 'Responded', 'Closed'].forEach((label) => {
+    [
+      'mobile.gst.notices.filter.all',
+      'mobile.gst.notices.filter.received',
+      'mobile.gst.notices.filter.underReview',
+      'mobile.gst.notices.filter.overdue',
+      'mobile.gst.notices.filter.responded',
+      'mobile.gst.notices.filter.closed',
+    ].forEach((label) => {
       expect(getByText(label)).toBeTruthy();
     });
+    // Legacy "Open" chip is gone.
+    expect(queryByText('mobile.gst.notices.filter.open')).toBeNull();
   });
 
-  it('badge count equals number of Open + Overdue notices', async () => {
+  it('badge count equals number of unsettled (not RESPONDED/CLOSED) notices', async () => {
     const { getByText } = render(
       <GstNoticeInboxScreen navigation={mockNavigation} route={mockRoute} />,
       { wrapper: makeWrapper() },
@@ -120,32 +142,68 @@ describe('GstNoticeInboxScreen', () => {
     });
   });
 
-  it('switching to Open tab calls listGstNotices with status=Open', async () => {
-    const { getByText } = render(
+  it('switching to Received tab calls listGstNotices with status=RECEIVED', async () => {
+    const { getByText, getAllByRole } = render(
       <GstNoticeInboxScreen navigation={mockNavigation} route={mockRoute} />,
       { wrapper: makeWrapper() },
     );
-    await waitFor(() => expect(getByText('All')).toBeTruthy());
-    fireEvent.press(getByText('Open'));
+    await waitFor(() => expect(getByText('mobile.gst.notices.filter.all')).toBeTruthy());
+    pressTab(getAllByRole, 'mobile.gst.notices.filter.received');
     await waitFor(() =>
       expect(mockListGstNotices).toHaveBeenCalledWith(
-        expect.objectContaining({ orgId: 'org-abc', status: 'Open' }),
+        expect.objectContaining({ orgId: 'org-abc', status: 'RECEIVED' }),
       ),
     );
   });
 
-  it('switching to Closed tab calls listGstNotices with status=Closed', async () => {
-    const { getByText } = render(
+  it('switching to Under-review tab calls listGstNotices with status=UNDER_REVIEW', async () => {
+    const { getByText, getAllByRole } = render(
       <GstNoticeInboxScreen navigation={mockNavigation} route={mockRoute} />,
       { wrapper: makeWrapper() },
     );
-    await waitFor(() => expect(getByText('All')).toBeTruthy());
-    fireEvent.press(getByText('Closed'));
+    await waitFor(() => expect(getByText('mobile.gst.notices.filter.all')).toBeTruthy());
+    pressTab(getAllByRole, 'mobile.gst.notices.filter.underReview');
     await waitFor(() =>
       expect(mockListGstNotices).toHaveBeenCalledWith(
-        expect.objectContaining({ orgId: 'org-abc', status: 'Closed' }),
+        expect.objectContaining({ orgId: 'org-abc', status: 'UNDER_REVIEW' }),
       ),
     );
+  });
+
+  it('switching to Closed tab calls listGstNotices with status=CLOSED', async () => {
+    const { getByText, getAllByRole } = render(
+      <GstNoticeInboxScreen navigation={mockNavigation} route={mockRoute} />,
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(getByText('mobile.gst.notices.filter.all')).toBeTruthy());
+    pressTab(getAllByRole, 'mobile.gst.notices.filter.closed');
+    await waitFor(() =>
+      expect(mockListGstNotices).toHaveBeenCalledWith(
+        expect.objectContaining({ orgId: 'org-abc', status: 'CLOSED' }),
+      ),
+    );
+  });
+
+  it('Overdue tab is client-side: no status param sent, only deadline-passed unsettled rows shown', async () => {
+    const { getByText, getAllByRole, getByTestId, queryByTestId } = render(
+      <GstNoticeInboxScreen navigation={mockNavigation} route={mockRoute} />,
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(getByText('mobile.gst.notices.filter.all')).toBeTruthy());
+    pressTab(getAllByRole, 'mobile.gst.notices.filter.overdue');
+
+    // n2: past statutory deadline + UNDER_REVIEW → overdue.
+    await waitFor(() => expect(getByTestId('notice-row-n2')).toBeTruthy());
+    // n1: future deadline → not overdue; n3: CLOSED (settled) → never overdue.
+    expect(queryByTestId('notice-row-n1')).toBeNull();
+    expect(queryByTestId('notice-row-n3')).toBeNull();
+
+    // The derived filter (and the legacy vocabulary) must never hit the wire.
+    for (const call of mockListGstNotices.mock.calls) {
+      expect(call[0].status).toBeUndefined();
+      expect(call[0].status).not.toBe('Overdue');
+      expect(call[0].status).not.toBe('Open');
+    }
   });
 
   it('All tab calls listGstNotices without status filter', async () => {

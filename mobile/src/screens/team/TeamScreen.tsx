@@ -12,7 +12,6 @@
  */
 import React from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   RefreshControl,
@@ -28,7 +27,9 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { ListSkeleton, ErrorState } from '../../components/shared/ListStates';
+import { useHaptics } from '../../hooks/useHaptics';
 import { useAuthStore } from '../../store/authStore';
 import { getApiError } from '../../lib/api';
 import {
@@ -62,6 +63,7 @@ function useRoleLabel() {
 }
 
 function MemberRow({ member, roleLabel }: { member: TeamMember; roleLabel: (r: string) => string }) {
+  const styles = useStyles();
   const { t } = useTranslation();
   const initial = (member.displayName ?? member.email ?? 'U').charAt(0).toUpperCase();
   const suspended = member.status === 'suspended';
@@ -96,11 +98,13 @@ interface InviteRowProps {
 }
 
 function InviteRow({ invite, roleLabel, onResend, onRevoke, busy }: InviteRowProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   return (
     <View style={styles.row}>
       <View style={styles.inviteIcon}>
-        <Ionicons name="mail-outline" size={18} color={Colors.brand[500]} />
+        <Ionicons name="mail-outline" size={18} color={tokens.brand500} />
       </View>
       <View style={styles.rowBody}>
         <Text style={styles.rowTitle} numberOfLines={1}>
@@ -118,7 +122,7 @@ function InviteRow({ invite, roleLabel, onResend, onRevoke, busy }: InviteRowPro
           accessibilityLabel={t('mobile.team.invites.resend')}
           hitSlop={8}
         >
-          <Ionicons name="refresh-outline" size={18} color={Colors.brand[500]} />
+          <Ionicons name="refresh-outline" size={18} color={tokens.brand500} />
         </Pressable>
         <Pressable
           style={styles.iconBtn}
@@ -127,7 +131,7 @@ function InviteRow({ invite, roleLabel, onResend, onRevoke, busy }: InviteRowPro
           accessibilityLabel={t('mobile.team.invites.revoke')}
           hitSlop={8}
         >
-          <Ionicons name="trash-outline" size={18} color={Colors.error[500]} />
+          <Ionicons name="trash-outline" size={18} color={tokens.errorFg} />
         </Pressable>
       </View>
     </View>
@@ -135,7 +139,10 @@ function InviteRow({ invite, roleLabel, onResend, onRevoke, busy }: InviteRowPro
 }
 
 export function TeamScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const qc = useQueryClient();
   const roleLabel = useRoleLabel();
   const isOwner = useAuthStore((s) => s.user?.userType === 'business_owner');
@@ -195,6 +202,8 @@ export function TeamScreen({ navigation }: Props) {
   const mutating = resendMutation.isPending || revokeMutation.isPending;
 
   const onRefresh = () => {
+    // §3.3 haptics map: pull-to-refresh release → light impact.
+    haptics.lightTap();
     void membersQuery.refetch();
     void invitesQuery.refetch();
   };
@@ -209,7 +218,7 @@ export function TeamScreen({ navigation }: Props) {
           accessibilityLabel={t('mobile.common.back')}
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.team.title')}</Text>
         <View style={styles.headerSpacer} />
@@ -217,14 +226,21 @@ export function TeamScreen({ navigation }: Props) {
 
       {!isOwner ? (
         <View style={styles.emptyWrap}>
-          <Ionicons name="lock-closed-outline" size={40} color={Colors.neutral[300]} />
+          <Ionicons name="lock-closed-outline" size={40} color={tokens.textTertiary} />
           <Text style={styles.emptyTitle}>{t('mobile.team.ownerOnlyTitle')}</Text>
           <Text style={styles.emptyText}>{t('mobile.team.ownerOnlyBody')}</Text>
         </View>
       ) : (
         <ScrollView
           contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={tokens.brand500}
+              colors={[tokens.brand500]}
+            />
+          }
           showsVerticalScrollIndicator={false}
         >
           <Button
@@ -232,14 +248,24 @@ export function TeamScreen({ navigation }: Props) {
             onPress={() => setModalVisible(true)}
             fullWidth
             size="lg"
-            leftIcon={<Ionicons name="person-add-outline" size={18} color={Colors.neutral[0]} />}
+            leftIcon={<Ionicons name="person-add-outline" size={18} color={tokens.textOnBrand} />}
           />
 
           {/* Pending invites */}
           <Text style={styles.sectionTitle}>{t('mobile.team.invites.section')}</Text>
           <Card padding="none" style={styles.sectionCard}>
             {invitesQuery.isLoading ? (
-              <ActivityIndicator style={styles.cardLoader} color={Colors.brand[500]} />
+              // §3.1: row-shaped skeleton matching invite rows
+              <View style={styles.cardSkeleton}>
+                <ListSkeleton variant="row" count={2} testID="team-invites-skeleton" />
+              </View>
+            ) : invitesQuery.isError ? (
+              <ErrorState
+                message={t('mobile.team.invites.error')}
+                retryLabel={t('mobile.common.retry')}
+                onRetry={() => void invitesQuery.refetch()}
+                testID="team-invites-error-state"
+              />
             ) : pendingInvites.length === 0 ? (
               <Text style={styles.cardEmpty}>{t('mobile.team.invites.empty')}</Text>
             ) : (
@@ -262,9 +288,17 @@ export function TeamScreen({ navigation }: Props) {
           <Text style={styles.sectionTitle}>{t('mobile.team.members.section')}</Text>
           <Card padding="none" style={styles.sectionCard}>
             {membersQuery.isLoading ? (
-              <ActivityIndicator style={styles.cardLoader} color={Colors.brand[500]} />
+              // §3.1: row-shaped skeleton matching member rows
+              <View style={styles.cardSkeleton}>
+                <ListSkeleton variant="row" count={3} testID="team-members-skeleton" />
+              </View>
             ) : membersQuery.isError ? (
-              <Text style={styles.cardEmpty}>{t('mobile.team.members.error')}</Text>
+              <ErrorState
+                message={t('mobile.team.members.error')}
+                retryLabel={t('mobile.common.retry')}
+                onRetry={() => void membersQuery.refetch()}
+                testID="team-members-error-state"
+              />
             ) : members.length === 0 ? (
               <Text style={styles.cardEmpty}>{t('mobile.team.members.empty')}</Text>
             ) : (
@@ -288,30 +322,31 @@ export function TeamScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     letterSpacing: -0.2,
   },
   headerSpacer: { width: 40 },
@@ -319,7 +354,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
     marginTop: 20,
@@ -327,9 +362,10 @@ const styles = StyleSheet.create({
   },
   sectionCard: { overflow: 'hidden' },
   cardLoader: { paddingVertical: 24 },
+  cardSkeleton: { paddingHorizontal: 12 },
   cardEmpty: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     textAlign: 'center',
     paddingVertical: 24,
     paddingHorizontal: 16,
@@ -337,7 +373,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     marginLeft: 64,
   },
   row: {
@@ -350,33 +386,33 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.brand[500],
+    backgroundColor: tk.brand500,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarMuted: { backgroundColor: Colors.neutral[400] },
-  avatarText: { fontSize: 16, fontWeight: '700', color: Colors.neutral[0] },
+  avatarMuted: { backgroundColor: tk.textTertiary },
+  avatarText: { fontSize: 16, fontWeight: '700', color: tk.textOnBrand },
   inviteIcon: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rowBody: { flex: 1 },
-  rowTitle: { fontSize: 15, fontWeight: '600', color: Colors.neutral[900] },
-  rowSub: { fontSize: 13, color: Colors.neutral[500], marginTop: 2 },
+  rowTitle: { fontSize: 15, fontWeight: '600', color: tk.textPrimary },
+  rowSub: { fontSize: 13, color: tk.textSecondary, marginTop: 2 },
   statusPill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  statusActive: { backgroundColor: Colors.success[50] },
-  statusSuspended: { backgroundColor: Colors.neutral[100] },
+  statusActive: { backgroundColor: tk.successTint },
+  statusSuspended: { backgroundColor: tk.sunken },
   statusText: { fontSize: 11, fontWeight: '700' },
-  statusTextActive: { color: Colors.success[600] },
-  statusTextSuspended: { color: Colors.neutral[500] },
+  statusTextActive: { color: tk.successFg },
+  statusTextSuspended: { color: tk.textSecondary },
   inviteActions: { flexDirection: 'row', gap: 4 },
   iconBtn: {
     width: 44,
@@ -395,12 +431,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
   },
   emptyText: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
   },
-});
+  }),
+);

@@ -28,10 +28,14 @@ public sealed class LedgerEntryConfiguration : IEntityTypeConfiguration<LedgerEn
         builder.Property(e => e.Source).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
         builder.Property(e => e.PostedAt).IsRequired();
-        builder.Property(e => e.ReviewedBy);
-        builder.Property(e => e.ReviewedAt);
+        // SWEEP-FIX: ReviewedBy → reviewer_user_id (convention would generate reviewed_by)
+        builder.Property(e => e.ReviewedBy).HasColumnName("reviewer_user_id");
+        builder.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
         builder.Property(e => e.DedupeHash).HasMaxLength(64); // SHA-256 hex
-        builder.Property(e => e.JournalBatchId);
+        // SWEEP-FIX WEB-14 (CORRECTED): JournalBatchId → journal_entry_id
+        // The DB uses journal_entry_id (FK to accounting.journal_entry) as the batch grouping column.
+        // Since JournalBatch is now mapped to journal_entry, JournalBatchId maps cleanly here.
+        builder.Property(e => e.JournalBatchId).HasColumnName("journal_entry_id");
         builder.Property(e => e.DocumentId);
 
         // Indexes for performance (org_id, fy_year, period_month) and (document_id)

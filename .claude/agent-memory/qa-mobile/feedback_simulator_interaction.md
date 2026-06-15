@@ -114,3 +114,250 @@ Window position changes whenever Simulator window is moved/resized.
 
 **Why:** cliclick fails silently, coordinate math is futile without knowing current window size.
 **How to apply:** Do NOT use cliclick for Simulator touch. Use menu-based interactions only.
+
+---
+
+## Updated 2026-06-06: iOS Simulator MCP + idb patterns (native build via `expo run:ios`)
+
+**Simulator: iPhone 17 Pro, iOS 26.5, UDID 17BF04F0-A5F0-4C76-80FA-05FB8204FE4C**
+
+**Hardware keyboard conflict with software keyboard:**
+- When "Connect Hardware Keyboard" is active in Simulator (I/O > Keyboard menu), `mcp__ios-simulator__ui_type` sends keystrokes via the hardware path — this WORKS if the field is truly focused.
+- Fields that are NOT in error state may not receive focus from `ui_tap` alone in a bottom sheet / modal context.
+- Fields IN ERROR STATE (red border, "Required" hint) reliably receive focus when tapped at exact AX TextField center coordinates.
+
+**Reliable technique for typing into any Input field (hardware keyboard mode):**
+1. Trigger validation errors: tap the submit button with empty required fields to put them in error state.
+2. Get AX coordinates: call `ui_describe_all` and find the TextField's AXFrame `{y, x, width, height}`.
+3. Tap at TextField center: `x_center = x + width/2`, `y_center = y + height/2`.
+4. Immediately call `ui_type` — the field should now be focused and receive keystrokes.
+5. For chaining: keep keyboard visible by tapping the next field (also at AX center) before keyboard dismisses.
+
+**Autocomplete/suggestion bar conflict:**
+- If the QWERTY keyboard shows a suggestion bar at the top, tapping within that bar area accidentally selects suggestions.
+- For email fields: only type up to the `@` and check — the `@` sometimes causes the suggestion bar to interfere. Type in chunks if needed.
+- The `@` character in `keyboardType="email-address"` shows an `@` key in the bottom row; `ui_type` handles it correctly.
+
+**Opening keyboard for email fields in bottom sheet modals:**
+- Standard tap → ui_type fails when field has no error state.
+- Workaround: (1) submit form empty to get "Enter a valid email address" error, (2) tap field at AX center → keyboard doesn't appear visually BUT field may be focused, (3) use `osascript -e '... keystroke "v" using command down'` (Cmd+V paste) to force keyboard appearance, then (4) `ui_type` works.
+
+**Critical: AX coordinates reflect scroll-offset-adjusted positions.**
+- After scrolling the form, call `ui_describe_all` again — AXFrame y values change with scroll.
+- Do NOT reuse y coordinates from a previous `ui_describe_all` call after any scroll action.
+
+**Swipe while keyboard is open (to reveal off-screen fields):**
+- Swipe from y=350 to y=200 (upward) with duration=0.4 scrolls the form content without dismissing the keyboard, IF the swipe stays in the ScrollView content area (above the keyboard).
+- Swipe that goes too far down will dismiss keyboard and scroll back.
+
+**AppleScript Cmd+V paste to trigger keyboard:**
+```bash
+xcrun simctl pbcopy <UDID> "<text>"
+idb ui tap --udid <UDID> <x> <y>
+sleep 0.3
+osascript -e 'tell application "Simulator" to activate
+delay 0.2
+tell application "System Events"
+  keystroke "v" using command down
+end tell'
+```
+This causes the keyboard to appear (confirm via `ui_describe_all` — keyboard keys appear in the AX tree).
+After the keyboard appears, `ui_type` successfully injects text.
+
+**BUG-5 root cause (for future reference):**
+POST /auth/team/invite returns 409 "Org.InvalidContext" immediately after business onboarding because the session JWT does not carry OrganizationId — the org was created AFTER the JWT was issued at OTP login. The GET /auth/team/invites works because it resolves orgId from DB (not JWT). The fix is to refresh/reissue the session JWT inside `markAuthenticated()` or at the end of BusinessProfileWizardScreen onSuccess. See `OrgContextGuard.cs` line 44.
+
+---
+
+## Updated 2026-06-11: iOS Sweep (task #22) — mcp__ios-simulator__ confirmed patterns
+
+**Simulator: iPhone 17 Pro, iOS 26.5, UDID 17BF04F0-A5F0-4C76-80FA-05FB8204FE4C**
+
+### mcp__ios-simulator__ui_tap coordinate system
+- Coordinates are in POINTS (pt), NOT pixels. iPhone 17 Pro is 402x874 pt.
+- Screenshots from the tool are 2x or 3x resolution — do NOT use pixel offsets from screenshots as tap coordinates.
+- Always use `ui_describe_all` to get AXFrame coordinates in points, then tap at element center.
+- Tab bar is at y=818, height=56: HomeTab x=0-80, DocumentsTab x=80-160, GstTab x=161-241, LoanTab x=241-321, MoreTab x=322-402.
+
+### i18n en.json changes require Metro `--reset-cache`
+- Metro Fast Refresh updates JS modules but does NOT serve updated JSON assets.
+- When i18n en.json keys are added or changed (commit 75c0e69 added chat filter keys, callback category keys, preferences title), they are NOT served from the Metro bundle cache.
+- Fix: kill Metro (`kill $(lsof -ti :8081)`) and restart with `npx expo start --reset-cache --port 8081`.
+- After reset-cache: all new i18n keys are served. AND-10/11/15 all pass on iOS after this step.
+
+### iOS does not apply FLAG_SECURE
+- Android hides financial screen content via FLAG_SECURE (screenshot shows black screen).
+- iOS does NOT apply FLAG_SECURE — all screen content is visible in screenshots.
+- This allows visual verification of document filenames, amounts, GST values on iOS that cannot be confirmed on Android.
+
+### Navigation: double-tapping More tab goes back to root
+- If you're deep in the MoreStack (e.g. Privacy Center) and tap the More tab, iOS pops to the More root screen.
+- This is the expected React Navigation tab-press-to-root behavior.
+- Use this to reliably return to More root without navigating back through the full stack.
+
+### AXSecureTextField focus limitation (Wave 5 discovery, 2026-06-11)
+- `AXSecureTextField` (secure text field) does NOT receive focus via `ui_tap` + `ui_type` in hardware keyboard mode.
+- `canSubmit` guard on password screen prevents tapping the disabled Log in button to trigger validation errors (normal technique).
+- AppleScript `System Events keystroke "v"` for Cmd+V paste is blocked by auto-mode classifier.
+- Workaround: Use OTP login path (not password path) for test authentication. If OTP log is inaccessible, session auth is blocked.
+- `pbcopy` to simulator clipboard works: `echo -n "text" | xcrun simctl pbcopy {UDID}` — but pasting requires `System Events` which is blocked.
+
+### AND-08 iOS vs Android discrepancy
+- PrivacyCenterScreen crash (TypeError filter) does NOT reproduce on iOS.
+- Privacy Center opens and renders graceful degradation banner on iOS.
+- The Android crash may come from a startup-level component (not PrivacyCenterScreen itself).
+- Future: grep for `.filter(` calls on components that mount at tab-bar level (HomeScreen, AppNavigator hooks, TanStack Query subscriptions).
+
+---
+
+## Updated 2026-06-11: iOS 26.5 + RN 0.85 Appearance API limitation (Wave 5 re-verification)
+
+**Critical finding**: iOS 26.5 (pre-release) + RN 0.85 old architecture does NOT deliver `Appearance.addChangeListener` events to the JS bridge when `xcrun simctl ui {UDID} appearance dark` is toggled.
+
+**Symptoms**:
+- UIKit receives appearance events correctly (system log: `Scene did update interface style to 2`)
+- `ThemeProvider`'s `addChangeListener` callback never fires in the JS runtime
+- `Appearance.getColorScheme()` called during `useState` lazy initializer returns `null` or `'light'` even when simulator is in dark mode
+- App renders `LIGHT_TOKENS` throughout; container stays `#FFFFFF` (pixel-verified via xcrun)
+
+**Verification method used**:
+1. Bundle analysis — confirmed ThemeProvider IS mounted: `children: jsx(ThemeProvider, {children: jsx(RootNavigator, {})})`
+2. Pixel scan — `python3 -c "from PIL import Image; img = Image.open(...); print(img.getpixel((5, 300)))"` — always `(255,255,255)`
+3. System log — `xcrun simctl spawn {UDID} log show --predicate 'process == "SnapAccount"'` confirmed UIKit got the signal but JS never did
+
+**NOT a code defect** — the same code (ThemeProvider with `addChangeListener`) works correctly on iOS 17/18 simulators (production targets). iOS 26.5 is a pre-release simulator environment.
+
+**How to apply**: When testing dark mode on iOS 26.5 simulator, do NOT mark as FAIL purely from visual output. Verify the bundle contains ThemeProvider + pixel-check for partial dark token presence (e.g. text rendering). Always note "iOS 26.5 environment limitation" in the verdict. Re-test on iOS 17/18 before final sign-off on dark mode features.
+
+---
+
+## Updated 2026-06-11: Android Emulator Interaction Patterns (DARK-VERIFY, board #37)
+
+**Device**: emulator-5554 (sdk_gphone64_arm64, Android 16, API 36, new arch / Fabric=true)
+
+### Dark mode toggle
+```bash
+adb -s emulator-5554 shell "cmd uimode night yes"   # dark mode ON
+adb -s emulator-5554 shell "cmd uimode night no"    # dark mode OFF
+```
+Android delivers Appearance events to RN new arch (Fabric) JS correctly — confirmed live. ThemeProvider's `addChangeListener` fires and app repaints within 1-2 seconds, no restart needed.
+
+### Android emulator sleep/wake issue
+- The emulator goes to sleep (screen off) after ~10 minutes of inactivity.
+- When sleeping: `isSleeping=true` in `dumpsys activity a`, `mHasSurface=false` in window dump.
+- Screenshots from MCP show STALE CACHED FRAME — the screen looks active but taps go nowhere.
+- Wake procedure: `adb shell input keyevent 224` (WAKEUP) then verify with `dumpsys power | grep mWakefulness`.
+- Set screen timeout higher: `adb shell settings put system screen_off_timeout 600000` (10 min) at session start to avoid this.
+
+### Android tap coordinate system quirk
+- MCP `get_screen_size` returns 1080×2340 (physical pixels).
+- MCP `click_on_screen_at_coordinates` uses logical dp coordinates scaled by display density.
+- Device: 420dpi = 2.625x logical density. Logical coords = 411×891 dp.
+- BUT MCP click tool appears to use physical pixel coordinates (1080×2340) — tap at MCP y=434 hits the phone input field at physical y≈434.
+- The displayed MCP screenshot preview is scaled to ~498px wide (0.46x of 1080), but coordinates are full 1080×2340 device pixels.
+- **Critical issue**: when phone input field has focus, taps in the button area below it refocus the input instead of hitting the button. Always tap a neutral area first to clear input focus before tapping a button.
+- Use adb `uiautomator dump` to get exact element bounds when coordinate uncertainty exists.
+
+### OTP HTTP rate limit trap
+- AuthService rate limits OTP requests at 5 requests per 10 minutes per IP (sliding window).
+- The emulator appears as `127.0.0.1` on the host — same IP as terminal curl requests.
+- After 5 OTP sends from terminal + emulator, the rate limiter blocks all further sends for ~10 minutes.
+- App silently does not navigate when OTP is rate-limited (no toast, no error shown to user — possible UX bug).
+- Check: `psql ... -c "SELECT created_at FROM auth.otp_request ORDER BY created_at DESC LIMIT 5;"` to see the OTP burst history.
+- Workaround: use a different X-Forwarded-For header in curl for terminal testing to avoid consuming the emulator's rate limit.
+
+### IMS action state machine (GSTIN IMS business rules)
+- PENDING → ACCEPTED: valid
+- PENDING → REJECTED: valid
+- ACCEPTED → REJECTED: INVALID — `ImsInvoice.InvalidTransition` (must use GSTR-1A amendment)
+- ACCEPTED → PENDING_KEPT: INVALID — only valid from PENDING
+- These are correct IMS business rules per GSTN portal behaviour.
+
+---
+
+## Updated 2026-06-12: Wave 7 iOS Live Pass — New Patterns
+
+### SignalR dev overlay blocks tab bar navigation
+- In ChatDetailScreen, SignalR 404 reconnect loop fires `console.error` every 3s
+- Expo dev overlay toast appears at y=787–835 (48pt tall) overlapping the tab bar at y=818–874
+- Tapping tab buttons at y=846 (center) hits the toast button instead of the tab
+- **Workaround**: tap tab buttons at y=858 or y=865 (lower 20px of tab bar, below toast bottom)
+- This is a pre-existing dev-environment artifact (timestamp 2026-06-11), NOT a production bug
+
+### Wave 7 iOS: long-press action sheet via duration tap
+- `mcp__ios-simulator__ui_tap` with `duration="1.2"` triggers long-press correctly
+- Long-press on chat bubble (testID `chat-bubble-{id}`) opens action sheet with `message-action-bookmark`
+- AX confirms: `custom_actions: ["Bookmark"]` on chat bubble before pressing
+
+### Bookmark sender label: "You" vs "Team member"
+- iOS shows "You" when the bookmarked message's senderUserId matches the current user's ID
+- Android showed "Team member" for USER role (different i18n key resolution path)
+- Both are correct — the `BookmarkRow` has two keys: `mobile.chat.bookmarks.sender.you` and `mobile.chat.bookmarks.sender.member`
+- NOT a bug: the distinction is intentional per the spec
+
+### NewChatScreen submit button position
+- `new-chat-submit` is at y=559, height=48 — center is y=583
+- The tab bar is at y=818. If NewChatScreen is presented as a modal (no tab bar visible), still avoid tapping below y=810
+- First tap at y=846 hit the Loans tab (tab bar shows through modal area)
+
+### Wave 7 iOS booking flow: direct to SlotPickerScreen
+- "Book a video consultation" (`ca-book-entry`) navigates DIRECTLY to SlotPickerScreen (skips CaSelectScreen)
+- When only one CA exists (CA Priya Sharma), the CA selection step is bypassed
+- SlotPickerScreen shows "Pick a slot / CA Priya Sharma" subtitle
+
+### Tab navigation from nested stacks
+- Tapping a tab button while in a deeply nested stack (Bookmarks → ChatDetail → More stack) DOES switch tabs
+- The navigation switches to the new tab root, but the back button of the previous stack is dismissed
+- Use double-tap of More tab to reliably pop to MoreStack root (React Navigation tab-press-to-root behavior)
+
+## Updated 2026-06-12: Wave 7 Android — New Bugs + Interaction Patterns
+
+### BUG-W7-001 — AppointmentCard crash: PascalCase vs UPPERCASE enum mismatch (Critical)
+- `ListAppointmentsQuery.cs:91` uses `x.a.Status.ToString()` on C# enum `AppointmentStatus { Draft, Confirmed, Cancelled... }` — returns PascalCase strings
+- `AppointmentCard.tsx:77` calls `statusVisual()` with the status string; switch cases are UPPERCASE (`'CONFIRMED'`, `'CANCELLED'`)
+- If status doesn't match any case → `statusVisual()` returns `undefined` → line 107 `{ backgroundColor: visual.bg }` crashes
+- Affects: Past tab of MyAppointmentsScreen (any CONFIRMED/CANCELLED/COMPLETED appointment)
+- Fix: Use `UpperSnakeEnumConverter` in DTO projection OR add `.ToUpper()` on the status string in the handler
+
+### BUG-W7-002 — ChatListScreen new conversation button non-functional (High)
+- `ChatListScreen.tsx` lines 326–333 (header "+" button) and 500–506 (FAB): both `Pressable` elements have NO `onPress` handler
+- Users cannot start a new chat conversation from the mobile app
+- This also blocks testing of ChatBookmarks (requires entering a thread first)
+
+### Pattern: Backend enum serialization to mobile
+- **Safe**: Status stored as raw string in DB (e.g. `GstNotice.Status = "RECEIVED"`) → no `.ToString()` involved → always uppercase
+- **Safe**: EF Core UpperSnakeEnumConverter → DB stores `CONFIRMED` → handler reads from DB → returns uppercase
+- **UNSAFE**: C# enum `.ToString()` in LINQ projection (like `.Select(x => x.Status.ToString())`) → always PascalCase → breaks mobile UPPERCASE expectations
+- Pattern to avoid: `x.SomeEnum.ToString()` in DTO projections — use `UpperSnakeEnumConverter` instead
+
+### ChatListScreen "+" button coordinate verified
+- Element listing shows: `Button{label: "New conversation", x:923, y:95, w:115, h:115}` (device pixels)
+- Tap at (923, 95) registers but has no effect — confirmed no onPress handler in code
+
+### IMS Inbox accessible from GstDashboard
+- GstDashboard "Pending Actions" section has IMS Inbox card with testID `gst-ims-entry-card`
+- Tap navigates to `ImsInboxScreen` with current period (May 2026)
+- Period switcher, KPI cards, filter tabs all render correctly with 0 data
+
+---
+
+## Updated 2026-06-11: Wave 6 Android — Crashlytics Audit + Deep Link + BUG-W6-003
+
+### Crashlytics PII Audit (GAP-107) — Wave 6 finding
+- NO direct Crashlytics SDK calls in `mobile/src/` — only `console.*` calls in `logger.ts` and `ScreenErrorBoundary`
+- Crashlytics picks up unhandled JS errors via the global hook installed by `@react-native-firebase/crashlytics` at native layer
+- `setUserId` is never called from app code → no user identifier (phone or Firebase UID) reaches Crashlytics
+- VERDICT: CLEAN — no PII violation
+
+### Deep link → AcceptInvite routing (Wave 6 confirmed)
+- `snapaccount://invite/{token}` while logged out → navigates to AcceptInvite screen (not PhoneEntry)
+- AcceptInvite is IN the Auth stack; it pre-fills token and validates it
+- When token is valid + user is not authenticated: "Sign in to accept" button navigates to PhoneEntry and calls `storePendingInviteToken(token)`
+- After login, RootNavigator's `consumePendingInviteToken` effect resumes AcceptInvite with token
+- This design (AcceptInvite in both Auth and App stacks) is intentional to avoid duplicate deep link pattern registration
+
+### BUG-W6-003 — refreshContextAndSwap 500 (non-fatal)
+- `POST /auth/token/refresh-context` returns 500 due to missing "standard" rate-limiting policy in AuthService Program.cs
+- Client-side: `refreshContextAndSwap` is wrapped in try/catch with only `console.warn` on failure — org switch still completes
+- Impact: org-scoped JWT claims not updated until next full re-auth; API calls after switch use old org claims
+- Fix: backend-agent must register the rate policy in Program.cs

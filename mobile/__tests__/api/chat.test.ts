@@ -59,11 +59,35 @@ describe('sendMessage', () => {
 });
 
 describe('createThread', () => {
-  it('calls POST /chat/threads', async () => {
-    mockPost.mockResolvedValue({ data: { threadId: 'new-thread', status: 'open', category: 'general', messageId: 'm1' } });
-    const result = await createThread({ category: 'general', initialMessage: 'Hello' });
-    expect(mockPost).toHaveBeenCalledWith('/chat/threads', { category: 'general', initialMessage: 'Hello' });
+  // BUG-W7-002: the server binds `category` with default System.Text.Json
+  // (no string-enum converter) — the NUMERIC ThreadCategory value must be
+  // sent (GENERAL=6, GST=1, ...). String categories 500 on the server.
+  it('calls POST /chat/threads with the numeric server category', async () => {
+    mockPost.mockResolvedValue({ data: { threadId: 'new-thread', status: 'Open', category: 'GENERAL', messageId: 'm1' } });
+    const result = await createThread({ category: 'GENERAL', initialMessage: 'Hello' });
+    expect(mockPost).toHaveBeenCalledWith('/chat/threads', {
+      category: 6,
+      subject: undefined,
+      initialMessage: 'Hello',
+      clientMessageId: undefined,
+    });
     expect(result.threadId).toBe('new-thread');
+  });
+
+  it('maps GST to numeric value 1 and passes subject/clientMessageId through', async () => {
+    mockPost.mockResolvedValue({ data: { threadId: 't2', status: 'Open', category: 'GST', messageId: 'm2' } });
+    await createThread({
+      category: 'GST',
+      subject: 'GSTR-1',
+      initialMessage: 'Help',
+      clientMessageId: 'cmid-1',
+    });
+    expect(mockPost).toHaveBeenCalledWith('/chat/threads', {
+      category: 1,
+      subject: 'GSTR-1',
+      initialMessage: 'Help',
+      clientMessageId: 'cmid-1',
+    });
   });
 });
 

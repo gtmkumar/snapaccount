@@ -56,11 +56,33 @@ public class GstDbContext(DbContextOptions<GstDbContext> options)
     /// <inheritdoc />
     public DbSet<LutFiling> LutFilings => Set<LutFiling>();
 
+    // ── IMS (Invoice Management System) — GAP-101, mandatory 1 Apr 2026 ──────
+
+    /// <inheritdoc />
+    public DbSet<ImsInvoice> ImsInvoices => Set<ImsInvoice>();
+
+    /// <inheritdoc />
+    public DbSet<ImsActionLog> ImsActionLogs => Set<ImsActionLog>();
+
+    /// <inheritdoc />
+    public DbSet<Gstr1aAmendment> Gstr1aAmendments => Set<Gstr1aAmendment>();
+
+    // ── GAP-108: Notice deadline rules (config-driven, FY-versioned, migration 084) ──
+
+    /// <inheritdoc />
+    public DbSet<GstNoticeDeadlineRule> GstNoticeDeadlineRules => Set<GstNoticeDeadlineRule>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("gst");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(GstDbContext).Assembly);
+        // SEC-fix W5-IMS-02: base.OnModelCreating must run FIRST so that the global
+        // GuidStringConverter for CreatedBy/UpdatedBy is applied before per-entity
+        // IEntityTypeConfiguration classes run. Configurations that need to override
+        // the converter (e.g. ImsInvoiceConfiguration, Gstr1aAmendmentConfiguration
+        // where those columns are character varying(128), NOT uuid) call
+        // HasConversion<string>() after this base call, which wins the last-write.
         base.OnModelCreating(modelBuilder);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(GstDbContext).Assembly);
     }
 }

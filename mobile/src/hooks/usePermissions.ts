@@ -2,7 +2,7 @@
  * usePermissions hook — Camera, notifications, storage
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 
@@ -19,23 +19,27 @@ export function usePermissions() {
     notifications: null,
   });
 
+  const checkPermissions = useCallback(
+    () =>
+      Promise.all([
+        ImagePicker.getCameraPermissionsAsync(),
+        ImagePicker.getMediaLibraryPermissionsAsync(),
+        Notifications.getPermissionsAsync(),
+      ]).then(([camera, gallery, notifs]) => {
+        // setState runs in an async callback (external-system response), not
+        // synchronously inside the effect body.
+        setPermissions({
+          camera: camera.granted,
+          gallery: gallery.granted,
+          notifications: notifs.granted,
+        });
+      }),
+    [],
+  );
+
   useEffect(() => {
-    checkPermissions();
-  }, []);
-
-  const checkPermissions = async () => {
-    const [camera, gallery, notifs] = await Promise.all([
-      ImagePicker.getCameraPermissionsAsync(),
-      ImagePicker.getMediaLibraryPermissionsAsync(),
-      Notifications.getPermissionsAsync(),
-    ]);
-
-    setPermissions({
-      camera: camera.granted,
-      gallery: gallery.granted,
-      notifications: notifs.granted,
-    });
-  };
+    void checkPermissions();
+  }, [checkPermissions]);
 
   const requestCamera = async (): Promise<boolean> => {
     const result = await ImagePicker.requestCameraPermissionsAsync();

@@ -31,7 +31,7 @@ import { useTranslation } from 'react-i18next';
 import * as LocalAuthentication from 'expo-local-authentication';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import {
   getLoanApplication,
@@ -49,6 +49,8 @@ type RoutePropType = RouteProp<LoanStackParamList, 'LoanPackagePreview'>;
 interface Props { navigation: NavProp; route: RoutePropType }
 
 export function LoanPackagePreviewScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { applicationId } = route.params;
@@ -103,13 +105,16 @@ export function LoanPackagePreviewScreen({ navigation, route }: Props) {
     enabled: viewBioPassed,
   });
 
-  // Never cache — fetch fresh signed URL each view
+  // Never cache — fetch a fresh signed URL each view. (A stable queryKey with
+  // staleTime/gcTime 0 + refetchOnMount 'always' replaces the old Date.now()
+  // key, which was impure-in-render and forced a new cache entry every render.)
   const urlQuery = useQuery({
-    queryKey: ['loan-package-url', applicationId, Date.now()],
+    queryKey: ['loan-package-url', applicationId],
     queryFn: () => getLoanPackageDownloadUrl(applicationId),
     enabled: viewBioPassed,
     staleTime: 0,
     gcTime: 0,
+    refetchOnMount: 'always',
   });
 
   const submitMutation = useMutation({
@@ -161,7 +166,7 @@ export function LoanPackagePreviewScreen({ navigation, route }: Props) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.loan} />
+          <ActivityIndicator size="large" color={tokens.loanAccent} />
         </View>
       </SafeAreaView>
     );
@@ -171,10 +176,10 @@ export function LoanPackagePreviewScreen({ navigation, route }: Props) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <Ionicons name="document-text-outline" size={36} color={Colors.neutral[300]} />
+          <Ionicons name="document-text-outline" size={36} color={tokens.textTertiary} />
           <Text style={styles.generatingText}>{t('mobile.loan.preview.state.generating')}</Text>
           <Text style={styles.generatingTip}>{t('mobile.loan.preview.state.generatingTip')}</Text>
-          <ActivityIndicator size="small" color={Colors.loan} style={{ marginTop: 8 }} />
+          <ActivityIndicator size="small" color={tokens.loanAccent} style={{ marginTop: 8 }} />
         </View>
       </SafeAreaView>
     );
@@ -184,7 +189,7 @@ export function LoanPackagePreviewScreen({ navigation, route }: Props) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <Ionicons name="alert-circle-outline" size={40} color={Colors.error[400]} />
+          <Ionicons name="alert-circle-outline" size={40} color={tokens.errorFg} />
           <Text style={styles.errorText}>{t('mobile.loan.preview.error.generationFailed')}</Text>
           <Pressable style={styles.retryBtn} onPress={() => { void appQuery.refetch(); void urlQuery.refetch(); }}>
             <Text style={styles.retryText}>{t('mobile.common.retry')}</Text>
@@ -209,7 +214,7 @@ export function LoanPackagePreviewScreen({ navigation, route }: Props) {
           hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.loan.preview.title')}</Text>
         <Pressable
@@ -218,7 +223,7 @@ export function LoanPackagePreviewScreen({ navigation, route }: Props) {
           accessibilityRole="button"
           accessibilityLabel="Share"
         >
-          <Ionicons name="share-outline" size={20} color={Colors.neutral[600]} />
+          <Ionicons name="share-outline" size={20} color={tokens.textSecondary} />
         </Pressable>
       </View>
 
@@ -342,18 +347,19 @@ export function LoanPackagePreviewScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12,
   },
-  generatingText: { fontSize: 17, fontWeight: '700', color: Colors.neutral[800] },
-  generatingTip: { fontSize: 13, color: Colors.neutral[500], textAlign: 'center' },
-  errorText: { fontSize: 14, color: Colors.neutral[600], textAlign: 'center' },
+  generatingText: { fontSize: 17, fontWeight: '700', color: tk.textPrimary },
+  generatingTip: { fontSize: 13, color: tk.textSecondary, textAlign: 'center' },
+  errorText: { fontSize: 14, color: tk.textSecondary, textAlign: 'center' },
   retryBtn: {
-    backgroundColor: Colors.loan, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: tk.loanAccent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10,
   },
-  retryText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  retryText: { fontSize: 14, fontWeight: '700', color: tk.textOnBrand },
 
   header: {
     flexDirection: 'row',
@@ -361,16 +367,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
+  // P6-QA-MOBILE-09: 44×44pt minimum touch target (was 40×40).
   backBtn: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center',
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center',
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
-  shareBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary },
+  shareBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 
   scrollContent: { padding: 16, gap: 14, paddingBottom: 24 },
 
@@ -382,60 +389,61 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[50],
+    borderBottomColor: tk.border,
   },
-  contentsLabel: { fontSize: 13, color: Colors.neutral[700], fontWeight: '500', flex: 1 },
-  contentsPages: { fontSize: 12, color: Colors.neutral[400], fontWeight: '600' },
+  contentsLabel: { fontSize: 13, color: tk.textSecondary, fontWeight: '500', flex: 1 },
+  contentsPages: { fontSize: 12, color: tk.textTertiary, fontWeight: '600' },
 
   footer: {
     flexDirection: 'row',
     gap: 10,
     padding: 16,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
+    borderTopColor: tk.border,
   },
   backEditBtn: {
     minHeight: 52,
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backEditBtnText: { fontSize: 14, fontWeight: '600', color: Colors.neutral[600] },
+  backEditBtnText: { fontSize: 14, fontWeight: '600', color: tk.textSecondary },
   submitBtn: {
     flex: 1,
     minHeight: 52,
     borderRadius: 12,
-    backgroundColor: Colors.loan,
+    backgroundColor: tk.loanAccent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   submitBtnDisabled: { opacity: 0.4 },
-  submitBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  submitBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
 
   // Modal
   modalOverlay: {
-    flex: 1, backgroundColor: Colors.surface.overlay,
+    flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)',
     alignItems: 'center', justifyContent: 'center', padding: 24,
   },
   modalCard: {
-    backgroundColor: Colors.surface.default, borderRadius: 20, padding: 24,
+    backgroundColor: tk.raised, borderRadius: 20, padding: 24,
     width: '100%', gap: 16,
   },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: Colors.neutral[900] },
-  modalBody: { fontSize: 14, color: Colors.neutral[600], lineHeight: 21 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: tk.textPrimary },
+  modalBody: { fontSize: 14, color: tk.textSecondary, lineHeight: 21 },
   modalActions: { flexDirection: 'row', gap: 10 },
   modalCancelBtn: {
     flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1.5,
-    borderColor: Colors.neutral[200], alignItems: 'center', justifyContent: 'center',
+    borderColor: tk.border, alignItems: 'center', justifyContent: 'center',
   },
-  modalCancelText: { fontSize: 14, fontWeight: '600', color: Colors.neutral[600] },
+  modalCancelText: { fontSize: 14, fontWeight: '600', color: tk.textSecondary },
   modalConfirmBtn: {
     flex: 1, minHeight: 48, borderRadius: 12,
-    backgroundColor: Colors.loan, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: tk.loanAccent, alignItems: 'center', justifyContent: 'center',
   },
-  modalConfirmText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
-});
+  modalConfirmText: { fontSize: 14, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);

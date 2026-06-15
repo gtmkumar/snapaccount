@@ -1,3 +1,13 @@
-# DB Engineer Memory Index
-
-- [Auth/RBAC module conventions](project_auth_rbac_module.md) — partial unique indexes on auth.role, dot-notation perm names, RLS session vars (migrations 035-036)
+- [Migration & EF Parity Conventions](conventions_migrations_ef_parity.md) — flat numbered SQL files are canonical (no EF migrations for auth/loan/subscription/notification/callback); how to match EF configs.
+- [Schema RLS & Trigger Patterns](patterns_rls_triggers.md) — RLS isolation snippets, no-delete / immutability triggers, audit-column rules.
+- [Document table partitioning](schema_document_partitioning.md) — document.document is RANGE-partitioned (ADD COLUMN at parent only); document_archive is NOT a partition; auth FKs by-value.
+- [Callback KPI materialized view](schema_callback_kpi_mv.md) — kpi_daily_snapshot is org-safe (org_id in GROUP BY); IST day-boundary; unique index enables CONCURRENTLY; status-vocab drift FIXED in 073 (keep MV col names).
+- [Accounting edit_log (MCA)](schema_accounting_edit_log.md) — migration 071 statutory tamper-proof audit pattern: append-only + DB-level immutable (UPDATE/DELETE/TRUNCATE triggers, owner-proof) + non-disableable AFTER-trigger capture.
+- [ITR act_version dimension](schema_itr_act_version.md) — migration 072 added act_version (default IT_ACT_1961) + tax_year to ITR config tables; itr.act_section_mapping (illustrative 1961→2025).
+- [DPDP anonymization pair](schema_dpdp_anonymization_pair.md) — (anonymization_reason, anonymized_at) on all 10 entity tables as of 068; gst.notices benign asymmetry; how to scan for drift.
+- [ITR EF reconciliation](schema_itr_ef_reconciliation.md) — all 14 itr.* tables EF-reconciled as of 069; convention-mapping (no HasColumnName) bug class; ca_reviewer_id orphan.
+- [RBAC permission seed](conventions_rbac_permission_seed.md) — seeding auth.permission for a [RequiresPermission] guard; resource/action split; mirror-grant by join; flag narrow-audience gaps.
+- [GST IMS + GSTR-1A schema](schema_gst_ims_gstr1a.md) — migration 074 tables; RLS house-style (organization_id + app.current_user_id, NOT handoff's app.current_org_id); append-only ims_action_logs; mirror grants.
+- [AI RAG tables](schema_ai_rag_tables.md) — migration 075 ai.chunks/embeddings/interactions; FLOAT4[] vector (pgvector deferred to P7b w/ in-migration upgrade DDL); append-only ai.interactions; EF nullability parity lesson.
+- [Auth/security log-table RLS](schema_auth_security_log_tables.md) — append-only telemetry logs (otp_request, ai_usage_log, fraud_checks, 089 device_integrity_checks) intentionally NO RLS; system-writes-for-admin vs customer-reads-own.
+- [Dev seed reconciliation](schema_dev_seed_reconciliation.md) — GAP-072: LOCAL_AUTH logins backend-runtime-seeded (not SQL); SQL dev-seed database/dev-seed/ (100→200); self-sufficiency guard; CI/docker path drift owed to devops.

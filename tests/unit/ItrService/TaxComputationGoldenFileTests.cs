@@ -3,6 +3,7 @@ using ItrService.Application.Services;
 using ItrService.Domain.Entities;
 using ItrService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Reflection;
 
 namespace ItrService.Tests;
@@ -45,7 +46,7 @@ public sealed class TaxComputationGoldenFileTests : IDisposable
         );
         _db.SaveChanges();
 
-        _engine = new TaxComputationEngine(_db);
+        _engine = new TaxComputationEngine(_db, NullLogger<TaxComputationEngine>.Instance);
     }
 
     public void Dispose() => _db.Dispose();
@@ -53,7 +54,8 @@ public sealed class TaxComputationGoldenFileTests : IDisposable
     /// <summary>Creates a TaxSlabVersion using reflection to set private properties (test-only helper).</summary>
     private static TaxSlabVersion MakeSlabVersion(
         string ay, string regime, string slabsJson,
-        decimal stdDeduction, decimal rebate87ALimit, decimal rebate87AMax, decimal cessRatePct)
+        decimal stdDeduction, decimal rebate87ALimit, decimal rebate87AMax, decimal cessRatePct,
+        string actVersion = "IT_ACT_1961")
     {
         // EF Core requires a parameterless private ctor + property setters.
         // Use reflection to set private backing values for this seed-only helper.
@@ -69,6 +71,8 @@ public sealed class TaxComputationGoldenFileTests : IDisposable
         Set(tsv, "Rebate87AMaxAmount", rebate87AMax);
         Set(tsv, "CessRatePct", cessRatePct);
         Set(tsv, "EffectiveFrom", new DateOnly(2024, 4, 1));
+        // GAP-102: act_version is required (migration 072). Default IT_ACT_1961 for existing tests.
+        Set(tsv, "ActVersion", actVersion);
 
         return tsv;
     }

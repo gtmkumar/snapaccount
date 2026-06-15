@@ -83,7 +83,8 @@ describe('LoansListPage — KPI strip', () => {
     vi.spyOn(loanApi, 'getLoanKpi').mockReturnValue(new Promise(() => {}))
     vi.spyOn(loanApi, 'listLoanApplications').mockReturnValue(new Promise(() => {}))
     renderPage()
-    const skeletons = document.querySelectorAll('.animate-pulse')
+    // Skeleton component uses skeleton-shimmer class (replaced animate-pulse — S3 elevation pass)
+    const skeletons = document.querySelectorAll('.skeleton-shimmer')
     expect(skeletons.length).toBeGreaterThanOrEqual(6)
   })
 

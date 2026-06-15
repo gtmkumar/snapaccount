@@ -80,6 +80,7 @@ public class AddUserApiTests(PostgresFixture pg) : IAsyncLifetime
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Testing");
+                builder.UseSetting("Auth:SessionSecret", "it-session-secret-for-testing-min32!!");
                 builder.UseSetting("DEV_AUTH_BYPASS", "true");
                 builder.UseSetting("LOCAL_AUTH", "true");       // needed for login + initialPassword
                 // Override the connection string so BOTH EF Core AND Hangfire point to the test DB

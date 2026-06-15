@@ -7,8 +7,11 @@ import { Toggle } from '@/components/ui/Toggle'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { getPartnerBanksLite } from '@/lib/loanApi'
+import { t } from '@/i18n'
 
 export function PartnerBanksSettings() {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -35,26 +38,28 @@ export function PartnerBanksSettings() {
       </div>
 
       {isLoading && (
-        <Card>
-          <p className="text-sm text-neutral-500">Loading partner banks…</p>
-        </Card>
+        <div aria-busy="true">
+          <Skeleton variant="list" />
+        </div>
       )}
 
       {isError && (
         <AlertBanner
           type="error"
-          title="Could not load partner banks"
-          description="The /loans/partner-banks request failed."
+          title={t('partnerBanks.settings.error.title')}
+          description={t('partnerBanks.settings.error.desc')}
           actions={
-            <Button variant="ghost" size="sm" onClick={() => void refetch()}>Retry</Button>
+            <Button variant="ghost" size="sm" onClick={() => void refetch()}>{t('common.retry')}</Button>
           }
         />
       )}
 
       {!isLoading && !isError && (banks?.length ?? 0) === 0 && (
-        <Card>
-          <p className="text-sm text-neutral-500">No partner banks configured yet. Click <em>Add Partner Bank</em> to onboard one.</p>
-        </Card>
+        <EmptyState
+          variant="generic"
+          title={t('partnerBanks.settings.empty.title')}
+          description={t('partnerBanks.settings.empty.desc')}
+        />
       )}
 
       {!isLoading && !isError && (banks?.length ?? 0) > 0 && (

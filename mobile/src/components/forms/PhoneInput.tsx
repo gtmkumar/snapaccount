@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { sanitizePhone } from '../../lib/utils';
 
 interface PhoneInputProps {
@@ -29,6 +29,8 @@ export function PhoneInput({
   disabled = false,
   autoFocus = false,
 }: PhoneInputProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const hasError = Boolean(error);
 
   const handleChange = (text: string) => {
@@ -62,7 +64,7 @@ export function PhoneInput({
           keyboardType="numeric"
           maxLength={10}
           placeholder="XXXXX XXXXX"
-          placeholderTextColor={Colors.neutral[400]}
+          placeholderTextColor={tokens.textTertiary}
           editable={!disabled}
           autoFocus={autoFocus}
           textContentType="telephoneNumber"
@@ -81,22 +83,23 @@ export function PhoneInput({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   wrapper: {
     marginBottom: 16,
   },
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     borderWidth: 1,
-    borderColor: Colors.neutral[300],
+    borderColor: tk.border,
     borderRadius: 8,
     height: 56,
     overflow: 'hidden',
   },
   errorBorder: {
-    borderColor: Colors.error[600],
+    borderColor: tk.errorCta,
     borderWidth: 2,
   },
   disabled: {
@@ -105,30 +108,31 @@ const styles = StyleSheet.create({
   prefix: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
   },
   prefixText: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
     letterSpacing: 0.5,
   },
   divider: {
     width: 1,
     height: 32,
-    backgroundColor: Colors.neutral[300],
+    backgroundColor: tk.border,
   },
   input: {
     flex: 1,
     paddingHorizontal: 16,
     fontSize: 22,
     fontWeight: '600',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     letterSpacing: 1,
   },
   errorText: {
     fontSize: 12,
-    color: Colors.error[600],
+    color: tk.errorFg,
     marginTop: 4,
   },
-});
+  }),
+);

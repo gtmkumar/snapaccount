@@ -106,6 +106,9 @@ public static class DependencyInjection
             services.AddScoped<IOcrJobEnqueuer, Services.Ocr.InlineOcrJobEnqueuer>();
         }
 
+        // Cross-service event publisher (approve → accounting pipeline)
+        services.AddScoped<IDocumentEventPublisher, DocumentEventPublisher>();
+
         // Current user — reads Firebase JWT claims from HttpContext.Items
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, CurrentUser>();

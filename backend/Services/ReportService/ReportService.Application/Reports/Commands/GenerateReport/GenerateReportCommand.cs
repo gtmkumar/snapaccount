@@ -36,10 +36,23 @@ public sealed class GenerateReportCommandValidator : AbstractValidator<GenerateR
     {
         RuleFor(x => x.ReportType).IsInEnum();
         RuleFor(x => x.Format).IsInEnum();
+
+        // BUG-W7-05: FinancialYear YYYY-YY rules must only apply to non-ChatThreadPdf report types.
+        // For ChatThreadPdf the endpoint encodes a 36-char UUID thread ID into this field —
+        // the 10-char MaximumLength and YYYY-YY regex would always reject it (HTTP 422).
         RuleFor(x => x.FinancialYear)
             .MaximumLength(10)
             .Matches(@"^\d{4}-\d{2}$").When(x => x.FinancialYear != null)
-            .WithMessage("FinancialYear must be in format YYYY-YY (e.g., 2024-25).");
+            .WithMessage("FinancialYear must be in format YYYY-YY (e.g., 2024-25).")
+            .When(x => x.ReportType != ReportType.ChatThreadPdf);
+
+        // For ChatThreadPdf: FinancialYear encodes the thread UUID — validate it is a valid GUID.
+        RuleFor(x => x.FinancialYear)
+            .NotEmpty()
+            .Must(fy => Guid.TryParse(fy, out _))
+            .WithMessage("For ChatThreadPdf, FinancialYear must contain a valid thread UUID.")
+            .When(x => x.ReportType == ReportType.ChatThreadPdf && x.FinancialYear != null);
+
         RuleFor(x => x.PeriodStart)
             .LessThan(x => x.PeriodEnd).When(x => x.PeriodStart.HasValue && x.PeriodEnd.HasValue)
             .WithMessage("PeriodStart must be before PeriodEnd.");
@@ -72,11 +85,17 @@ public sealed class GenerateReportCommandHandler(
                 Error.Validation("Report.UnsupportedType",
                     $"No generator available for {request.ReportType}/{request.Format}."));
 
-        // Create and persist the job
+        // Create and persist the job.
+        // RequestedBy is Guid? — maps to user_id (uuid). Previously set via .ToString() which
+        // caused "42804: column user_id is of type uuid but expression is of type character varying".
+        // Title is NOT NULL with NO DB default — must be set explicitly (HasDefaultValue would cause
+        // EF to omit the column on INSERT → Postgres 23502).
+        var fyLabel = request.FinancialYear is { Length: <= 10 } fy ? $" {fy}" : string.Empty;
         var job = new ReportJob
         {
             OrgId = orgId.Value,
-            RequestedBy = currentUser.UserId.ToString(),
+            RequestedBy = currentUser.UserId,
+            Title = $"{request.ReportType} Report{fyLabel}",
             ReportType = request.ReportType,
             Format = request.Format,
             FinancialYear = request.FinancialYear,

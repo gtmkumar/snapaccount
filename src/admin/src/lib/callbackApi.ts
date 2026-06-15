@@ -133,11 +133,26 @@ export const CallbackKpiSchema = z.object({
   organizationId: z.string().optional(),
   open: z.number(),
   avgTtrSeconds: z.number(),
+  /**
+   * CONTRACT — ratio 0..1 as sent by the backend (e.g. 0.943 = 94.3%).
+   * getCallbackKpi() converts this to a percentage (×100, max 1 decimal) before
+   * returning, so callers always receive a value in the range 0..100.
+   * Special case: 1.0 → 100 (no floating-point overshoot).
+   * The raw ratio is validated here (z.number()) because Zod parses the
+   * backend response before the normalisation step multiplies by 100.
+   */
   slaCompliance: z.number(),
-  completed: z.number(),
+  // Backend may send `totalCompleted` instead of (or in addition to) `completed`.
+  // Normalisation happens in getCallbackKpi() before .parse() so this field is
+  // always present in the parsed output regardless of which backend field name is used.
+  completed: z.number().default(0),
   deltas: z.object({
     open: z.number(),
     avgTtrSeconds: z.number(),
+    /**
+     * CONTRACT — ratio delta 0..1 from the backend (e.g. 0.012 = +1.2 percentage points).
+     * getCallbackKpi() converts this to percentage points (×100, max 1 decimal).
+     */
     slaCompliance: z.number(),
     completed: z.number(),
   }),
@@ -284,5 +299,29 @@ export interface CallbackKpiParams {
 
 export async function getCallbackKpi(params: CallbackKpiParams = {}) {
   const res = await api.get('/callbacks/kpi', { params })
-  return CallbackKpiSchema.parse(res.data)
+  // Normalise: backend sends `totalCompleted` at top level; schema expects `completed`.
+  // Merge so both naming conventions are handled transparently.
+  const raw = res.data as Record<string, unknown>
+  const normalised = {
+    ...raw,
+    completed: raw['completed'] ?? raw['totalCompleted'] ?? 0,
+  }
+  const parsed = CallbackKpiSchema.parse(normalised)
+
+  // Convert slaCompliance and its delta from 0..1 ratio to 0..100 percentage.
+  // Backend contract: ratio (e.g. 0.943). UI contract: percentage (e.g. 94.3).
+  // Special case: 1.0 exactly → 100 (avoids 100.0 display).
+  const toPercent = (ratio: number): number => {
+    const pct = ratio * 100
+    return pct >= 100 ? 100 : Math.round(pct * 10) / 10
+  }
+
+  return {
+    ...parsed,
+    slaCompliance: toPercent(parsed.slaCompliance),
+    deltas: {
+      ...parsed.deltas,
+      slaCompliance: toPercent(parsed.deltas.slaCompliance),
+    },
+  }
 }

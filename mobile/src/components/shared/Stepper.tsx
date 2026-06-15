@@ -5,7 +5,11 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useTranslation } from 'react-i18next';
+import {
+  createThemedStyles,
+  type ThemeTokens,
+} from '../../contexts/ThemeContext';
 
 interface StepperProps {
   steps: string[];
@@ -14,10 +18,16 @@ interface StepperProps {
 }
 
 export function Stepper({ steps, currentStep, testID }: StepperProps) {
+  const styles = useStyles();
+  const { t } = useTranslation();
   return (
     <View testID={testID} style={styles.container} accessibilityRole="progressbar"
       accessibilityValue={{ min: 0, max: steps.length - 1, now: currentStep }}
-      accessibilityLabel={`Step ${currentStep + 1} of ${steps.length}: ${steps[currentStep]}`}
+      accessibilityLabel={t('mobile.auth.wizard.stepProgress', {
+        current: currentStep + 1,
+        total: steps.length,
+        label: steps[currentStep],
+      })}
     >
       {steps.map((step, index) => {
         const isCompleted = index < currentStep;
@@ -76,79 +86,81 @@ export function Stepper({ steps, currentStep, testID }: StepperProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  connector: {
-    height: 2,
-    flex: 1,
-    marginTop: 14,
-    marginHorizontal: -2,
-  },
-  connectorCompleted: {
-    backgroundColor: Colors.brand[500],
-  },
-  connectorPending: {
-    backgroundColor: Colors.neutral[200],
-  },
-  stepNode: {
-    alignItems: 'center',
-    gap: 6,
-    width: 52,
-  },
-  circle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  circleCompleted: {
-    backgroundColor: Colors.brand[500],
-  },
-  circleActive: {
-    backgroundColor: Colors.brand[600],
-    shadowColor: Colors.brand[600],
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  circlePending: {
-    backgroundColor: Colors.neutral[100],
-    borderWidth: 2,
-    borderColor: Colors.neutral[300],
-  },
-  circleNum: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.neutral[400],
-  },
-  circleNumActive: {
-    color: '#FFFFFF',
-  },
-  checkmark: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  stepLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: Colors.neutral[400],
-    textAlign: 'center',
-  },
-  stepLabelActive: {
-    color: Colors.brand[600],
-    fontWeight: '700',
-  },
-  stepLabelCompleted: {
-    color: Colors.brand[500],
-    fontWeight: '600',
-  },
-});
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    connector: {
+      height: 2,
+      flex: 1,
+      marginTop: 14,
+      marginHorizontal: -2,
+    },
+    connectorCompleted: {
+      backgroundColor: tk.brand500,
+    },
+    connectorPending: {
+      backgroundColor: tk.border,
+    },
+    stepNode: {
+      alignItems: 'center',
+      gap: 6,
+      width: 52,
+    },
+    circle: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    circleCompleted: {
+      backgroundColor: tk.brand500,
+    },
+    circleActive: {
+      backgroundColor: tk.brandCta,
+      shadowColor: tk.shadowColor,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    circlePending: {
+      backgroundColor: tk.sunken,
+      borderWidth: 2,
+      borderColor: tk.border,
+    },
+    circleNum: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: tk.textSecondary,
+    },
+    circleNumActive: {
+      color: tk.textOnBrand,
+    },
+    checkmark: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: tk.textOnBrand,
+    },
+    stepLabel: {
+      fontSize: 10,
+      fontWeight: '500',
+      color: tk.textSecondary,
+      textAlign: 'center',
+    },
+    stepLabelActive: {
+      color: tk.brandFg,
+      fontWeight: '700',
+    },
+    stepLabelCompleted: {
+      color: tk.brand500,
+      fontWeight: '600',
+    },
+  }),
+);

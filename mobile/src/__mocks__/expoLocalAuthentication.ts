@@ -1,3 +1,5 @@
+import { jest } from '@jest/globals';
+
 /**
  * Jest mock for expo-local-authentication
  * SEC-048: Real biometric support; tests use this mock to exercise

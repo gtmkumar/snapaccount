@@ -16,13 +16,15 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 interface DisclaimerCardProps {
   testID?: string;
 }
 
 export function DisclaimerCard({ testID }: DisclaimerCardProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
 
   return (
@@ -32,7 +34,7 @@ export function DisclaimerCard({ testID }: DisclaimerCardProps) {
       accessibilityRole="text"
       accessible
     >
-      <Ionicons name="information-circle" size={18} color={Colors.info[600]} />
+      <Ionicons name="information-circle" size={18} color={tokens.infoFg} />
       <Text style={styles.text} accessibilityLabel={t('mobile.loan.preview.disclaimer')}>
         {t('mobile.loan.preview.disclaimer')}
       </Text>
@@ -40,15 +42,16 @@ export function DisclaimerCard({ testID }: DisclaimerCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    backgroundColor: Colors.info[50],
+    backgroundColor: tk.infoTint,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.info[100],
+    borderColor: tk.infoTint,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginHorizontal: 16,
@@ -57,8 +60,9 @@ const styles = StyleSheet.create({
   text: {
     flex: 1,
     fontSize: 12,
-    color: Colors.info[800],
+    color: tk.infoFg,
     lineHeight: 18,
     fontWeight: '500',
   },
-});
+  }),
+);

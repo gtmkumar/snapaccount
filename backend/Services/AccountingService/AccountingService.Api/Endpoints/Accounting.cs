@@ -1,9 +1,12 @@
+using AccountingService.Application.EditLog.Queries.ExportEditLog;
+using AccountingService.Application.EditLog.Queries.GetEditLog;
 using AccountingService.Application.FiscalYear.Commands.CloseFiscalYear;
 using AccountingService.Application.JournalBatches.Commands.PostJournalBatch;
 using AccountingService.Application.JournalBatches.Commands.ReviewPosting;
 using AccountingService.Application.JournalBatches.Commands.ReversePosting;
 using AccountingService.Application.Organizations.Commands.BootstrapCoa;
 using AccountingService.Application.Reports.Queries.GetBalanceSheet;
+using AccountingService.Application.Reports.Queries.GetComparativeAnalysis;
 using AccountingService.Application.Reports.Queries.GetLedgerByAccount;
 using AccountingService.Application.Reports.Queries.GetProfitAndLoss;
 using AccountingService.Application.Reports.Queries.GetTaxLiability;
@@ -12,6 +15,7 @@ using MediatR;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Domain;
+using System.Net.Mime;
 
 namespace AccountingService.Api.Endpoints;
 
@@ -64,6 +68,39 @@ public sealed class Accounting : EndpointGroupBase
         groupBuilder.MapPost("/postings/{id:guid}/reverse", ReversePosting)
             .RequireAuthorization()
             .RequireRateLimiting("standard");
+
+        // GAP-044 / Comparative analysis ─────────────────────────────────────
+
+        // GET /accounting/reports/comparative?baseYear=2026&priorYear=2025&categoryFilter=INCOME
+        // RBAC: accounting.reports.read (PermissionBehavior enforces)
+        // Shape: chart-friendly { labels[], baseRevenue[], priorRevenue[], … , topMovers[] }
+        groupBuilder.MapGet("/reports/comparative", GetComparativeAnalysis)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GetComparativeAnalysis")
+            .WithSummary("YoY + MoM comparative analysis of revenue/expense/profit (GAP-044). " +
+                         "Chart-friendly series arrays aligned to Indian FY month labels (Apr–Mar). " +
+                         "Permission: accounting.reports.read.");
+
+        // GAP-100 / MCA edit-log ─────────────────────────────────────────────
+
+        // GET /accounting/edit-log?fyYear=&entityType=&page=&pageSize=
+        // Permission: accounting.editlog.read  (enforced by PermissionBehavior)
+        groupBuilder.MapGet("/edit-log", GetEditLog)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GetAccountingEditLog")
+            .WithSummary("MCA statutory edit log (GAP-100). Paginated. Permission: accounting.editlog.read. " +
+                         "Returns who changed what on the books-of-account tables and when.");
+
+        // GET /accounting/edit-log/export?fyYear=2026-27  → CSV download
+        // Permission: accounting.editlog.read (enforced by PermissionBehavior)
+        groupBuilder.MapGet("/edit-log/export", ExportEditLog)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("ExportAccountingEditLog")
+            .WithSummary("Stream full MCA edit log for a financial year as CSV (statutory FY export). " +
+                         "Permission: accounting.editlog.read.");
     }
 
     private static async Task<IResult> PostJournalBatch(
@@ -169,6 +206,57 @@ public sealed class Accounting : EndpointGroupBase
         return result.IsSuccess
             ? Results.NoContent()
             : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
+    }
+
+    private static async Task<IResult> GetEditLog(
+        ISender sender,
+        ICurrentUser currentUser,
+        string? fyYear = null,
+        string? entityType = null,
+        int page = 1,
+        int pageSize = 50)
+    {
+        var result = await sender.Send(new GetEditLogQuery(fyYear, entityType, page, pageSize));
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.Type == ErrorType.Forbidden
+                ? Results.Forbid()
+                : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
+    }
+
+    private static async Task<IResult> ExportEditLog(
+        ISender sender,
+        ICurrentUser currentUser,
+        string fyYear = "")
+    {
+        var result = await sender.Send(new ExportEditLogQuery(fyYear));
+        if (!result.IsSuccess)
+            return result.Error.Type == ErrorType.Forbidden
+                ? Results.Forbid()
+                : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
+
+        var export = result.Value;
+        var bytes = System.Text.Encoding.UTF8.GetBytes(export.Csv);
+        return Results.File(bytes, MediaTypeNames.Text.Csv, export.FileName);
+    }
+
+    private static async Task<IResult> GetComparativeAnalysis(
+        ISender sender,
+        ICurrentUser currentUser,
+        int baseYear = 2026,
+        int? priorYear = null,
+        string? categoryFilter = null)
+    {
+        if (currentUser.OrganizationId is null)
+            return Results.BadRequest(new { error = "No organisation associated with this user." });
+
+        var result = await sender.Send(
+            new GetComparativeAnalysisQuery(currentUser.OrganizationId.Value, baseYear, priorYear, categoryFilter));
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.Type == ErrorType.Forbidden
+                ? Results.Forbid()
+                : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
     }
 
     private static async Task<IResult> HandleQuery<T>(Task<Result<T>> queryTask)

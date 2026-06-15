@@ -133,24 +133,32 @@ describe('ChatListScreen', () => {
     expect(buttons.length).toBeGreaterThanOrEqual(7);
   });
 
-  it('pressing GST filter chip calls listThreads with gst-notice category', async () => {
-    mockListThreads.mockResolvedValue({ items: [], totalCount: 0 });
-
-    const { getAllByRole } = render(
+  // AND-10: chips previously rendered raw keys (`chat.list.filter.*`) because
+  // the `mobile.` prefix was missing from the t() calls. Labels must resolve.
+  it('filter chips render translated labels, not raw i18n keys', () => {
+    const { getByText, queryByText } = render(
       <Wrapper>
         <ChatListScreen navigation={mockNavigation as never} />
       </Wrapper>,
     );
 
-    // Filter chips are buttons with accessibilityState.selected
-    // Find the GST chip by label text
+    expect(getByText('All')).toBeTruthy();
+    expect(getByText('Unread')).toBeTruthy();
+    expect(getByText('GST')).toBeTruthy();
+    expect(queryByText('chat.list.filter.all')).toBeNull();
+    expect(queryByText('mobile.chat.list.filter.all')).toBeNull();
+  });
+
+  it('pressing GST filter chip calls listThreads with gst-notice category', async () => {
+    mockListThreads.mockResolvedValue({ items: [], totalCount: 0 });
+
     const { getByLabelText } = render(
       <Wrapper>
         <ChatListScreen navigation={mockNavigation as never} />
       </Wrapper>,
     );
 
-    const gstChip = getByLabelText('chat.list.filter.gst');
+    const gstChip = getByLabelText('GST');
     fireEvent.press(gstChip);
 
     await waitFor(() => {
@@ -167,7 +175,7 @@ describe('ChatListScreen', () => {
       </Wrapper>,
     );
 
-    fireEvent.press(getByLabelText('chat.list.filter.loan'));
+    fireEvent.press(getByLabelText('Loan'));
 
     await waitFor(() => {
       expect(mockListThreads).toHaveBeenCalledWith(
@@ -191,7 +199,7 @@ describe('ChatListScreen', () => {
       </Wrapper>,
     );
 
-    fireEvent.press(getByLabelText('chat.list.filter.unread'));
+    fireEvent.press(getByLabelText('Unread'));
 
     await waitFor(() => {
       expect(queryByText('Unread Thread')).toBeTruthy();
@@ -330,5 +338,33 @@ describe('ChatListScreen', () => {
       threadId: 'nav-thread',
       source: 'list',
     });
+  });
+
+  // ── new conversation (BUG-W7-002) ─────────────────────────────────────────
+  // Both the header "+" button and the FAB must open the NewChat compose
+  // screen — they previously had NO onPress handler at all.
+
+  it('header + button navigates to NewChat', () => {
+    const { getByTestId } = render(
+      <Wrapper>
+        <ChatListScreen navigation={mockNavigation as never} />
+      </Wrapper>,
+    );
+
+    fireEvent.press(getByTestId('chat-list-new-header'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('NewChat');
+  });
+
+  it('FAB navigates to NewChat', () => {
+    const { getByTestId } = render(
+      <Wrapper>
+        <ChatListScreen navigation={mockNavigation as never} />
+      </Wrapper>,
+    );
+
+    fireEvent.press(getByTestId('chat-list-new-fab'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('NewChat');
   });
 });

@@ -40,6 +40,7 @@ public sealed class GetApplicationQueryHandler(
     {
         var orgId = currentUser.OrganizationId;
 
+        // Migration 066: assigned_bank_id column confirmed — project AssignedBankId and AssignedBank.Name.
         var dto = await db.LoanApplications
             .Where(a => a.Id == request.ApplicationId && a.OrgId == orgId && a.DeletedAt == null)
             .Select(a => new LoanApplicationDto(

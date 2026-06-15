@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 interface ProgressRingProps {
   progress: number; // 0–1
@@ -22,11 +22,14 @@ export function ProgressRing({
   progress,
   size = 72,
   strokeWidth = 6,
-  color = Colors.brand[500],
+  color,
   label,
   centerText,
   testID,
 }: ProgressRingProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
+  const ringColor = color ?? tokens.brand500;
   const clampedProgress = Math.max(0, Math.min(1, progress));
   const pct = Math.round(clampedProgress * 100);
 
@@ -50,7 +53,7 @@ export function ProgressRing({
               height: size,
               borderRadius: size / 2,
               borderWidth: strokeWidth,
-              borderColor: Colors.neutral[100],
+              borderColor: tokens.border,
             },
           ]}
         />
@@ -65,12 +68,12 @@ export function ProgressRing({
                 height: size,
                 borderRadius: size / 2,
                 borderWidth: strokeWidth,
-                borderColor: color,
+                borderColor: ringColor,
                 // Approximate arc using border transparency
-                borderTopColor: fillDegrees >= 90 ? color : 'transparent',
-                borderRightColor: fillDegrees >= 180 ? color : 'transparent',
-                borderBottomColor: fillDegrees >= 270 ? color : 'transparent',
-                borderLeftColor: fillDegrees >= 360 ? color : 'transparent',
+                borderTopColor: fillDegrees >= 90 ? ringColor : 'transparent',
+                borderRightColor: fillDegrees >= 180 ? ringColor : 'transparent',
+                borderBottomColor: fillDegrees >= 270 ? ringColor : 'transparent',
+                borderLeftColor: fillDegrees >= 360 ? ringColor : 'transparent',
                 transform: [{ rotate: '-90deg' }],
               },
             ]}
@@ -90,7 +93,8 @@ export function ProgressRing({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   wrapper: {
     alignItems: 'center',
     gap: 8,
@@ -112,13 +116,14 @@ const styles = StyleSheet.create({
   },
   centerText: {
     fontWeight: '800',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     letterSpacing: -0.5,
   },
   label: {
     fontSize: 12,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     fontWeight: '500',
     textAlign: 'center',
   },
-});
+  }),
+);

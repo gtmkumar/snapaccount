@@ -27,7 +27,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import {
   getPreferences,
   updatePreferences,
@@ -61,6 +61,8 @@ const CHANNELS: { key: ChannelKey; labelKey: string; descKey: string; icon: Reac
 ];
 
 export function NotificationPreferencesScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const setStoreLanguage = usePreferencesStore((s) => s.setLanguage);
 
@@ -124,7 +126,7 @@ export function NotificationPreferencesScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.title}>{t('mobile.auth.preferences.title')}</Text>
         <View style={{ width: 40 }} />
@@ -138,7 +140,7 @@ export function NotificationPreferencesScreen({ navigation }: Props) {
           </View>
         ) : (
           <View style={styles.centered}>
-            <ActivityIndicator size="large" color={Colors.brand[500]} />
+            <ActivityIndicator size="large" color={tokens.brand500} />
           </View>
         )
       ) : (
@@ -162,7 +164,7 @@ export function NotificationPreferencesScreen({ navigation }: Props) {
                     <Text style={styles.langNative}>{LANGUAGES[lang].nativeLabel}</Text>
                     <Text style={styles.langName}>{LANGUAGES[lang].label}</Text>
                   </View>
-                  {selected && <Ionicons name="checkmark-circle" size={22} color={Colors.brand[500]} />}
+                  {selected && <Ionicons name="checkmark-circle" size={22} color={tokens.brand500} />}
                 </Pressable>
               );
             })}
@@ -174,7 +176,7 @@ export function NotificationPreferencesScreen({ navigation }: Props) {
             {CHANNELS.map((ch, idx, arr) => (
               <View key={ch.key} style={[styles.channelRow, idx === arr.length - 1 && { borderBottomWidth: 0 }]}>
                 <View style={styles.channelIcon}>
-                  <Ionicons name={ch.icon} size={18} color={Colors.brand[500]} />
+                  <Ionicons name={ch.icon} size={18} color={tokens.brand500} />
                 </View>
                 <View style={styles.channelInfo}>
                   <Text style={styles.channelLabel}>{t(ch.labelKey)}</Text>
@@ -183,8 +185,8 @@ export function NotificationPreferencesScreen({ navigation }: Props) {
                 <Switch
                   value={prefs[ch.key]}
                   onValueChange={() => toggleChannel(ch.key)}
-                  trackColor={{ false: Colors.neutral[300], true: Colors.brand[500] }}
-                  thumbColor={Colors.neutral[0]}
+                  trackColor={{ false: tokens.textTertiary, true: tokens.brand500 }}
+                  thumbColor={tokens.textOnBrand}
                   accessibilityLabel={t(ch.labelKey)}
                 />
               </View>
@@ -193,13 +195,13 @@ export function NotificationPreferencesScreen({ navigation }: Props) {
 
           {saved ? (
             <View style={styles.savedRow}>
-              <Ionicons name="checkmark-circle" size={16} color={Colors.success[600]} />
+              <Ionicons name="checkmark-circle" size={16} color={tokens.successFg} />
               <Text style={styles.savedText}>{t('mobile.auth.preferences.saved')}</Text>
             </View>
           ) : null}
           {saveError ? (
             <View style={styles.savedRow}>
-              <Ionicons name="alert-circle" size={16} color={Colors.error[600]} />
+              <Ionicons name="alert-circle" size={16} color={tokens.errorFg} />
               <Text style={styles.errorText}>{saveError}</Text>
             </View>
           ) : null}
@@ -218,27 +220,28 @@ export function NotificationPreferencesScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900], letterSpacing: -0.2 },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
   scrollContent: { padding: 16, gap: 8, paddingBottom: 40 },
-  subtitle: { fontSize: 14, color: Colors.neutral[500], marginBottom: 8 },
+  subtitle: { fontSize: 14, color: tk.textSecondary, marginBottom: 8 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
-  errorText: { fontSize: 14, color: Colors.error[600], flex: 1 },
+  errorText: { fontSize: 14, color: tk.errorFg, flex: 1 },
   retryBtn: { marginTop: 8 },
 
-  sectionLabel: { fontSize: 12, color: Colors.neutral[400], textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 12, marginBottom: 6 },
+  sectionLabel: { fontSize: 12, color: tk.textTertiary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 12, marginBottom: 6 },
   card: { overflow: 'hidden', borderRadius: 18 },
 
   langRow: {
@@ -249,11 +252,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     minHeight: 56,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
   langInfo: { gap: 2 },
-  langNative: { fontSize: 15, fontWeight: '600', color: Colors.neutral[900] },
-  langName: { fontSize: 12, color: Colors.neutral[500] },
+  langNative: { fontSize: 15, fontWeight: '600', color: tk.textPrimary },
+  langName: { fontSize: 12, color: tk.textSecondary },
 
   channelRow: {
     flexDirection: 'row',
@@ -263,15 +266,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     minHeight: 56,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
-  channelIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: Colors.brand[50], alignItems: 'center', justifyContent: 'center' },
+  channelIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: tk.brandTint, alignItems: 'center', justifyContent: 'center' },
   channelInfo: { flex: 1 },
-  channelLabel: { fontSize: 15, color: Colors.neutral[800] },
-  channelDesc: { fontSize: 12, color: Colors.neutral[500], marginTop: 2 },
+  channelLabel: { fontSize: 15, color: tk.textPrimary },
+  channelDesc: { fontSize: 12, color: tk.textSecondary, marginTop: 2 },
 
   savedRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
-  savedText: { fontSize: 13, color: Colors.success[600], fontWeight: '600' },
+  savedText: { fontSize: 13, color: tk.successFg, fontWeight: '600' },
 
   saveBtn: { marginTop: 20 },
-});
+  }),
+);

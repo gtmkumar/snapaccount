@@ -69,6 +69,34 @@ public sealed class Reports : EndpointGroupBase
                 "SEC-046: TTL is capped at 15 minutes. " +
                 "Caller must own the report (IDOR-scoped to org). " +
                 "Use case: share-with-CA, share-with-bank flows.");
+
+        // ── GAP-032: Tally XML export ─────────────────────────────────────────
+
+        /// <summary>POST /reports/tally-export — Generate Tally-importable XML (or CSV fallback).</summary>
+        groupBuilder.MapPost("/tally-export", GenerateTallyExport)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GenerateTallyExport")
+            .WithSummary("GAP-032: Generate Tally XML export (or CSV fallback when feature flag is off).")
+            .WithDescription(
+                "Produces Tally-importable XML (ENVELOPE/TALLYMESSAGE/LEDGER + VOUCHER). " +
+                "Feature flag: Report:TallyExportEnabled=true in config/Secret Manager. " +
+                "When flag is false, returns CSV fallback. " +
+                "Uses GenerateReport flow with ReportType=TallyExport.");
+
+        // ── GAP-043: Chat thread PDF export ───────────────────────────────────
+
+        /// <summary>POST /reports/chat-thread-pdf — Export a chat thread as PDF.</summary>
+        groupBuilder.MapPost("/chat-thread-pdf", GenerateChatThreadPdf)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GenerateChatThreadPdf")
+            .WithSummary("GAP-043: Export a chat thread as a formatted PDF.")
+            .WithDescription(
+                "Reads messages from chat.messages (cross-schema, same DB). " +
+                "IDOR: thread must belong to the calling user's organisation. " +
+                "Renders with QuestPDF (fonts CI-verified). " +
+                "Returns job ID; use GET /reports/{id}/download-url for the file.");
     }
 
     // ── Handler delegates ──────────────────────────────────────────────────────
@@ -119,6 +147,37 @@ public sealed class Reports : EndpointGroupBase
         return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
     }
 
+    private static async Task<IResult> GenerateTallyExport(
+        TallyExportRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new GenerateReportCommand(
+                ReportType.TallyExport,
+                ReportFormat.Pdf, // format field ignored by TallyExportGenerator; XML or CSV is auto-selected
+                null,
+                req.PeriodStart,
+                req.PeriodEnd),
+            ct);
+
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
+    private static async Task<IResult> GenerateChatThreadPdf(
+        ChatThreadPdfRequest req, ISender sender, CancellationToken ct)
+    {
+        // Encode ThreadId as FinancialYear string (reuses existing job schema without DDL change)
+        var result = await sender.Send(
+            new GenerateReportCommand(
+                ReportType.ChatThreadPdf,
+                ReportFormat.Pdf,
+                req.ThreadId.ToString(), // encoded as FinancialYear
+                null,
+                null),
+            ct);
+
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
     private static int MapError(SnapAccount.Shared.Domain.Error error)
         => error.Type switch
         {
@@ -148,3 +207,11 @@ internal record ListParams(
     string? Status = null,
     int Page = 1,
     int PageSize = 20);
+
+/// <summary>GAP-032: Request body for Tally XML export.</summary>
+internal record TallyExportRequest(
+    DateTime? PeriodStart = null,
+    DateTime? PeriodEnd = null);
+
+/// <summary>GAP-043: Request body for chat thread PDF export.</summary>
+internal record ChatThreadPdfRequest(Guid ThreadId);

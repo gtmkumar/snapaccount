@@ -15,7 +15,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { isValidGSTIN, isValidTAN, isValidAadhaar } from '../../lib/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -71,6 +71,8 @@ function MaskedField({
   accessibilityHint,
   validText,
 }: MaskedFieldProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const [touched, setTouched] = useState(false);
   const internalError = touched ? validate(value) : null;
   const displayError = error ?? internalError;
@@ -95,7 +97,7 @@ function MaskedField({
         onChangeText={handleChange}
         onBlur={handleBlur}
         placeholder={placeholder}
-        placeholderTextColor={Colors.neutral[400]}
+        placeholderTextColor={tokens.textTertiary}
         autoCapitalize={autoCapitalize}
         autoCorrect={false}
         keyboardType={keyboardType}
@@ -223,42 +225,44 @@ export function AadhaarNumberInput(props: FieldProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: { gap: 6 },
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
   },
   input: {
     height: 48,
     borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.neutral[900],
-    backgroundColor: Colors.surface.default,
+    color: tk.textPrimary,
+    backgroundColor: tk.raised,
     letterSpacing: 2,
   },
   inputError: {
-    borderColor: Colors.error[500],
-    backgroundColor: Colors.error[50],
+    borderColor: tk.errorCta,
+    backgroundColor: tk.errorTint,
   },
   inputDisabled: {
-    backgroundColor: Colors.neutral[50],
-    color: Colors.neutral[400],
+    backgroundColor: tk.canvas,
+    color: tk.textTertiary,
   },
   inputValid: {
-    borderColor: Colors.success[500],
+    borderColor: tk.successFg,
   },
   errorText: {
     fontSize: 12,
-    color: Colors.error[600],
+    color: tk.errorFg,
   },
   validText: {
     fontSize: 12,
-    color: Colors.success[600],
+    color: tk.successFg,
   },
-});
+  }),
+);

@@ -2,3 +2,10 @@
 - [QA Phase 6F FINAL State](project_phase6_state.md) — Phase 6F QA COMPLETE (2026-04-25): 677/677 Vitest PASS (+192 tests); ChatService+SubscriptionService integration scaffolds compile clean (P6-INT-02)
 - [Module 1 RBAC State](project_module1_rbac_state.md) — Module 1 Auth/RBAC QA FINAL (2026-05-29): 721/721 Vitest PASS (+44), 428/428 unit PASS, 20/20 RBAC integration PASS; BUG-RBAC-E2E-001 filed
 - [No alert() dialogs](feedback_no_alert_dialogs.md) — Team lead rejected native alert()/confirm() on financial platform; require in-app toast/modal
+- [Live Sweep 2026-06-11](project_live_sweep_2026_06_11.md) — 16/46 endpoints FAIL; 3 EF mismatch patterns; RBAC returns 400/500 not 403; report at .claude/qa/live-web-sweep-2026-06-11.md
+- [Task #23 State](project_task23_state.md) — DPDP +21 unit tests (84% coverage), SEC-056 WIRED, PermissionCatalog filters (not disables) inactive, NEW-D09 IDOR 2/2 PASS; InMemory EF CreatedAt gotcha documented
+- [Wave 5 Live Test State](project_wave5_state.md) — Wave 5 live QA (2026-06-11): GstService DOWN (Hangfire static API bug), 4 bugs filed, 11/12 services green, 1418 unit + 1007 Vitest PASS; report at .claude/qa/live-web-wave5-2026-06-11.md
+- [EF OnModelCreating order bug](feedback_ef_onmodelcreating_order.md) — HasMaxLength(128) on BaseAuditableEntity audit cols + wrong base/Apply order → 500 on full entity materialization (W5-IMS-02 root cause + fix pattern)
+- [Stale bundle false positives](feedback_stale_bundle_false_positives.md) — Always verify frontend behaviour via source code, not browser alone; BUG-MCA-ETYPE-005 was stale HMR bundle artifact
+- [Wave 6 Live Test State](project_wave6_state.md) — Wave 6 live QA (2026-06-11): 4 bugs found; AuthService missing "standard" rate limiter (BUG-W6-003) blocks health aggregate + refresh-context; SubscriptionService stale (BUG-W6-002); 2564 regression tests green
+- [Wave 7 QA Patterns](wave7_qa_patterns.md) — 6 bugs: string enum → 500 (N.Channel + GstFormType), notification_log NOT NULL, Tally export wrong table names, ChatPDF validator blocks UUID, device approval UI missing

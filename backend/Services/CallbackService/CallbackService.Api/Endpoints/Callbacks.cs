@@ -1,5 +1,6 @@
 using CallbackService.Application.Callbacks.Commands.AddNote;
 using CallbackService.Application.Dashboard.Queries.GetDashboardStats;
+using CallbackService.Application.Dashboard.Queries.GetKpiSnapshot;
 using CallbackService.Application.Dashboard.Queries.GetWorkloadByUser;
 using CallbackService.Application.Callbacks.Commands.AssignCallback;
 using CallbackService.Application.Callbacks.Commands.CancelCallback;
@@ -235,17 +236,43 @@ public sealed class Callbacks : EndpointGroupBase
         return result.IsSuccess ? Results.Created() : Results.BadRequest(new { error = result.Error.Message });
     }
 
-    private static IResult GetKpiSnapshot(ICurrentUser currentUser)
+    // GET /callbacks/kpi [Authorize] — GAP-012: real query over callback.kpi_daily_snapshot MV
+    // WEB-FIX (a): accepts "range" string param (7d/30d/90d) as well as legacy daysBack int.
+    //              When "range" is provided it takes precedence over daysBack.
+    private static async Task<IResult> GetKpiSnapshot(
+        ICurrentUser currentUser,
+        ISender sender,
+        string? range = null,
+        int daysBack = 30,
+        CancellationToken ct = default)
     {
-        // P6-HANDOFF-04: callback.kpi_daily_snapshot is a MV with no RLS.
-        // Full KPI query implementation requires direct SQL against the MV.
-        // Returning a placeholder — full implementation requires db-engineer MV confirmation.
         if (!currentUser.IsAuthenticated) return Results.Unauthorized();
-        return Results.Ok(new
+
+        // P6-HANDOFF-04: OrganizationId ALWAYS comes from the caller's JWT claims —
+        // never from a query parameter — so cross-org reads (IDOR) are impossible.
+        var orgId = currentUser.OrganizationId;
+        if (!orgId.HasValue || orgId == Guid.Empty)
+            return Results.Problem(
+                "Organisation context missing from session. " +
+                "Complete business onboarding and call POST /auth/token/refresh-context first.",
+                statusCode: 422);
+
+        // WEB-FIX: parse the range string to days; falls back to daysBack int for backward compat.
+        var resolvedDays = range?.ToLowerInvariant() switch
         {
-            message = "KPI snapshot endpoint live. MV query pending db-engineer confirmation of kpi_daily_snapshot schema.",
-            organizationId = currentUser.OrganizationId
-        });
+            "7d"  => 7,
+            "30d" => 30,
+            "90d" => 90,
+            "fy"  => 365,
+            "24h" => 1,
+            _     => daysBack,
+        };
+        var clampedDays = Math.Clamp(resolvedDays, 1, 365);
+        var result = await sender.Send(new GetKpiSnapshotQuery(orgId.Value, clampedDays), ct);
+
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.ToHttpResult();
     }
 }
 

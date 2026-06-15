@@ -36,6 +36,13 @@ const mockTakePicture = jest.fn(() =>
   Promise.resolve({ uri: 'file:///photos/test.jpg' }),
 );
 
+// expo-image-picker: needed by CameraScreen for gallery upload path
+jest.mock('expo-image-picker', () => ({
+  requestMediaLibraryPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
+  launchImageLibraryAsync: jest.fn(() => Promise.resolve({ canceled: true, assets: [] })),
+  MediaTypeOptions: { Images: 'Images', All: 'All' },
+}));
+
 jest.mock('expo-camera', () => {
   const React = require('react');
   const { View } = require('react-native');

@@ -172,7 +172,7 @@ describe('ITR API client', () => {
   // ── Notices ───────────────────────────────────────────────────────────────
 
   it('createItrNotice calls POST /itr/filings/:id/notices', async () => {
-    mockPost.mockResolvedValue({ data: { noticeId: 'nt1', status: 'Open' } });
+    mockPost.mockResolvedValue({ data: { noticeId: 'nt1', status: 'RECEIVED' } });
     await createItrNotice('f1', {
       assesseeId: 'a1',
       noticeNumber: 'NTC2025001',

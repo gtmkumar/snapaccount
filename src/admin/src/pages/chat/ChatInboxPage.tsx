@@ -5,7 +5,7 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import {
   MessageSquare, RefreshCw, Search,
   CheckCheck,
@@ -36,7 +36,6 @@ const STATUS_COLORS: Record<ThreadStatus, string> = {
 }
 
 export default function ChatInboxPage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -90,7 +89,7 @@ export default function ChatInboxPage() {
   const resolveMutation = useMutation({
     mutationFn: resolveThread,
     onSuccess: () => {
-      toast.success(t('chat.inbox.bulk.markResolved', 'Threads resolved'))
+      toast.success(t('chat.inbox.bulk.markResolved'))
       void queryClient.invalidateQueries({ queryKey: ['chat', 'threads'] })
       setSelectedIds(new Set())
     },
@@ -126,7 +125,7 @@ export default function ChatInboxPage() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-[var(--text-primary)]">
-            {t('chat.inbox.title', 'Chat')}
+            {t('chat.inbox.title')}
           </h1>
           {unreadCount > 0 && (
             <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--brand-primary)] text-white">
@@ -140,7 +139,7 @@ export default function ChatInboxPage() {
           </Button>
           <Button variant="primary" size="sm">
             <Pencil className="h-4 w-4 mr-1" />
-            {t('chat.inbox.compose', 'Compose')}
+            {t('chat.inbox.compose')}
           </Button>
         </div>
       </div>
@@ -155,13 +154,13 @@ export default function ChatInboxPage() {
               type="search"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder={t('chat.inbox.search', 'Search threads…')}
+              placeholder={t('chat.inbox.search')}
               className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border bg-[var(--surface-sunken)] border-[var(--border-default)] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
             />
           </div>
 
           {/* Filter region */}
-          <div role="region" aria-label={t('chat.inbox.filter.aria', 'Filters')} className="mb-3 space-y-2">
+          <div role="region" aria-label={t('chat.inbox.filter.aria')} className="mb-3 space-y-2">
             {/* Status filters */}
             <div className="flex flex-wrap gap-1.5">
               <button
@@ -170,7 +169,7 @@ export default function ChatInboxPage() {
                   !statusFilter ? 'bg-[var(--brand-primary)] text-white' : 'bg-[var(--surface-sunken)] text-[var(--text-secondary)] hover:bg-[var(--border-subtle)]'
                 )}
               >
-                {t('chat.inbox.filter.status.all', 'All')}
+                {t('chat.inbox.filter.status.all')}
               </button>
               {STATUS_OPTIONS.map(s => (
                 <button
@@ -212,7 +211,7 @@ export default function ChatInboxPage() {
               <div className="flex gap-1.5">
                 <Button size="sm" variant="ghost" onClick={handleBulkResolve}>
                   <CheckCheck className="h-3.5 w-3.5 mr-1" />
-                  {t('chat.inbox.bulk.markResolved', 'Resolve')}
+                  {t('chat.inbox.bulk.markResolved')}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
                   Clear
@@ -229,7 +228,7 @@ export default function ChatInboxPage() {
               ))
             ) : isError ? (
               <div className="text-sm text-[var(--text-secondary)] text-center py-8">
-                {t('chat.inbox.error', 'Failed to load threads.')}
+                {t('chat.inbox.error')}
                 <button onClick={() => refetch()} className="block mt-2 text-[var(--text-link)] hover:underline mx-auto">
                   Retry
                 </button>
@@ -238,7 +237,7 @@ export default function ChatInboxPage() {
               <EmptyState
                 variant="chat.inbox"
                 size="sm"
-                title={searchQuery || statusFilter ? t('chat.inbox.empty.filtered', 'No threads match these filters') : undefined}
+                title={searchQuery || statusFilter ? t('chat.inbox.empty.filtered') : undefined}
                 primaryCta={searchQuery || statusFilter ? {
                   label: 'Clear filters',
                   onPress: () => { setSearchQuery(''); setStatusFilter(undefined); setCategoryFilter([]) }
@@ -264,7 +263,7 @@ export default function ChatInboxPage() {
           <div className="text-center">
             <MessageSquare className="h-12 w-12 text-[var(--text-tertiary)] mx-auto mb-3" aria-hidden="true" />
             <p className="text-sm text-[var(--text-secondary)]">
-              {t('chat.inbox.select', 'Select a thread to view conversation')}
+              {t('chat.inbox.select')}
             </p>
           </div>
         </div>

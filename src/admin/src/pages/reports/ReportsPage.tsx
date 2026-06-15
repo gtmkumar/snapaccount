@@ -4,11 +4,11 @@
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import {
   BarChart3, Download, Share2, RefreshCw, Play,
   FileText, TrendingUp, Scale, Droplets, Calculator, BookOpen,
-  Clock,
+  Clock, Database,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/Badge'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import {
   listReportJobs, generateReport, getReportDownloadUrl, generateShareLink,
+  enqueueTallyExport, listTallyExportJobs,
   type ReportType, type ReportJobSummary,
 } from '@/lib/reportApi'
 import { cn } from '@/lib/utils'
@@ -49,7 +50,6 @@ const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'info'> =
 }
 
 export default function ReportsPage() {
-  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null })
   const [fy, setFy] = useState('2025-26')
@@ -69,17 +69,17 @@ export default function ReportsPage() {
       periodEnd: dateRange.end?.toISOString(),
     }),
     onSuccess: (data) => {
-      toast.success(t('reports.generated', `Report queued (Job: ${data.jobId.slice(0, 8)}…)`))
+      toast.success(t('reports.generated', { jobId: data.jobId.slice(0, 8) }))
       void queryClient.invalidateQueries({ queryKey: ['reports', 'jobs'] })
     },
-    onError: () => toast.error(t('reports.error', 'Failed to generate report')),
+    onError: () => toast.error(t('reports.error')),
   })
 
   const downloadMutation = useMutation({
     mutationFn: (jobId: string) => getReportDownloadUrl(jobId),
     onSuccess: (data) => {
       window.open(data.url, '_blank')
-      toast.success(t('reports.downloading', 'Opening download link…'))
+      toast.success(t('reports.downloading'))
     },
   })
 
@@ -87,17 +87,36 @@ export default function ReportsPage() {
     mutationFn: (jobId: string) => generateShareLink(jobId),
     onSuccess: (data) => {
       void navigator.clipboard.writeText(data.url)
-      toast.success(t('reports.shared', `Share link copied! Expires ${format(new Date(data.expiresAt), 'HH:mm')}`))
+      toast.success(t('reports.shared', { time: format(new Date(data.expiresAt), 'HH:mm') }))
     },
-    onError: () => toast.error(t('reports.shareError', 'Failed to generate share link')),
+    onError: () => toast.error(t('reports.shareError')),
+  })
+
+  // GAP-032 Tally export
+  const { data: tallyJobs, isLoading: tallyJobsLoading } = useQuery({
+    queryKey: ['tally-export-jobs'],
+    queryFn: () => listTallyExportJobs({ pageSize: 5 }),
+    staleTime: 30_000,
+  })
+
+  const tallyExportMutation = useMutation({
+    mutationFn: () => enqueueTallyExport({
+      periodStart: dateRange.start?.toISOString() ?? undefined,
+      periodEnd: dateRange.end?.toISOString() ?? undefined,
+    }),
+    onSuccess: (data) => {
+      toast.success(t('reports.tally.queued', { jobId: data.jobId.slice(0, 8) }))
+      void queryClient.invalidateQueries({ queryKey: ['tally-export-jobs'] })
+    },
+    onError: () => toast.error(t('reports.tally.error')),
   })
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <PageHeader
-          title={t('reports.title', 'Reports')}
-          subtitle={t('reports.subtitle', 'Generate financial reports, download PDFs, and share with CAs or banks.')}
+          title={t('reports.title')}
+          subtitle={t('reports.subtitle')}
         />
         <div className="flex items-center gap-3 flex-wrap">
           <DateRangePicker value={dateRange} onChange={setDateRange} fyAware />
@@ -105,7 +124,7 @@ export default function ReportsPage() {
             value={fy}
             onChange={e => setFy(e.target.value)}
             className="text-sm px-3 py-2 rounded-lg border bg-[var(--surface-sunken)] border-[var(--border-default)] text-[var(--text-primary)]"
-            aria-label={t('reports.fy', 'Financial Year')}
+            aria-label={t('reports.fy')}
           >
             <option value="2024-25">FY 2024-25</option>
             <option value="2025-26">FY 2025-26</option>
@@ -136,18 +155,56 @@ export default function ReportsPage() {
                 className="flex-1"
               >
                 <Play className="h-3.5 w-3.5 mr-1" />
-                {t('reports.generate', 'Generate')}
+                {t('reports.generate')}
               </Button>
             </div>
           </Card>
         ))}
       </div>
 
+      {/* GAP-032 Tally export section */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">
+              {t('reports.tally.title')}
+            </h2>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              {t('reports.tally.subtitle')}
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => tallyExportMutation.mutate()}
+            loading={tallyExportMutation.isPending}
+            leftIcon={<Database className="h-4 w-4" />}
+          >
+            {t('reports.tally.export')}
+          </Button>
+        </div>
+
+        {tallyJobsLoading ? (
+          <div className="h-8 bg-[var(--surface-sunken)] rounded-lg animate-pulse" />
+        ) : (tallyJobs?.items ?? []).length === 0 ? (
+          <p className="text-sm text-[var(--text-tertiary)]">{t('reports.tally.empty')}</p>
+        ) : (
+          <div className="space-y-2">
+            {(tallyJobs?.items ?? []).map(job => (
+              <TallyExportJobRow
+                key={job.jobId}
+                job={job}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Recent jobs */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold text-[var(--text-primary)]">
-            {t('reports.recentJobs', 'Recent Reports')}
+            {t('reports.recentJobs')}
           </h2>
           <Button
             variant="ghost"
@@ -165,7 +222,7 @@ export default function ReportsPage() {
             <EmptyState
               variant="reports"
               size="sm"
-              primaryCta={{ label: t('reports.generateFirst', 'Generate your first report'), onPress: () => generateMutation.mutate('ProfitAndLoss') }}
+              primaryCta={{ label: t('reports.generateFirst'), onPress: () => generateMutation.mutate('ProfitAndLoss') }}
             />
           ) : (
             <div className="space-y-2">
@@ -187,6 +244,49 @@ export default function ReportsPage() {
   )
 }
 
+// ── Tally Export Job Row ──────────────────────────────────────────────────────
+
+// TallyExportJobRow uses ReportJobSummary (from listTallyExportJobs → /reports?reportType=TallyExport)
+function TallyExportJobRow({ job }: { job: ReportJobSummary }) {
+  const statusVariant: Record<string, 'success' | 'warning' | 'error' | 'info'> = {
+    Completed: 'success',
+    Processing: 'warning',
+    Queued: 'info',
+    Failed: 'error',
+    // Legacy ALLCAPS fallbacks
+    COMPLETE: 'success',
+    GENERATING: 'warning',
+    QUEUED: 'info',
+    FAILED: 'error',
+  }
+
+  return (
+    <div className={cn(
+      'flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors',
+      'bg-[var(--surface-raised)] border-[var(--border-subtle)] hover:border-[var(--border-default)]'
+    )}>
+      <Database className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" aria-hidden="true" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+          {t('reports.tally.xmlExport')} {job.financialYear ? `FY ${job.financialYear}` : ''}
+        </p>
+        <p className="text-xs text-[var(--text-tertiary)]">
+          {job.createdAt ? format(new Date(job.createdAt), 'dd/MM/yyyy HH:mm') : ''}
+        </p>
+      </div>
+      <Badge variant={statusVariant[job.status] ?? 'info'} size="sm">
+        {job.status}
+      </Badge>
+      {job.status === 'COMPLETE' && (
+        <Clock className="h-4 w-4 text-neutral-400" aria-label="Download available via Reports" />
+      )}
+      {job.status === 'GENERATING' && (
+        <Clock className="h-4 w-4 text-[var(--text-tertiary)] animate-spin" aria-label="Generating" />
+      )}
+    </div>
+  )
+}
+
 // ── Report Job Row ────────────────────────────────────────────────────────────
 
 interface ReportJobRowProps {
@@ -198,7 +298,6 @@ interface ReportJobRowProps {
 }
 
 function ReportJobRow({ job, onDownload, onShare, isDownloading, isSharing }: ReportJobRowProps) {
-  const { t } = useTranslation()
 
   return (
     <div className={cn(
@@ -226,10 +325,10 @@ function ReportJobRow({ job, onDownload, onShare, isDownloading, isSharing }: Re
       <div className="flex gap-1.5 shrink-0">
         {job.status === 'COMPLETE' && (
           <>
-            <Button variant="ghost" size="sm" onClick={onDownload} loading={isDownloading} aria-label={t('reports.download', 'Download')}>
+            <Button variant="ghost" size="sm" onClick={onDownload} loading={isDownloading} aria-label={t('reports.download')}>
               <Download className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={onShare} loading={isSharing} aria-label={t('reports.share', 'Share link')}>
+            <Button variant="ghost" size="sm" onClick={onShare} loading={isSharing} aria-label={t('reports.share')}>
               <Share2 className="h-4 w-4" />
             </Button>
           </>

@@ -10,6 +10,8 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { DueDateChip } from '@/components/ui/DueDateChip'
+import { NoticeFormTypeBadge, type NoticeFormType } from '@/components/ui/NoticeFormTypeBadge'
+import { GstatStageChip, type GstatStage } from '@/components/ui/GstatStageChip'
 import { SelectionToolbar } from '@/components/ui/SelectionToolbar'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { Card } from '@/components/ui/Card'
@@ -207,9 +209,10 @@ function NoticeRowCard({ notice, onClick }: { notice: GstNotice; onClick: () => 
         {notice.dueDate && <DueDateChip dueDate={notice.dueDate} size="sm" />}
       </div>
       <p className="text-sm font-semibold text-neutral-900 font-mono">{notice.noticeNumber}</p>
-      <p className="text-xs text-neutral-500">
-        {notice.noticeType} · GSTIN {notice.gstin}
-      </p>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <NoticeFormTypeBadge formType={notice.noticeType as NoticeFormType} size="sm" />
+        <span className="text-xs text-neutral-400">· GSTIN {notice.gstin}</span>
+      </div>
       <p className="text-xs text-neutral-400">
         Received {new Date(notice.createdAt).toLocaleDateString('en-IN')}
         {notice.assignedCaName ? ` · Assigned to ${notice.assignedCaName}` : ' · Unassigned'}
@@ -438,6 +441,9 @@ export default function NoticeTrackerListPage() {
                     {t('admin.gst.notice.col.type')}
                   </th>
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                    {t('gst.notice.gstat.column')}
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">
                     {t('admin.gst.notice.col.gstin')}
                   </th>
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">
@@ -479,7 +485,14 @@ export default function NoticeTrackerListPage() {
                       <span className="font-mono text-xs text-neutral-800">{notice.noticeNumber}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs text-neutral-600">{notice.noticeType}</span>
+                      <NoticeFormTypeBadge formType={notice.noticeType as NoticeFormType} size="sm" />
+                    </td>
+                    <td className="px-4 py-3">
+                      {notice.gstatStage ? (
+                        <GstatStageChip currentStage={notice.gstatStage as GstatStage} />
+                      ) : (
+                        <span className="text-xs text-neutral-300">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="font-mono text-xs text-neutral-700">{notice.gstin}</span>

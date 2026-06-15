@@ -76,3 +76,79 @@ jest.mock('react-native/Libraries/BatchedBridge/NativeModules', () => {
     ...mockNativeModules,
   };
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TurboModuleRegistry mock (Task #25 test enablement)
+// RN 0.76 resolves PlatformConstants / DeviceInfo / feature-flag specs through
+// TurboModuleRegistry at import time; without a bridge config the invariant in
+// TurboModuleRegistry.js throws and every suite that imports a component file
+// fails to even load ("__fbBatchedBridgeConfig is not set").
+// `get()` returns null (callers all have JS fallbacks — feature flags use
+// defaults, Appearance no-ops); `getEnforcing()` returns a permissive proxy
+// whose getConstants() supplies the minimal shapes RN reads during render.
+jest.mock('react-native/Libraries/TurboModule/TurboModuleRegistry', () => {
+  const constantsFor = (name) => {
+    switch (name) {
+      case 'PlatformConstants':
+        return {
+          forceTouchAvailable: false,
+          interfaceIdiom: 'phone',
+          isTesting: true,
+          reactNativeVersion: { major: 0, minor: 76, patch: 9 },
+          osVersion: '17.0',
+          systemName: 'iOS',
+        };
+      case 'DeviceInfo':
+        return {
+          Dimensions: {
+            window: { width: 390, height: 844, scale: 3, fontScale: 1 },
+            screen: { width: 390, height: 844, scale: 3, fontScale: 1 },
+            windowPhysicalPixels: { width: 1170, height: 2532, scale: 3, fontScale: 1 },
+            screenPhysicalPixels: { width: 1170, height: 2532, scale: 3, fontScale: 1 },
+          },
+        };
+      case 'SourceCode':
+        return { scriptURL: 'http://localhost/index.bundle' };
+      default:
+        return {};
+    }
+  };
+  const makeModule = (name) =>
+    new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === 'getConstants') return () => constantsFor(name);
+          if (prop === 'addListener' || prop === 'removeListeners') return () => {};
+          return () => null;
+        },
+      },
+    );
+  return {
+    __esModule: true,
+    // Animated (useNativeDriver) hard-asserts that the native animated module
+    // exists, so return a permissive stub for those; everything else falls
+    // back to the JS default path via null.
+    get: (name) => (/Animated/.test(String(name)) ? makeModule(name) : null),
+    getEnforcing: (name) => makeModule(name),
+  };
+});
+
+// NativeEventEmitter asserts a non-null native module on iOS; with the
+// TurboModuleRegistry mock above returning null from get(), Keyboard /
+// Appearance / etc. would throw at construction. Replace with a no-op emitter.
+jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter', () => {
+  class MockNativeEventEmitter {
+    addListener() {
+      return { remove: () => {} };
+    }
+    removeListener() {}
+    removeAllListeners() {}
+    removeSubscription() {}
+    listenerCount() {
+      return 0;
+    }
+    emit() {}
+  }
+  return { __esModule: true, default: MockNativeEventEmitter };
+});

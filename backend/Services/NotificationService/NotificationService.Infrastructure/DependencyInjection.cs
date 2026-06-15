@@ -55,10 +55,17 @@ public static class DependencyInjection
         services.AddHttpClient("MSG91");
         services.AddHttpClient("SendGrid");
 
-        // Channel adapters (Push / SMS / Email)
+        // HTTP client for WhatsApp Business Cloud API (GAP-045)
+        services.AddHttpClient("WhatsApp");
+
+        // Channel adapters (Push / SMS / Email / WhatsApp)
         services.AddScoped<IChannelAdapter, FcmPushAdapter>();
         services.AddScoped<IChannelAdapter, Msg91SmsAdapter>();
         services.AddScoped<IChannelAdapter, SendGridEmailAdapter>();
+        // GAP-045: WhatsApp adapter — registered unconditionally; the adapter itself
+        // checks WhatsApp:Enabled at dispatch time and returns WHATSAPP_DISABLED when off.
+        // This matches Decision #2: "full implementation, flagged off by default."
+        services.AddScoped<IChannelAdapter, WhatsAppBusinessAdapter>();
 
         // Hosted services
         if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<RecurringJobsSubscriber>();

@@ -19,11 +19,12 @@ public sealed class PartnerBankConfiguration : IEntityTypeConfiguration<PartnerB
             .HasMaxLength(20)
             .IsRequired();
         builder.Property(x => x.ContactEmail).HasMaxLength(200);
-        // P6-HANDOFF-27: AES-GCM encrypted config stored as bytea
-        builder.Property(x => x.ApiConfigEncrypted).HasColumnType("bytea");
+        // SWEEP-FIX WEB-03: DB column is jsonb, not bytea. Property type changed to string.
+        builder.Property(x => x.ApiConfigEncrypted).HasColumnType("jsonb");
         builder.Property(x => x.ApiConfigKeyRef).HasMaxLength(200);
         builder.Property(x => x.WebhookSecretRef).HasMaxLength(200);
 
+        // Migration 066: LoanApplication.AssignedBankId (FK) now enabled in LoanApplicationConfiguration.
         builder.HasIndex(x => x.Name).IsUnique();
         builder.HasQueryFilter(x => x.DeletedAt == null);
     }

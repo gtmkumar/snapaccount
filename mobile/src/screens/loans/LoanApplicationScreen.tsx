@@ -6,7 +6,7 @@
  * Telemetry: loan.app.opened, loan.app.docUploaded, loan.app.draftSaved, loan.app.previewUnlocked
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,7 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import {
   getLoanApplication,
@@ -57,12 +57,12 @@ const INITIAL_ROWS: DocRow[] = [
   { type: 'ITR', labelKey: 'mobile.loan.application.checklist.row.itr', isAuto: true, state: 'auto-pending' },
 ];
 
-function docStateColor(state: DocRowState): string {
+function docStateColor(state: DocRowState, tk: ThemeTokens): string {
   switch (state) {
-    case 'uploaded': case 'auto-ready': return Colors.success[600];
-    case 'uploading': case 'auto-pending': return Colors.warning[600];
-    case 'error': return Colors.error[600];
-    default: return Colors.neutral[400];
+    case 'uploaded': case 'auto-ready': return tk.successFg;
+    case 'uploading': case 'auto-pending': return tk.warningFg;
+    case 'error': return tk.errorFg;
+    default: return tk.textTertiary;
   }
 }
 
@@ -77,6 +77,8 @@ function docStateIcon(state: DocRowState): React.ComponentProps<typeof Ionicons>
 }
 
 export function LoanApplicationScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { applicationId, productName } = route.params;
@@ -95,16 +97,21 @@ export function LoanApplicationScreen({ navigation, route }: Props) {
     enabled: !!applicationId,
   });
 
-  // Sync uploaded doc types from backend into local row state
-  useEffect(() => {
-    if (!docsQuery.data) return;
-    const uploadedTypes = new Set(docsQuery.data.items.map((d) => d.documentType));
-    setRows((prev) =>
-      prev.map((r) =>
-        uploadedTypes.has(r.type) && !r.isAuto ? { ...r, state: 'uploaded' } : r,
-      ),
-    );
-  }, [docsQuery.data]);
+  // Sync uploaded doc types from backend into local row state — adjust state
+  // during render (react.dev "you might not need an effect") instead of an
+  // effect, avoiding a cascading re-render.
+  const [prevDocsData, setPrevDocsData] = useState<typeof docsQuery.data>(undefined);
+  if (docsQuery.data !== prevDocsData) {
+    setPrevDocsData(docsQuery.data);
+    if (docsQuery.data) {
+      const uploadedTypes = new Set(docsQuery.data.items.map((d) => d.documentType));
+      setRows((prev) =>
+        prev.map((r) =>
+          uploadedTypes.has(r.type) && !r.isAuto ? { ...r, state: 'uploaded' } : r,
+        ),
+      );
+    }
+  }
 
   const submitMutation = useMutation({
     mutationFn: () => submitLoanApplication(applicationId!),
@@ -156,7 +163,7 @@ export function LoanApplicationScreen({ navigation, route }: Props) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.loan} />
+          <ActivityIndicator size="large" color={tokens.loanAccent} />
         </View>
       </SafeAreaView>
     );
@@ -173,7 +180,7 @@ export function LoanApplicationScreen({ navigation, route }: Props) {
           hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>
           {t('mobile.loan.application.title', {
@@ -187,7 +194,7 @@ export function LoanApplicationScreen({ navigation, route }: Props) {
           hitSlop={8}
           accessibilityRole="button"
         >
-          <Ionicons name="save-outline" size={20} color={Colors.neutral[600]} />
+          <Ionicons name="save-outline" size={20} color={tokens.textSecondary} />
         </Pressable>
       </View>
 
@@ -224,7 +231,7 @@ export function LoanApplicationScreen({ navigation, route }: Props) {
               progress={uploadedCount / rows.length}
               size={40}
               strokeWidth={4}
-              color={Colors.loan}
+              color={tokens.loanAccent}
               centerText={`${uploadedCount}/${rows.length}`}
             />
           </View>
@@ -239,11 +246,11 @@ export function LoanApplicationScreen({ navigation, route }: Props) {
               <Ionicons
                 name={docStateIcon(row.state)}
                 size={20}
-                color={docStateColor(row.state)}
+                color={docStateColor(row.state, tokens)}
               />
               <View style={styles.docRowInfo}>
                 <Text style={styles.docRowLabel}>{t(row.labelKey)}</Text>
-                <Text style={[styles.docRowBadge, { color: docStateColor(row.state) }]}>
+                <Text style={[styles.docRowBadge, { color: docStateColor(row.state, tokens) }]}>
                   {row.isAuto
                     ? row.state === 'auto-ready'
                       ? t('mobile.loan.application.checklist.badge.auto') + ' ✓'
@@ -261,7 +268,7 @@ export function LoanApplicationScreen({ navigation, route }: Props) {
                   accessibilityLabel={`Upload ${t(row.labelKey)}`}
                   hitSlop={8}
                 >
-                  <Ionicons name="cloud-upload-outline" size={16} color={Colors.loan} />
+                  <Ionicons name="cloud-upload-outline" size={16} color={tokens.loanAccent} />
                   <Text style={styles.uploadCtaText}>Upload</Text>
                 </Pressable>
               )}
@@ -276,11 +283,11 @@ export function LoanApplicationScreen({ navigation, route }: Props) {
             onPress={handlePreview}
             accessibilityRole="button"
           >
-            <Ionicons name="document-text" size={18} color={Colors.loan} />
+            <Ionicons name="document-text" size={18} color={tokens.loanAccent} />
             <Text style={styles.previewTeaserText}>
               {t('mobile.loan.application.preview.teaser', { pages: 47 })}
             </Text>
-            <Ionicons name="arrow-forward" size={16} color={Colors.loan} />
+            <Ionicons name="arrow-forward" size={16} color={tokens.loanAccent} />
           </Pressable>
         )}
       </ScrollView>
@@ -308,7 +315,7 @@ export function LoanApplicationScreen({ navigation, route }: Props) {
           }
         >
           {submitMutation.isPending ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={tokens.textOnBrand} />
           ) : (
             <>
               <Text style={[styles.primaryBtnText, !allReady && styles.primaryBtnTextDisabled]}>
@@ -319,7 +326,7 @@ export function LoanApplicationScreen({ navigation, route }: Props) {
               <Ionicons
                 name="arrow-forward"
                 size={16}
-                color={allReady ? '#FFFFFF' : Colors.neutral[400]}
+                color={allReady ? tokens.textOnBrand : tokens.textTertiary}
               />
             </>
           )}
@@ -329,8 +336,9 @@ export function LoanApplicationScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row',
@@ -338,43 +346,44 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
     gap: 8,
   },
+  // P6-QA-MOBILE-09: 44×44pt minimum touch target (was 40×40).
   backBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: Colors.neutral[900] },
-  saveDraftBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: tk.textPrimary },
+  saveDraftBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 
   scrollContent: { padding: 16, gap: 14, paddingBottom: 24 },
 
   summaryStrip: {
     flexDirection: 'row',
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 14,
     padding: 14,
     alignItems: 'center',
-    shadowColor: '#0F172A',
+    shadowColor: tk.shadowColor,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 1,
   },
   summaryItem: { flex: 1, alignItems: 'center', gap: 2 },
-  summaryLabel: { fontSize: 11, color: Colors.neutral[500], fontWeight: '500' },
-  summaryValue: { fontSize: 14, fontWeight: '700', color: Colors.neutral[900] },
-  summaryDivider: { width: 1, height: 32, backgroundColor: Colors.neutral[200] },
+  summaryLabel: { fontSize: 11, color: tk.textSecondary, fontWeight: '500' },
+  summaryValue: { fontSize: 14, fontWeight: '700', color: tk.textPrimary },
+  summaryDivider: { width: 1, height: 32, backgroundColor: tk.border },
 
   section: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 14,
     padding: 16,
     gap: 4,
@@ -385,7 +394,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.neutral[800] },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: tk.textPrimary },
 
   docRow: {
     flexDirection: 'row',
@@ -393,11 +402,11 @@ const styles = StyleSheet.create({
     gap: 12,
     minHeight: 64,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[50],
+    borderBottomColor: tk.border,
     paddingVertical: 10,
   },
   docRowInfo: { flex: 1 },
-  docRowLabel: { fontSize: 14, fontWeight: '600', color: Colors.neutral[800] },
+  docRowLabel: { fontSize: 14, fontWeight: '600', color: tk.textPrimary },
   docRowBadge: { fontSize: 11, fontWeight: '500', marginTop: 2 },
   uploadCta: {
     flexDirection: 'row',
@@ -406,52 +415,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: Colors.accent[50],
-    minHeight: 36,
+    backgroundColor: tk.warningTint,
+    // P6-QA-MOBILE-08: 44pt minimum touch target (was 36).
+    minHeight: 44,
   },
-  uploadCtaText: { fontSize: 12, fontWeight: '700', color: Colors.loan },
+  uploadCtaText: { fontSize: 12, fontWeight: '700', color: tk.loanAccent },
 
   previewTeaser: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: Colors.accent[50],
+    backgroundColor: tk.warningTint,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.accent[100],
+    borderColor: tk.warningTintBorder,
   },
-  previewTeaserText: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.accent[700] },
+  previewTeaserText: { flex: 1, fontSize: 14, fontWeight: '600', color: tk.loanAccent },
 
   footer: {
     flexDirection: 'row',
     gap: 10,
     padding: 16,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
+    borderTopColor: tk.border,
   },
   secondaryBtn: {
     minHeight: 52,
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryBtnText: { fontSize: 14, fontWeight: '600', color: Colors.neutral[600] },
+  secondaryBtnText: { fontSize: 14, fontWeight: '600', color: tk.textSecondary },
   primaryBtn: {
     flex: 1,
     minHeight: 52,
     borderRadius: 12,
-    backgroundColor: Colors.loan,
+    backgroundColor: tk.loanAccent,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
   primaryBtnDisabled: { opacity: 0.4 },
-  primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
-  primaryBtnTextDisabled: { color: Colors.neutral[400] },
-});
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
+  primaryBtnTextDisabled: { color: tk.textTertiary },
+  }),
+);

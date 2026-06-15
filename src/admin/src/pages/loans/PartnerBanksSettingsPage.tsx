@@ -11,6 +11,8 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { Card } from '@/components/ui/Card'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { BankAdapterTypeBadge } from '@/components/ui/BankAdapterTypeBadge'
@@ -623,19 +625,17 @@ export default function PartnerBanksSettingsPage() {
 
       {/* Bank card list */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" aria-busy="true">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-36 rounded-xl bg-neutral-100 animate-pulse" />
+            <Skeleton key={i} variant="card" className="h-36" />
           ))}
         </div>
       ) : banks.length === 0 ? (
-        <div className="py-16 text-center space-y-3">
-          <Building2 className="h-10 w-10 mx-auto text-neutral-300" aria-hidden="true" />
-          <p className="text-neutral-500">{t('admin.partnerBanks.empty')}</p>
-          <Button onClick={handleAddNew} leftIcon={<Plus className="h-4 w-4" />}>
-            {t('admin.partnerBanks.add')}
-          </Button>
-        </div>
+        <EmptyState
+          variant="generic"
+          title={t('admin.partnerBanks.empty')}
+          primaryCta={{ label: t('admin.partnerBanks.add'), onPress: handleAddNew }}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {banks.map(bank => (

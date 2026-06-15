@@ -1,8 +1,7 @@
 /**
  * CallbackKpiPage — Admin Callback KPI Dashboard
  * Route: /callbacks/kpi
- * Phase: 6E
- * TODO Phase 6F: role-gate to Admin + Ops Lead only; CAs see limited view
+ * Phase: 6E — GAP-053: route-level guard restricts to SUPER_ADMIN + OPERATIONS_MANAGER
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -27,6 +26,8 @@ import {
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/utils'
 import { t } from '@/i18n'
@@ -41,7 +42,7 @@ const STATUS_COLORS: Record<string, string> = {
   IN_PROGRESS: '#6366f1',   // brand-500
   FOLLOW_UP_NEEDED: '#8b5cf6', // accent-500
   ESCALATED_TO_CA: '#ef4444', // error-500
-  COMPLETED: '#22c55e',     // success-500
+  COMPLETED: '#10b981',     // success-500 (emerald — canonical S0 token)
   CANCELLED: '#9ca3af',     // neutral-400
 }
 
@@ -173,10 +174,11 @@ export default function CallbackKpiPage() {
       />
 
       {isError && (
-        <div className="text-center py-12">
-          <p className="text-sm text-error-600">Failed to load KPI data.</p>
-          <button onClick={() => void refetch()} className="mt-2 text-xs text-brand-600 hover:underline">Retry</button>
-        </div>
+        <EmptyState
+          variant="generic"
+          title={t('callbackKpi.error.title')}
+          primaryCta={{ label: t('callbackKpi.error.retry'), onPress: () => void refetch() }}
+        />
       )}
 
       {isEmpty && (
@@ -190,7 +192,7 @@ export default function CallbackKpiPage() {
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         {isLoading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-28 bg-neutral-100 rounded-xl animate-pulse" />
+              <Skeleton key={i} variant="card" className="h-28" />
             ))
           : data && (
             <>
@@ -211,7 +213,7 @@ export default function CallbackKpiPage() {
               />
               <MetricCard
                 title={t('admin.callbacks.kpi.metric.slaCompliance')}
-                value={data.slaCompliance.toFixed(1)}
+                value={data.slaCompliance === 100 ? '100' : data.slaCompliance.toFixed(1)}
                 unit="%"
                 delta={Number(data.deltas.slaCompliance.toFixed(1))}
                 deltaSuffix=" pp"
@@ -235,7 +237,7 @@ export default function CallbackKpiPage() {
         <Card>
           <CardHeader title={t('admin.callbacks.kpi.chart.statusDist')} />
           {isLoading
-            ? <div className="h-48 bg-neutral-100 rounded animate-pulse" />
+            ? <Skeleton variant="chart" />
             : data && data.statusDistribution.length > 0
               ? (
                 <ResponsiveContainer width="100%" height={240}>
@@ -251,14 +253,14 @@ export default function CallbackKpiPage() {
                   </BarChart>
                 </ResponsiveContainer>
               )
-              : <p className="text-sm text-neutral-400 py-8 text-center">No data</p>}
+              : <EmptyState variant="generic" title={t('callbackKpi.chart.noData')} size="sm" />}
         </Card>
 
         {/* Daily volume */}
         <Card>
           <CardHeader title={t('admin.callbacks.kpi.chart.dailyVolume')} />
           {isLoading
-            ? <div className="h-48 bg-neutral-100 rounded animate-pulse" />
+            ? <Skeleton variant="chart" />
             : data && data.dailyVolume.length > 0
               ? (
                 <ResponsiveContainer width="100%" height={240}>
@@ -285,13 +287,13 @@ export default function CallbackKpiPage() {
                       type="monotone"
                       dataKey="completed"
                       name={t('admin.callbacks.kpi.chart.seriesCompleted')}
-                      stroke="#22c55e"
+                      stroke="#10b981"
                       strokeWidth={2}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
               )
-              : <p className="text-sm text-neutral-400 py-8 text-center">No data</p>}
+              : <EmptyState variant="generic" title={t('callbackKpi.chart.noData')} size="sm" />}
         </Card>
       </div>
 
@@ -301,7 +303,7 @@ export default function CallbackKpiPage() {
         <Card>
           <CardHeader title={t('admin.callbacks.kpi.chart.ttrHistogram')} />
           {isLoading
-            ? <div className="h-48 bg-neutral-100 rounded animate-pulse" />
+            ? <Skeleton variant="chart" />
             : data && data.ttrHistogram.length > 0
               ? (
                 <ResponsiveContainer width="100%" height={240}>
@@ -314,21 +316,21 @@ export default function CallbackKpiPage() {
                       {data.ttrHistogram.map((entry, index) => (
                         <Cell
                           key={`cell-${index}`}
-                          fill={entry.withinSla ? '#22c55e' : '#ef4444'}
+                          fill={entry.withinSla ? '#10b981' : '#ef4444'}
                         />
                       ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )
-              : <p className="text-sm text-neutral-400 py-8 text-center">No data</p>}
+              : <EmptyState variant="generic" title={t('callbackKpi.chart.noData')} size="sm" />}
         </Card>
 
         {/* Category mix donut */}
         <Card>
           <CardHeader title={t('admin.callbacks.kpi.chart.categoryMix')} />
           {isLoading
-            ? <div className="h-48 bg-neutral-100 rounded animate-pulse" />
+            ? <Skeleton variant="chart" />
             : data && data.categoryMix.length > 0
               ? (
                 <div className="flex items-center gap-4">
@@ -364,7 +366,7 @@ export default function CallbackKpiPage() {
                   </div>
                 </div>
               )
-              : <p className="text-sm text-neutral-400 py-8 text-center">No data</p>}
+              : <EmptyState variant="generic" title={t('callbackKpi.chart.noData')} size="sm" />}
         </Card>
       </div>
 
@@ -372,7 +374,7 @@ export default function CallbackKpiPage() {
       <Card>
         <CardHeader title={t('admin.callbacks.kpi.team.title')} />
         {isLoading
-          ? <div className="h-32 bg-neutral-100 rounded animate-pulse" />
+          ? <Skeleton variant="dataTableDense" />
           : data && data.teamPerformance.length > 0
             ? (
               <div className="overflow-x-auto">
@@ -428,7 +430,7 @@ export default function CallbackKpiPage() {
                 </table>
               </div>
             )
-            : <p className="text-sm text-neutral-400 py-4 text-center">No data for this range.</p>}
+            : <EmptyState variant="generic" title={t('callbackKpi.chart.noData')} size="sm" />}
       </Card>
 
       {/* SLA breaches table */}
@@ -443,7 +445,7 @@ export default function CallbackKpiPage() {
           </button>
         </div>
         {isLoading
-          ? <div className="h-32 bg-neutral-100 rounded animate-pulse" />
+          ? <Skeleton variant="dataTableDense" />
           : data && data.slaBreaches.length > 0
             ? (
               <div className="overflow-x-auto">
@@ -494,7 +496,7 @@ export default function CallbackKpiPage() {
                 </table>
               </div>
             )
-            : <p className="text-sm text-neutral-400 py-4 text-center">No SLA breaches in this range.</p>}
+            : <EmptyState variant="generic" title={t('callbackKpi.slaBreaches.noData')} size="sm" />}
       </Card>
     </div>
   )

@@ -1,5 +1,7 @@
 using ItrService.Application.Common.Interfaces;
+using ItrService.Application.TaxSlabs.Queries.GetTaxSlabs;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SnapAccount.Shared.Domain;
 using System.Security.Cryptography;
 using System.Text;
@@ -61,19 +63,29 @@ public sealed record TaxComputationResult(
 
 /// <summary>
 /// Implementation of <see cref="ITaxComputationEngine"/>.
-/// Reads <c>itr.tax_slab_versions</c> keyed by (ay, regime).
+/// Reads <c>itr.tax_slab_versions</c> keyed by (ay, regime, act_version).
+/// GAP-102: for AY2026-27 onward prefers IT_ACT_2025 rows; falls back to IT_ACT_1961 with warning.
 /// </summary>
-public sealed class TaxComputationEngine(IItrDbContext dbContext) : ITaxComputationEngine
+public sealed class TaxComputationEngine(
+    IItrDbContext dbContext,
+    ILogger<TaxComputationEngine> logger) : ITaxComputationEngine
 {
     /// <inheritdoc />
     public async Task<Result<TaxComputationResult>> ComputeAsync(TaxComputationInput input, CancellationToken ct = default)
     {
-        // Load tax slab version — P6-HANDOFF-18
-        var slabVersion = await dbContext.TaxSlabVersions
-            .Where(v => v.AssessmentYear == input.AssessmentYear && v.Regime == input.Regime
-                && (v.EffectiveUntil == null || v.EffectiveUntil >= DateOnly.FromDateTime(DateTime.UtcNow)))
-            .OrderByDescending(v => v.EffectiveFrom)
-            .FirstOrDefaultAsync(ct);
+        // Load tax slab version with act_version resolution (GAP-102)
+        var targetActVersion = GetTaxSlabsQueryHandler.ResolveTargetActVersion(input.AssessmentYear);
+        var slabVersion = await FindSlabVersion(input.AssessmentYear, input.Regime, targetActVersion, ct);
+
+        // Fall-back: 2025-Act requested but not yet seeded → fall back to 1961 with warning
+        if (slabVersion is null && targetActVersion == "IT_ACT_2025")
+        {
+            logger.LogWarning(
+                "TaxComputationEngine: No IT_ACT_2025 slab for AY={AY} regime={Regime}. " +
+                "Falling back to IT_ACT_1961.",
+                input.AssessmentYear, input.Regime);
+            slabVersion = await FindSlabVersion(input.AssessmentYear, input.Regime, "IT_ACT_1961", ct);
+        }
 
         if (slabVersion is null)
             return Error.NotFound("TaxSlab.NotFound",
@@ -171,6 +183,16 @@ public sealed class TaxComputationEngine(IItrDbContext dbContext) : ITaxComputat
             ComputationHash: computationHash,
             ComputationJsonb: computationJsonb);
     }
+
+    private async Task<ItrService.Domain.Entities.TaxSlabVersion?> FindSlabVersion(
+        string ay, string regime, string actVersion, CancellationToken ct)
+        => await dbContext.TaxSlabVersions
+            .Where(v => v.AssessmentYear == ay
+                     && v.Regime == regime
+                     && v.ActVersion == actVersion
+                     && (v.EffectiveUntil == null || v.EffectiveUntil >= DateOnly.FromDateTime(DateTime.UtcNow)))
+            .OrderByDescending(v => v.EffectiveFrom)
+            .FirstOrDefaultAsync(ct);
 
     private static (decimal GrossTax, List<SlabBreakdownItem> Breakdown) CalculateSlabTax(
         decimal taxableIncome, List<TaxSlab> slabs)

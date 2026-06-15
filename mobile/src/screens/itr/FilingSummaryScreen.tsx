@@ -20,7 +20,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { AccordionSection } from '../../components/shared/AccordionSection';
 import { SummaryList } from '../../components/shared/SummaryList';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { getItrFiling } from '../../api/itr';
 import type { ItrStackParamList } from '../../navigation/ItrStack';
@@ -34,6 +34,8 @@ interface Props {
 }
 
 export function FilingSummaryScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { filingId, regime } = route.params;
@@ -48,7 +50,7 @@ export function FilingSummaryScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.itr.summary.title')}</Text>
         <View style={{ width: 40 }} />
@@ -56,7 +58,7 @@ export function FilingSummaryScreen({ navigation, route }: Props) {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {isLoading ? (
-          <ActivityIndicator size="large" color={Colors.itr} style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={tokens.itrAccent} style={{ marginTop: 40 }} />
         ) : filing ? (
           <>
             {/* Filing overview card */}
@@ -142,7 +144,7 @@ export function FilingSummaryScreen({ navigation, route }: Props) {
 
             {filing.computationHash && (
               <View style={styles.hashCard}>
-                <Ionicons name="shield-checkmark-outline" size={16} color={Colors.success[600]} />
+                <Ionicons name="shield-checkmark-outline" size={16} color={tokens.successFg} />
                 <Text style={styles.hashText} numberOfLines={1}>
                   {t('mobile.itr.summary.hash')}: {filing.computationHash.slice(0, 16)}…
                 </Text>
@@ -169,41 +171,43 @@ export function FilingSummaryScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default, borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised, borderBottomWidth: 1, borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900], letterSpacing: -0.2 },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
   scrollContent: { padding: 16, gap: 14 },
 
   overviewCard: {
-    backgroundColor: Colors.surface.default, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.neutral[100], overflow: 'hidden',
+    backgroundColor: tk.raised, borderRadius: 16,
+    borderWidth: 1, borderColor: tk.border, overflow: 'hidden',
   },
   overviewRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 14, minHeight: 52,
   },
-  overviewLabel: { fontSize: 13, color: Colors.neutral[500] },
-  overviewValue: { fontSize: 15, fontWeight: '700', color: Colors.neutral[900] },
-  overviewDivider: { height: 1, backgroundColor: Colors.neutral[100], marginHorizontal: 16 },
-  regimePill: { backgroundColor: Colors.itr + '15', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 },
-  regimePillText: { fontSize: 13, fontWeight: '700', color: Colors.itr },
-  statusBadge: { backgroundColor: Colors.warning[50], borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  statusBadgeText: { fontSize: 12, fontWeight: '700', color: Colors.warning[700] },
+  overviewLabel: { fontSize: 13, color: tk.textSecondary },
+  overviewValue: { fontSize: 15, fontWeight: '700', color: tk.textPrimary },
+  overviewDivider: { height: 1, backgroundColor: tk.sunken, marginHorizontal: 16 },
+  regimePill: { backgroundColor: tk.itrAccent + '15', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 },
+  regimePillText: { fontSize: 13, fontWeight: '700', color: tk.itrAccent },
+  statusBadge: { backgroundColor: tk.warningTint, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  statusBadgeText: { fontSize: 12, fontWeight: '700', color: tk.warningFg },
 
   hashCard: {
     flexDirection: 'row', gap: 8, alignItems: 'center',
-    backgroundColor: Colors.success[50], borderRadius: 10, padding: 12,
-    borderWidth: 1, borderColor: Colors.success[200],
+    backgroundColor: tk.successTint, borderRadius: 10, padding: 12,
+    borderWidth: 1, borderColor: tk.successTintBorder,
   },
-  hashText: { flex: 1, fontSize: 12, color: Colors.success[700], fontFamily: 'monospace' },
+  hashText: { flex: 1, fontSize: 12, color: tk.successFg, fontFamily: 'monospace' },
 
-  footer: { padding: 16, borderTopWidth: 1, borderTopColor: Colors.neutral[100], backgroundColor: Colors.surface.default },
-  approveBtn: { backgroundColor: Colors.itr, borderRadius: 14, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
-  approveBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-});
+  footer: { padding: 16, borderTopWidth: 1, borderTopColor: tk.border, backgroundColor: tk.raised },
+  approveBtn: { backgroundColor: tk.itrAccent, borderRadius: 14, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
+  approveBtnText: { fontSize: 16, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);

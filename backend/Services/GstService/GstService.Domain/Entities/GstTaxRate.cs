@@ -37,4 +37,19 @@ public class GstTaxRate : BaseAuditableEntity
     }
 
     public bool IsCurrentlyActive => IsActive && ValidTo == null;
+
+    /// <summary>
+    /// GAP-022: Terminates this rate by setting <see cref="ValidTo"/>.
+    /// Called automatically when a newer rate with the same name is created.
+    /// </summary>
+    public void Terminate(DateOnly validTo)
+    {
+        ValidTo = validTo;
+    }
+
+    /// <summary>
+    /// GAP-022: Deactivates this rate (admin soft-disable).
+    /// The rate remains in history but is excluded from active-rate lookups.
+    /// </summary>
+    public void Deactivate() => IsActive = false;
 }

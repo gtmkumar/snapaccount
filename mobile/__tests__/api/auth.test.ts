@@ -21,10 +21,12 @@ import {
   updatePreferences,
   getDevices,
   revokeDevice,
+  getMyApprovalStatus,
   verifyPan,
   sendAadhaarOtp,
   verifyAadhaarOtp,
   complete2faChallenge,
+  refreshContext,
 } from '../../src/api/auth';
 
 const mockGet = apiClient.get as jest.Mock;
@@ -72,6 +74,20 @@ describe('devices', () => {
     await revokeDevice('dev-123');
     expect(mockDelete).toHaveBeenCalledWith('/auth/devices/dev-123');
   });
+
+  // Wave 7 recon: NEW-device waiting screen polls a real verdict endpoint.
+  it('GET /auth/devices/my-approval-status returns the verdict body as-is', async () => {
+    const body = {
+      approvalRequestId: 'req-1',
+      status: 'PENDING',
+      decidedAt: null,
+      expiresAt: '2026-06-12T05:10:00Z',
+      mode: 'ENFORCE',
+    };
+    mockGet.mockResolvedValue({ data: body });
+    await expect(getMyApprovalStatus()).resolves.toEqual(body);
+    expect(mockGet).toHaveBeenCalledWith('/auth/devices/my-approval-status');
+  });
 });
 
 describe('KYC', () => {
@@ -116,5 +132,30 @@ describe('2FA challenge', () => {
     });
     expect(res.token).toBe('tok');
     expect(res.userId).toBe('u1');
+  });
+});
+
+// GAP-007 / BUG-5
+describe('refreshContext', () => {
+  it('POSTs to /auth/token/refresh-context with no body', async () => {
+    mockPost.mockResolvedValue({
+      data: { accessToken: 'new-org-token', expiresAt: '2026-06-10T22:00:00Z' },
+    });
+    await refreshContext();
+    expect(mockPost).toHaveBeenCalledWith('/auth/token/refresh-context');
+  });
+
+  it('returns accessToken and expiresAt from the response', async () => {
+    mockPost.mockResolvedValue({
+      data: { accessToken: 'tok-abc', expiresAt: '2026-06-10T22:00:00Z' },
+    });
+    const result = await refreshContext();
+    expect(result.accessToken).toBe('tok-abc');
+    expect(result.expiresAt).toBe('2026-06-10T22:00:00Z');
+  });
+
+  it('propagates HTTP errors to the caller (caller decides on fallback)', async () => {
+    mockPost.mockRejectedValue(new Error('401 Unauthorized'));
+    await expect(refreshContext()).rejects.toThrow('401 Unauthorized');
   });
 });

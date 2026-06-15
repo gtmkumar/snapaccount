@@ -6,7 +6,7 @@
 import { useRef, useState } from 'react'
 import { Sun, Moon, Monitor } from 'lucide-react'
 import { useTheme, type ThemePreference } from '@/contexts/ThemeContext'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 const ICONS: Record<ThemePreference, typeof Sun> = {
@@ -21,7 +21,6 @@ interface ThemeToggleProps {
 
 export function ThemeToggle({ className }: ThemeToggleProps) {
   const { preference, effectiveTheme, cycleTheme, setPreference } = useTheme()
-  const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const longPressTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -48,9 +47,9 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
 
   const options: ThemePreference[] = ['light', 'dark', 'system']
   const labels: Record<ThemePreference, string> = {
-    light: t('theme.toggle.light', 'Light'),
-    dark: t('theme.toggle.dark', 'Dark'),
-    system: t('theme.toggle.system', 'System default'),
+    light: t('theme.toggle.light'),
+    dark: t('theme.toggle.dark'),
+    system: t('theme.toggle.system'),
   }
 
   return (
@@ -61,7 +60,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         className="sr-only"
         role="status"
       >
-        {menuOpen ? '' : t('theme.announce.changed', `Theme changed to ${effectiveTheme}`)}
+        {menuOpen ? '' : t('theme.announce.changed', { theme: effectiveTheme })}
       </span>
 
       <button
@@ -70,7 +69,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
-        aria-label={t('theme.toggle.label', 'Toggle theme')}
+        aria-label={t('theme.toggle.label')}
         aria-pressed={preference !== 'system'}
         aria-haspopup="menu"
         className={cn(

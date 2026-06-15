@@ -24,12 +24,8 @@ try
         .WriteTo.Console()
         .Enrich.WithProperty("Service", "AiService"));
 
-    // MediatR — AiService has no Application layer commands yet, but the shared
-    // DispatchDomainEventsInterceptor (registered by AddAiInfrastructure) requires IMediator.
-    // Scan the Infrastructure assembly so the registration is non-empty.
-    builder.Services.AddMediatR(cfg =>
-        cfg.RegisterServicesFromAssembly(typeof(AiService.Infrastructure.DependencyInjection).Assembly));
-
+    // AddAiInfrastructure now calls AddAiApplicationServices internally,
+    // which registers MediatR + FluentValidation from the Application assembly.
     builder.Services.AddAiInfrastructure(builder.Configuration);
 
     builder.Services.AddOpenApi();
@@ -50,9 +46,20 @@ try
     builder.Services.AddSnapAuthentication();
     builder.Services.AddHttpContextAccessor();
 
-    // SEC-011: AI endpoints rate-limited to 20 req/min per user (cost guardrail)
+    // SEC-011: Rate limiting — standard (100/min) and AI endpoints (20/min, cost guardrail)
+    // BUG-W6-003: AiService endpoints reference "standard" — must register the policy here.
     builder.Services.AddRateLimiter(options =>
     {
+        // Standard endpoints: 100 req/min fixed window
+        options.AddFixedWindowLimiter("standard", opt =>
+        {
+            opt.PermitLimit = 100;
+            opt.Window = TimeSpan.FromMinutes(1);
+            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            opt.QueueLimit = 0;
+        });
+
+        // AI endpoints: 20 req/min per user (token cost guardrail per CLAUDE.md)
         options.AddFixedWindowLimiter("ai", opt =>
         {
             opt.PermitLimit = 20;
@@ -97,6 +104,26 @@ try
 
     // Auto-discover and register all EndpointGroupBase subclasses in this assembly
     app.MapEndpoints(Assembly.GetExecutingAssembly());
+
+    // GAP-005: Fail-fast in non-Development when SESSION_JWT_SECRET is absent.
+    SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);
+
+    // RV-02 (SEC-AI-02): Fail-fast in non-Development when InternalApi:SharedToken is absent.
+    // Without this secret, AiProviderResolver cannot authenticate its call to AuthService's
+    // /auth/config/ai/effective endpoint and silently falls back to MockAiProvider in production.
+    // Dev is intentionally unaffected (local env has no Secret Manager binding).
+    if (!string.Equals(app.Environment.EnvironmentName, "Development", StringComparison.OrdinalIgnoreCase))
+    {
+        var internalToken = app.Configuration["InternalApi:SharedToken"];
+        if (string.IsNullOrWhiteSpace(internalToken) || internalToken.Length < 32)
+        {
+            throw new InvalidOperationException(
+                "InternalApi:SharedToken is not configured or is shorter than 32 characters. " +
+                "In non-Development environments this secret MUST be set (e.g. via GCP Secret Manager) " +
+                "to enable authenticated service-to-service communication with AuthService. " +
+                "Without it, AiService silently degrades to the mock AI provider in production.");
+        }
+    }
 
     app.Run();
 }

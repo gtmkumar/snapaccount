@@ -154,6 +154,9 @@ export function useDocumentQueue() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const ocrTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const retryTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Latest uploadItem, readable from retry timers without a self-reference
+  // inside its own useCallback (lint: no use-before-declare during render).
+  const uploadItemRef = useRef<(localId: string) => Promise<void> | void>(() => {});
 
   // Load persisted queue on mount + register background fetch task
   useEffect(() => {
@@ -277,7 +280,7 @@ export function useDocumentQueue() {
                     : i,
                 ),
               );
-              uploadItem(localId);
+              void uploadItemRef.current(localId);
             }, delay);
             retryTimers.current[localId] = timer;
 
@@ -298,6 +301,11 @@ export function useDocumentQueue() {
     },
     [updateItem],
   );
+
+  // Keep the ref pointing at the latest uploadItem (refs may be written in effects).
+  useEffect(() => {
+    uploadItemRef.current = uploadItem;
+  }, [uploadItem]);
 
   // ── Enqueue a new capture ──────────────────────────────────────────────────
 
@@ -402,9 +410,13 @@ export function useDocumentQueue() {
   // ── Cleanup timers on unmount ─────────────────────────────────────────────
 
   useEffect(() => {
+    // Copy the (stable) timer records so the cleanup reads the same objects
+    // it captured, per react-hooks/exhaustive-deps guidance.
+    const ocr = ocrTimers.current;
+    const retry = retryTimers.current;
     return () => {
-      Object.values(ocrTimers.current).forEach(clearTimeout);
-      Object.values(retryTimers.current).forEach(clearTimeout);
+      Object.values(ocr).forEach(clearTimeout);
+      Object.values(retry).forEach(clearTimeout);
     };
   }, []);
 

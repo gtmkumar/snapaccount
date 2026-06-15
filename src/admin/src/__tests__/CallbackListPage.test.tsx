@@ -9,6 +9,19 @@ import { MemoryRouter } from 'react-router'
 import * as callbackApi from '@/lib/callbackApi'
 import CallbackListPage from '@/pages/callbacks/CallbackListPage'
 
+// GAP-053: KPI button is now wrapped in <Can> — mock usePermission so tests
+// see admin.dashboard.read as granted (mirrors SUPER_ADMIN / OPERATIONS_MANAGER).
+vi.mock('@/hooks/usePermission', () => ({
+  usePermission: () => ({
+    hasServerPermission: () => true,
+    hasAnyServerPermission: () => true,
+    hasAllServerPermissions: () => true,
+    hasPermission: () => true,
+    permissionsLoaded: true,
+    serverPermissions: ['callback.read', 'callback.kpi.read', 'admin.dashboard.read'],
+  }),
+}))
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

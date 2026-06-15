@@ -134,11 +134,13 @@ describe('UserApprovalScreen', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('mobile.itr.approval.biometricCta'));
     });
+    // useBiometricGate centralises the fallback Alert — uses mobile.biometric.fallback.* keys
     await waitFor(() =>
       expect(alertSpy).toHaveBeenCalledWith(
-        'mobile.itr.approval.biometricPrompt',
-        'mobile.common.usePin',
+        'mobile.biometric.fallback.title',
+        'mobile.biometric.fallback.body',
         expect.arrayContaining([expect.objectContaining({ style: 'cancel' })]),
+        expect.anything(),
       ),
     );
     alertSpy.mockRestore();

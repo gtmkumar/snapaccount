@@ -193,27 +193,31 @@ describe('Loan API client — recordConsent signature payload', () => {
     });
   });
 
-  it('recordConsent POSTs to /loans/applications/:id/consent', async () => {
+  // GAP-021: recordConsent now POSTs to /consents (plural) and requires kfsId.
+  it('recordConsent POSTs to /loans/applications/:id/consents (plural)', async () => {
     await recordLoanConsent('app-uuid-123', {
       consentVersion: '1.4',
       consentType: 'CREDIT_BUREAU',
+      kfsId: 'kfs-001',
     });
     expect(mockPost).toHaveBeenCalledWith(
-      '/loans/applications/app-uuid-123/consent',
+      '/loans/applications/app-uuid-123/consents',
       expect.any(Object),
     );
   });
 
-  it('recordConsent payload includes consentVersion and consentType', async () => {
+  it('recordConsent payload includes consentTextVersion, consentType and kfsId', async () => {
     await recordLoanConsent('app-uuid-123', {
       consentVersion: '1.4',
       consentType: 'CREDIT_BUREAU',
+      kfsId: 'kfs-abc',
     });
     const [, payload] = mockPost.mock.calls[0] as [string, Record<string, unknown>];
     expect(payload).toEqual(
       expect.objectContaining({
-        consentVersion: '1.4',
+        consentTextVersion: '1.4',
         consentType: 'CREDIT_BUREAU',
+        kfsId: 'kfs-abc',
       }),
     );
   });
@@ -223,15 +227,17 @@ describe('Loan API client — recordConsent signature payload', () => {
     await recordLoanConsent('app-uuid-123', {
       consentVersion: VERSION,
       consentType: 'DATA_SHARE_WITH_BANK',
+      kfsId: 'kfs-001',
     });
     const [, payload] = mockPost.mock.calls[0] as [string, Record<string, unknown>];
-    expect(payload.consentVersion).toBe(VERSION);
+    expect(payload.consentTextVersion).toBe(VERSION);
   });
 
   it('recordConsent called for CREDIT_BUREAU returns consentId and signatureHex', async () => {
     const result = await recordLoanConsent('app-1', {
       consentVersion: '1.4',
       consentType: 'CREDIT_BUREAU',
+      kfsId: 'kfs-001',
     });
     expect(result.consentId).toBe('consent-uuid-1');
     expect(result.signatureHex).toBe('aabbccdd');
@@ -241,9 +247,10 @@ describe('Loan API client — recordConsent signature payload', () => {
     await recordLoanConsent('app-1', {
       consentVersion: '1.4',
       consentType: 'DATA_SHARE_WITH_BANK',
+      kfsId: 'kfs-001',
     });
     const [url, payload] = mockPost.mock.calls[0] as [string, Record<string, unknown>];
-    expect(url).toBe('/loans/applications/app-1/consent');
+    expect(url).toBe('/loans/applications/app-1/consents');
     expect(payload.consentType).toBe('DATA_SHARE_WITH_BANK');
   });
 
@@ -251,6 +258,7 @@ describe('Loan API client — recordConsent signature payload', () => {
     await recordLoanConsent('app-1', {
       consentVersion: '1.4',
       consentType: 'DISBURSEMENT_MANDATE',
+      kfsId: 'kfs-001',
     });
     const [, payload] = mockPost.mock.calls[0] as [string, Record<string, unknown>];
     expect(payload.consentType).toBe('DISBURSEMENT_MANDATE');
@@ -284,11 +292,11 @@ describe('Loan API client — auth header forwarded via apiClient', () => {
 
   it('recordConsent goes through apiClient.post (auth header guaranteed)', async () => {
     mockPost.mockResolvedValue({ data: { consentId: 'c-1', signatureHex: 'ff00' } });
-    await recordLoanConsent('app-1', { consentVersion: '1.4', consentType: 'CREDIT_BUREAU' });
+    await recordLoanConsent('app-1', { consentVersion: '1.4', consentType: 'CREDIT_BUREAU', kfsId: 'kfs-001' });
     expect(mockPost).toHaveBeenCalledTimes(1);
     // Auth header is attached by apiClient interceptor — presence is tested at apiClient level
-    // Here we assert the function routes through apiClient and not directly
-    expect(mockPost.mock.calls[0][0]).toBe('/loans/applications/app-1/consent');
+    // GAP-021: path changed to /consents (plural) to match backend contract
+    expect(mockPost.mock.calls[0][0]).toBe('/loans/applications/app-1/consents');
   });
 
   it('getLoanPackageDownloadUrl uses apiClient.get (never caches signed URL)', async () => {

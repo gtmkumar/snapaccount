@@ -1,3 +1,5 @@
+import { jest } from '@jest/globals';
+
 /** Mock for expo-background-fetch in Jest */
 export const BackgroundFetchResult = {
   NewData: 1,
@@ -9,6 +11,6 @@ export const BackgroundFetchStatus = {
   Denied: 2,
   Available: 3,
 };
-export const registerTaskAsync = jest.fn().mockResolvedValue(undefined);
-export const unregisterTaskAsync = jest.fn().mockResolvedValue(undefined);
-export const getStatusAsync = jest.fn().mockResolvedValue(BackgroundFetchStatus.Available);
+export const registerTaskAsync = jest.fn(async () => undefined);
+export const unregisterTaskAsync = jest.fn(async () => undefined);
+export const getStatusAsync = jest.fn(async () => BackgroundFetchStatus.Available);

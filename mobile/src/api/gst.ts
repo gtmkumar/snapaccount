@@ -10,11 +10,16 @@ import { apiClient } from '../lib/api';
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Canonical server notice lifecycle (Wave 7 residual #7 alignment).
+ * "Overdue" is no longer a status — it is computed client-side, see
+ * src/lib/noticeStatus.ts.
+ */
 export type GstNoticeStatus =
-  | 'Open'
-  | 'Responded'
-  | 'Closed'
-  | 'Overdue';
+  | 'RECEIVED'
+  | 'UNDER_REVIEW'
+  | 'RESPONDED'
+  | 'CLOSED';
 
 export type GstNoticeType =
   | 'ASMT_10'
@@ -24,6 +29,53 @@ export type GstNoticeType =
   | 'REG_17'
   | 'SCN_01'
   | 'Other';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wave 7B/7C — GAP-108 notice taxonomy / statutory deadline / GSTAT stage
+// RECONCILED 2026-06-12 against docs/api/endpoints.md "Wave 7C — GST Notice
+// Engine" + GstService NoticeDto/NoticeDetailDto (migration 084):
+//  - formType enum gains OTHER (server default).
+//  - Appeal ladder is NONE → REPLY_FILED → ORDER_RECEIVED → APPEAL_FILED →
+//    GSTAT_PENDING → RESOLVED (forward-only), NOT the spec-suggested 7-stage
+//    ladder.
+//  - Fields: statutoryDeadline (DateOnly), appealStage, appealDeadline,
+//    isGstatBacklogFlagged, deadlineOverridden, daysRemaining, isOverdue.
+// RESIDUAL #7 RESOLVED 2026-06-12: GstNoticeStatus now mirrors the server
+// canon (RECEIVED/UNDER_REVIEW/RESPONDED/CLOSED). The old "Overdue" filter is
+// a client-side derived view (src/lib/noticeStatus.ts isNoticeOverdue) —
+// never sent as a status query param. Wave 7 recon: the backend ListNotices
+// endpoint shims legacy request filters (Open→RECEIVED, Overdue→UNDER_REVIEW,
+// Responded→RESPONDED, Closed→CLOSED) for pre-Wave-7C builds; responses are
+// canonical, so client-side legacy tolerance has been removed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Statutory form-type taxonomy (distinct from workflow status). */
+export type GstNoticeFormType =
+  | 'ASMT_10'
+  | 'DRC_01'
+  | 'DRC_01A'
+  | 'DRC_01B'
+  | 'DRC_01C'
+  | 'ADT_01'
+  | 'OTHER';
+
+/** GSTAT appeal ladder stages (server enum, forward-only state machine). */
+export type GstatStage =
+  | 'NONE'
+  | 'REPLY_FILED'
+  | 'ORDER_RECEIVED'
+  | 'APPEAL_FILED'
+  | 'GSTAT_PENDING'
+  | 'RESOLVED';
+
+/** Active appeal ladder (NONE = not in appeal → no tracker rendered). */
+export const GSTAT_STAGE_ORDER: Exclude<GstatStage, 'NONE'>[] = [
+  'REPLY_FILED',
+  'ORDER_RECEIVED',
+  'APPEAL_FILED',
+  'GSTAT_PENDING',
+  'RESOLVED',
+];
 
 export interface GstNoticeAttachment {
   gcsUri: string;
@@ -50,6 +102,22 @@ export interface GstNotice {
   assignedCaUserId?: string;
   createdAt: string;
   updatedAt: string;
+
+  // ── Wave 7B/7C (GAP-108) — all optional; UI gracefully degrades when absent ──
+  /** Statutory form-type code (taxonomy badge); OTHER = no badge. */
+  formType?: GstNoticeFormType;
+  /** Statutory response deadline (DueDateChip source), "YYYY-MM-DD". */
+  statutoryDeadline?: string;
+  /** True when an operator overrode the computed deadline. */
+  deadlineOverridden?: boolean;
+  /** Server-computed days remaining to the effective deadline (detail only). */
+  daysRemaining?: number | null;
+  isOverdue?: boolean;
+  /** GSTAT appeal stage; "NONE" → not in appeal (no tracker). */
+  appealStage?: GstatStage;
+  appealDeadline?: string | null;
+  /** GSTAT backlog-appeal window applies (file by 30/06/2026). */
+  isGstatBacklogFlagged?: boolean;
 }
 
 export interface GstNoticeListResponse {

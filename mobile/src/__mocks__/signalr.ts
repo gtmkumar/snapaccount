@@ -1,3 +1,5 @@
+import { jest } from '@jest/globals';
+
 /** Mock for @microsoft/signalr in Jest */
 export const HubConnectionState = {
   Disconnected: 'Disconnected',
@@ -12,11 +14,11 @@ export const HubConnectionBuilder = jest.fn().mockImplementation(() => ({
   withAutomaticReconnect: jest.fn().mockReturnThis(),
   build: jest.fn().mockReturnValue({
     state: HubConnectionState.Disconnected,
-    start: jest.fn().mockResolvedValue(undefined),
-    stop: jest.fn().mockResolvedValue(undefined),
+    start: jest.fn(async () => undefined),
+    stop: jest.fn(async () => undefined),
     on: jest.fn(),
     off: jest.fn(),
-    invoke: jest.fn().mockResolvedValue(undefined),
+    invoke: jest.fn(async () => undefined),
     onreconnecting: jest.fn(),
     onreconnected: jest.fn(),
     onclose: jest.fn(),

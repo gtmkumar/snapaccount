@@ -10,6 +10,8 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { DueDateChip } from '@/components/ui/DueDateChip'
+import { NoticeFormTypeBadge, type NoticeFormType } from '@/components/ui/NoticeFormTypeBadge'
+import { GstatStageLadder, type GstatStage } from '@/components/ui/GstatStageChip'
 import { AttachmentList, type AttachmentFile } from '@/components/ui/AttachmentList'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { AlertBanner } from '@/components/shared/AlertBanner'
@@ -275,9 +277,11 @@ export default function NoticeDetailPage() {
           <div className="space-y-1">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-lg font-bold text-neutral-900 font-mono">{notice.noticeNumber}</h1>
-              <Badge variant="neutral">{notice.noticeType}</Badge>
+              <NoticeFormTypeBadge formType={notice.noticeType as NoticeFormType} />
               {noticeStatusBadge(notice.status)}
-              {notice.dueDate && <DueDateChip dueDate={notice.dueDate} />}
+              {(notice.statutoryDeadline ?? notice.dueDate) && (
+                <DueDateChip dueDate={(notice.statutoryDeadline ?? notice.dueDate)!} />
+              )}
             </div>
             <p className="text-sm text-neutral-500">
               GSTIN <span className="font-mono">{notice.gstin}</span>
@@ -384,22 +388,29 @@ export default function NoticeDetailPage() {
                   value={subject}
                   onChange={e => setSubject(e.target.value)}
                   disabled={isReadOnly}
+                  maxLength={500}
                   className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-brand-500 outline-none disabled:opacity-60"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-neutral-600 mb-1">
-                  {t('admin.gst.notice.response.body')} *
+                  {t('admin.gst.notice.response.body')} * {/* GAP-055: maxLength added */}
                 </label>
                 <textarea
                   value={body}
                   onChange={e => setBody(e.target.value)}
                   disabled={isReadOnly}
                   rows={6}
+                  maxLength={10000}
                   placeholder={t('admin.gst.notice.response.bodyPlaceholder')}
                   className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-brand-500 outline-none disabled:opacity-60 resize-none"
                 />
+                {!isReadOnly && (
+                  <p className="text-xs text-neutral-400 text-right mt-0.5">
+                    {body.length}/10000
+                  </p>
+                )}
               </div>
 
               <div>
@@ -513,6 +524,42 @@ export default function NoticeDetailPage() {
               </div>
             </dl>
           </Card>
+
+          {/* GAP-108 Wave 7: GSTAT backlog banner */}
+          {notice.isGstatBacklogEligible && (
+            <AlertBanner
+              type="warning"
+              title={t('gst.notice.gstat.backlogFlag')}
+            />
+          )}
+
+          {/* GAP-108 Wave 7: GSTAT appeal ladder */}
+          {notice.gstatStage && (
+            <Card>
+              <CardHeader title={t('gst.notice.gstat.title')} />
+              <GstatStageLadder
+                currentStage={notice.gstatStage as GstatStage}
+                stageTimestamps={notice.gstatStageTimestamps}
+              />
+            </Card>
+          )}
+
+          {/* GAP-108 Wave 7: Simulator CTA for DRC-01B/01C */}
+          {(notice.noticeType === 'DRC-01B' || notice.noticeType === 'DRC-01C') && (
+            <div className="rounded-lg bg-violet-50 border border-violet-200 px-3 py-2.5 flex items-center justify-between gap-3">
+              <p className="text-xs text-violet-800 font-medium">
+                {t('gst.notice.simulate.cta')}
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="shrink-0"
+                onClick={() => window.open('/gst/itc-mismatch', '_blank')}
+              >
+                {t('gst.notice.simulate.cta')}
+              </Button>
+            </div>
+          )}
 
           {/* Existing response (if responded) */}
           {notice.status === 'RESPONDED' && notice.responseText && (

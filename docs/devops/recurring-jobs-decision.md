@@ -120,16 +120,11 @@ deadline use cases (GST, ITR, subscription).
 
 ---
 
-## Initial Cloud Scheduler Jobs
+## Full Cloud Scheduler Job Matrix
 
-All times are in IST (Asia/Kolkata, UTC+5:30). Provisioned in `infra/pubsub-scheduler-recurring-jobs.sh`.
-
-| Job name | Schedule (IST) | Pub/Sub payload `job_type` | Description |
-|---|---|---|---|
-| `gst-deadline-check` | Daily 06:00 | `GST_DEADLINE_CHECK` | Query orgs with GST return due in 7/3/1 days; fan out D-7, D-3, D-1 notifications |
-| `itr-deadline-reminders` | Daily 07:00 (May–Sept peak; year-round off-peak) | `ITR_DEADLINE_REMINDERS` | Query unverified ITR filings; fire e-verify reminders at Day 1/7/15/25/29 |
-| `itr-refund-polling` | Daily 09:00 | `ITR_REFUND_POLLING` | Poll Income Tax portal for refund status changes on pending ITRs |
-| `subscription-renewal-check` | Daily 08:00 | `SUBSCRIPTION_RENEWAL_CHECK` | Query orgs with subscription expiring in 7/3/1 days; send renewal push + email |
+> **Last updated:** 2026-06-10 (Phase 7 Wave 2 — D5, GAP-012 / GAP-042)
+>
+> All times are **IST (Asia/Kolkata, UTC+5:30)**. Provisioned in `infra/pubsub-scheduler-recurring-jobs.sh`.
 
 **Pub/Sub topic:** `snapaccount.recurring-jobs.due`
 
@@ -142,9 +137,100 @@ All times are in IST (Asia/Kolkata, UTC+5:30). Provisioned in `infra/pubsub-sche
 }
 ```
 
-NotificationService handler switches on `job_type` and performs the database query +
-fan-out for that job type. This single-topic / payload-discriminated approach keeps
-Pub/Sub subscription count low and is easy to extend with new job types.
+NotificationService / CallbackService handlers switch on `job_type`.
+
+---
+
+### Phase 6 Jobs (active)
+
+| Job name | Cron (IST) | `job_type` payload | Target Service | Backend endpoint / handler | Idempotency | Notes |
+|---|---|---|---|---|---|---|
+| `gst-deadline-check` | `0 6 * * *` (daily 06:00) | `GST_DEADLINE_CHECK` | NotificationService → GstService | `GstDeadlineCheckHandler` — queries `gst.gst_returns` for returns due in 7/3/1 days; emits D-7/D-3/D-1 push + SMS per org | One notification per (org, return_type, due_date, days_before) per day via dedup cache | Phase 6B |
+| `itr-deadline-reminders` | `0 9 * * *` (daily 09:00) | `ITR_DEADLINE_REMINDERS` | NotificationService → ItrService | Backend gates on filing season (May–Sept); queries unverified filings; fires e-verify reminders at **Day 1 / 7 / 15 / 25 / 29** after filing date | One reminder per (filing_id, day_slot) per day | Phase 6D; Day-25 also creates an auto-callback (plan G8.1) — PENDING-B19 |
+| `itr-refund-polling` | `0 10 * * *` (daily 10:00) | `ITR_REFUND_POLLING` | ItrService | Mock `ItrRefundPollingHandler` (keep behind flag — GAP-042); polls IT portal for refund status changes | Idempotent — only notifies on status change | Phase 6D; real IT portal integration is ERI registration scope |
+| `subscription-renewal-check` | `0 8 * * *` (daily 08:00) | `SUBSCRIPTION_RENEWAL_CHECK` | SubscriptionService → NotificationService | Queries `subscription.subscriptions` for orgs expiring in 7/3/1 days; sends renewal push + email | One notification per (org, expiry_date, days_before) per 6h (dedup) | Phase 6E |
+
+---
+
+### Phase 7 Wave 2 Jobs (new — D5)
+
+| Job name | Cron (IST) | `job_type` payload | Target Service | Backend endpoint / handler | Auth | Idempotency | Status |
+|---|---|---|---|---|---|---|---|
+| `callback-kpi-mv-refresh` | `30 0 * * *` (daily 00:30) | `CALLBACK_KPI_MV_REFRESH` | CallbackService | `POST /callbacks/internal/refresh-kpi-mv` — executes `REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot` | OIDC (service account `cloud-scheduler-sa`) | MV REFRESH is idempotent; safe to re-run | **PENDING-B19** (backend Wave 3 must implement the internal endpoint) |
+| `gst-pre-deadline-callback` | `0 7 * * *` (daily 07:00) | `GST_PRE_DEADLINE_CALLBACK` | CallbackService | `POST /callbacks/internal/gst-pre-deadline` — queries GstService for unapproved returns due in ≤2 days; creates callback records (priority=HIGH) | Pub/Sub subscription | `INSERT ... ON CONFLICT (org_id, return_period, callback_type, day_key) DO NOTHING` | **PENDING-B19** |
+| `itr-form16-missing` | `0 11 * * *` (daily 11:00) | `ITR_FORM16_MISSING` | NotificationService + CallbackService | Checks salaried users with no Form 16 uploaded > 3 days after June 15; creates callback + sends push | Pub/Sub subscription | One alert per (user_id, assessment_year) per day | **PENDING-B19**; gate: only active June 15 – July 31 |
+
+---
+
+### GST 7/3/1-Day Reminder Detail
+
+The `gst-deadline-check` job covers all GST deadline reminder use cases in a single daily fan-out:
+
+| Reminder | Trigger | Return types | Channel |
+|---|---|---|---|
+| D-7 | 7 days before due date | GSTR-1, GSTR-3B, GSTR-9, GSTR-9C | Push + SMS |
+| D-3 | 3 days before due date | GSTR-1, GSTR-3B | Push + SMS + Email |
+| D-1 | 1 day before due date | GSTR-1, GSTR-3B | Push + SMS + Email (high urgency) |
+
+Monthly GSTR-1 due date: 11th of month. GSTR-3B due date: 20th. Quarterly variants: as per QRMP scheme.
+
+---
+
+### ITR E-Verify Reminder Cadence
+
+The `itr-deadline-reminders` job handles all e-verify reminder steps:
+
+| Day after filing | Message | Channel | Special action |
+|---|---|---|---|
+| Day 1 | "Your ITR has been filed! Please e-verify within 30 days to complete the process." | Push | — |
+| Day 7 | "7 days passed — e-verify your ITR return now to avoid it being treated as not filed." | Push + SMS | — |
+| Day 15 | "Half the e-verify window has passed (15/30 days). E-verify your ITR immediately." | Push + SMS + Email | — |
+| Day 25 | "Only 5 days left to e-verify. Urgent action required." | Push + SMS + Email | **Auto-callback created** (plan G8.1, priority=URGENT) — PENDING-B19 |
+| Day 29 | "FINAL REMINDER: 1 day left to e-verify your ITR (Day 29 of 30)." | Push + SMS + Email | — |
+
+All reminders: gated on `itr.verification_queue.status NOT IN ('VERIFIED', 'WITHDRAWN')`.
+
+---
+
+### Subscription Renewal Reminder Detail
+
+| Days to expiry | Message | Channel |
+|---|---|---|
+| 7 days | "Your SnapAccount subscription expires in 7 days. Renew to keep filing GST and ITR." | Push + Email |
+| 3 days | "3 days left — renew your subscription now to avoid service interruption." | Push + Email + SMS |
+| 1 day | "URGENT: Your subscription expires tomorrow. Renew immediately." | Push + SMS + Email (high urgency) |
+
+---
+
+### Callback KPI MV Refresh (P6-HANDOFF-07)
+
+The `callback-kpi-mv-refresh` job fires at 00:30 IST (after midnight) to refresh the
+`callback.kpi_daily_snapshot` materialized view for the previous day's data:
+
+```sql
+-- Executed by CallbackService internal endpoint:
+REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot;
+```
+
+**Why CONCURRENTLY?**
+The `kpi_daily_snapshot` MV has a unique index on `(org_id, snapshot_date)` (confirmed by
+Wave 1 migration 061). `CONCURRENTLY` allows reads during refresh — the admin `/callbacks/kpi`
+endpoint remains responsive while the MV updates. Without `CONCURRENTLY`, the MV locks for
+the duration of the refresh (unacceptable during business hours).
+
+**Why 00:30 IST?**
+- Midnight (00:00) is often when scheduled tasks from other services run simultaneously.
+- 00:30 provides a 30-minute offset to reduce resource contention on the DB.
+- The MV snapshots `snapshot_date = CURRENT_DATE - 1` so yesterday's data is complete.
+
+**PENDING-B19 implementation notes for backend-agent:**
+- Create `POST /callbacks/internal/refresh-kpi-mv` (no Firebase auth — OIDC from Scheduler).
+- The endpoint should verify the OIDC token's service account is `cloud-scheduler-sa`.
+- Execute `REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot` in a `try/catch`.
+- On success: return HTTP 200 with `{ "refreshed_at": "...", "rows_updated": N }`.
+- On failure: return HTTP 500; Pub/Sub will retry (max 3 attempts, 30s/5m/10m backoff).
+- Add a short-circuit: if `snapshot_date = CURRENT_DATE - 1` rows already exist with
+  `updated_at > NOW() - INTERVAL '23 hours'`, skip and return 200 (idempotency guard).
 
 ---
 

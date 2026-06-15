@@ -6,7 +6,7 @@
  * scope and intentionally absent — see staffApi.ts.
  */
 import { useQuery } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import { AlertTriangle, Info, Download } from 'lucide-react'
 import {
   getStaffWorkloadGrid, loadLevel, QUEUE_KEYS, type QueueKey,
@@ -22,7 +22,6 @@ import { LOAD_BADGE } from './workloadColors'
 const OVERLOAD_THRESHOLD = 30 // open items — matches the "heavy/overloaded" boundary
 
 export function WorkloadTab() {
-  const { t } = useTranslation()
 
   const { data, isLoading } = useQuery({
     queryKey: ['staff', 'workload-grid'],
@@ -36,10 +35,10 @@ export function WorkloadTab() {
   const failedQueues = QUEUE_KEYS.filter(k => errors[k])
 
   const queueLabels: Record<QueueKey, string> = {
-    gst: t('team.workload.queue.gst', 'GST'),
-    itr: t('team.workload.queue.itr', 'ITR'),
-    chat: t('team.workload.queue.chat', 'Chat'),
-    callbacks: t('team.workload.queue.callbacks', 'Callbacks'),
+    gst: t('team.workload.queue.gst'),
+    itr: t('team.workload.queue.itr'),
+    chat: t('team.workload.queue.chat'),
+    callbacks: t('team.workload.queue.callbacks'),
   }
 
   const overloaded = rows.filter(r => r.totalAssigned > OVERLOAD_THRESHOLD)
@@ -47,10 +46,10 @@ export function WorkloadTab() {
 
   const exportCsv = () => {
     const csv = toCsv(rows, [
-      { header: t('team.workload.col.staff', 'Staff'), value: r => r.name },
-      { header: t('team.staff.col.role', 'Role'), value: r => r.roleDisplayName },
+      { header: t('team.workload.col.staff'), value: r => r.name },
+      { header: t('team.staff.col.role'), value: r => r.roleDisplayName },
       ...QUEUE_KEYS.map(k => ({ header: queueLabels[k], value: (r: typeof rows[number]) => r.queues[k] })),
-      { header: t('team.workload.col.total', 'Total'), value: r => r.totalAssigned },
+      { header: t('team.workload.col.total'), value: r => r.totalAssigned },
     ])
     downloadCsv(csvFilename('team-workload'), csv)
   }
@@ -66,7 +65,7 @@ export function WorkloadTab() {
             leftIcon={<Download className="h-4 w-4" />}
             onClick={exportCsv}
           >
-            {t('team.workload.export', 'Export CSV')}
+            {t('team.workload.export')}
           </Button>
         </div>
       )}
@@ -83,7 +82,7 @@ export function WorkloadTab() {
             ? <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
             : <Info className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />}
           <p>
-            {t('team.workload.capacity', `${overloaded.length} overloaded, ${available.length} with capacity.`)}
+            {t('team.workload.capacity', { overloaded: overloaded.length, available: available.length })}
           </p>
         </div>
       )}
@@ -91,8 +90,7 @@ export function WorkloadTab() {
       {/* Degraded-data note when a queue service failed */}
       {failedQueues.length > 0 && (
         <p className="text-xs text-[var(--text-tertiary)]">
-          {t('team.workload.degraded',
-            `Some queue counts are unavailable (${failedQueues.map(k => queueLabels[k]).join(', ')}) and shown as 0.`)}
+          {t('team.workload.degraded')}
         </p>
       )}
 
@@ -100,14 +98,14 @@ export function WorkloadTab() {
         {isLoading ? (
           <Skeleton variant="dataTableDense" />
         ) : rows.length === 0 ? (
-          <EmptyState variant="team" title={t('team.workload.empty', 'No staff to show workload for')} />
+          <EmptyState variant="team" title={t('team.workload.empty')} />
         ) : (
           <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
-            <table className="w-full text-sm" aria-label={t('team.workload.title', 'Workload distribution')}>
+            <table className="w-full text-sm" aria-label={t('team.workload.title')}>
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] bg-[var(--surface-sunken)]">
                   <th scope="col" className="px-4 py-2.5 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
-                    {t('team.workload.col.staff', 'Staff')}
+                    {t('team.workload.col.staff')}
                   </th>
                   {QUEUE_KEYS.map(k => (
                     <th key={k} scope="col" className="px-3 py-2.5 text-center text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
@@ -115,7 +113,7 @@ export function WorkloadTab() {
                     </th>
                   ))}
                   <th scope="col" className="px-3 py-2.5 text-center text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
-                    {t('team.workload.col.total', 'Total')}
+                    {t('team.workload.col.total')}
                   </th>
                 </tr>
               </thead>
@@ -161,13 +159,11 @@ export function WorkloadTab() {
       {/* Legend */}
       {!isLoading && rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-tertiary)]">
-          <span>{t('team.workload.legend', 'Load')}:</span>
-          {(['normal', 'busy', 'heavy', 'overloaded'] as const).map(level => (
+          <span>{t('team.workload.legend')}:</span>
+          {(['idle', 'normal', 'busy', 'heavy', 'overloaded'] as const).map(level => (
             <span key={level} className="inline-flex items-center gap-1.5">
               <span className={cn('h-2 w-2 rounded-full', LOAD_BADGE[level].dot)} aria-hidden="true" />
-              {t(`team.workload.load.${level}`, {
-                idle: '0', normal: '1–10', busy: '11–20', heavy: '21–30', overloaded: '31+',
-              }[level])}
+              {t(`team.workload.load.${level}`)}
             </span>
           ))}
         </div>

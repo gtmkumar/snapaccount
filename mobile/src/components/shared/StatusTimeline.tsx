@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 type StepStatus = 'completed' | 'active' | 'pending' | 'error';
 
@@ -35,6 +35,7 @@ export function StatusTimeline({
 }
 
 function VerticalTimeline({ steps }: { steps: TimelineStep[] }) {
+  const styles = useStyles();
   return (
     <View style={styles.verticalContainer}>
       {steps.map((step, index) => {
@@ -84,6 +85,7 @@ function VerticalTimeline({ steps }: { steps: TimelineStep[] }) {
 }
 
 function HorizontalTimeline({ steps }: { steps: TimelineStep[] }) {
+  const styles = useStyles();
   return (
     <View style={styles.horizontalContainer}>
       {steps.map((step, index) => {
@@ -132,6 +134,7 @@ function HorizontalTimeline({ steps }: { steps: TimelineStep[] }) {
 }
 
 function StepDot({ status }: { status: StepStatus }) {
+  const styles = useStyles();
   return (
     <View
       style={[
@@ -155,7 +158,8 @@ function StepDot({ status }: { status: StepStatus }) {
 const DOT_SIZE = 20;
 const CONNECTOR_WIDTH = 2;
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   // Vertical
   verticalContainer: {
     paddingLeft: 4,
@@ -176,10 +180,10 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   connectorCompleted: {
-    backgroundColor: Colors.success[600],
+    backgroundColor: tk.successFg,
   },
   connectorPending: {
-    backgroundColor: Colors.neutral[200],
+    backgroundColor: tk.border,
     // dashed effect via border
   },
   stepContent: {
@@ -189,29 +193,29 @@ const styles = StyleSheet.create({
   stepLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
   },
   stepLabelActive: {
-    color: Colors.brand[500],
+    color: tk.brand500,
     fontWeight: '700',
   },
   stepLabelCompleted: {
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
   },
   stepLabelPending: {
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
   },
   stepLabelError: {
-    color: Colors.error[600],
+    color: tk.errorFg,
   },
   stepDescription: {
     fontSize: 12,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     marginTop: 2,
   },
   stepTimestamp: {
     fontSize: 11,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     marginTop: 2,
   },
 
@@ -223,28 +227,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: Colors.neutral[300],
-    backgroundColor: Colors.neutral[0],
+    borderColor: tk.border,
+    backgroundColor: tk.raised,
   },
   dotCompleted: {
-    backgroundColor: Colors.success[600],
-    borderColor: Colors.success[600],
+    backgroundColor: tk.successFg,
+    borderColor: tk.successFg,
   },
   dotActive: {
-    backgroundColor: Colors.brand[500],
-    borderColor: Colors.brand[500],
+    backgroundColor: tk.brand500,
+    borderColor: tk.brand500,
     // Pulsing indicator would require Animated API
   },
   dotPending: {
-    backgroundColor: Colors.neutral[0],
-    borderColor: Colors.neutral[300],
+    backgroundColor: tk.raised,
+    borderColor: tk.border,
   },
   dotError: {
-    backgroundColor: Colors.error[600],
-    borderColor: Colors.error[600],
+    backgroundColor: tk.errorCta,
+    borderColor: tk.errorCta,
   },
   dotCheck: {
-    color: Colors.neutral[0],
+    color: tk.textOnBrand,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -271,7 +275,8 @@ const styles = StyleSheet.create({
   hStepLabel: {
     fontSize: 10,
     textAlign: 'center',
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     marginTop: 6,
   },
-});
+  }),
+);

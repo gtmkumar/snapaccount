@@ -69,6 +69,9 @@ export interface AuthState {
   setLoading: (loading: boolean) => void;
   // Rotate tokens after a successful silent refresh.
   rotateTokens: (accessToken: string, newRefreshToken: string) => void;
+  // GAP-007 / BUG-5: Swap ONLY the access token after a refresh-context call.
+  // The opaque refresh token is NOT rotated — only the in-memory Bearer is updated.
+  swapAccessToken: (accessToken: string) => void;
   signOut: () => void;
 }
 
@@ -148,6 +151,14 @@ export const useAuthStore = create<AuthState>()(
           firebaseToken: accessToken,
           refreshToken: newRefreshToken,
         }),
+
+      // GAP-007 / BUG-5: Re-mint org context without rotating the refresh token.
+      // Only firebaseToken (the in-memory Bearer) is updated.
+      // SecureStore persistence: firebaseToken is excluded from partialize, so
+      // SecureStore is not written with the new token — the refreshToken persisted
+      // in SecureStore is unchanged, preserving the ability to silently re-auth.
+      swapAccessToken: (accessToken) =>
+        set({ firebaseToken: accessToken }),
 
       signOut: () =>
         set({

@@ -17,8 +17,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
-import { listCallbacks, getCallbackKpi, type CallbackCategory, type CallbackStatus } from '../../api/callbacks';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { listCallbacks, getCallbackKpi, type CallbackCategory } from '../../api/callbacks';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -60,15 +60,11 @@ const CATEGORY_MAP: Record<CtaCategory, CallbackCategory> = {
   OTHER: 'General',
 };
 
-// Statuses that mean "open" callback
-const OPEN_STATUSES: CallbackStatus[] = ['Pending', 'Assigned', 'Confirmed'];
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CallbackStatusChip — shown when user has active callback
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CallbackStatusChip({
-  callbackId,
   scheduledAt,
   onPress,
 }: {
@@ -76,6 +72,7 @@ function CallbackStatusChip({
   scheduledAt?: string;
   onPress: () => void;
 }) {
+  const styles = useStyles();
   const { t } = useTranslation();
 
   const timeLabel = scheduledAt
@@ -122,9 +119,6 @@ function CallbackStatusChip({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CardVariant({
-  category,
-  linkedEntity,
-  prefillReason,
   avgMinutes,
   hasExisting,
   existingCallbackId,
@@ -144,6 +138,8 @@ function CardVariant({
   onViewExisting: () => void;
   isOnline?: boolean;
 }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
 
   if (hasExisting && existingCallbackId) {
@@ -168,7 +164,7 @@ function CardVariant({
       accessibilityLabel={`Request a callback from SnapAccount expert${avgMinutes ? `, average response ${avgMinutes} minutes` : ''}`}
     >
       <View style={styles.cardIcon}>
-        <Ionicons name="headset-outline" size={20} color={Colors.brand[600]} />
+        <Ionicons name="headset-outline" size={20} color={tokens.brandCta} />
       </View>
       <View style={styles.cardContent}>
         <Text style={styles.cardTitle}>{t('mobile.callback.cta.card.title')}</Text>
@@ -200,7 +196,6 @@ function BottomSheetVariant({
   onRequest,
   onChat,
   hasExisting,
-  existingCallbackId,
   onViewExisting,
   isOnline = true,
 }: {
@@ -213,6 +208,8 @@ function BottomSheetVariant({
   onViewExisting: () => void;
   isOnline?: boolean;
 }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
 
   return (
@@ -231,7 +228,7 @@ function BottomSheetVariant({
 
           {!isOnline && (
             <View style={styles.sheetOfflineBanner}>
-              <Ionicons name="cloud-offline-outline" size={14} color={Colors.warning[700]} />
+              <Ionicons name="cloud-offline-outline" size={14} color={tokens.warningFg} />
               <Text style={styles.sheetOfflineText}>{t('mobile.callback.cta.offlineTooltip')}</Text>
             </View>
           )}
@@ -250,7 +247,7 @@ function BottomSheetVariant({
               disabled={!isOnline}
               accessibilityRole="button"
             >
-              <Ionicons name="call-outline" size={18} color={Colors.neutral[0]} style={{ marginRight: 6 }} />
+              <Ionicons name="call-outline" size={18} color={tokens.textOnBrand} style={{ marginRight: 6 }} />
               <Text style={styles.sheetPrimaryBtnText}>
                 {t('mobile.callback.cta.sheet.requestPrimary')}
               </Text>
@@ -259,7 +256,7 @@ function BottomSheetVariant({
 
           {onChat && (
             <Pressable style={styles.sheetSecondaryBtn} onPress={() => { onClose(); onChat(); }}>
-              <Ionicons name="chatbubble-outline" size={18} color={Colors.brand[600]} style={{ marginRight: 6 }} />
+              <Ionicons name="chatbubble-outline" size={18} color={tokens.brandCta} style={{ marginRight: 6 }} />
               <Text style={styles.sheetSecondaryBtnText}>
                 {t('mobile.callback.cta.sheet.chatSecondary')}
               </Text>
@@ -284,13 +281,14 @@ export function RequestCallbackCta({
   category = 'OTHER',
   linkedEntity,
   prefillReason,
-  onRequested,
   onNavigateToModal,
   onNavigateToStatus,
   onNavigateToChat,
   testID = 'request-callback-cta',
   isOnline = true,
 }: RequestCallbackCtaProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const [sheetVisible, setSheetVisible] = useState(false);
 
   const apiCategory = CATEGORY_MAP[category];
@@ -341,7 +339,7 @@ export function RequestCallbackCta({
           accessibilityRole="button"
           accessibilityLabel="Need help? Request a callback"
         >
-          <Ionicons name="headset-outline" size={22} color={Colors.neutral[0]} />
+          <Ionicons name="headset-outline" size={22} color={tokens.textOnBrand} />
         </Pressable>
         <BottomSheetVariant
           visible={sheetVisible}
@@ -375,56 +373,57 @@ export function RequestCallbackCta({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   // Card variant
   card: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: Colors.brand[50],
-    borderRadius: 16, borderWidth: 1, borderColor: Colors.brand[200],
+    backgroundColor: tk.brandTint,
+    borderRadius: 16, borderWidth: 1, borderColor: tk.brandTintBorder,
     padding: 16, marginHorizontal: 0,
-    shadowColor: Colors.brand[500],
+    shadowColor: tk.brand500,
     shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
   },
   cardIcon: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: Colors.brand[100],
+    backgroundColor: tk.brandTintBorder,
     alignItems: 'center', justifyContent: 'center',
   },
   cardContent: { flex: 1, gap: 2 },
-  cardTitle: { fontSize: 14, fontWeight: '600', color: Colors.neutral[900] },
-  cardSub: { fontSize: 12, color: Colors.neutral[600] },
+  cardTitle: { fontSize: 14, fontWeight: '600', color: tk.textPrimary },
+  cardSub: { fontSize: 12, color: tk.textSecondary },
   cardBtn: {
-    backgroundColor: Colors.brand[500], borderRadius: 8,
+    backgroundColor: tk.brand500, borderRadius: 8,
     paddingHorizontal: 14, paddingVertical: 10,
     minHeight: 44, alignItems: 'center', justifyContent: 'center',
   },
-  cardBtnDisabled: { backgroundColor: Colors.neutral[200] },
-  cardBtnText: { fontSize: 13, fontWeight: '700', color: Colors.neutral[0] },
-  cardBtnTextDisabled: { color: Colors.neutral[400] },
+  cardBtnDisabled: { backgroundColor: tk.border },
+  cardBtnText: { fontSize: 13, fontWeight: '700', color: tk.textOnBrand },
+  cardBtnTextDisabled: { color: tk.textTertiary },
 
   // Status chip
   statusChip: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.warning[50],
-    borderRadius: 12, borderWidth: 1, borderColor: Colors.warning[300],
+    backgroundColor: tk.warningTint,
+    borderRadius: 12, borderWidth: 1, borderColor: tk.warningTintBorder,
     paddingHorizontal: 14, paddingVertical: 12, minHeight: 56,
   },
   statusChipDot: {
-    width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.warning[500],
+    width: 10, height: 10, borderRadius: 5, backgroundColor: tk.warningFg,
   },
-  statusChipText: { flex: 1, fontSize: 13, fontWeight: '600', color: Colors.warning[800] },
+  statusChipText: { flex: 1, fontSize: 13, fontWeight: '600', color: tk.warningFg },
   statusChipBtn: {
-    backgroundColor: Colors.warning[100], borderRadius: 6,
+    backgroundColor: tk.warningTintBorder, borderRadius: 6,
     paddingHorizontal: 12, paddingVertical: 6, minHeight: 44, alignItems: 'center', justifyContent: 'center',
   },
-  statusChipBtnText: { fontSize: 13, fontWeight: '700', color: Colors.warning[700] },
+  statusChipBtnText: { fontSize: 13, fontWeight: '700', color: tk.warningFg },
 
   // Bottom-sheet
   fabTrigger: {
     width: 56, height: 56, borderRadius: 28,
-    backgroundColor: Colors.brand[500],
+    backgroundColor: tk.brand500,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.brand[500],
+    shadowColor: tk.brand500,
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8,
   },
   sheetBackdrop: {
@@ -432,39 +431,40 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
     paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, gap: 12,
     minHeight: 320,
   },
   sheetHandle: {
     width: 36, height: 4, borderRadius: 2,
-    backgroundColor: Colors.neutral[300],
+    backgroundColor: tk.border,
     alignSelf: 'center', marginBottom: 16,
   },
-  sheetTitle: { fontSize: 20, fontWeight: '700', color: Colors.neutral[900] },
-  sheetBody: { fontSize: 14, color: Colors.neutral[600], lineHeight: 22 },
+  sheetTitle: { fontSize: 20, fontWeight: '700', color: tk.textPrimary },
+  sheetBody: { fontSize: 14, color: tk.textSecondary, lineHeight: 22 },
   sheetOfflineBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.warning[50], borderRadius: 8,
-    padding: 10, borderWidth: 1, borderColor: Colors.warning[200],
+    backgroundColor: tk.warningTint, borderRadius: 8,
+    padding: 10, borderWidth: 1, borderColor: tk.warningTintBorder,
   },
-  sheetOfflineText: { fontSize: 13, color: Colors.warning[700], flex: 1 },
+  sheetOfflineText: { fontSize: 13, color: tk.warningFg, flex: 1 },
   sheetPrimaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: Colors.brand[500], borderRadius: 14,
+    backgroundColor: tk.brand500, borderRadius: 14,
     paddingVertical: 16, minHeight: 56,
   },
-  sheetPrimaryBtnDisabled: { backgroundColor: Colors.neutral[200] },
-  sheetPrimaryBtnText: { fontSize: 16, fontWeight: '700', color: Colors.neutral[0] },
+  sheetPrimaryBtnDisabled: { backgroundColor: tk.border },
+  sheetPrimaryBtnText: { fontSize: 16, fontWeight: '700', color: tk.textOnBrand },
   sheetSecondaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     borderRadius: 14, paddingVertical: 14, minHeight: 52,
-    borderWidth: 1, borderColor: Colors.brand[200],
+    borderWidth: 1, borderColor: tk.brandTintBorder,
   },
-  sheetSecondaryBtnText: { fontSize: 15, fontWeight: '600', color: Colors.brand[600] },
+  sheetSecondaryBtnText: { fontSize: 15, fontWeight: '600', color: tk.brandCta },
   sheetCancelBtn: {
     alignItems: 'center', paddingVertical: 14, minHeight: 44,
   },
-  sheetCancelBtnText: { fontSize: 15, color: Colors.neutral[500] },
-});
+  sheetCancelBtnText: { fontSize: 15, color: tk.textSecondary },
+  }),
+);

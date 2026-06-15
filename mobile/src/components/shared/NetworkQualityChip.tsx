@@ -10,7 +10,6 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AccessibilityInfo,
   Alert,
   Animated,
   Pressable,
@@ -20,7 +19,7 @@ import {
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -40,10 +39,12 @@ interface Props {
 }
 
 export function NetworkQualityChip({ testID }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const [quality, setQuality] = useState<Quality>('good');
   const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const [opacityAnim] = useState(() => new Animated.Value(0));
   const prevQuality = useRef<Quality>('good');
 
   const deriveQuality = useCallback((state: NetInfoState): Quality => {
@@ -126,8 +127,8 @@ export function NetworkQualityChip({ testID }: Props) {
   const iconName: React.ComponentProps<typeof Ionicons>['name'] = isOffline
     ? 'cloud-offline-outline'
     : 'wifi-outline';
-  const chipColor = isOffline ? Colors.neutral[400] : Colors.warning[600];
-  const chipBg = isOffline ? Colors.neutral[100] : Colors.warning[50];
+  const chipColor = isOffline ? tokens.textTertiary : tokens.warningFg;
+  const chipBg = isOffline ? tokens.sunken : tokens.warningTint;
 
   return (
     <Animated.View style={{ opacity: opacityAnim }}>
@@ -148,7 +149,8 @@ export function NetworkQualityChip({ testID }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((_tk: ThemeTokens) =>
+  StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -163,4 +165,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.1,
   },
-});
+  }),
+);

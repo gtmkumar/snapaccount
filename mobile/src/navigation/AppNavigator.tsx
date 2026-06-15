@@ -16,7 +16,8 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../constants/colors';
+import { useTranslation } from 'react-i18next';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../contexts/ThemeContext';
 import { useAuthStore } from '../store/authStore';
 
 // Stack navigators
@@ -49,13 +50,15 @@ interface TabIconProps {
 }
 
 function TabIcon({ iconName, iconNameFocused, label, focused, badge }: TabIconProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.tabIconContainer}>
       <View>
         <Ionicons
           name={focused ? iconNameFocused : iconName}
           size={24}
-          color={focused ? Colors.brand[500] : Colors.neutral[400]}
+          color={focused ? tokens.brand500 : tokens.textTertiary}
         />
         {badge !== undefined && badge > 0 && (
           <View style={styles.badge}>
@@ -71,9 +74,11 @@ function TabIcon({ iconName, iconNameFocused, label, focused, badge }: TabIconPr
 }
 
 export function AppNavigator() {
+  const styles = useStyles();
   // Salaried individuals (UserType=employee) get the ITR-centric tab set; everyone
   // else (business owners, and any pre-persona/default account) gets the SME set.
   const isIndividual = useAuthStore((s) => s.user?.userType === 'employee');
+  const { t } = useTranslation();
 
   const documentsTab = (
     <Tab.Screen
@@ -84,7 +89,7 @@ export function AppNavigator() {
           <TabIcon
             iconName="folder-outline"
             iconNameFocused="folder"
-            label="Documents"
+            label={t('mobile.tabs.documents')}
             focused={focused}
           />
         ),
@@ -101,7 +106,7 @@ export function AppNavigator() {
           <TabIcon
             iconName="menu-outline"
             iconNameFocused="menu"
-            label="More"
+            label={t('mobile.tabs.more')}
             focused={focused}
           />
         ),
@@ -127,7 +132,7 @@ export function AppNavigator() {
                 <TabIcon
                   iconName="document-text-outline"
                   iconNameFocused="document-text"
-                  label="Taxes"
+                  label={t('mobile.tabs.taxes')}
                   focused={focused}
                 />
               ),
@@ -142,7 +147,7 @@ export function AppNavigator() {
                 <TabIcon
                   iconName="chatbubble-ellipses-outline"
                   iconNameFocused="chatbubble-ellipses"
-                  label="Support"
+                  label={t('mobile.tabs.support')}
                   focused={focused}
                 />
               ),
@@ -160,7 +165,7 @@ export function AppNavigator() {
                 <TabIcon
                   iconName="home-outline"
                   iconNameFocused="home"
-                  label="Home"
+                  label={t('mobile.tabs.home')}
                   focused={focused}
                 />
               ),
@@ -175,7 +180,7 @@ export function AppNavigator() {
                 <TabIcon
                   iconName="bar-chart-outline"
                   iconNameFocused="bar-chart"
-                  label="GST"
+                  label={t('mobile.tabs.gst')}
                   focused={focused}
                 />
               ),
@@ -189,7 +194,7 @@ export function AppNavigator() {
                 <TabIcon
                   iconName="business-outline"
                   iconNameFocused="business"
-                  label="Loans"
+                  label={t('mobile.tabs.loans')}
                   focused={focused}
                 />
               ),
@@ -202,10 +207,11 @@ export function AppNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   tabBar: {
     height: 56,
-    backgroundColor: Colors.neutral[0],
+    backgroundColor: tk.raised,
     borderTopWidth: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
@@ -220,19 +226,19 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontSize: 10,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     marginTop: 2,
     fontWeight: '500',
   },
   tabLabelFocused: {
-    color: Colors.brand[500],
+    color: tk.brand500,
     fontWeight: '600',
   },
   badge: {
     position: 'absolute',
     top: -4,
     right: -8,
-    backgroundColor: Colors.error[600],
+    backgroundColor: tk.errorCta,
     borderRadius: 8,
     minWidth: 16,
     height: 16,
@@ -241,8 +247,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: {
-    color: Colors.neutral[0],
+    color: '#FFFFFF', // white on errorCta, AA both modes
     fontSize: 9,
     fontWeight: '700',
   },
-});
+  }),
+);

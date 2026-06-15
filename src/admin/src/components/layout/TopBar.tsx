@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { NotificationCenter } from '@/components/shared/NotificationCenter'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useCommandPalette } from '@/contexts/CommandPaletteContext'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 
 const routeLabels: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -52,7 +52,6 @@ export function TopBar({ className, onMobileMenuToggle }: TopBarProps) {
   const location = useLocation()
   const { user } = useAuth()
   const { open: openPalette } = useCommandPalette()
-  const { t } = useTranslation()
   const breadcrumbs = buildBreadcrumbs(location.pathname)
 
   return (
@@ -108,7 +107,7 @@ export function TopBar({ className, onMobileMenuToggle }: TopBarProps) {
         <button
           type="button"
           onClick={openPalette}
-          aria-label={t('palette.trigger.label', 'Open command palette (⌘K)')}
+          aria-label={t('palette.trigger.label')}
           className={cn(
             'hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
             'text-[var(--text-tertiary)] border border-[var(--border-default)]',
@@ -116,7 +115,7 @@ export function TopBar({ className, onMobileMenuToggle }: TopBarProps) {
           )}
         >
           <Search className="h-4 w-4" aria-hidden="true" />
-          <span className="hidden lg:inline">{t('palette.placeholder', 'Search anything…')}</span>
+          <span className="hidden lg:inline">{t('palette.placeholder')}</span>
           <kbd className="hidden lg:inline px-1.5 py-0.5 text-xs rounded bg-[var(--surface-canvas)] border border-[var(--border-default)] font-mono ml-1">⌘K</kbd>
         </button>
 
@@ -124,7 +123,7 @@ export function TopBar({ className, onMobileMenuToggle }: TopBarProps) {
         <button
           type="button"
           onClick={openPalette}
-          aria-label={t('palette.trigger.label', 'Open command palette')}
+          aria-label={t('palette.trigger.label')}
           className="md:hidden flex items-center justify-center h-9 w-9 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-sunken)] transition-colors"
         >
           <Search className="h-5 w-5" />

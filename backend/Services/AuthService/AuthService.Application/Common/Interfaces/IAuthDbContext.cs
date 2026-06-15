@@ -103,6 +103,27 @@ public interface IAuthDbContext
     /// <summary>KYC verification records (PAN / Aadhaar) in <c>auth.kyc_verification</c>.</summary>
     DbSet<KycVerification> KycVerifications { get; }
 
+    /// <summary>DPDP Act 2023 — purpose-coded consent audit trail in <c>auth.user_consent</c>.</summary>
+    DbSet<UserConsent> UserConsents { get; }
+
+    /// <summary>DPDP Act 2023 — per-user data export (portability) requests in <c>auth.data_export_request</c>.</summary>
+    DbSet<DataExportRequest> DataExportRequests { get; }
+
+    /// <summary>DPDP Act 2023 — user-submitted data correction requests in <c>auth.data_correction_request</c>.</summary>
+    DbSet<DataCorrectionRequest> DataCorrectionRequests { get; }
+
+    /// <summary>SEC-056 — runtime feature flags in <c>auth.feature_flag</c>.</summary>
+    DbSet<FeatureFlag> FeatureFlags { get; }
+
+    /// <summary>SEC-056 — generic key-value platform config (language, WhatsApp) in <c>auth.platform_config</c>.</summary>
+    DbSet<PlatformConfig> PlatformConfigs { get; }
+
+    /// <summary>GAP-047: Pending device approval requests in <c>auth.device_approval_requests</c> (migration 083).</summary>
+    DbSet<DeviceApprovalRequest> DeviceApprovalRequests { get; }
+
+    /// <summary>GAP-064: Device integrity attestation telemetry in <c>auth.device_integrity_checks</c> (migration 089).</summary>
+    DbSet<DeviceIntegrityCheck> DeviceIntegrityChecks { get; }
+
     /// <summary>Persists changes to the auth schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

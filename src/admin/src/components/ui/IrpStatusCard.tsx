@@ -62,7 +62,7 @@ export function IrpStatusCard({
       <div className={cn('rounded-xl border border-neutral-200 bg-neutral-50 p-4 flex items-center justify-between', className)}>
         <div>
           <p className="text-sm font-semibold text-neutral-700">E-Invoice (IRP)</p>
-          <p className="text-xs text-neutral-400 mt-0.5">No IRN generated yet</p>
+          <p className="text-xs text-neutral-500 mt-0.5">No IRN generated yet</p>
         </div>
         {onGenerate && (
           <button

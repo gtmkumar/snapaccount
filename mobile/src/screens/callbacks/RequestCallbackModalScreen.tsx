@@ -23,7 +23,8 @@ import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
 import { createCallback, type CallbackCategory, type CallbackPriority } from '../../api/callbacks';
 import type { CtaCategory } from '../../components/callbacks/RequestCallbackCta';
 import { useAuthStore } from '../../store/authStore';
@@ -46,7 +47,6 @@ const CATEGORY_MAP: Record<CtaCategory, CallbackCategory> = {
   DOC: 'Accounting', BILLING: 'Subscription', OTHER: 'General',
 };
 
-const CATEGORIES: CtaCategory[] = ['GST', 'ITR', 'LOAN', 'DOC', 'BILLING', 'OTHER'];
 const PRIMARY_CATEGORIES: CtaCategory[] = ['GST', 'ITR', 'LOAN', 'DOC'];
 const PRIORITIES: Priority[] = ['Low', 'Normal', 'High', 'Urgent'];
 const MAX_REASON = 500;
@@ -73,7 +73,10 @@ function buildWindow(timeOption: TimeOption, hour: number): { start: string; end
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function RequestCallbackModalScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const { user } = useAuthStore();
   // SEC-033: prevent screenshot on sensitive modal
   useSensitiveScreen();
@@ -119,9 +122,11 @@ export function RequestCallbackModalScreen({ navigation, route }: Props) {
       });
     },
     onSuccess: (data) => {
+      haptics.success(); // §3.3: callback request submitted
       navigation.replace('CallbackStatus', { callbackId: data.callbackId });
     },
     onError: (err: unknown) => {
+      haptics.error(); // §3.3: submit failure
       const axErr = err as { response?: { status?: number; data?: { callbackId?: string; message?: string } } };
       const status = axErr?.response?.status;
       if (status === 409) {
@@ -177,7 +182,7 @@ export function RequestCallbackModalScreen({ navigation, route }: Props) {
             accessibilityRole="button"
             hitSlop={8}
           >
-            <Ionicons name="close" size={22} color={Colors.neutral[700]} />
+            <Ionicons name="close" size={22} color={tokens.textSecondary} />
           </Pressable>
           <Text style={styles.headerTitle}>{t('mobile.callback.modal.title')}</Text>
           <View style={styles.headerSpacer} />
@@ -192,7 +197,7 @@ export function RequestCallbackModalScreen({ navigation, route }: Props) {
           {/* Error banner */}
           {error && (
             <View style={styles.errorBanner}>
-              <Ionicons name="alert-circle-outline" size={16} color={Colors.error[600]} />
+              <Ionicons name="alert-circle-outline" size={16} color={tokens.errorFg} />
               <Text style={styles.errorBannerText}>{error}</Text>
               <Pressable onPress={() => submit()} hitSlop={8}>
                 <Text style={styles.errorBannerCta}>{t('mobile.callback.modal.errorRetry')}</Text>
@@ -318,7 +323,7 @@ export function RequestCallbackModalScreen({ navigation, route }: Props) {
               value={reason}
               onChangeText={setReason}
               placeholder={t(reasonPlaceholderKey)}
-              placeholderTextColor={Colors.neutral[400]}
+              placeholderTextColor={tokens.textTertiary}
               multiline
               numberOfLines={4}
               maxLength={MAX_REASON + 10}
@@ -347,7 +352,7 @@ export function RequestCallbackModalScreen({ navigation, route }: Props) {
               <Ionicons
                 name={showPriority ? 'chevron-up' : 'chevron-down'}
                 size={16}
-                color={Colors.neutral[500]}
+                color={tokens.textSecondary}
               />
             </Pressable>
             {showPriority && (
@@ -415,9 +420,10 @@ export function RequestCallbackModalScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   flex: { flex: 1 },
-  container: { flex: 1, backgroundColor: Colors.surface.default },
+  container: { flex: 1, backgroundColor: tk.raised },
   scroll: { flex: 1 },
   scrollContent: { padding: 20, gap: 4, paddingBottom: 20 },
 
@@ -425,90 +431,90 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    borderBottomWidth: 1, borderBottomColor: tk.border,
   },
   closeBtn: {
     width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
   },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: Colors.neutral[900] },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: tk.textPrimary },
   headerSpacer: { width: 44 },
 
   // Error/conflict banners
   errorBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.error[50], borderRadius: 10,
-    padding: 12, borderWidth: 1, borderColor: Colors.error[200], marginBottom: 12,
+    backgroundColor: tk.errorTint, borderRadius: 10,
+    padding: 12, borderWidth: 1, borderColor: tk.errorTintBorder, marginBottom: 12,
   },
-  errorBannerText: { flex: 1, fontSize: 13, color: Colors.error[700] },
-  errorBannerCta: { fontSize: 13, color: Colors.error[600], fontWeight: '700' },
+  errorBannerText: { flex: 1, fontSize: 13, color: tk.errorFg },
+  errorBannerCta: { fontSize: 13, color: tk.errorFg, fontWeight: '700' },
   conflictBanner: {
-    backgroundColor: Colors.warning[50], borderRadius: 10,
-    padding: 12, borderWidth: 1, borderColor: Colors.warning[200], marginBottom: 12, gap: 8,
+    backgroundColor: tk.warningTint, borderRadius: 10,
+    padding: 12, borderWidth: 1, borderColor: tk.warningTintBorder, marginBottom: 12, gap: 8,
   },
-  conflictBannerText: { fontSize: 13, color: Colors.warning[800] },
-  conflictBannerCta: { fontSize: 13, color: Colors.brand[600], fontWeight: '700' },
+  conflictBannerText: { fontSize: 13, color: tk.warningFg },
+  conflictBannerCta: { fontSize: 13, color: tk.brandCta, fontWeight: '700' },
 
   // Context card
   contextCard: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.neutral[50], borderRadius: 10,
-    padding: 12, borderWidth: 1, borderColor: Colors.neutral[200], marginBottom: 12,
+    backgroundColor: tk.canvas, borderRadius: 10,
+    padding: 12, borderWidth: 1, borderColor: tk.border, marginBottom: 12,
   },
-  contextLabel: { fontSize: 12, color: Colors.neutral[500] },
-  contextValue: { fontSize: 13, fontWeight: '600', color: Colors.neutral[800], flex: 1 },
+  contextLabel: { fontSize: 12, color: tk.textSecondary },
+  contextValue: { fontSize: 13, fontWeight: '600', color: tk.textPrimary, flex: 1 },
 
   // Section
   section: { marginBottom: 20 },
-  sectionLabel: { fontSize: 14, fontWeight: '600', color: Colors.neutral[800], marginBottom: 10 },
+  sectionLabel: { fontSize: 14, fontWeight: '600', color: tk.textPrimary, marginBottom: 10 },
 
   // Category chips
   categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   categoryChip: {
     paddingHorizontal: 14, paddingVertical: 10, borderRadius: 22,
-    backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.neutral[200],
+    backgroundColor: tk.sunken, borderWidth: 1, borderColor: tk.border,
     minHeight: 44, alignItems: 'center', justifyContent: 'center',
   },
-  categoryChipActive: { backgroundColor: Colors.brand[500], borderColor: Colors.brand[500] },
-  categoryChipText: { fontSize: 13, fontWeight: '500', color: Colors.neutral[700] },
-  categoryChipTextActive: { color: Colors.neutral[0], fontWeight: '600' },
+  categoryChipActive: { backgroundColor: tk.brand500, borderColor: tk.brand500 },
+  categoryChipText: { fontSize: 13, fontWeight: '500', color: tk.textSecondary },
+  categoryChipTextActive: { color: tk.textOnBrand, fontWeight: '600' },
 
   // Radio
   radioRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, minHeight: 44 },
   radio: {
     width: 20, height: 20, borderRadius: 10,
-    borderWidth: 2, borderColor: Colors.neutral[300],
+    borderWidth: 2, borderColor: tk.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  radioSelected: { borderColor: Colors.brand[500] },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.brand[500] },
-  radioLabel: { fontSize: 14, color: Colors.neutral[800], flex: 1 },
+  radioSelected: { borderColor: tk.brand500 },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: tk.brand500 },
+  radioLabel: { fontSize: 14, color: tk.textPrimary, flex: 1 },
 
   // Hour picker
   hourPicker: { marginTop: 12, gap: 8 },
-  hourPickerLabel: { fontSize: 13, color: Colors.neutral[600] },
+  hourPickerLabel: { fontSize: 13, color: tk.textSecondary },
   hourRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   hourChip: {
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
-    backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.neutral[200],
+    backgroundColor: tk.sunken, borderWidth: 1, borderColor: tk.border,
     minHeight: 44, alignItems: 'center', justifyContent: 'center',
   },
-  hourChipActive: { backgroundColor: Colors.brand[50], borderColor: Colors.brand[400] },
-  hourChipText: { fontSize: 13, color: Colors.neutral[700] },
-  hourChipTextActive: { color: Colors.brand[700], fontWeight: '600' },
+  hourChipActive: { backgroundColor: tk.brandTint, borderColor: tk.brand400 },
+  hourChipText: { fontSize: 13, color: tk.textSecondary },
+  hourChipTextActive: { color: tk.brandFg, fontWeight: '600' },
 
   // Textarea
   textarea: {
-    borderWidth: 1, borderColor: Colors.neutral[200],
+    borderWidth: 1, borderColor: tk.border,
     borderRadius: 12, padding: 14,
-    fontSize: 14, color: Colors.neutral[900],
+    fontSize: 14, color: tk.textPrimary,
     minHeight: 100, textAlignVertical: 'top',
-    backgroundColor: Colors.neutral[50],
+    backgroundColor: tk.canvas,
   },
   charCountRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
-  charCount: { fontSize: 12, color: Colors.neutral[400] },
-  charCountError: { color: Colors.error[600] },
-  fieldError: { fontSize: 12, color: Colors.error[600], flex: 1 },
+  charCount: { fontSize: 12, color: tk.textTertiary },
+  charCountError: { color: tk.errorFg },
+  fieldError: { fontSize: 12, color: tk.errorFg, flex: 1 },
 
   // Priority accordion
   accordionHeader: {
@@ -519,18 +525,19 @@ const styles = StyleSheet.create({
   // Footer
   footer: {
     flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 16,
-    borderTopWidth: 1, borderTopColor: Colors.neutral[100],
-    backgroundColor: Colors.surface.default,
+    borderTopWidth: 1, borderTopColor: tk.border,
+    backgroundColor: tk.raised,
   },
   cancelBtn: {
-    flex: 0.4, borderRadius: 12, borderWidth: 1, borderColor: Colors.neutral[200],
+    flex: 0.4, borderRadius: 12, borderWidth: 1, borderColor: tk.border,
     paddingVertical: 14, alignItems: 'center', justifyContent: 'center', minHeight: 52,
   },
-  cancelBtnText: { fontSize: 15, color: Colors.neutral[600], fontWeight: '600' },
+  cancelBtnText: { fontSize: 15, color: tk.textSecondary, fontWeight: '600' },
   submitBtn: {
-    flex: 0.6, backgroundColor: Colors.brand[500], borderRadius: 12,
+    flex: 0.6, backgroundColor: tk.brand500, borderRadius: 12,
     paddingVertical: 14, alignItems: 'center', justifyContent: 'center', minHeight: 52,
   },
-  submitBtnDisabled: { backgroundColor: Colors.neutral[200] },
-  submitBtnText: { fontSize: 15, fontWeight: '700', color: Colors.neutral[0] },
-});
+  submitBtnDisabled: { backgroundColor: tk.border },
+  submitBtnText: { fontSize: 15, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);

@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { ProgressRing } from '../../components/shared/ProgressRing';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { apiClient } from '../../lib/api';
 import type { ItrStackParamList } from '../../navigation/ItrStack';
@@ -42,15 +42,17 @@ interface DocChecklistItem {
   category: 'income' | 'tax' | 'investment' | 'bank' | 'other';
 }
 
-const CATEGORY_COLORS: Record<DocChecklistItem['category'], string> = {
-  income: Colors.brand[500],
-  tax: Colors.itr,
-  investment: Colors.success[500],
-  bank: Colors.accent[500],
-  other: Colors.neutral[500],
-};
+const categoryColors = (tk: ThemeTokens): Record<DocChecklistItem['category'], string> => ({
+  income: tk.brand500,
+  tax: tk.itrAccent,
+  investment: tk.successFg,
+  bank: tk.loanAccent,
+  other: tk.textSecondary,
+});
 
 export function DocChecklistScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { assesseeId, filingId } = route.params;
@@ -92,7 +94,7 @@ export function DocChecklistScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}
           accessibilityLabel={t('mobile.common.back')}>
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.itr.docChecklist.title')}</Text>
         <View style={{ width: 40 }} />
@@ -100,7 +102,14 @@ export function DocChecklistScreen({ navigation, route }: Props) {
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => void refetch()}
+            tintColor={tokens.brand500}
+            colors={[tokens.brand500]}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         {/* Progress ring summary */}
@@ -108,7 +117,7 @@ export function DocChecklistScreen({ navigation, route }: Props) {
           <ProgressRing
             progress={progress}
             size={88}
-            color={Colors.itr}
+            color={tokens.itrAccent}
             label={t('mobile.itr.docChecklist.required')}
             testID="doc-checklist-progress"
           />
@@ -119,7 +128,7 @@ export function DocChecklistScreen({ navigation, route }: Props) {
             <Text style={styles.progressSub}>{t('mobile.itr.docChecklist.progressSub')}</Text>
             {allRequiredDone && (
               <View style={styles.allDoneBadge}>
-                <Ionicons name="checkmark-circle" size={14} color={Colors.success[600]} />
+                <Ionicons name="checkmark-circle" size={14} color={tokens.successFg} />
                 <Text style={styles.allDoneText}>{t('mobile.itr.docChecklist.allDone')}</Text>
               </View>
             )}
@@ -135,13 +144,13 @@ export function DocChecklistScreen({ navigation, route }: Props) {
             accessibilityLabel={t('mobile.itr.docChecklist.uploadForm16')}
           >
             <View style={styles.form16Icon}>
-              <Ionicons name="document-attach" size={24} color={Colors.itr} />
+              <Ionicons name="document-attach" size={24} color={tokens.itrAccent} />
             </View>
             <View style={styles.form16Text}>
               <Text style={styles.form16Title}>{t('mobile.itr.docChecklist.uploadForm16')}</Text>
               <Text style={styles.form16Sub}>{t('mobile.itr.docChecklist.form16Sub')}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.neutral[400]} />
+            <Ionicons name="chevron-forward" size={18} color={tokens.textTertiary} />
           </Pressable>
         )}
 
@@ -157,7 +166,7 @@ export function DocChecklistScreen({ navigation, route }: Props) {
                 <View
                   style={[
                     styles.categoryDot,
-                    { backgroundColor: CATEGORY_COLORS[category as DocChecklistItem['category']] },
+                    { backgroundColor: categoryColors(tokens)[category as DocChecklistItem['category']] },
                   ]}
                 />
                 <Text style={styles.categoryLabel}>
@@ -210,6 +219,8 @@ function ChecklistRow({
   item: DocChecklistItem;
   onUpload: () => void;
 }) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   return (
     <View style={[styles.checkRow, item.uploaded && styles.checkRowDone]}>
       <View
@@ -225,7 +236,7 @@ function ChecklistRow({
           <Ionicons
             name={item.required ? 'ellipse-outline' : 'remove-outline'}
             size={14}
-            color={item.required ? Colors.neutral[400] : Colors.neutral[300]}
+            color={item.required ? tokens.textTertiary : tokens.textTertiary}
           />
         )}
       </View>
@@ -247,91 +258,93 @@ function ChecklistRow({
           accessibilityRole="button"
           accessibilityLabel={`Upload ${item.label}`}
         >
-          <Ionicons name="cloud-upload-outline" size={16} color={Colors.itr} />
+          <Ionicons name="cloud-upload-outline" size={16} color={tokens.itrAccent} />
         </Pressable>
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
-  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.neutral[900], letterSpacing: -0.2 },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: tk.textPrimary, letterSpacing: -0.2 },
   scrollContent: { padding: 16, gap: 16 },
 
   progressCard: {
     flexDirection: 'row',
     gap: 20,
     alignItems: 'center',
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: Colors.neutral[100],
+    borderColor: tk.border,
   },
   progressText: { flex: 1, gap: 4 },
-  progressTitle: { fontSize: 18, fontWeight: '800', color: Colors.neutral[900], letterSpacing: -0.2 },
-  progressSub: { fontSize: 13, color: Colors.neutral[500] },
+  progressTitle: { fontSize: 18, fontWeight: '800', color: tk.textPrimary, letterSpacing: -0.2 },
+  progressSub: { fontSize: 13, color: tk.textSecondary },
   allDoneBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  allDoneText: { fontSize: 13, fontWeight: '700', color: Colors.success[600] },
+  allDoneText: { fontSize: 13, fontWeight: '700', color: tk.successFg },
 
   form16Cta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    backgroundColor: Colors.itr + '0D',
+    backgroundColor: tk.itrAccent + '0D',
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.itr + '30',
+    borderColor: tk.itrAccent + '30',
     minHeight: 68,
   },
-  form16Icon: { width: 44, height: 44, borderRadius: 12, backgroundColor: Colors.itr + '18', alignItems: 'center', justifyContent: 'center' },
+  form16Icon: { width: 44, height: 44, borderRadius: 12, backgroundColor: tk.itrAccent + '18', alignItems: 'center', justifyContent: 'center' },
   form16Text: { flex: 1, gap: 2 },
-  form16Title: { fontSize: 14, fontWeight: '700', color: Colors.itr },
-  form16Sub: { fontSize: 12, color: Colors.neutral[500] },
+  form16Title: { fontSize: 14, fontWeight: '700', color: tk.itrAccent },
+  form16Sub: { fontSize: 12, color: tk.textSecondary },
 
   categoryGroup: { gap: 8 },
   categoryHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   categoryDot: { width: 8, height: 8, borderRadius: 4 },
-  categoryLabel: { fontSize: 13, fontWeight: '700', color: Colors.neutral[600], textTransform: 'uppercase', letterSpacing: 0.5 },
+  categoryLabel: { fontSize: 13, fontWeight: '700', color: tk.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   checkRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.neutral[100],
+    borderColor: tk.border,
     minHeight: 52,
   },
-  checkRowDone: { backgroundColor: Colors.success[50], borderColor: Colors.success[200] },
-  checkCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.neutral[100], alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  checkCircleDone: { backgroundColor: Colors.success[500] },
-  checkCircleOptional: { backgroundColor: Colors.neutral[50] },
+  checkRowDone: { backgroundColor: tk.successTint, borderColor: tk.successTintBorder },
+  checkCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  checkCircleDone: { backgroundColor: tk.successFg },
+  checkCircleOptional: { backgroundColor: tk.canvas },
   checkContent: { flex: 1, gap: 2 },
-  checkLabel: { fontSize: 14, fontWeight: '600', color: Colors.neutral[800] },
-  checkLabelDone: { color: Colors.success[700], textDecorationLine: 'line-through' },
-  requiredStar: { color: Colors.error[500] },
-  checkDesc: { fontSize: 12, color: Colors.neutral[500], lineHeight: 17 },
+  checkLabel: { fontSize: 14, fontWeight: '600', color: tk.textPrimary },
+  checkLabelDone: { color: tk.successFg, textDecorationLine: 'line-through' },
+  requiredStar: { color: tk.errorFg },
+  checkDesc: { fontSize: 12, color: tk.textSecondary, lineHeight: 17 },
   uploadBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 
-  skeleton: { height: 56, backgroundColor: Colors.neutral[100], borderRadius: 12 },
+  skeleton: { height: 56, backgroundColor: tk.sunken, borderRadius: 12 },
 
-  footer: { padding: 16, borderTopWidth: 1, borderTopColor: Colors.neutral[100], backgroundColor: Colors.surface.default },
-  continueBtn: { backgroundColor: Colors.itr, borderRadius: 14, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
-  continueBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-});
+  footer: { padding: 16, borderTopWidth: 1, borderTopColor: tk.border, backgroundColor: tk.raised },
+  continueBtn: { backgroundColor: tk.itrAccent, borderRadius: 14, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
+  continueBtnText: { fontSize: 16, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);

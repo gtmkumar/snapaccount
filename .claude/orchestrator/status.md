@@ -1,7 +1,125 @@
 # SnapAccount — Orchestrator Status
 
-## Current Phase: Phase 6 — Production Completion (🎯 COMPLETE — ALL 6 SUB-PHASES STAGING-GO)
-**Last Updated:** 2026-04-25 19:05 IST — **Phase 6 COMPLETE.** All 6 sub-phases (6A/6B/6C/6D/6E/6F) STAGING-GO. Pre-production blockers tracked separately for ops + Phase 7 (NEW-002 HIGH, SEC-041, INFO-001/007, P6-HANDOFF-25, P6-FLAG-04..10).
+## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 8 COMPLETE — 2026-06-12; all delegable gaps closed, remaining queue is TL-gated)
+
+### Phase 7 Wave 8 — GAP-064 device integrity attestation + SignalR local-dev fix (2026-06-12, COMPLETE — live-verified on local stack)
+
+Closes the last OPEN-delegable gap (GAP-064) + BUG-W7-IOS-001 from Wave 7 iOS QA.
+- **Backend (AuthService)**: `IDeviceIntegrityVerifier` — `MockDeviceIntegrityVerifier` dev default ("mock-fail"→FAIL, absent→SKIPPED, else PASS) + credential-gated `PlayIntegrityVerifier`/`AppAttestVerifier` stubs (NotConfigured verdict when creds absent, never throw; KYC-adapter pattern). `DeviceIntegrityMiddleware` after FirebaseAuthMiddleware: soft-fail default (`DeviceIntegrity:Enforce=false`), enforce mode → 403 `DeviceIntegrity.Failed`; all outcomes → `auth.device_integrity_checks` telemetry (fire-and-forget). Contract: `X-Device-Integrity` + `X-Device-Integrity-Platform` headers on OTP-send/login/loan-apply/loan-consent.
+- **Mobile**: `@expo/app-integrity@~56.0.3` (official Expo module — Play Integrity + App Attest), `deviceIntegrity.ts` service (never throws; `__DEV__`→`mock-dev-token`; 5-min cache + in-flight dedupe; sticky unavailable flag; tokens in-memory only); axios-interceptor URL allowlist for exactly the 4 contract routes (KYC OTP routes test-pinned as non-matches). ⚠️ Native module — real attestation needs a fresh dev build (`expo run:android/ios`) + TL items: GCP project number (`integrityCloudProjectNumber`), Play/App Attest credentials; until then soft-fails by design. Deferred markers documented in-code: server challenge endpoint for replay-binding when real providers get wired.
+- **BUG-W7-IOS-001 (SignalR)**: root cause = mobile `HUB_BASE_URL` used `apiBaseUrl` (:5101 AuthService — no hub) → negotiate 404. Fixed: `CHAT_HUB_BASE_URL` (HOST_ROOT:5107 pattern, app.json `chatBaseUrl`) + ChatService Redis `AbortOnConnectFail=false` so the hub serves negotiate without Redis locally. Live: negotiate → 401 (hub alive, auth required), not 404.
+- **Migration 089** (`auth.device_integrity_checks` + 3 indexes) formalized, applied, replay-verified idempotent, no drift vs ad-hoc DDL.
+- **Live verification (orchestrator, real stack)**: OTP-send + valid token → 200 + PASS row; + `mock-fail` → 200 (soft-fail) + FAIL row; enforce-mode 403 verified by backend-agent on side instance; hub negotiate 401-not-404.
+- **Gates**: AuthService 780 (+139), ChatService 199 (+4) — orchestrator re-run; mobile jest/lint/type-check re-run at commit.
+- **Open after Wave 8**: entire remaining queue is TL-gated — CI billing, Firebase key rotation (GAP-001), DPO appointment, Razorpay webhook secret, KYC sandbox creds, GAP-104 product decision (gates 105/109), GAP-073 bank pilots (gates 039), Play Integrity/App Attest credentials + GCP project number (activates GAP-064 real verification), approximate-location + resend-push.
+
+### Phase 7 Wave 7 — Feature wave: CA consultations, templates, notice engine, fraud/auth hardening (2026-06-12, COMPLETE & LIVE-VERIFIED web + Android + iOS)
+
+Closes GAP-031/032/037/043/044/047/051/108/110 + board #42/#44/#45/#46 + full client-contract reconciliation. Session was interrupted (window closed) mid-wave 2026-06-12; reconstructed from agent memories + git state, then completed.
+
+- **Backend 7A** (GAP-031/032/037/043, migrations 080/081): ChatService CA appointments (CaProfile/AppointmentSlot/Appointment, 7 endpoints, IMeetingLinkProvider mock-first, 2h cancel/reschedule domain rule, rating aggregate) + MessageBookmark; ReportService TallyExportGenerator (feature-flagged, XML+CSV) + ChatThreadPdfGenerator; NotificationService template CRUD (6 endpoints, test-send to caller only, effective_from backfill lesson).
+- **Backend 7A addendum** (CA residuals, migration 085): GET /appointments/ca-profiles, POST /{id}/cancel-by-ca (mandatory reason, no 2h rule), availability-rules CRUD + generate; CaAvailabilityRule aggregate + ISlotGenerationService (Hangfire weekly job bypasses MediatR/PermissionBehavior).
+- **Backend 7B** (GAP-044/047/051/110 + #42, migrations 082/083): loan.fraud_checks (6 check types, FLAG soft/FAIL 422, config-driven thresholds, MockPennyDrop dev-only); AccountingService GET /accounting/reports/comparative (Indian FY, chart-ready, top-10 movers); AuthService admin cookie auth (sa_admin_rt HttpOnly SameSite=Strict + X-Requested-With CSRF, 1h access/7d refresh, mobile path untouched); device approval (10-min expiry, DeviceApproval:Enforce soft-launch flag, Pub/Sub event).
+- **Backend 7C** (GAP-108, migration 084): GST notice engine — form-type taxonomy (ASMT-10/DRC-01/01A/01B/01C/ADT-01), DB-driven FY-versioned statutory deadline rules (21 seeded + "ALL" sentinel), DRC-01B/01C simulator (dataAvailable=false when source absent), forward-only GSTAT appeal-stage machine w/ 30-Jun-2026 backlog flag.
+- **Backend mobile-reconciliation** (migration 086): GET /appointments/{id} (IDOR-guarded), first-class appointment topic, slots/day-map, enriched BookmarkDto, GET /auth/devices/my-approval-status (ENFORCE/NOTIFY_ONLY), GST legacy-status shim.
+- **UI/UX (#45)**: docs/design/wave7-feature-specs.md (5 sections, no new tokens, [confirm 7A/7B] markers all reconciled).
+- **Admin frontend (#46 + residual reconciliation)**: Template Manager (26-event catalog, DLT/segment counter), CA availability (rule-based editor + GenerateSlotsPanel; weekday=DayOfWeek int, TimeSpan↔"HH:mm" client conversion) + appointments page w/ cancel-by-ca reason dialog, GST notice taxonomy components, Tally export, GAP-051 in-memory token + silent refresh + CSRF header. i18n 2140 keys en/hi/bn parity.
+- **Mobile (build + residual reconciliation)**: CA booking flow (SlotPicker w/ server day-map, topic first-class — notes-prefix workaround removed), bookmarks (enriched DTO, role-based sender fallback), device approval (real my-approval-status polling, NOTIFY_ONLY no-gate branch), GST/ITR notice parity (canonical statuses only), comparative report screen. Deferred per TL gate: approximate-location, resend-push.
+- **Verification (orchestrator, independent)**: backend 1,452 unit tests green across the 7 changed services (Chat 157, Auth 752, Gst 198, Loan 166, Accounting 60, Notification 91, Report 28); admin vitest 1078/1078, lint 0/0, build pass; mobile jest 715/715 (76 suites), lint clean, type-check 0 new.
+- **Migrations 080–086** all applied + scratch-replayed (idempotent).
+- **Live QA cycle (2026-06-12, full test→fix→retest)**: fresh stack restart on committed build (stale-process lesson applied). **Web pass**: 8 areas PASS + 6 HIGH bugs. **Android pass**: 6/6 PASS after 2 fixes. **iOS pass**: 6/6 PASS first run (both bug-fix regressions re-verified on-device, 35 screenshots). All bugs VERIFIED-FIXED in final browser/device retest; zero new issues. Reports: .claude/qa/wave7-live-qa-{web,android,ios}-2026-06-12.md.
+  - **Web bugs fixed**: W7-01/03 missing `JsonStringEnumConverter` in Notification+Gst Program.cs (string PascalCase enums → 500); W7-02 notification_log write-path divergence (notification_id NOT NULL → migration 087 + Guid? shadow no-default; then notification_at unmapped NOT NULL → explicit value); W7-04 TallyExportGenerator wrong table names (chart_of_accounts/journal_entries → account/journal_entry(_line) + debit/credit predicate); W7-05 ChatThreadPdf FY validator guard + financial_year varchar(10)→40 (migration 088); W7-06 device-approval admin queue UI never built → built (Settings section, approve/deny modals w/ reviewer-device picker, 14 tests, +32 i18n keys ×3).
+  - **Mobile bugs fixed**: W7-001 appointment enum projections PascalCase `.ToString()` vs UPPER_SNAKE contract → EnumUpperSnake.Serialize across 6 ChatService projection sites + 38 pinning tests; W7-002 new-conversation flow entirely absent (unwired "+"/FAB) → NewChatScreen + ChatStack route + createThread numeric-enum wire fix + 8 tests.
+  - **Write-path audit** (retest still 500'd → orchestrator captured real exceptions via standalone side-port instances): report.report divergences — status CHECK vocabulary PENDING/GENERATING vs C# Queued/Processing (migration 088 realigns CHECK to QUEUED/PROCESSING/COMPLETED/FAILED + UpperSnakeEnumConverter), user_id uuid column vs string property (42804), phantom EF defaults (title HasDefaultValue, notification_at HasDefaultValueSql — no real DB defaults exist; values now written explicitly). **Lesson**: EfSmoke read-materialization misses write paths on 0-row tables; insert-path model-inspection tests added pinning mappings/converters/no-phantom-defaults.
+  - **Env/QA-error closures**: LoanService:ConsentHmacKey dev user-secret seeded → KFS 201 all locales incl. hi (closes Wave 6 KFS-hi re-check); consent-catalog "404" was QA wrong-path (real route /loans/consents/catalog, 200); org-switcher re-check PASS; IMS inbox live PASS on Android AND iOS (all Wave 6 lockout-pending re-checks now closed).
+- **Migrations 087–088** authored + applied + replay-verified idempotent (notification_log.notification_id nullable; report.report CHECK realign + status default QUEUED + financial_year varchar(40)).
+- **Final gates @ wrap (orchestrator re-run)**: backend Chat 195, Gst 217, Notification 114, Report 52; admin lint 0/0, build pass, vitest 1092/1092 (58 files), i18n 2171 ×3 parity; mobile lint clean, type-check clean, jest 724/724 (77 suites).
+- **Known issue (logged, not blocking)**: BUG-W7-IOS-001 — ChatService SignalR hub 404 in local dev (pre-existing, dev-only; REST messaging unaffected; Expo overlay toast noise). Route to backend-agent next wave.
+- **Open**: TL queue unchanged (#24); deferred GAP-064 + decision-gated 105/109 (GAP-104), 039 (GAP-073); approximate-location + resend-push (TL gate).
+
+### Phase 7 Wave 6 — Medium/Low gap tail (2026-06-11, COMPLETE & live-verified)
+
+Triage-first (54 deferred items code-verified at HEAD: 9 already closed, 14 partial, 26 open → built; triage table: wave6-triage-2026-06-11.md). Delivered:
+- **Backend**: OCR-feedback write path + accuracy report (GAP-014), document tags idempotent CRUD (015), stub-PDF + MockRazorpay prod guards (041/PCI-02), GcpStartup warn logs (053), GST tax-rate config FY-versioned CRUD + 8-slab validation (022, migration 078), WhatsApp adapter mock-first (045), subscriber admin list, /admin/health/aggregate, KFS server-side locale chain (079) + consent-catalog locale, refresh-context org selection w/ membership check (org-switcher backend).
+- **Frontend**: callback <Can> gating (023), Subscriber/Invoice pages (036), live System Health page + dashboard widget (038), upgrade CTA (035), GstTaxRatesPage. Admin vitest 1047.
+- **Mobile**: locale on KFS/consent calls (+ fixed consentLocale hardcoded 'en' DPDP audit bug), invite-token resume via SecureStore single-shot, celebration single-fire + server fire-guard, 44pt sweep (~14 screens), multi-org switcher. Mobile jest 648.
+- **Ops/Sec/DB**: RBI data-residency map (14 stores; 3 TL verify items), CERT-In/DPDP incident runbook + statutory log-retention buckets (7yr financial), HSN/SAC pipeline script, PCI-DSS SAQ-A scope statement (eligibility confirmed in code), VAPT plan (12 targets), dev-seed drift fixed (was CI path mismatch + silent orphans; CI now strict).
+- **QA cycle**: web 2,564 regression green + 4 bugs found→fixed→live-verified (missing "standard" rate-limit policy in Auth/Ai → 500s; slab validation unwired; stale SubscriptionService process; tag dup). Android: invite deep-link + dark-mode live PASS; Crashlytics PII audit CLEAN (no Crashlytics calls in mobile/src).
+- **Open**: #24 TL queue, #42 refresh-context typed-401 polish (LOW). Wave 7+ deferred: GAP-031/032/037/043/044/047/051/064/108/110, decision-gated 105/109 (GAP-104), 039 (GAP-073). QA live re-checks pending OTP lockout expiry: org-switcher multi-org, KFS hi live, IMS inbox on Android (all code+jest verified).
+- Reports: .claude/qa/live-web-wave6-2026-06-11.md, live-android-wave6-2026-06-11.md.
+
+### Phase 7 Wave 5 — IMS/MCA UI, SEC-AI-02 to GO, design-elevation completion (2026-06-11, COMPLETE & live-verified)
+
+Built, security-gated, live-tested (web + iOS), fixed, and re-verified in one cycle. Commits: `18ce9b0` (build wave) + closing slice (this commit).
+- **IMS UI (#32)**: implementation-ready spec (docs/design/ims-inbox-spec.md) → admin 3 pages (/gst/ims, detail, GSTR-1A) + mobile 3 screens + 6 components; optimistic accept/5s undo→PENDING_KEPT, client-required reject reason, bulk cap 100, deemed banners; Hangfire deemed-acceptance job (14th 02:00 IST). Live web re-verify: 8/8 PASS.
+- **MCA UI (#33)**: /compliance/edit-log page, FY+entity filters, CSV export, accounting.editlog.read gate. Live PASS.
+- **SEC-AI-02 (#34)**: 2 review rounds + 2 fix rounds → **GO for staging**. AES-GCM key protection, platform.ai.manage gate + X-Internal-Token, advisory-locked reservation-row token budget (migration 077, concurrency-tested), RAG ingestion ownership check, Gemini systemInstruction separation, JWT-only org, chunk redaction, FG-01 cancellation abort. Conditions (TL): Pub/Sub publish IAM + InternalApi:SharedToken secret.
+- **Design elevation #26 CLOSED (S0–S7)**: admin S3 skeleton/empty sweep + S5 3-tier dashboard (ARIA tabs w/ keyboard nav); mobile dark-mode ALL screens (ThemeProvider mount bug found by live QA — context default was a working light theme so tests passed silently; now null-default + real-App test); S3-mobile ListStates kit, S4 haptics/pull-to-refresh/celebration, S6 onboarding trust signals; tokens.json v2.1.0 (dark tertiary contrast fix). Mobile debt #35: type-check+lint 0/0.
+- **Contract gaps #27**: org name editable (GSTIN explicitly KYC-gated 400), addressLine2 read-back, /subscriptions/me 404 typed, /auth/config/privacy-contact.
+- **Bug class closed platform-wide**: BaseDbContext GuidStringConverter vs varchar created_by/updated_by (4 tables: gst.ims_invoices, gst.gstr1a_amendments, ai.chunks, ai.interactions — all other schemas uuid-clean). Full-materialization EfSmoke tests added (projection-only tests structurally can't catch this).
+- **Boot bug found+fixed**: GstService Hangfire RecurringJob registered pre-app.Run() → ApplicationStarted callback.
+- **Test totals**: backend 1418+ green (12 services), admin vitest 1022, mobile jest 596; i18n en/hi/bn parity (admin 1824, mobile 1322 keys/locale).
+- **Open**: #24 TL queue (+2 new: Pub/Sub IAM, SharedToken secret), #36 wizard i18n (LOW), #37 dark-mode visual verify on iOS 17/18 sim (iOS 26.5 pre-release sim doesn't deliver Appearance events to RN 0.85 old-arch JS — fix is in-bundle + jest-pinned).
+- QA reports: .claude/qa/live-web-wave5-2026-06-11.md, live-ios-wave5-2026-06-11.md.
+
+### Phase 7 Wave 4 — Regulatory & platform build wave (2026-06-11, same session, COMPLETE & live-verified)
+
+Team-lead approved dispatch ("2"). Delivered and verified live on the running stack:
+- **GSTN IMS (GAP-101)**: full backend (3 entities, 8 endpoints, deterministic mock GSTN client, GSTR-1A, deemed-acceptance command) + migration 074 (tables, RLS, append-only action log) + 5 permissions seeded. Live: sync→8 mock invoices→summary with 2B deadline. Remaining: UI (task #32), Hangfire wiring, 3B-block verification vs primary advisory.
+- **AI Service P7a (GAP-030)**: /ai/extract + org-scoped /ai/chat (mock-first, PAN/Aadhaar/card redaction, daily token budgets, Sarvam Indic routing) + RAG ingestion subscriber + migration 075 (chunks/embeddings FLOAT4[]→P7b pgvector/interactions). 61 tests. Follow-ups in #31.
+- **MCA edit-log (GAP-100)**: migration 071 (append-only, trigger-enforced immutability incl. SUPER_ADMIN, auto-capture on 4 accounting tables) + GUC interceptor + auditor endpoints + permission 076. Live-verified. UI: #33.
+- **IT Act 2025 (GAP-102)**: migration 072 (act_version/tax_year + section mapping) + resolver fallback logic + actVersion DTO fields. Regression found in live verify (10 wrong EF mappings on TaxSlabVersion/DeductionSection) — fixed, EfSmoke hardened from AnyAsync to full projections (closes the convention-divergence blind spot).
+- **Chat idempotency (NEW-D08)**: closed end-to-end (backend dedupe + mobile UUID with retry-reuse).
+- **Design elevation (#26, partial)**: admin S0 canonical tokens; mobile tinted-surface ThemeTokens + 6 regulated screens dark-mode migrated with both-mode contrast gate tests; 58 screens remain.
+- **Callback MV vocab (073)**: counts now real.
+- Backend suite ~1,250+ green across services; mobile jest 521/521; admin vitest 941/941. Migrations 071–076 all applied + scratch-replayed.
+
+### Phase 7 Wave 3 — Live test → fix → retest cycle (2026-06-11 session)
+
+Full record: **`live-test-verification-2026-06-11.md`**. Summary: task board rebuilt (30 tasks); qa-web API sweep found 16 failing endpoints (systemic EF↔DB divergence + RBAC status bugs) — ALL fixed across 3 backend rounds + migrations 065–069 and re-verified live (API + Playwright browser pass); EfSmoke suites (35) added, backend 1,143 tests green; B15 document review loop delivered end-to-end (backend+DB+frontend); a11y spec + 2 regulatory blockers fixed (SR-accessible KFS/consent gates); design-elevation spec (S0–S7) ready; single i18n runtime (1611-key en/hi/bn parity + CI gate); Settings real subscription stats; endpoints.md regenerated; AI architecture decided; Android live sweep done (11 findings, fixes dispatched; jest baseline 438/438). Remaining: iOS sweep, IMS/MCA/IT-Act/AI-P7a builds, TL queue (see task board).
+
+### Phase 7 Wave 1 — COMPLETE & VERIFIED (2026-06-10 17:30 IST)
+
+All four Wave 1 dispatches accepted after independent orchestrator verification (build/lint/test re-runs + code inspection, not report-trust):
+
+| Agent | Scope | Verdict | Evidence |
+|---|---|---|---|
+| backend-agent | B1–B6 (Firebase revoke retry, RLS error alerting, SESSION_JWT_SECRET fail-fast ×12 services, /auth/token/refresh-context, Callback KPI + assignments_log SEC-030, loan consent locale + catalog endpoint) | ACCEPTED | dotnet build 0 err; Auth 575/575, Callback 35/35, Loan 90/90 |
+| mobile-dev | M5 (stub removal: ITR/GST dashboards wired, 3 dup loan screens deleted) + M7 (i18n extraction, 830-key parity en/hi/bn) | ACCEPTED | Lint/type/jest failures verified pre-existing via git-stash baseline |
+| db-engineer (retry) | DB1 (GAP-070 verified already reconciled by 060) + handoff migration 061 (loan.consent_locale, consent_catalog seeds en/hi/bn, deleted_at EF parity) | ACCEPTED | Full-chain replay clean on scratch DB; 061 idempotent; callback 018 drift-free |
+| frontend-dev (retry) | F1 (Document Queue/Review real APIs, documentApi.ts) + F2 (ITC Mismatch wired) | ACCEPTED | Lint 0/0, build pass, vitest 912/912 (+29), i18n 126-key parity, 0 mock identifiers |
+
+**Wave 1 notes:** First frontend-dev and db-engineer runs stalled (~15:35–15:47 IST) and were re-dispatched at 17:07 IST; retries completed in ~15 min each. Original mobile/backend runs completed first-pass.
+
+**Open handoffs out of Wave 1:**
+- Backend B15 (document review-decision/archive endpoints) — admin Review page buttons disabled with TODO B15 markers until delivered (Wave 3).
+- hi/bn consent catalog seed texts are `[PLACEHOLDER TRANSLATION — LEGAL REVIEW REQUIRED]` → team-lead legal review.
+- `callback.kpi_daily_snapshot` MV refresh job (`REFRESH MATERIALIZED VIEW CONCURRENTLY`) → devops-engineer (Wave 2 D-slot).
+- Clients must call `POST /auth/token/refresh-context` after org creation to close BUG-5 end-to-end → mobile M-slot + frontend (Wave 2).
+- notification_event seeder try/catch band-aid (PR #19) can be removed now that 060 is verified → backend (Wave 2/3).
+- Mobile Jest infra debt (nativewind/TurboModuleRegistry, 23 pre-existing failing suites) → qa-mobile (Wave 4).
+
+### Phase 7 Wave 2 — COMPLETE & CODE-VERIFIED (2026-06-11 review)
+
+Wave 2 (incl. batch 2) landed as commit `75c0e69` on branch `2026-06-10-s5t4` and was independently code-verified 2026-06-11: B7 DPDP privacy stack (entities + Privacy.cs + migration 062 + tests), B8 RBI KFS + cooling-off (migration 063 + mobile KeyFactsStatementScreen), B9 Razorpay client + usage metering (migration 064; Mock default in DI — production activation runbook needed), B10/B12 done, B11 spot-verified (SEC-056 endpoint wiring still partial), M2/M3/M4 delivered (Privacy Center + biometric step-up live), D4 CI migration-replay + healthz jobs, D5 scheduler matrix incl. KPI MV refresh. Full verification + 22 new findings + 12 new regulatory gaps (GAP-100..111): **`gap-analysis-2026-06-11-delta.md`**. Wave 3 recommendation in that doc §E; per-agent tasks created on the session task board 2026-06-11.
+
+### Phase 7 Wave 2 — DISPATCHED (2026-06-10 20:55 IST, team-lead pre-approved autonomous continuation)
+
+Batch 1 (parallel, disjoint file ownership):
+- **backend-agent** → B7 (DPDP consent/privacy APIs), B8 (RBI KFS + cooling-off), B9 (Razorpay + usage metering), B10 (notification seeder band-aid removal), B11 (14-item security bundle), B12 (permission catalog is_active/roleCount). DDL handoff section required for db-engineer.
+- **ui-ux-agent** → U1 (Key Facts Statement screen spec), U2 (Privacy Center spec). Unblocks mobile M3.
+- **devops-engineer** → D3 (Secret Manager slots + HSN/SAC runbook + Bucket Lock prep), D4 (CI migration-replay + healthz smoke jobs), D5 (Cloud Scheduler job matrix incl. KPI MV refresh).
+- **mobile-dev** → M2 only (consume /auth/token/refresh-context after onboarding; BUG-5 closure). M3/M4 held as batch 2 pending B7/B8 + U1/U2; M1 blocked on TL-2.
+
+Batch 2 (queued): mobile M3 (KFS screen + Privacy Center) + M4 (biometric step-up, partial pending M1/TL-2); db-engineer DDL from backend B7/B8/B9/B12 handoff.
+
+**Last Updated:** 2026-06-10 — **Comprehensive post-Phase-6 review complete.** Full gap analysis at `.claude/orchestrator/gap-analysis-2026-06-10.md` (50+ gaps: requirements vs implementation, security, DPDP Rules 2025 / RBI Digital Lending compliance, industry benchmarks). Per-agent Phase 7 task files at `.claude/orchestrator/phase-7-tasks/`. Team-lead action items TL-1..TL-10 listed in `phase-7-tasks/README.md` (CI billing, Firebase key rotation, GSTN/DLT/DNS paperwork, DPO appointment).
+
+### Post-Phase-6 Review Summary (2026-06-10)
+- **Verified state:** 12 backend services / ~236 endpoints / ~756 tests; AiService 100% 501-stubs; GSTN/IRP/EWB + ITR refund mock-by-default; admin 55 pages (Document Queue/Review + ITC Mismatch still mock-backed); mobile 57 screens (i18n key parity complete, several "Coming Soon" stubs).
+- **Top blockers:** GAP-001 (committed Firebase plist + leaked key), GAP-002 (CI billing), GAP-003 (DPDP erasure broken on Firebase revoke failure), GAP-007 (BUG-5 session JWT missing orgId), GAP-010/011/012 (admin core review loop on mock data, KPI placeholder).
+- **New compliance scope:** DPDP Rules 2025 consent/privacy-center/breach-runbook (GAP-020), RBI Digital Lending KFS + cooling-off (GAP-021).
+- Work completed after Phase 6 close (Auth/RBAC module, user-hierarchy phases 1–2, 2026-05-16 infra audit PRs #17–23, 2026-06-06 live smoke QA) is reflected in the gap analysis inputs.
 
 ## Phase Status
 

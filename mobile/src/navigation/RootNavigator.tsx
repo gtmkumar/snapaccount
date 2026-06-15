@@ -9,10 +9,11 @@ import type { LinkingOptions, NavigationContainerRef } from '@react-navigation/n
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { AuthNavigator } from './AuthNavigator';
 import { AppNavigator } from './AppNavigator';
-import { Colors } from '../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../contexts/ThemeContext';
 import { useAuthStore } from '../store/authStore';
 import { initPushNotifications, configureForegroundNotificationHandler } from '../notifications/pushTokenManager';
 import { wireNotificationRouter } from '../notifications/notificationRouter';
+import { consumePendingInviteToken } from '../lib/pendingInvite';
 
 // Configure foreground notification display at module level
 configureForegroundNotificationHandler();
@@ -48,6 +49,8 @@ function buildLinking(isAuthenticated: boolean): LinkingOptions<RootLinkParamLis
 }
 
 export function RootNavigator() {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { isAuthenticated, isLoading, setLoading } = useAuthStore();
   const navigationRef = useRef<NavigationContainerRef<Record<string, object | undefined>>>(null);
   // Build the linking config for the currently-mounted navigator so the
@@ -71,6 +74,47 @@ export function RootNavigator() {
     }
   }, [isAuthenticated]);
 
+  // GAP-065: resume a pending org-invite after sign-in. A deep-link invite
+  // tapped while logged out persists its token (AcceptInviteScreen →
+  // storePendingInviteToken); when auth completes the tree remounts as
+  // AppNavigator, so reopen AcceptInvite (MoreTab/MoreStack) with the token.
+  // consumePendingInviteToken() is single-shot — a failed accept never loops.
+  const inviteResumeArmedRef = useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated) {
+      inviteResumeArmedRef.current = false;
+      return;
+    }
+    if (inviteResumeArmedRef.current) return;
+    inviteResumeArmedRef.current = true;
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    void consumePendingInviteToken().then((token) => {
+      if (!token || cancelled) return;
+      // The freshly-mounted AppNavigator may not be ready on the same tick.
+      const tryNavigate = (attempt: number) => {
+        if (cancelled) return;
+        const nav = navigationRef.current;
+        if (nav?.isReady()) {
+          nav.navigate('MoreTab', {
+            screen: 'AcceptInvite',
+            params: { token },
+          });
+        } else if (attempt < 20) {
+          retryTimer = setTimeout(() => tryNavigate(attempt + 1), 150);
+        }
+      };
+      tryNavigate(0);
+    });
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [isAuthenticated]);
+
   useEffect(() => {
     // Auth is driven by the backend session token (a LOCAL_AUTH JWT issued by
     // /auth/otp/verify) held in the auth store. The token is intentionally NOT
@@ -86,7 +130,7 @@ export function RootNavigator() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.brand[500]} />
+        <ActivityIndicator size="large" color={tokens.brand500} />
       </View>
     );
   }
@@ -98,11 +142,13 @@ export function RootNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.bg.base,
+    backgroundColor: tk.canvas,
   },
-});
+  }),
+);

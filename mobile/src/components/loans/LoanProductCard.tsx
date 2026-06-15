@@ -16,7 +16,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import {
+  createThemedStyles,
+  useTheme,
+  type ThemeTokens,
+} from '../../contexts/ThemeContext';
 import { BadgeQual, type QualLevel } from './BadgeQual';
 import { EligibilityHintRow } from './EligibilityHintRow';
 import type { LoanProduct } from '../../api/loans';
@@ -49,6 +53,8 @@ export function LoanProductCard({
   testID,
 }: LoanProductCardProps) {
   const { t } = useTranslation();
+  const { tokens } = useTheme();
+  const styles = useStyles();
 
   const displayBankName = bankName ?? t('mobile.loan.hub.card.bank');
 
@@ -62,7 +68,7 @@ export function LoanProductCard({
       {/* Card header — bank logo + name + badge */}
       <View style={styles.header}>
         <View style={styles.bankLogoPlaceholder} accessibilityLabel={`${displayBankName} logo`}>
-          <Ionicons name="business" size={20} color={Colors.loan} />
+          <Ionicons name="business" size={20} color={tokens.loanAccent} />
         </View>
         <View style={styles.bankInfo}>
           <Text style={styles.bankName} numberOfLines={1}>{displayBankName}</Text>
@@ -126,115 +132,113 @@ export function LoanProductCard({
           <Text style={styles.ctaBtnPrimaryText}>
             {t('mobile.loan.hub.card.cta.apply')}
           </Text>
-          <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+          <Ionicons name="arrow-forward" size={14} color={tokens.textOnBrand} />
         </Pressable>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.surface.default,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 12,
-  },
-  bankLogoPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: Colors.accent[50],
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  bankInfo: {
-    flex: 1,
-  },
-  bankName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.neutral[500],
-    letterSpacing: 0.2,
-  },
-  productName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.neutral[900],
-    marginTop: 2,
-    letterSpacing: -0.2,
-    lineHeight: 20,
-  },
-  metricsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.bg.subtle,
-    borderRadius: 10,
-    padding: 10,
-    gap: 4,
-  },
-  metric: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-  },
-  metricLabel: {
-    fontSize: 10,
-    color: Colors.neutral[500],
-    fontWeight: '500',
-  },
-  metricValue: {
-    fontSize: 12,
-    color: Colors.neutral[800],
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  metricDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: Colors.neutral[200],
-  },
-  ctaRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  ctaBtn: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  ctaBtnOutline: {
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
-  },
-  ctaBtnOutlineText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.neutral[700],
-  },
-  ctaBtnPrimary: {
-    backgroundColor: Colors.loan,
-  },
-  ctaBtnPrimaryText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-});
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: tk.raised,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 12,
+      ...tk.elevation1,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      marginBottom: 12,
+    },
+    bankLogoPlaceholder: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      backgroundColor: tk.loanAccent + '15',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    bankInfo: {
+      flex: 1,
+    },
+    bankName: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: tk.textSecondary,
+      letterSpacing: 0.2,
+    },
+    productName: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: tk.textPrimary,
+      marginTop: 2,
+      letterSpacing: -0.2,
+      lineHeight: 20,
+    },
+    metricsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: tk.sunken,
+      borderRadius: 10,
+      padding: 10,
+      gap: 4,
+    },
+    metric: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 2,
+    },
+    metricLabel: {
+      fontSize: 10,
+      color: tk.textSecondary,
+      fontWeight: '500',
+    },
+    metricValue: {
+      fontSize: 12,
+      color: tk.textPrimary,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    metricDivider: {
+      width: 1,
+      height: 28,
+      backgroundColor: tk.border,
+    },
+    ctaRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 12,
+    },
+    ctaBtn: {
+      flex: 1,
+      minHeight: 44,
+      borderRadius: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+    },
+    ctaBtnOutline: {
+      borderWidth: 1.5,
+      borderColor: tk.border,
+    },
+    ctaBtnOutlineText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: tk.textSecondary,
+    },
+    ctaBtnPrimary: {
+      backgroundColor: tk.loanAccent,
+    },
+    ctaBtnPrimaryText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: tk.textOnBrand,
+    },
+  }),
+);

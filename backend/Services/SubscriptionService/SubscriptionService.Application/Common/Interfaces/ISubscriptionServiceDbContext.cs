@@ -18,6 +18,12 @@ public interface ISubscriptionServiceDbContext
     /// <summary>Invoices (subscription.invoices).</summary>
     DbSet<Invoice> Invoices { get; }
 
+    /// <summary>GAP-034: Admin-configured Razorpay credentials (single row).</summary>
+    DbSet<RazorpayConfig> RazorpayConfigs { get; }
+
+    /// <summary>GAP-034: Metered usage records for feature consumption tracking.</summary>
+    DbSet<UsageRecord> UsageRecords { get; }
+
     /// <summary>Persists changes to the subscription schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

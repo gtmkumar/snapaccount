@@ -8,7 +8,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 interface ETACountdownCardProps {
   totalDays: number;
@@ -23,17 +23,19 @@ export function ETACountdownCard({
   etaLabel,
   testID,
 }: ETACountdownCardProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const progress = totalDays > 0 ? Math.min(elapsedDays / totalDays, 1) : 0;
   const pct = Math.round(progress * 100);
 
   const progressColor =
-    pct < 50 ? Colors.success[500] : pct < 80 ? Colors.warning[500] : Colors.error[500];
+    pct < 50 ? tokens.successFg : pct < 80 ? tokens.warningFg : tokens.errorFg;
 
   return (
     <View testID={testID} style={styles.card}>
       <View style={styles.header}>
-        <Ionicons name="time-outline" size={16} color={Colors.neutral[500]} />
+        <Ionicons name="time-outline" size={16} color={tokens.textSecondary} />
         <Text style={styles.title}>
           {etaLabel ?? t('mobile.loan.status.eta.title')}
         </Text>
@@ -56,13 +58,14 @@ export function ETACountdownCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   card: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 14,
     padding: 14,
     gap: 8,
-    shadowColor: '#0F172A',
+    shadowColor: tk.shadowColor,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
@@ -76,17 +79,17 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     flex: 1,
   },
   progress: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
   },
   trackBg: {
     height: 6,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -94,4 +97,5 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
-});
+  }),
+);

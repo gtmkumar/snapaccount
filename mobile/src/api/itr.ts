@@ -189,7 +189,11 @@ export type ItrNoticeType =
   | 'Notice_156'
   | 'Other';
 
-export type ItrNoticeStatus = 'Open' | 'Responded' | 'Closed' | 'Overdue';
+/**
+ * Canonical server notice lifecycle (aligned with GstNoticeStatus, Wave 7
+ * residual #7). "Overdue" is computed client-side — src/lib/noticeStatus.ts.
+ */
+export type ItrNoticeStatus = 'RECEIVED' | 'UNDER_REVIEW' | 'RESPONDED' | 'CLOSED';
 
 export interface ItrNoticeAttachment {
   gcsUri: string;

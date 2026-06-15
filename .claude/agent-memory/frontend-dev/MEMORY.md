@@ -11,3 +11,16 @@
 - [SEC-045 PayloadViewer OAuth hotfix](project_sec045_fix.md) — Bearer ***{last6} masking; 4 new tests; 34 pre-existing lint warnings also fixed
 - [Auth/RBAC Module 1 Completion](project_rbac_module1.md) — roles matrix, orgs list/detail, invite acceptance, permission-gated nav; 699 tests, 0 lint errors
 - [Task #20 Auth Features](project_task20_auth_features.md) — user prefs, devices, forgot/reset password, 2FA TOTP; qrcode.react QRCodeSVG; Badge uses variant not color; 864 tests
+- [i18n pattern — @/i18n not react-i18next](feedback_i18n_pattern.md) — use custom t() from @/i18n; react-i18next not initialized in tests; status enums need .toLowerCase() for key lookup
+- [Test QueryClient staleTime:Infinity](feedback_test_queryclient.md) — React 19 double-mount causes 2 fetches; staleTime:Infinity prevents; prefer toHaveBeenCalled() over CalledTimes(1)
+- [Task #2 B15 wire + WEB-13/16 fixes](project_task2_b15_wire.md) — approve/reject/clarify/archive wired; common.previous→common.prev; listGstReturns orgId required; 923 tests
+- [Task #11/#12 completion](project_task11_12_completion.md) — subscription stats wired; react-i18next removed; 14 files migrated; 1611-key parity; 928 tests, 0 lint errors
+- [Task #26/#30 design elevation S0 + slaCompliance ratio fix](project_task26_30_design_elevation.md) — S0 canonical tokens (Emerald success, Orange accent, radius-sm 6px, color-loan EA580C); slaCompliance 0..1→% conversion; 941 tests
+- [Task #33 MCA edit-log page](project_task33_mca_editlog.md) — accountingApi.ts + EditLogPage + /compliance/edit-log route + sidebar + 36 i18n keys; 963 tests, 0 lint errors
+- [Task #32 GSTN IMS Inbox](project_task32_ims_inbox.md) — 3 routes + gstImsApi + 84 i18n keys (en/hi/bn) + 44 tests; Zod UUID v4 caveat; optimistic accept/undo; 963→1007 tests
+- [S3/S5 design elevation: skeleton sweep + dashboard hierarchy](project_s3_s5_design_elevation.md) — 5 pages fixed (UserDetail/LoansListKpi/PartnerBanks/PartnerBanksSettings/CallbackKpi); dashboard 3-tier hierarchy; 89 new i18n keys; 1007 tests
+- [Wave 5 QA bugfixes BUG-MCA-ETYPE-005 + BUG-DASH-KB-004](project_wave5_bugfixes.md) — entityType snake_case regression tests; Tier3TabBar ARIA keyboard nav (roving tabIndex + Arrow/Home/End); 1007→1022 tests
+- [Wave 6 batch #39 completion](project_wave6_batch39.md) — GAP-023 callback gating, GAP-036 subscriber/invoice pages, GAP-038 health page, GAP-035 upgrade CTA, GAP-052 UX fixes; +91 i18n keys; 1022 tests, 0 lint
+- [GAP-022 GST Tax Rate Config](project_gap022_tax_rates.md) — effective-dated rate admin page; GST_SLABS constant; computeTaxBreakdown; EmptyState uses variant not icon; 1022→1047 tests
+- [Wave 7 + 7A Residual Reconciliation](project_wave7_completion.md) — GAP-037/031/108/032/051 + all 3 CA residuals wired to real contracts; 2140 i18n keys; 1078 tests, 0 lint
+- [BUG-W7-06 Device Approval Queue](project_wave7_completion.md#bug-w7-06-fix-2026-06-12--post-wave-7-live-qa) — GAP-047 queue built; devicesApi extended; Settings section added; 32 i18n keys; 2171 key parity; 1092 tests

@@ -26,13 +26,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { PanInput } from '../../components/shared/PanInput';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { isValidPAN } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import apiClient, { getApiError } from '../../lib/api';
+import { logger } from '../../lib/logger';
 import { saveDocument } from '../../api/documents';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
@@ -42,13 +44,15 @@ interface Props {
   navigation: NavProp;
 }
 
-const schema = z.object({
-  pan: z.string().refine(isValidPAN, 'Invalid PAN format (e.g. ABCDE1234F)'),
-  fullName: z.string().min(2, 'Full name is required'),
-  dateOfBirth: z.string().min(10, 'Date of birth is required (DD/MM/YYYY)'),
-});
+// Schema factory so validation messages resolve through i18n (I18N-WIZARD #1).
+const makeSchema = (t: TFunction) =>
+  z.object({
+    pan: z.string().refine(isValidPAN, t('mobile.auth.wizard.valPanInvalid')),
+    fullName: z.string().min(2, t('mobile.auth.wizard.valFullNameRequired')),
+    dateOfBirth: z.string().min(10, t('mobile.auth.wizard.valDobRequired')),
+  });
 
-type FormData = z.infer<typeof schema>;
+type FormData = z.infer<ReturnType<typeof makeSchema>>;
 
 /** Convert DD/MM/YYYY → ISO YYYY-MM-DD (backend DateOnly). Undefined if unparseable. */
 function toIsoDate(ddmmyyyy?: string): string | undefined {
@@ -59,12 +63,16 @@ function toIsoDate(ddmmyyyy?: string): string | undefined {
 }
 
 export function IndividualProfileWizardScreen({ navigation }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { updateProfile, markAuthenticated } = useAuthStore();
   const { t } = useTranslation();
   const [loading, setLoading] = React.useState(false);
   const [panVerified, setPanVerified] = React.useState(false);
 
-  const form = useForm<FormData>({ resolver: zodResolver(schema) });
+  // Schema (and its messages) re-resolves when the active language changes.
+  const resolver = React.useMemo(() => zodResolver(makeSchema(t)), [t]);
+  const form = useForm<FormData>({ resolver });
 
   const handleSubmit = form.handleSubmit(async (data) => {
     setLoading(true);
@@ -92,7 +100,9 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
       // which renders the salaried-individual tab set for userType=employee).
       markAuthenticated();
     } catch (err: unknown) {
-      Alert.alert('Error', getApiError(err).message || 'Could not save profile. Please try again.');
+      // Never surface raw (English-only) server text — translated message + dev log.
+      logger.debug('individual-wizard', 'profile save failed', { err: getApiError(err) });
+      Alert.alert(t('mobile.common.error'), t('mobile.auth.wizard.saveFailed'));
     } finally {
       setLoading(false);
     }
@@ -101,7 +111,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Button label="← Back" variant="ghost" size="sm" onPress={() => navigation.goBack()} />
+        <Button label={`← ${t('mobile.auth.wizard.back')}`} variant="ghost" size="sm" onPress={() => navigation.goBack()} />
       </View>
 
       <KeyboardAvoidingView
@@ -113,9 +123,15 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.stepTitle}>Your tax profile</Text>
+          <Text style={styles.stepTitle}>{t('mobile.auth.wizard.individualTitle')}</Text>
+
+          {/* Trust signal on the regulated step (spec §4.2) */}
+          <View style={styles.trustBanner}>
+            <Ionicons name="lock-closed-outline" size={16} color={tokens.successFg} />
+            <Text style={styles.trustText}>{t('mobile.auth.wizard.trustPan')}</Text>
+          </View>
           <Text style={styles.stepSubtitle}>
-            We'll use your PAN to set up personal ITR filing. No business details needed.
+            {t('mobile.auth.wizard.individualSubtitle')}
           </Text>
 
           <Controller
@@ -123,7 +139,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
             name="pan"
             render={({ field, fieldState }) => (
               <PanInput
-                label="PAN Number"
+                label={t('mobile.auth.wizard.panLabel')}
                 value={field.value ?? ''}
                 onChangeText={(v) => {
                   field.onChange(v);
@@ -137,7 +153,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
 
           {panVerified && (
             <View style={styles.verifiedRow}>
-              <Ionicons name="checkmark-circle" size={16} color={Colors.success[600]} />
+              <Ionicons name="checkmark-circle" size={16} color={tokens.successFg} />
               <Text style={styles.verifiedText}>{t('mobile.auth.kyc.panVerified')}</Text>
             </View>
           )}
@@ -147,8 +163,8 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
             name="fullName"
             render={({ field, fieldState }) => (
               <Input
-                label="Full Name (as on PAN)"
-                placeholder="Enter your full name"
+                label={t('mobile.auth.wizard.fullNameLabel')}
+                placeholder={t('mobile.auth.wizard.fullNamePlaceholder')}
                 value={field.value}
                 onChangeText={field.onChange}
                 error={fieldState.error?.message}
@@ -161,8 +177,8 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
             name="dateOfBirth"
             render={({ field, fieldState }) => (
               <Input
-                label="Date of Birth"
-                placeholder="DD/MM/YYYY"
+                label={t('mobile.auth.wizard.dobLabel')}
+                placeholder={t('mobile.auth.wizard.dobPlaceholder')}
                 value={field.value}
                 onChangeText={field.onChange}
                 error={fieldState.error?.message}
@@ -174,10 +190,9 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
 
           <View style={styles.infoBanner}>
             <View style={styles.bannerRow}>
-              <Ionicons name="lock-closed-outline" size={14} color={Colors.success[600]} style={styles.bannerIcon} />
+              <Ionicons name="lock-closed-outline" size={14} color={tokens.successFg} style={styles.bannerIcon} />
               <Text style={styles.infoBannerText}>
-                Your PAN is safe. We use it only for government portal verification.
-                You can add Aadhaar and Form 16 later from your profile.
+                {t('mobile.auth.wizard.individualPanInfo')}
               </Text>
             </View>
           </View>
@@ -189,7 +204,7 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
             leaving no visible way to submit. */}
         <View style={styles.footer}>
           <Button
-            label="Complete Setup"
+            label={t('mobile.auth.wizard.completeSetup')}
             onPress={handleSubmit}
             loading={loading}
             fullWidth
@@ -201,10 +216,11 @@ export function IndividualProfileWizardScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg.base,
+    backgroundColor: tk.canvas,
   },
   flex: { flex: 1 },
   header: {
@@ -223,25 +239,43 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 24,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
-    backgroundColor: Colors.bg.base,
+    borderTopColor: tk.border,
+    backgroundColor: tk.canvas,
+  },
+  trustBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: tk.successTint,
+    borderWidth: 1,
+    borderColor: tk.successTintBorder,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  trustText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: tk.successFg,
+    fontWeight: '500',
   },
   stepTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     marginBottom: 8,
   },
   stepSubtitle: {
     fontSize: 14,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     marginBottom: 24,
     lineHeight: 20,
   },
   infoBanner: {
-    backgroundColor: Colors.info[50],
+    backgroundColor: tk.infoTint,
     borderLeftWidth: 4,
-    borderLeftColor: Colors.info[600],
+    borderLeftColor: tk.infoFg,
     padding: 12,
     borderRadius: 8,
     marginVertical: 16,
@@ -250,7 +284,7 @@ const styles = StyleSheet.create({
   bannerIcon: { marginRight: 6, marginTop: 2 },
   infoBannerText: {
     fontSize: 13,
-    color: Colors.info[600],
+    color: tk.infoFg,
     lineHeight: 18,
     flex: 1,
   },
@@ -262,7 +296,8 @@ const styles = StyleSheet.create({
   },
   verifiedText: {
     fontSize: 13,
-    color: Colors.success[600],
+    color: tk.successFg,
     fontWeight: '600',
   },
-});
+  }),
+);

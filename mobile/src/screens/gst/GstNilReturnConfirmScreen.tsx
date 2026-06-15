@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { ResultScreen } from '../../components/shared/ResultScreen';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { fileNilReturn, getGstReturn } from '../../api/gst';
 import type { GstStackParamList } from '../../navigation/GstStack';
@@ -35,6 +35,8 @@ interface Props {
 }
 
 export function GstNilReturnConfirmScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
   const { returnId, period, gstin } = route.params;
@@ -100,7 +102,7 @@ export function GstNilReturnConfirmScreen({ navigation, route }: Props) {
           accessibilityLabel={t('mobile.common.back')}
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.gst.nilReturn.title')}</Text>
         <View style={{ width: 40 }} />
@@ -111,14 +113,14 @@ export function GstNilReturnConfirmScreen({ navigation, route }: Props) {
         showsVerticalScrollIndicator={false}
       >
         {isLoading ? (
-          <ActivityIndicator size="large" color={Colors.gst} style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={tokens.gstAccent} style={{ marginTop: 40 }} />
         ) : (
           <>
             {/* Return info card */}
             <View style={styles.infoCard}>
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
-                  <Ionicons name="document-text" size={22} color={Colors.gst} />
+                  <Ionicons name="document-text" size={22} color={tokens.gstAccent} />
                 </View>
                 <View>
                   <Text style={styles.infoLabel}>{t('mobile.gst.nilReturn.returnType')}</Text>
@@ -130,7 +132,7 @@ export function GstNilReturnConfirmScreen({ navigation, route }: Props) {
               <View style={styles.infoDivider} />
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
-                  <Ionicons name="calendar-outline" size={22} color={Colors.gst} />
+                  <Ionicons name="calendar-outline" size={22} color={tokens.gstAccent} />
                 </View>
                 <View>
                   <Text style={styles.infoLabel}>{t('mobile.gst.nilReturn.period')}</Text>
@@ -140,7 +142,7 @@ export function GstNilReturnConfirmScreen({ navigation, route }: Props) {
               <View style={styles.infoDivider} />
               <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
-                  <Ionicons name="business-outline" size={22} color={Colors.gst} />
+                  <Ionicons name="business-outline" size={22} color={tokens.gstAccent} />
                 </View>
                 <View>
                   <Text style={styles.infoLabel}>{t('mobile.gst.nilReturn.gstin')}</Text>
@@ -151,7 +153,7 @@ export function GstNilReturnConfirmScreen({ navigation, route }: Props) {
 
             {/* Warning banner */}
             <View style={styles.warningBanner}>
-              <Ionicons name="warning" size={20} color={Colors.warning[700]} />
+              <Ionicons name="warning" size={20} color={tokens.warningFg} />
               <Text style={styles.warningText}>
                 {t('mobile.gst.nilReturn.warningText')}
               </Text>
@@ -171,7 +173,7 @@ export function GstNilReturnConfirmScreen({ navigation, route }: Props) {
                   <Ionicons
                     name="checkmark-circle-outline"
                     size={16}
-                    color={Colors.neutral[500]}
+                    color={tokens.textSecondary}
                   />
                   <Text style={styles.impliesText}>{t(key)}</Text>
                 </View>
@@ -224,30 +226,31 @@ export function GstNilReturnConfirmScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     letterSpacing: -0.2,
   },
   scrollContent: {
@@ -255,10 +258,10 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   infoCard: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.neutral[100],
+    borderColor: tk.border,
     overflow: 'hidden',
   },
   infoRow: {
@@ -271,19 +274,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.gst + '12',
+    backgroundColor: tk.gstAccent + '12',
     alignItems: 'center',
     justifyContent: 'center',
   },
   infoLabel: {
     fontSize: 12,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     marginBottom: 2,
   },
   infoValue: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
   },
   gstinMono: {
     letterSpacing: 1.5,
@@ -291,37 +294,37 @@ const styles = StyleSheet.create({
   },
   infoDivider: {
     height: 1,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     marginHorizontal: 16,
   },
   warningBanner: {
     flexDirection: 'row',
     gap: 10,
-    backgroundColor: Colors.warning[50],
+    backgroundColor: tk.warningTint,
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.warning[200],
+    borderColor: tk.warningTintBorder,
     alignItems: 'flex-start',
   },
   warningText: {
     flex: 1,
     fontSize: 13,
-    color: Colors.warning[800],
+    color: tk.warningFg,
     lineHeight: 19,
   },
   sectionCard: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.neutral[100],
+    borderColor: tk.border,
     gap: 12,
   },
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
   },
   impliesRow: {
     flexDirection: 'row',
@@ -331,18 +334,18 @@ const styles = StyleSheet.create({
   impliesText: {
     flex: 1,
     fontSize: 13,
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     lineHeight: 18,
   },
   ackRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
     minHeight: 52,
   },
   checkbox: {
@@ -350,29 +353,29 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: Colors.neutral[300],
+    borderColor: tk.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
   },
   checkboxChecked: {
-    backgroundColor: Colors.gst,
-    borderColor: Colors.gst,
+    backgroundColor: tk.gstAccent,
+    borderColor: tk.gstAccent,
   },
   ackText: {
     flex: 1,
     fontSize: 13,
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
     lineHeight: 19,
   },
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
-    backgroundColor: Colors.surface.default,
+    borderTopColor: tk.border,
+    backgroundColor: tk.raised,
   },
   fileBtn: {
-    backgroundColor: Colors.gst,
+    backgroundColor: tk.gstAccent,
     borderRadius: 14,
     minHeight: 52,
     alignItems: 'center',
@@ -384,6 +387,7 @@ const styles = StyleSheet.create({
   fileBtnText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
   },
-});
+  }),
+);

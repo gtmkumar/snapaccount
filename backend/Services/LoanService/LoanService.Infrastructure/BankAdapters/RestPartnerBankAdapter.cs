@@ -40,9 +40,11 @@ public sealed class RestPartnerBankAdapter(
 
         try
         {
-            // P6-HANDOFF-27: Decrypt API config using ICredentialEncryptionService
+            // P6-HANDOFF-27: Decrypt API config using ICredentialEncryptionService.
+            // SWEEP-FIX WEB-03: ApiConfigEncrypted is Base64 string (jsonb in DB) — convert back to bytes.
+            var encryptedBytes = Convert.FromBase64String(bank.ApiConfigEncrypted);
             var configJson = await credentialEncryption.DecryptAsync(
-                bank.ApiConfigEncrypted, bank.ApiConfigKeyRef, ct);
+                encryptedBytes, bank.ApiConfigKeyRef, ct);
 
             using var configDoc = JsonDocument.Parse(configJson);
             var baseUrl = configDoc.RootElement.GetProperty("base_url").GetString()!;

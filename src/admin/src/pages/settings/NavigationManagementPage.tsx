@@ -6,11 +6,11 @@
  * add/edit/reorder/(de)activate menu items, set icon/url/parent, and pick the
  * permission(s) that reveal each item. The sidebar reflects changes on next load.
  *
- * i18n: react-i18next useTranslation with inline string defaults (no {{}} interp).
+ * i18n: @/i18n t() (NOT react-i18next).
  */
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import { Plus, Pencil, Trash2, Search, GripVertical } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -29,7 +29,6 @@ import { listPermissions } from '@/lib/rbacApi'
 import { cn } from '@/lib/utils'
 
 export default function NavigationManagementPage() {
-  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<NavigationItemAdmin | null>(null)
   const [creating, setCreating] = useState(false)
@@ -49,11 +48,11 @@ export default function NavigationManagementPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteNavigationItem(id),
     onSuccess: () => {
-      toast.success(t('nav.mgmt.deleted', 'Menu item deleted'))
+      toast.success(t('nav.mgmt.deleted'))
       setDeleteTarget(null)
       invalidate()
     },
-    onError: () => { toast.error(t('nav.mgmt.deleteError', 'Failed to delete menu item')); setDeleteTarget(null) },
+    onError: () => { toast.error(t('nav.mgmt.deleteError')); setDeleteTarget(null) },
   })
 
   // Order: top-level by displayOrder, each followed by its children.
@@ -72,12 +71,12 @@ export default function NavigationManagementPage() {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-4">
         <PageHeader
-          title={t('nav.mgmt.title', 'Navigation')}
-          subtitle={t('nav.mgmt.subtitle', 'Manage the sidebar menu — items, order, icons, and which permission reveals each.')}
+          title={t('nav.mgmt.title')}
+          subtitle={t('nav.mgmt.subtitle')}
         />
         <Button variant="primary" onClick={() => setCreating(true)}>
           <Plus className="h-4 w-4 mr-1" />
-          {t('nav.mgmt.add', 'Add menu item')}
+          {t('nav.mgmt.add')}
         </Button>
       </div>
 
@@ -85,14 +84,14 @@ export default function NavigationManagementPage() {
         {isLoading ? (
           <Skeleton variant="list" />
         ) : ordered.length === 0 ? (
-          <EmptyState variant="generic" title={t('nav.mgmt.empty', 'No menu items')} />
+          <EmptyState variant="generic" title={t('nav.mgmt.empty')} />
         ) : (
           <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
-            <table className="w-full text-sm" aria-label={t('nav.mgmt.title', 'Navigation')}>
+            <table className="w-full text-sm" aria-label={t('nav.mgmt.title')}>
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] bg-[var(--surface-sunken)]">
-                  {['', t('nav.mgmt.col.label', 'Label'), t('nav.mgmt.col.key', 'Key'), t('nav.mgmt.col.url', 'URL'),
-                    t('nav.mgmt.col.perms', 'Permissions'), t('nav.mgmt.col.status', 'Status'), ''].map((h, i) => (
+                  {['', t('nav.mgmt.col.label'), t('nav.mgmt.col.key'), t('nav.mgmt.col.url'),
+                    t('nav.mgmt.col.perms'), t('nav.mgmt.col.status'), ''].map((h, i) => (
                     <th key={i} className="px-3 py-2.5 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -117,23 +116,23 @@ export default function NavigationManagementPage() {
                             ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
                             : 'bg-[var(--surface-sunken)] text-[var(--text-secondary)]')}>
                           {item.permissionIds.length === 0
-                            ? t('nav.mgmt.public', 'Public')
-                            : t('nav.mgmt.permCount', '{{n}} permission(s)').replace('{{n}}', String(item.permissionIds.length))}
+                            ? t('nav.mgmt.public')
+                            : t('nav.mgmt.permCount', { n: item.permissionIds.length })}
                         </span>
                       </td>
                       <td className="px-3 py-2.5">
                         <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium',
                           item.isActive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
                             : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400')}>
-                          {item.isActive ? t('nav.mgmt.active', 'Active') : t('nav.mgmt.inactive', 'Hidden')}
+                          {item.isActive ? t('nav.mgmt.active') : t('nav.mgmt.inactive')}
                         </span>
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="flex gap-1.5 justify-end">
-                          <Button variant="ghost" size="sm" onClick={() => setEditing(item)} aria-label={t('common.edit', 'Edit')}>
+                          <Button variant="ghost" size="sm" onClick={() => setEditing(item)} aria-label={t('common.edit')}>
                             <Pencil className="h-4 w-4 text-[var(--text-tertiary)]" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(item)} aria-label={t('common.delete', 'Delete')}>
+                          <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(item)} aria-label={t('common.delete')}>
                             <Trash2 className="h-4 w-4 text-rose-500" />
                           </Button>
                         </div>
@@ -159,14 +158,14 @@ export default function NavigationManagementPage() {
       <Dialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
-        title={t('nav.mgmt.delete.title', 'Delete menu item')}
-        description={t('nav.mgmt.delete.desc', 'It will be removed from the sidebar. Child items are promoted to top level.')}
+        title={t('nav.mgmt.delete.title')}
+        description={t('nav.mgmt.delete.desc')}
         footer={
           <>
             <Button variant="danger" loading={deleteMutation.isPending} onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}>
-              {t('common.delete', 'Delete')}
+              {t('common.delete')}
             </Button>
-            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>{t('common.cancel', 'Cancel')}</Button>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>{t('common.cancel')}</Button>
           </>
         }
       >
@@ -186,7 +185,6 @@ function NavItemDialog({
   onClose: () => void
   onSaved: () => void
 }) {
-  const { t } = useTranslation()
   const isEdit = item !== null
   const [key, setKey] = useState(item?.key ?? '')
   const [label, setLabel] = useState(item?.label ?? '')
@@ -237,11 +235,11 @@ function NavItemDialog({
         ? updateNavigationItem(item!.id, payload)
         : createNavigationItem({ key: key.trim(), ...payload }).then(() => undefined)
     },
-    onSuccess: () => { toast.success(isEdit ? t('nav.mgmt.saved', 'Menu item saved') : t('nav.mgmt.created', 'Menu item created')); onSaved() },
+    onSuccess: () => { toast.success(isEdit ? t('nav.mgmt.saved') : t('nav.mgmt.created')); onSaved() },
     onError: (err: unknown) => {
       const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code
-      if (code === 'Navigation.Duplicate') toast.error(t('nav.mgmt.dupKey', 'A menu item with that key already exists'))
-      else toast.error(t('nav.mgmt.saveError', 'Failed to save menu item'))
+      if (code === 'Navigation.Duplicate') toast.error(t('nav.mgmt.dupKey'))
+      else toast.error(t('nav.mgmt.saveError'))
     },
   })
 
@@ -253,53 +251,53 @@ function NavItemDialog({
   return (
     <Dialog
       open onClose={onClose}
-      title={isEdit ? t('nav.mgmt.edit.title', 'Edit menu item') : t('nav.mgmt.add', 'Add menu item')}
+      title={isEdit ? t('nav.mgmt.edit.title') : t('nav.mgmt.add')}
       size="lg"
       footer={
         <>
           <Button variant="primary" onClick={() => save.mutate()} loading={save.isPending} disabled={!canSave}>
-            {t('common.save', 'Save')}
+            {t('common.save')}
           </Button>
-          <Button variant="ghost" onClick={onClose}>{t('common.cancel', 'Cancel')}</Button>
+          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
         </>
       }
     >
       <div className="space-y-4 py-1">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.key', 'Key')} *</label>
+            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.key')} *</label>
             <input value={key} disabled={isEdit} onChange={e => setKey(e.target.value.toLowerCase())}
               placeholder="reports.advanced" className={cn(field, 'font-mono', isEdit && 'opacity-60')} />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.label', 'Label')} *</label>
+            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.label')} *</label>
             <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Advanced Reports" className={field} />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.url', 'URL')} *</label>
+            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.url')} *</label>
             <input value={url} onChange={e => setUrl(e.target.value)} placeholder="/reports/advanced" className={cn(field, 'font-mono')} />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.order', 'Display order')}</label>
+            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.order')}</label>
             <input type="number" value={displayOrder} onChange={e => setDisplayOrder(Number(e.target.value))} className={field} />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.icon', 'Icon')}</label>
+            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.icon')}</label>
             <select value={iconKey} onChange={e => setIconKey(e.target.value)} className={field}>
-              <option value="">{t('nav.mgmt.noIcon', '(none)')}</option>
+              <option value="">{t('nav.mgmt.noIcon')}</option>
               {NAV_ICON_KEYS.map(k => <option key={k} value={k}>{k}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.parent', 'Parent')}</label>
+            <label className="block text-sm font-medium mb-1.5">{t('nav.mgmt.field.parent')}</label>
             <select value={parentId} onChange={e => setParentId(e.target.value)} className={field}>
-              <option value="">{t('nav.mgmt.topLevel', '(top level)')}</option>
+              <option value="">{t('nav.mgmt.topLevel')}</option>
               {parentOptions.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
           </div>
@@ -307,7 +305,7 @@ function NavItemDialog({
 
         <label className="flex items-center gap-3 text-sm">
           <Toggle checked={isActive} onChange={() => setIsActive(v => !v)} size="sm" id="nav-active" />
-          {t('nav.mgmt.field.active', 'Visible in sidebar')}
+          {t('nav.mgmt.field.active')}
         </label>
 
         {/* Visibility picker — which permission(s) reveal this item to a user.
@@ -315,35 +313,35 @@ function NavItemDialog({
             current admin's own permissions. */}
         <div>
           <label className="block text-sm font-medium mb-1">
-            {t('nav.mgmt.field.perms', 'Who can see this item')}
+            {t('nav.mgmt.field.perms')}
           </label>
           <p className="text-xs text-[var(--text-tertiary)] mb-2">
-            {t('nav.mgmt.permsHint', 'Pick the permission(s) a user must hold for this item to appear in their sidebar. Leave everything unchecked to show it to all users.')}
+            {t('nav.mgmt.permsHint')}
           </p>
 
           {permIds.size === 0 ? (
             <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300">
-              {t('nav.mgmt.publicHint', 'Public — visible to all users (no permission required).')}
+              {t('nav.mgmt.publicHint')}
             </div>
           ) : (
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs text-[var(--text-secondary)]">
-                {t('nav.mgmt.permSelected', '{{n}} permission(s) selected — any one grants access').replace('{{n}}', String(permIds.size))}
+                {t('nav.mgmt.permSelected', { n: permIds.size })}
               </span>
               <button type="button" onClick={() => setPermIds(new Set())}
                 className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] underline">
-                {t('nav.mgmt.clearPerms', 'Clear all')}
+                {t('nav.mgmt.clearPerms')}
               </button>
             </div>
           )}
 
           <div className="relative mb-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
-            <input value={permSearch} onChange={e => setPermSearch(e.target.value)} placeholder={t('nav.mgmt.permSearch', 'Search permissions…')} className={cn(field, 'pl-9')} />
+            <input value={permSearch} onChange={e => setPermSearch(e.target.value)} placeholder={t('nav.mgmt.permSearch')} className={cn(field, 'pl-9')} />
           </div>
           <div className="max-h-56 overflow-y-auto rounded-lg border border-[var(--border-subtle)]">
             {filteredModules.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-[var(--text-tertiary)]">{t('nav.mgmt.noPermMatch', 'No permissions match your search.')}</p>
+              <p className="px-3 py-3 text-xs text-[var(--text-tertiary)]">{t('nav.mgmt.noPermMatch')}</p>
             ) : filteredModules.map(m => (
               <div key={m.module}>
                 <div className="sticky top-0 z-10 bg-[var(--surface-sunken)] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] border-b border-[var(--border-subtle)]">

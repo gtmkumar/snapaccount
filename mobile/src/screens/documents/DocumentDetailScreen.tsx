@@ -18,13 +18,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { StatusBadge } from '../../components/ui/Badge';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { AmountDisplay } from '../../components/ui/AmountDisplay';
 import { StatusTimeline } from '../../components/shared/StatusTimeline';
-import { Colors } from '../../constants/colors';
-import { formatDateIN, formatINR } from '../../lib/utils';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { formatDateIN } from '../../lib/utils';
 import apiClient from '../../lib/api';
 import type { DocumentStackParamList } from '../../navigation/DocumentStack';
 import type { DocumentStatus } from '../../components/ui/Badge';
@@ -75,28 +77,30 @@ interface BackendDocumentDto {
   fields?: BackendOcrField[] | null;
 }
 
-// Human-readable labels for the well-known extracted field keys.
-const FIELD_LABELS: Record<string, string> = {
-  vendor_name: 'Vendor',
-  amount: 'Amount',
-  document_date: 'Date',
-  gstin: 'GSTIN',
-  invoice_number: 'Invoice No.',
-  gst_rate: 'GST Rate',
-  tax_amount: 'Tax',
-  total_amount: 'Total',
+// Translated labels for the well-known extracted field keys.
+const FIELD_LABEL_KEYS: Record<string, string> = {
+  vendor_name: 'mobile.docs.detail.fields.vendor',
+  amount: 'mobile.docs.detail.fields.amount',
+  document_date: 'mobile.docs.detail.fields.date',
+  gstin: 'mobile.docs.detail.fields.gstin',
+  invoice_number: 'mobile.docs.detail.fields.invoiceNo',
+  gst_rate: 'mobile.docs.detail.fields.gstRate',
+  tax_amount: 'mobile.docs.detail.fields.tax',
+  total_amount: 'mobile.docs.detail.fields.total',
 };
 
-function prettyLabel(key: string): string {
-  return FIELD_LABELS[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+function prettyLabel(key: string, t: TFunction): string {
+  const labelKey = FIELD_LABEL_KEYS[key];
+  if (labelKey) return t(labelKey);
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function mapDocument(d: BackendDocumentDto): DocumentDetail {
+function mapDocument(d: BackendDocumentDto, t: TFunction): DocumentDetail {
   const conf = Math.round((d.ocrConfidence ?? 0) * 100);
   return {
     id: d.id,
     filename: d.fileName,
-    category: 'Document',
+    category: t('mobile.docs.detail.categoryFallback'),
     status: d.status as DocumentStatus,
     imageUrl: d.storageUrl ?? '',
     date: d.documentDate ?? undefined,
@@ -106,7 +110,7 @@ function mapDocument(d: BackendDocumentDto): DocumentDetail {
     ocrFields: (d.fields ?? [])
       .filter((f) => f.value != null && f.value !== '')
       .map((f) => ({
-        label: prettyLabel(f.name),
+        label: prettyLabel(f.name, t),
         value: String(f.value),
         confidence: Math.round((f.confidence ?? d.ocrConfidence ?? 0) * 100),
       })),
@@ -117,13 +121,13 @@ function mapDocument(d: BackendDocumentDto): DocumentDetail {
 }
 
 const DOCUMENT_STATUS_STEPS = [
-  { id: 'uploaded', label: 'Uploaded' },
-  { id: 'ocr_complete', label: 'OCR Complete' },
-  { id: 'in_review', label: 'In Review' },
-  { id: 'processed', label: 'Processed' },
+  { id: 'uploaded', labelKey: 'mobile.docs.detail.steps.uploaded' },
+  { id: 'ocr_complete', labelKey: 'mobile.docs.detail.steps.ocrComplete' },
+  { id: 'in_review', labelKey: 'mobile.docs.detail.steps.inReview' },
+  { id: 'processed', labelKey: 'mobile.docs.detail.steps.processed' },
 ];
 
-function getTimelineSteps(status: DocumentStatus) {
+function getTimelineSteps(status: DocumentStatus, t: TFunction) {
   const statusOrder: Record<DocumentStatus, number> = {
     UPLOADED: 0,
     OCR_COMPLETE: 1,
@@ -134,7 +138,8 @@ function getTimelineSteps(status: DocumentStatus) {
   const currentIndex = statusOrder[status];
 
   return DOCUMENT_STATUS_STEPS.map((step, index) => ({
-    ...step,
+    id: step.id,
+    label: t(step.labelKey),
     status: index < currentIndex
       ? 'completed' as const
       : index === currentIndex
@@ -143,31 +148,34 @@ function getTimelineSteps(status: DocumentStatus) {
   }));
 }
 
-function getOcrConfidenceConfig(confidence: number) {
+function getOcrConfidenceConfig(confidence: number, tk: ThemeTokens, t: TFunction) {
   if (confidence >= 80) return {
-    color: Colors.success[600],
-    bg: Colors.success[100],
-    label: 'High confidence — auto-processed',
+    color: tk.successFg,
+    bg: tk.successTint,
+    label: t('mobile.docs.detail.confidence.high'),
   };
   if (confidence >= 50) return {
-    color: Colors.warning[600],
-    bg: Colors.warning[100],
-    label: 'Medium confidence — please verify data',
+    color: tk.warningFg,
+    bg: tk.warningTint,
+    label: t('mobile.docs.detail.confidence.medium'),
   };
   return {
-    color: Colors.error[600],
-    bg: Colors.error[100],
-    label: 'Low confidence — manual review required',
+    color: tk.errorFg,
+    bg: tk.errorTint,
+    label: t('mobile.docs.detail.confidence.low'),
   };
 }
 
-function getFieldConfidenceColor(confidence: number): string {
+function getFieldConfidenceColor(confidence: number, tk: ThemeTokens): string {
   if (confidence >= 80) return 'transparent';
-  if (confidence >= 50) return Colors.warning[100];
-  return Colors.error[100];
+  if (confidence >= 50) return tk.warningTint;
+  return tk.errorTint;
 }
 
 export function DocumentDetailScreen({ navigation, route }: Props) {
+  const styles = useStyles();
+  const { tokens } = useTheme();
+  const { t } = useTranslation();
   const { documentId } = route.params;
 
   const { data: document, isLoading } = useQuery({
@@ -179,25 +187,25 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
     },
     queryFn: async () => {
       const res = await apiClient.get<BackendDocumentDto>(`/documents/${documentId}`);
-      return mapDocument(res.data);
+      return mapDocument(res.data, t);
     },
   });
 
   const handleDelete = () => {
     Alert.alert(
-      'Delete Document',
-      'Are you sure you want to delete this document? This action cannot be undone.',
+      t('mobile.docs.detail.action.delete'),
+      t('mobile.docs.detail.delete.body'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('mobile.common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('mobile.docs.detail.delete.confirm'),
           style: 'destructive',
           onPress: async () => {
             try {
               await apiClient.delete(`/documents/${documentId}`);
               navigation.goBack();
             } catch {
-              Alert.alert('Error', 'Could not delete document. Please try again.');
+              Alert.alert(t('mobile.common.error'), t('mobile.docs.detail.delete.error'));
             }
           },
         },
@@ -209,14 +217,14 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loading}>
-          <Text style={styles.loadingText}>Loading...</Text>
+          <Text style={styles.loadingText}>{t('mobile.docs.detail.loading')}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const ocrConfig = getOcrConfidenceConfig(document.ocrConfidence);
-  const timelineSteps = getTimelineSteps(document.status);
+  const ocrConfig = getOcrConfidenceConfig(document.ocrConfidence, tokens, t);
+  const timelineSteps = getTimelineSteps(document.status, t);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -228,7 +236,11 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {document.category}
         </Text>
-        <Pressable style={styles.headerBtn} accessibilityLabel="Share">
+        <Pressable
+          style={styles.headerBtn}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.docs.detail.share')}
+        >
           <Text>⬆️</Text>
         </Pressable>
       </View>
@@ -259,7 +271,7 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
         {/* Status + Timeline */}
         <Card style={styles.section}>
           <View style={styles.statusRow}>
-            <Text style={styles.sectionTitle}>Status</Text>
+            <Text style={styles.sectionTitle}>{t('mobile.docs.detail.section.status')}</Text>
             <StatusBadge status={document.status} />
           </View>
           <StatusTimeline steps={timelineSteps} />
@@ -268,13 +280,13 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
         {/* OCR Fields */}
         {document.ocrFields.length > 0 && (
           <Card style={styles.section}>
-            <Text style={styles.sectionTitle}>Extracted Data</Text>
+            <Text style={styles.sectionTitle}>{t('mobile.docs.detail.section.extracted')}</Text>
             {document.ocrFields.map((field, index) => (
               <View
                 key={index}
                 style={[
                   styles.ocrFieldRow,
-                  { backgroundColor: getFieldConfidenceColor(field.confidence) },
+                  { backgroundColor: getFieldConfidenceColor(field.confidence, tokens) },
                 ]}
               >
                 <Text style={styles.ocrFieldLabel}>{field.label}</Text>
@@ -286,29 +298,29 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
 
         {/* Metadata */}
         <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>Details</Text>
+          <Text style={styles.sectionTitle}>{t('mobile.docs.detail.section.details')}</Text>
           <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>Category</Text>
+            <Text style={styles.metaLabel}>{t('mobile.docs.detail.meta.category')}</Text>
             <Text style={styles.metaValue}>{document.category}</Text>
           </View>
           {document.date && (
             <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>Date</Text>
+              <Text style={styles.metaLabel}>{t('mobile.docs.detail.fields.date')}</Text>
               <Text style={styles.metaValue}>{formatDateIN(new Date(document.date))}</Text>
             </View>
           )}
           {document.amount !== undefined && (
             <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>Amount</Text>
+              <Text style={styles.metaLabel}>{t('mobile.docs.detail.fields.amount')}</Text>
               <AmountDisplay amount={document.amount} size="sm" />
             </View>
           )}
           <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>Uploaded</Text>
+            <Text style={styles.metaLabel}>{t('mobile.docs.detail.meta.uploaded')}</Text>
             <Text style={styles.metaValue}>{formatDateIN(new Date(document.uploadedAt))}</Text>
           </View>
           <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>File Size</Text>
+            <Text style={styles.metaLabel}>{t('mobile.docs.detail.meta.fileSize')}</Text>
             <Text style={styles.metaValue}>{(document.fileSize / 1024).toFixed(1)} KB</Text>
           </View>
         </Card>
@@ -316,19 +328,19 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
         {/* Actions */}
         <View style={styles.actionsSection}>
           <Button
-            label="Share Document"
+            label={t('mobile.docs.detail.action.share')}
             variant="secondary"
             fullWidth
             onPress={() => {}}
           />
           <Button
-            label="Download PDF"
+            label={t('mobile.docs.detail.action.download')}
             variant="secondary"
             fullWidth
             onPress={() => {}}
           />
           <Button
-            label="Delete Document"
+            label={t('mobile.docs.detail.action.delete')}
             variant="ghost"
             fullWidth
             onPress={handleDelete}
@@ -340,27 +352,28 @@ export function DocumentDetailScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  loadingText: { fontSize: 16, color: Colors.neutral[500] },
+  loadingText: { fontSize: 16, color: tk.textSecondary },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[200],
+    borderBottomColor: tk.border,
   },
   backBtn: { padding: 4, marginRight: 8 },
-  backText: { fontSize: 20, color: Colors.brand[500] },
-  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: Colors.neutral[900] },
+  backText: { fontSize: 20, color: tk.brand500 },
+  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: tk.textPrimary },
   headerBtn: { padding: 8 },
   scrollContent: { padding: 16, gap: 16 },
   imageContainer: {
     height: 240,
-    backgroundColor: Colors.neutral[900],
+    backgroundColor: tk.textPrimary,
     borderRadius: 12,
     overflow: 'hidden',
     alignItems: 'center',
@@ -384,7 +397,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.neutral[800],
+    color: tk.textPrimary,
     marginBottom: 12,
   },
   ocrFieldRow: {
@@ -395,17 +408,18 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginBottom: 4,
   },
-  ocrFieldLabel: { fontSize: 13, color: Colors.neutral[600] },
-  ocrFieldValue: { fontSize: 13, fontWeight: '500', color: Colors.neutral[900] },
+  ocrFieldLabel: { fontSize: 13, color: tk.textSecondary },
+  ocrFieldValue: { fontSize: 13, fontWeight: '500', color: tk.textPrimary },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
-  metaLabel: { fontSize: 13, color: Colors.neutral[500] },
-  metaValue: { fontSize: 13, fontWeight: '500', color: Colors.neutral[800] },
+  metaLabel: { fontSize: 13, color: tk.textSecondary },
+  metaValue: { fontSize: 13, fontWeight: '500', color: tk.textPrimary },
   actionsSection: { gap: 10 },
   deleteBtn: {},
-});
+  }),
+);

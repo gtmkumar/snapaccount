@@ -42,6 +42,7 @@ public sealed class ListApplicationsQueryHandler(
 
         var total = await query.CountAsync(cancellationToken);
 
+        // Migration 066: assigned_bank_id column confirmed — project AssignedBankId and AssignedBank.Name.
         var items = await query
             .OrderByDescending(a => a.CreatedAt)
             .Skip((request.Page - 1) * request.PageSize)

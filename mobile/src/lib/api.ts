@@ -17,6 +17,7 @@ import axios, {
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useAuthStore } from '../store/authStore';
+import { getIntegrityToken } from '../services/deviceIntegrity';
 
 // Augment InternalAxiosRequestConfig to carry the retry sentinel.
 declare module 'axios' {
@@ -68,6 +69,8 @@ const SERVICE_PORTS: Record<string, number> = {
   '/loans': 5105,
   '/itr': 5106,
   '/chat': 5107,
+  // Wave 7A: CA appointments + message bookmarks live in ChatService under /appointments
+  '/appointments': 5107,
   '/notifications': 5108,
   '/reports': 5109,
   '/subscription': 5110,
@@ -80,6 +83,53 @@ function baseUrlForPath(url?: string): string {
   if (!url) return API_BASE_URL;
   const prefix = Object.keys(SERVICE_PORTS).find((p) => url.startsWith(p));
   return prefix ? `${HOST_ROOT}:${SERVICE_PORTS[prefix]}` : API_BASE_URL;
+}
+
+/**
+ * Base URL for the ChatService SignalR hub (`{base}/hubs/chat`).
+ *
+ * BUG-W7-IOS-001: the hub lives on ChatService (:5107), NOT on the auth host
+ * that `extra.apiBaseUrl` points at — negotiating against apiBaseUrl 404s.
+ * Resolve it like REST chat calls: optional `extra.chatBaseUrl` override in
+ * app.json (same pattern as documentsBaseUrl), else HOST_ROOT + the pinned
+ * chat port. Both paths get the Android `10.0.2.2` loopback rewrite.
+ */
+export const CHAT_HUB_BASE_URL: string = (() => {
+  const override = extra.chatBaseUrl as string | undefined;
+  return override ? resolveHost(override) : `${HOST_ROOT}:${SERVICE_PORTS['/chat']}`;
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAP-064 — device integrity attestation headers (Wave 8 pinned contract).
+//
+// EXACTLY these four POST call sites carry `X-Device-Integrity` +
+// `X-Device-Integrity-Platform`; do NOT blanket-add to other requests:
+//   1. POST /auth/otp/send                                (OTP send / resend)
+//   2. POST /auth/otp/verify                              (OTP verify / login)
+//   3. POST /loans/applications/{id}/submit               (loan application submit)
+//   4. POST /loans/applications/{id}/consents             (loan consent record)
+//
+// Soft-fail: when getIntegrityToken() resolves null (emulator, dev client
+// without the native module, unsupported device) we send NO header — backend
+// telemetry handles absence. The request itself is never blocked or delayed
+// beyond the (cached / sticky-unavailable) token lookup.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const INTEGRITY_HEADER = 'X-Device-Integrity';
+const INTEGRITY_PLATFORM_HEADER = 'X-Device-Integrity-Platform';
+
+const INTEGRITY_ROUTES: RegExp[] = [
+  /^\/auth\/otp\/send$/,
+  /^\/auth\/otp\/verify$/,
+  /^\/loans\/applications\/[^/]+\/submit$/,
+  /^\/loans\/applications\/[^/]+\/consents$/,
+];
+
+/** True when a request matches one of the 4 attestation-bearing call sites. */
+export function requiresDeviceIntegrity(method?: string, url?: string): boolean {
+  if ((method ?? '').toLowerCase() !== 'post' || !url) return false;
+  const path = url.split('?')[0];
+  return INTEGRITY_ROUTES.some((route) => route.test(path));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -101,7 +151,7 @@ export const apiClient: AxiosInstance = axios.create({
 // ─────────────────────────────────────────────────────────────────────────────
 
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  async (config: InternalAxiosRequestConfig) => {
     config.baseURL = baseUrlForPath(config.url);
 
     // For multipart uploads, let React Native set Content-Type itself so it
@@ -115,6 +165,22 @@ apiClient.interceptors.request.use(
     const token = useAuthStore.getState().firebaseToken;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // GAP-064: attach attestation headers on the 4 pinned call sites only.
+    // getIntegrityToken() never throws and resolves null when attestation is
+    // unavailable — the try/catch is a pure backstop so an interceptor bug can
+    // never block auth/loan requests.
+    if (requiresDeviceIntegrity(config.method, config.url)) {
+      try {
+        const integrity = await getIntegrityToken();
+        if (integrity) {
+          config.headers[INTEGRITY_HEADER] = integrity.token;
+          config.headers[INTEGRITY_PLATFORM_HEADER] = integrity.platform;
+        }
+      } catch {
+        // Soft-fail: proceed without integrity headers.
+      }
     }
     return config;
   },
@@ -195,18 +261,21 @@ export interface ApiError {
   message: string;
   errors?: Record<string, string[]>;
   statusCode: number;
+  /** Stable backend error code (e.g. "Otp.Invalid") from the { error, code } envelope. */
+  code?: string;
 }
 
 export function getApiError(error: unknown): ApiError {
   if (axios.isAxiosError(error)) {
     // Backend error envelope is { error, code }; some endpoints use { message }.
     const data = error.response?.data as
-      | (Partial<ApiError> & { error?: string })
+      | (Partial<ApiError> & { error?: string; code?: string })
       | undefined;
     return {
       message: data?.message ?? data?.error ?? error.message ?? 'An error occurred',
       errors: data?.errors,
       statusCode: error.response?.status ?? 0,
+      code: typeof data?.code === 'string' ? data.code : undefined,
     };
   }
   return {
@@ -255,6 +324,45 @@ export async function refreshAccessToken(): Promise<boolean> {
     useAuthStore.getState().rotateTokens(res.data.accessToken, res.data.newRefreshToken);
     return true;
   } catch {
+    return false;
+  }
+}
+
+/**
+ * GAP-007 / BUG-5: Re-issue the session JWT with current org/RBAC claims by
+ * calling POST /auth/token/refresh-context, then atomically swap the access
+ * token in the auth store.
+ *
+ * Unlike refreshAccessToken() this does NOT rotate the opaque refresh token —
+ * it only re-mints the access-token claims (picks up the new OrganizationId
+ * written by CreateOrganizationCommandHandler or the invite-accept membership row).
+ *
+ * Call this immediately after:
+ *   - the business-onboarding wizard creates the org (POST /auth/organizations)
+ *   - a team invite is accepted (POST /auth/invite/{token}/accept)
+ *
+ * Failure is non-fatal: returns false and logs. The current access token
+ * remains valid for non-org-scoped endpoints; callers MUST continue their flow
+ * (org creation / invite accept already succeeded). Do NOT block completion on
+ * a context-refresh failure.
+ *
+ * GAP-045 (org switcher): `organizationId` is sent as a forward-compatible
+ * body hint for multi-org users. The current backend handler resolves the
+ * active org as the user's most-recently-created membership and IGNORES the
+ * body — an org-select parameter on RefreshContextCommand is a pending
+ * backend-agent handoff. Mobile keeps its own currentOrganization in the auth
+ * store, so client-side org scoping is correct either way.
+ */
+export async function refreshContextAndSwap(organizationId?: string): Promise<boolean> {
+  try {
+    const url = '/auth/token/refresh-context';
+    const res = organizationId
+      ? await apiClient.post<{ accessToken: string; expiresAt: string }>(url, { organizationId })
+      : await apiClient.post<{ accessToken: string; expiresAt: string }>(url);
+    useAuthStore.getState().swapAccessToken(res.data.accessToken);
+    return true;
+  } catch (err) {
+    console.warn('[refreshContextAndSwap] Failed to refresh org context:', err);
     return false;
   }
 }

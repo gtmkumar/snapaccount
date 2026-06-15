@@ -55,10 +55,61 @@ export interface ChatMessage {
   attachmentsJson?: string;
   clientMessageId?: string;
   createdAt: string;
+  /** Wave 7A (GAP-043): bookmark flag on the message. [confirm 7A] */
+  isBookmarked?: boolean;
   /** Client-only: local delivery state */
   localStatus?: 'queued' | 'sending' | 'sent' | 'failed';
   /** Client-only: attachment URIs before upload */
   localAttachments?: LocalAttachment[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wave 7A — GAP-043 bookmarks + thread export
+// RECONCILED 2026-06-12 against docs/api/endpoints.md "Wave 7A":
+//  - POST /appointments/bookmarks/toggle { messageId, note? }
+//      → { messageId, isBookmarked, bookmarkId? }   (ChatService :5107)
+//  - GET  /appointments/bookmarks?page&pageSize
+//      → { items: BookmarkDto[], totalCount, page, pageSize }
+//  - POST /reports/chat-thread-pdf { threadId } → report job (ReportService);
+//    file via GET /reports/{id}/download-url.
+// RESIDUALS CLOSED (Wave 7 mobile reconciliation): BookmarkDto is enriched
+// with messageCreatedAt, senderUserId, senderRole and threadSubject.
+// senderDisplayName is intentionally absent (schema-per-service isolation —
+// no cross-schema join to auth.*); rows render a role-based fallback label.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Persisted sender role on chat messages (server enum, returned as string). */
+export type BookmarkSenderRole = 'USER' | 'CA' | 'ADMIN' | 'SYSTEM' | 'AI';
+
+/** UI bookmark row shape (mapped from the server BookmarkDto). */
+export interface BookmarkedMessage {
+  bookmarkId: string;
+  messageId: string;
+  threadId: string;
+  /** Thread subject/title — null/absent when the thread has none. */
+  threadSubject?: string | null;
+  /** Sender's user id — null post-DPDP erasure. */
+  senderUserId: string | null;
+  /**
+   * Sender role — drives the display-name fallback (senderDisplayName is
+   * intentionally not provided; schema isolation).
+   */
+  senderRole: BookmarkSenderRole | string;
+  /** Message body for the bookmarks list row. */
+  body: string;
+  /** UTC ISO of the ORIGINAL message (messageCreatedAt). */
+  createdAt: string;
+  bookmarkedAt: string;
+}
+
+export type ExportJobStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export interface ThreadExportJob {
+  jobId: string;
+  status: ExportJobStatus;
+  /** Signed PDF URL — resolved via GET /reports/{id}/download-url when COMPLETED. */
+  downloadUrl?: string | null;
+  errorMessage?: string | null;
 }
 
 export interface LocalAttachment {
@@ -84,8 +135,37 @@ export interface SendMessageRequest {
   clientMessageId?: string;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BUG-W7-002: new-conversation (StartThread) wire format.
+// RECONCILED 2026-06-12 against ChatService.Domain.Enums.ThreadCategory and
+// live-probed on :5107 — POST /chat/threads binds `category` via default
+// System.Text.Json (NO JsonStringEnumConverter), so the NUMERIC enum value
+// must be sent; string forms ("general"/"GENERAL") fail binding (500).
+// Server enum: GST=1, ITR=2, DOC=3, LOAN=4, BILLING=5, GENERAL=6.
+// Response: { threadId, status: "Open", category: "GENERAL", messageId }.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Server-side thread categories accepted by POST /chat/threads. */
+export type ServerThreadCategory =
+  | 'GST'
+  | 'ITR'
+  | 'DOC'
+  | 'LOAN'
+  | 'BILLING'
+  | 'GENERAL';
+
+/** Numeric values of ChatService.Domain.Enums.ThreadCategory (see header). */
+export const SERVER_THREAD_CATEGORY_VALUES: Record<ServerThreadCategory, number> = {
+  GST: 1,
+  ITR: 2,
+  DOC: 3,
+  LOAN: 4,
+  BILLING: 5,
+  GENERAL: 6,
+};
+
 export interface CreateThreadRequest {
-  category: ThreadCategory;
+  category: ServerThreadCategory;
   subject?: string;
   initialMessage: string;
   clientMessageId?: string;
@@ -93,8 +173,10 @@ export interface CreateThreadRequest {
 
 export interface CreateThreadResponse {
   threadId: string;
-  status: ThreadStatus;
-  category: ThreadCategory;
+  /** Server ThreadStatus.ToString() — e.g. "Open". */
+  status: string;
+  /** Server ThreadCategory.ToString() — e.g. "GENERAL". */
+  category: string;
   messageId: string;
 }
 
@@ -152,11 +234,20 @@ export async function markThreadRead(threadId: string): Promise<void> {
   await apiClient.post(`/chat/threads/${threadId}/read`);
 }
 
-/** Open a new support thread. */
+/**
+ * Open a new support thread (BUG-W7-002).
+ * Sends the NUMERIC server enum value for category — see the wire-format
+ * note above `ServerThreadCategory` (string categories 500 on the server).
+ */
 export async function createThread(
   req: CreateThreadRequest,
 ): Promise<CreateThreadResponse> {
-  const res = await apiClient.post<CreateThreadResponse>('/chat/threads', req);
+  const res = await apiClient.post<CreateThreadResponse>('/chat/threads', {
+    category: SERVER_THREAD_CATEGORY_VALUES[req.category],
+    subject: req.subject,
+    initialMessage: req.initialMessage,
+    clientMessageId: req.clientMessageId,
+  });
   return res.data;
 }
 
@@ -184,6 +275,103 @@ export async function searchMessages(params: {
 export async function getUnreadCount(): Promise<UnreadCountResponse> {
   const res = await apiClient.get<UnreadCountResponse>('/chat/threads/unread-count');
   return res.data;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wave 7A — GAP-043 bookmark + export endpoints (reconciled — see header above)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /appointments/bookmarks/toggle — create or soft-delete (idempotent pair).
+ * The server toggles; callers pass the desired direction only for optimistic UI.
+ */
+export async function toggleBookmark(
+  messageId: string,
+): Promise<{ messageId: string; isBookmarked: boolean; bookmarkId?: string | null }> {
+  const res = await apiClient.post<{
+    messageId: string;
+    isBookmarked: boolean;
+    bookmarkId?: string | null;
+  }>('/appointments/bookmarks/toggle', { messageId });
+  return res.data;
+}
+
+/** GET /appointments/bookmarks — caller's bookmarked messages (paginated). */
+export async function listBookmarks(): Promise<{ items: BookmarkedMessage[] }> {
+  const res = await apiClient.get<{
+    items: {
+      bookmarkId: string;
+      messageId: string;
+      threadId: string;
+      messageBody: string;
+      note?: string | null;
+      bookmarkedAt: string;
+      messageCreatedAt: string;
+      senderUserId?: string | null;
+      senderRole: string;
+      threadSubject?: string | null;
+    }[];
+  }>('/appointments/bookmarks', { params: { page: 1, pageSize: 100 } });
+  return {
+    items: (res.data.items ?? []).map((b) => ({
+      bookmarkId: b.bookmarkId,
+      messageId: b.messageId,
+      threadId: b.threadId,
+      threadSubject: b.threadSubject ?? null,
+      senderUserId: b.senderUserId ?? null,
+      senderRole: b.senderRole,
+      body: b.messageBody,
+      // Original message time (Wave 7 recon) — falls back to bookmark time.
+      createdAt: b.messageCreatedAt ?? b.bookmarkedAt,
+      bookmarkedAt: b.bookmarkedAt,
+    })),
+  };
+}
+
+/** Normalize ReportService job status strings ("Completed" → "COMPLETED"). */
+function normalizeJobStatus(status: string | undefined): ExportJobStatus {
+  const s = (status ?? '').toUpperCase();
+  if (s.includes('COMPLET')) return 'COMPLETED';
+  if (s.includes('FAIL')) return 'FAILED';
+  if (s.includes('PROCESS') || s.includes('RUNNING')) return 'PROCESSING';
+  return 'PENDING';
+}
+
+/**
+ * POST /reports/chat-thread-pdf { threadId } — ReportService generates the
+ * PDF (synchronously in the current implementation; the poll loop still
+ * supports an async job). IDOR: thread must belong to the caller's org.
+ */
+export async function startThreadExport(threadId: string): Promise<ThreadExportJob> {
+  const res = await apiClient.post<{ jobId: string; status: string; errorMessage?: string | null }>(
+    '/reports/chat-thread-pdf',
+    { threadId },
+  );
+  return {
+    jobId: res.data.jobId,
+    status: normalizeJobStatus(res.data.status),
+    errorMessage: res.data.errorMessage ?? null,
+  };
+}
+
+/** GET /reports/{jobId} — poll export job status. */
+export async function getThreadExportJob(jobId: string): Promise<ThreadExportJob> {
+  const res = await apiClient.get<{ jobId: string; status: string; errorMessage?: string | null }>(
+    `/reports/${jobId}`,
+  );
+  return {
+    jobId: res.data.jobId,
+    status: normalizeJobStatus(res.data.status),
+    errorMessage: res.data.errorMessage ?? null,
+  };
+}
+
+/** GET /reports/{jobId}/download-url — signed GCS URL (15 min TTL, never cached). */
+export async function getThreadExportDownloadUrl(jobId: string): Promise<string> {
+  const res = await apiClient.get<{ url: string; expiresAt: string }>(
+    `/reports/${jobId}/download-url`,
+  );
+  return res.data.url;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -115,11 +115,27 @@ export const GstNoticeTypeSchema = z.enum([
   'ASMT-10',
   'ASMT-11',
   'DRC-01',
+  'DRC-01A',
+  'DRC-01B',
+  'DRC-01C',
   'DRC-03',
+  'ADT-01',
   'REG-17',
   'OTHER',
 ])
 export type GstNoticeType = z.infer<typeof GstNoticeTypeSchema>
+
+// GAP-108 Wave 7: GSTAT appeal stage enum [confirm 7B]
+export const GstatStageEnum = z.enum([
+  'ORIGINAL_ORDER',
+  'APPEAL_FILED',
+  'APPELLATE_ORDER',
+  'GSTAT_FILED',
+  'GSTAT_HEARING',
+  'GSTAT_ORDER',
+  'CLOSED',
+]).optional()
+export type GstatStageType = z.infer<typeof GstatStageEnum>
 
 export const GstNoticeAttachmentSchema = z.object({
   id: z.string(),
@@ -142,6 +158,9 @@ export const GstNoticeSchema = z.object({
   noticeType: GstNoticeTypeSchema,
   noticeDate: z.string(),
   dueDate: z.string().nullable(),
+  // GAP-108 Wave 7: statutory response deadline [confirm 7B] field name may differ
+  statutoryDeadline: z.string().nullable().optional(),
+  responseDueDate: z.string().nullable().optional(),
   status: GstNoticeStatusSchema,
   description: z.string().nullable().optional(),
   assignedCaId: z.string().nullable().optional(),
@@ -151,6 +170,10 @@ export const GstNoticeSchema = z.object({
   respondedBy: z.string().nullable().optional(),
   submissionChannel: z.string().nullable().optional(),
   attachments: z.array(GstNoticeAttachmentSchema).optional(),
+  // GAP-108 Wave 7: GSTAT appeal stage [confirm 7B]
+  gstatStage: GstatStageEnum,
+  gstatStageTimestamps: z.record(z.string(), z.string()).optional(),
+  isGstatBacklogEligible: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -238,13 +261,17 @@ export const HsnSacListSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export interface ListReturnsParams {
-  organizationId?: string
+  /** Required: backend returns 500 without org context. Gate useQuery with enabled: !!organizationId */
+  organizationId: string
   financialYear?: string
   page?: number
   pageSize?: number
 }
 
-export async function listGstReturns(params: ListReturnsParams = {}) {
+export async function listGstReturns(params: ListReturnsParams) {
+  if (!params.organizationId) {
+    throw new Error('listGstReturns: organizationId is required — do not call before org context resolves')
+  }
   const res = await api.get('/gst/returns', { params })
   return GstReturnsListSchema.parse(res.data)
 }
@@ -496,4 +523,173 @@ export type NoticesDueWidgetData = z.infer<typeof NoticesDueWidgetDataSchema>
 export async function getNoticesDueSummary() {
   const res = await api.get('/gst/notices/due-summary')
   return NoticesDueWidgetDataSchema.parse(res.data)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 Wave 1: ITC Reconciliation (GAP-011)
+// Endpoints:
+//   GET  /gst/itc-mismatches?organizationId=&status=   → GetItcMismatchesQuery
+//   POST /gst/itc-reconciliation                       → ReconcileItcCommand
+// ---------------------------------------------------------------------------
+
+/**
+ * ItcMismatchDto shape from GetItcMismatchesQuery handler:
+ *   Id, MismatchType, ClaimedAmount, AvailableAmount, DifferenceAmount, Status
+ */
+export const ItcMismatchSchema = z.object({
+  id: z.string().uuid(),
+  mismatchType: z.enum(['AMOUNT_MISMATCH', 'MISSING_IN_2B', 'EXCESS_CLAIM']),
+  claimedAmount: z.number(),
+  availableAmount: z.number(),
+  differenceAmount: z.number(),
+  status: z.enum(['OPEN', 'RESOLVED', 'IGNORED']),
+})
+
+export type ItcMismatch = z.infer<typeof ItcMismatchSchema>
+
+export const ItcMismatchListSchema = z.array(ItcMismatchSchema)
+
+export interface GetItcMismatchesParams {
+  organizationId: string
+  status?: string
+}
+
+/** GET /gst/itc-mismatches — returns all mismatches for an org, filtered by status. */
+export async function getItcMismatches(params: GetItcMismatchesParams): Promise<ItcMismatch[]> {
+  const res = await api.get('/gst/itc-mismatches', { params })
+  return ItcMismatchListSchema.parse(res.data)
+}
+
+/**
+ * ReconcileItcResponse shape from ReconcileItcCommand:
+ *   OrganizationId, FinancialYear, PeriodMonth, MismatchesDetected, TotalDifferenceAmount
+ */
+export const ReconcileItcResponseSchema = z.object({
+  organizationId: z.string().uuid(),
+  financialYear: z.string(),
+  periodMonth: z.number(),
+  mismatchesDetected: z.number(),
+  totalDifferenceAmount: z.number(),
+})
+
+export type ReconcileItcResponse = z.infer<typeof ReconcileItcResponseSchema>
+
+export interface ReconcileItcRequest {
+  organizationId: string
+  financialYear: string
+  periodMonth: number
+  reconciliationType?: 'GSTR_2A' | 'GSTR_2B'
+}
+
+/** POST /gst/itc-reconciliation — runs ITC reconciliation for an org+period. */
+export async function reconcileItc(body: ReconcileItcRequest): Promise<ReconcileItcResponse> {
+  const res = await api.post('/gst/itc-reconciliation', body)
+  return ReconcileItcResponseSchema.parse(res.data)
+}
+
+// ---------------------------------------------------------------------------
+// GAP-022: Admin Tax Rate Configuration
+// Endpoints (GstService :5104):
+//   GET  /gst/tax-rates             → ListTaxRatesQuery — all rates, activeOnly?
+//   GET  /gst/tax-rates/effective   → GetEffectiveTaxRateQuery — for rateName+asOfDate
+//   POST /gst/tax-rates             → CreateTaxRateCommand (gst.admin.taxrates)
+//   DELETE /gst/tax-rates/{id}/deactivate → DeactivateTaxRateCommand (gst.admin.taxrates)
+// ---------------------------------------------------------------------------
+
+/**
+ * TaxRateDto — matches ListTaxRatesQueryHandler projection.
+ * Dates arrive as ISO strings from JSON serialisation of DateOnly.
+ */
+export const TaxRateDtoSchema = z.object({
+  id: z.string().uuid(),
+  rateName: z.string(),
+  ratePct: z.number(),
+  cgstPct: z.number(),
+  sgstPct: z.number(),
+  igstPct: z.number(),
+  cessPct: z.number(),
+  validFrom: z.string(),        // ISO date string e.g. "2024-07-01"
+  validTo: z.string().nullable(),
+  isActive: z.boolean(),
+  notes: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export type TaxRateDto = z.infer<typeof TaxRateDtoSchema>
+
+export const TaxRateListSchema = z.array(TaxRateDtoSchema)
+
+/** EffectiveTaxRateDto — GetEffectiveTaxRateQuery response. */
+export const EffectiveTaxRateDtoSchema = z.object({
+  id: z.string().uuid(),
+  rateName: z.string(),
+  ratePct: z.number(),
+  cgstPct: z.number(),
+  sgstPct: z.number(),
+  igstPct: z.number(),
+  cessPct: z.number(),
+  validFrom: z.string(),
+  validTo: z.string().nullable(),
+})
+
+export type EffectiveTaxRateDto = z.infer<typeof EffectiveTaxRateDtoSchema>
+
+/** CreateTaxRateResponse — 201 body from POST /gst/tax-rates. */
+export const CreateTaxRateResponseSchema = z.object({
+  taxRateId: z.string().uuid(),
+  rateName: z.string(),
+  ratePct: z.number(),
+  cgstPct: z.number(),
+  sgstPct: z.number(),
+  igstPct: z.number(),
+  validFrom: z.string(),
+})
+
+export type CreateTaxRateResponse = z.infer<typeof CreateTaxRateResponseSchema>
+
+/**
+ * Standard GST slabs (Indian statutory rates).
+ * Shown as a select in the create-rate form; backend also accepts non-standard
+ * values (the validator only enforces 0–100 range), but the UI restricts to slabs.
+ */
+export const GST_SLABS = [0, 1.5, 3, 5, 7.5, 12, 18, 28] as const
+export type GstSlab = (typeof GST_SLABS)[number]
+
+/** Compute CGST/SGST/IGST from a slab percentage. */
+export function computeTaxBreakdown(ratePct: number): { cgstPct: number; sgstPct: number; igstPct: number } {
+  const half = Math.round((ratePct / 2) * 100) / 100
+  return { cgstPct: half, sgstPct: half, igstPct: ratePct }
+}
+
+// API functions ---------------------------------------------------------------
+
+/** GET /gst/tax-rates — all rates, optionally filtered to active-only. */
+export async function listTaxRates(activeOnly = false): Promise<TaxRateDto[]> {
+  const res = await api.get('/gst/tax-rates', { params: { activeOnly } })
+  return TaxRateListSchema.parse(res.data)
+}
+
+/** GET /gst/tax-rates/effective?rateName=&asOfDate= */
+export async function getEffectiveTaxRate(rateName: string, asOfDate?: string): Promise<EffectiveTaxRateDto> {
+  const res = await api.get('/gst/tax-rates/effective', { params: { rateName, asOfDate } })
+  return EffectiveTaxRateDtoSchema.parse(res.data)
+}
+
+export interface CreateTaxRateRequest {
+  rateName: string
+  ratePct: number
+  validFrom: string   // ISO date string "YYYY-MM-DD"
+  notes?: string
+}
+
+/** POST /gst/tax-rates — requires gst.admin.taxrates permission. */
+export async function createTaxRate(body: CreateTaxRateRequest): Promise<CreateTaxRateResponse> {
+  const res = await api.post('/gst/tax-rates', body)
+  return CreateTaxRateResponseSchema.parse(res.data)
+}
+
+/** DELETE /gst/tax-rates/{id}/deactivate — requires gst.admin.taxrates permission. */
+export async function deactivateTaxRate(id: string): Promise<void> {
+  await api.delete(`/gst/tax-rates/${id}/deactivate`)
 }

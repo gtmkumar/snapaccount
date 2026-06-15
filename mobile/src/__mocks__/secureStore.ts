@@ -1,3 +1,5 @@
+import { jest } from '@jest/globals';
+
 const store: Record<string, string> = {};
 
 export const getItemAsync = jest.fn((key: string) => Promise.resolve(store[key] ?? null));

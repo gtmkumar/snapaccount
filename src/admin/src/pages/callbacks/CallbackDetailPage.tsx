@@ -1,8 +1,7 @@
 /**
  * CallbackDetailPage — Admin Callback Detail
  * Route: /callbacks/:id
- * Phase: 6E
- * TODO Phase 6F: role-gate to CA + Admin + Ops only
+ * Phase: 6E — GAP-053: role-gated to CA + Admin + Ops only via <Can>
  */
 import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router'
@@ -27,6 +26,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { StatusTimeline } from '@/components/ui/StatusTimeline'
 import { Modal } from '@/components/ui/Modal'
+import { Can } from '@/components/shared/Can'
 import { cn } from '@/lib/utils'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 import { t } from '@/i18n'
@@ -425,52 +425,62 @@ export default function CallbackDetailPage() {
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div role="toolbar" aria-label="Callback actions" className="flex gap-2 flex-wrap shrink-0">
-          {canStartCall && (
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<PhoneCall className="h-4 w-4" />}
-              onClick={() => toast.info('Call started — tracking in progress')}
-            >
-              {t('admin.callback.action.startCall')}
-            </Button>
-          )}
-          {canComplete && !canStartCall && (
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<CheckCircle className="h-4 w-4" />}
-              onClick={() => void completeMutation.mutate()}
-              disabled={completeMutation.isPending}
-              aria-label="Complete callback — transitions status to Completed"
-            >
-              {t('admin.callback.action.complete')}
-            </Button>
-          )}
-          {canEscalate && (
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<ArrowUpCircle className="h-4 w-4" />}
-              onClick={() => setConfirmModal({ type: 'escalate' })}
-            >
-              {t('admin.callback.action.escalate')}
-            </Button>
-          )}
-          {canCancel && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-error-600 hover:bg-error-50"
-              leftIcon={<X className="h-4 w-4" />}
-              onClick={() => setConfirmModal({ type: 'cancel' })}
-            >
-              {t('admin.callback.action.cancel')}
-            </Button>
-          )}
-        </div>
+        {/* Action buttons — gated: ops/CA can mutate; read-only viewers see nothing */}
+        <Can anyOf={['callback.update', 'callback.complete', 'callback.cancel']}>
+          <div role="toolbar" aria-label="Callback actions" className="flex gap-2 flex-wrap shrink-0">
+            {canStartCall && (
+              <Can permission="callback.update">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<PhoneCall className="h-4 w-4" />}
+                  onClick={() => toast.info('Call started — tracking in progress')}
+                >
+                  {t('admin.callback.action.startCall')}
+                </Button>
+              </Can>
+            )}
+            {canComplete && !canStartCall && (
+              <Can permission="callback.complete">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<CheckCircle className="h-4 w-4" />}
+                  onClick={() => void completeMutation.mutate()}
+                  disabled={completeMutation.isPending}
+                  aria-label="Complete callback — transitions status to Completed"
+                >
+                  {t('admin.callback.action.complete')}
+                </Button>
+              </Can>
+            )}
+            {canEscalate && (
+              <Can permission="callback.update">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<ArrowUpCircle className="h-4 w-4" />}
+                  onClick={() => setConfirmModal({ type: 'escalate' })}
+                >
+                  {t('admin.callback.action.escalate')}
+                </Button>
+              </Can>
+            )}
+            {canCancel && (
+              <Can permission="callback.cancel">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-error-600 hover:bg-error-50"
+                  leftIcon={<X className="h-4 w-4" />}
+                  onClick={() => setConfirmModal({ type: 'cancel' })}
+                >
+                  {t('admin.callback.action.cancel')}
+                </Button>
+              </Can>
+            )}
+          </div>
+        </Can>
       </div>
 
       {/* Stepper */}
@@ -549,11 +559,13 @@ export default function CallbackDetailPage() {
             </Card>
           )}
 
-          {/* Note composer */}
-          <NoteComposer
-            callbackId={cb.id}
-            onSuccess={() => void queryClient.invalidateQueries({ queryKey: ['callback', id] })}
-          />
+          {/* Note composer — ops/CA only */}
+          <Can permission="callback.update">
+            <NoteComposer
+              callbackId={cb.id}
+              onSuccess={() => void queryClient.invalidateQueries({ queryKey: ['callback', id] })}
+            />
+          </Can>
 
           {/* Previous notes */}
           {notes.length > 0 && (

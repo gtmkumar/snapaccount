@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui/Button';
 import { PhoneInput } from '../../components/forms/PhoneInput';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import apiClient, { getApiError } from '../../lib/api';
 import { isValidPhone } from '../../lib/utils';
 import { useAuthMethods } from '../../hooks/useAuthMethods';
@@ -42,6 +42,8 @@ interface PhoneEntryScreenProps {
 }
 
 export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const { setAuthenticated, setSession, setOrganizations } = useAuthStore();
   const [phone, setPhone] = useState('');
@@ -159,7 +161,7 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
       } else if (apiErr.statusCode >= 400 && apiErr.statusCode < 500) {
         setError(apiErr.message || 'Invalid phone number. Please check and try again.');
       } else {
-        Alert.alert('Error', 'Could not send OTP. Please check your connection and try again.');
+        Alert.alert(t('mobile.common.error'), t('mobile.auth.phone.sendError'));
       }
     } finally {
       setLoading(false);
@@ -186,16 +188,16 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
           <View style={styles.illustrationArea}>
             <View style={styles.illustrationOuter}>
               <View style={styles.illustrationInner}>
-                <Ionicons name="shield-checkmark" size={40} color={Colors.brand[500]} />
+                <Ionicons name="shield-checkmark" size={40} color={tokens.brand500} />
               </View>
             </View>
           </View>
 
           {/* Heading */}
           <View style={styles.headingArea}>
-            <Text style={styles.heading}>Welcome to{'\n'}SnapAccount</Text>
+            <Text style={styles.heading}>{t('mobile.auth.phone.welcome')}{'\n'}SnapAccount</Text>
             <Text style={styles.subheading}>
-              GST, ITR, Loans -- all in one place for your business
+              {t('mobile.auth.phone.subheading')}
             </Text>
           </View>
 
@@ -209,7 +211,7 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
             />
 
             <Button
-              label={loading ? 'Sending OTP...' : 'Continue with OTP'}
+              label={loading ? t('mobile.auth.phone.sendingOtp') : t('mobile.auth.phone.continueOtp')}
               onPress={handleSendOTP}
               disabled={!canSubmit}
               loading={loading}
@@ -221,7 +223,7 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
           {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or continue with</Text>
+            <Text style={styles.dividerText}>{t('mobile.auth.phone.orContinue')}</Text>
             <View style={styles.dividerLine} />
           </View>
 
@@ -229,11 +231,11 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
           <View style={styles.socialArea}>
             {showPasswordOption && (
               <Button
-                label="Phone number & password"
+                label={t('mobile.auth.phone.passwordOption')}
                 variant="secondary"
                 fullWidth
                 size="lg"
-                leftIcon={<Ionicons name="lock-closed-outline" size={20} color={Colors.neutral[700]} />}
+                leftIcon={<Ionicons name="lock-closed-outline" size={20} color={tokens.textSecondary} />}
                 onPress={() => navigation.navigate('PasswordAuth')}
               />
             )}
@@ -244,7 +246,7 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
               size="lg"
               loading={socialLoading === 'google'}
               disabled={socialLoading !== null}
-              leftIcon={<Ionicons name="logo-google" size={20} color={Colors.neutral[700]} />}
+              leftIcon={<Ionicons name="logo-google" size={20} color={tokens.textSecondary} />}
               onPress={handleGoogleSignIn}
               style={showPasswordOption ? { marginTop: 12 } : undefined}
             />
@@ -256,7 +258,7 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
                 size="lg"
                 loading={socialLoading === 'apple'}
                 disabled={socialLoading !== null}
-                leftIcon={<Ionicons name="logo-apple" size={20} color={Colors.neutral[900]} />}
+                leftIcon={<Ionicons name="logo-apple" size={20} color={tokens.textPrimary} />}
                 onPress={handleAppleSignIn}
                 style={{ marginTop: 12 }}
               />
@@ -265,10 +267,10 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
 
           {/* Terms */}
           <Text style={styles.terms}>
-            By continuing, you agree to our{' '}
-            <Text style={styles.termsLink}>Terms of Service</Text>
-            {' '}and{' '}
-            <Text style={styles.termsLink}>Privacy Policy</Text>
+            {t('mobile.auth.phone.termsPrefix')}{' '}
+            <Text style={styles.termsLink}>{t('mobile.auth.phone.termsOfService')}</Text>
+            {' '}{t('mobile.auth.phone.and')}{' '}
+            <Text style={styles.termsLink}>{t('mobile.auth.phone.privacyPolicy')}</Text>
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -276,10 +278,11 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.neutral[0],
+    backgroundColor: tk.raised,
   },
   flex: {
     flex: 1,
@@ -298,7 +301,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 28,
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -306,7 +309,7 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 20,
-    backgroundColor: Colors.brand[100],
+    backgroundColor: tk.brandTintBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -316,14 +319,14 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 32,
     fontWeight: '800',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     marginBottom: 10,
     lineHeight: 38,
     letterSpacing: -0.5,
   },
   subheading: {
     fontSize: 16,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     lineHeight: 24,
   },
   formArea: {
@@ -338,11 +341,11 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.neutral[200],
+    backgroundColor: tk.border,
   },
   dividerText: {
     fontSize: 13,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     letterSpacing: 0.2,
   },
   socialArea: {
@@ -350,12 +353,13 @@ const styles = StyleSheet.create({
   },
   terms: {
     fontSize: 13,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     textAlign: 'center',
     lineHeight: 20,
   },
   termsLink: {
-    color: Colors.brand[500],
+    color: tk.brand500,
     fontWeight: '500',
   },
-});
+  }),
+);

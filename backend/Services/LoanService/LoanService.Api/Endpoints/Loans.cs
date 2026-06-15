@@ -1,4 +1,6 @@
 using LoanService.Application.LoanApplications.Commands.AssignToBank;
+using LoanService.Application.LoanApplications.Commands.RunFraudChecks;
+using LoanService.Application.LoanApplications.Queries.GetFraudSummary;
 using LoanService.Application.LoanApplications.Commands.AttachDocument;
 using LoanService.Application.LoanApplications.Commands.CheckEligibility;
 using LoanService.Application.LoanApplications.Commands.CloseApplication;
@@ -6,6 +8,9 @@ using LoanService.Application.LoanApplications.Commands.GeneratePackage;
 using LoanService.Application.LoanApplications.Commands.RecordBankDecision;
 using LoanService.Application.Consents.Queries.GetConsentCatalog;
 using LoanService.Application.Dashboard.Queries.GetDashboardStats;
+using LoanService.Application.Dashboard.Queries.GetLoanKpi;
+using LoanService.Application.KeyFacts.Commands.GenerateKfs;
+using LoanService.Application.KeyFacts.Queries.GetKfs;
 using LoanService.Application.LoanApplications.Commands.RecordConsent;
 using LoanService.Application.LoanApplications.Commands.RecordDisbursement;
 using LoanService.Application.LoanApplications.Commands.StartApplication;
@@ -16,6 +21,8 @@ using LoanService.Application.LoanApplications.Queries.GetBankCommunicationLog;
 using LoanService.Application.LoanApplications.Queries.GetEligibilityResult;
 using LoanService.Application.LoanApplications.Queries.GetPackageDownloadUrl;
 using LoanService.Application.LoanApplications.Queries.ListApplications;
+using LoanService.Application.LoanProducts.Queries.GetLoanProduct;
+using LoanService.Application.LoanProducts.Queries.ListLoanProducts;
 using LoanService.Application.PartnerBanks.Commands.CreatePartnerBank;
 using LoanService.Application.PartnerBanks.Commands.UpdatePartnerBank;
 using LoanService.Application.PartnerBanks.Queries.GetPartnerBanks;
@@ -39,6 +46,29 @@ public sealed class Loans : EndpointGroupBase
     /// <inheritdoc />
     public override void Map(RouteGroupBuilder groupBuilder)
     {
+        // ── Loan Products (public catalog — org-agnostic) ─────────────────────
+
+        /// <summary>
+        /// GET /loans/products — Paginated catalog of active loan products.
+        /// Mobile: LoanHubScreen calls listLoanProducts({ pageSize: 50 }).
+        /// Response: { items: LoanProductDto[], totalCount: int }
+        /// Rate limit: standard. No org-scoping — catalog is shared across all orgs.
+        /// </summary>
+        groupBuilder.MapGet("/products", ListLoanProducts)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("ListLoanProducts")
+            .WithSummary("Paginated catalog of active loan products")
+            .WithDescription("Returns all active loan products ordered by name. Org-agnostic — every authenticated user sees the same catalog. Mobile LoanHubScreen queries pageSize=50.");
+
+        /// <summary>
+        /// GET /loans/products/{id} — Single active loan product by ID.
+        /// Mobile: getLoanProduct(productId) for product detail / pre-fill.
+        /// </summary>
+        groupBuilder.MapGet("/products/{id:guid}", GetLoanProduct)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetLoanProduct")
+            .WithSummary("Get a single active loan product by ID");
+
         // ── Applications ──────────────────────────────────────────────────────
 
         /// <summary>POST /loans/applications — Start a new loan application.</summary>
@@ -69,10 +99,62 @@ public sealed class Loans : EndpointGroupBase
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("AttachLoanDocument");
 
+        // GAP-021: KFS MUST be generated and acknowledged before consent submission.
+        /// <summary>POST /loans/applications/{id}/kfs — Generate a Key Facts Statement.</summary>
+        groupBuilder.MapPost("/applications/{id:guid}/kfs", GenerateKfs)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GenerateKfs")
+            .WithSummary("Generate an RBI-compliant Key Facts Statement for this loan application. Must be acknowledged before consent.")
+            .WithDescription(
+                "NEW-D10: Optional ?locale=hi|bn|en query param selects the KFS language. " +
+                "Resolution chain: caller param → 'en' fallback. " +
+                "Validated against supported set: en, hi, bn. " +
+                "The generated locale is stored on the KFS row (migration 079).");
+
+        /// <summary>GET /loans/applications/{id}/kfs — Retrieve the most-recent KFS.</summary>
+        groupBuilder.MapGet("/applications/{id:guid}/kfs", GetKfs)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetKfs")
+            .WithSummary("Retrieve the current Key Facts Statement for this loan application.")
+            .WithDescription(
+                "NEW-D10: Optional ?locale=hi query param prefers a locale variant. " +
+                "Falls back to any locale (typically 'en') if the requested locale is not found. " +
+                "Never fails because of locale — RBI KFS retrieval is statutory. " +
+                "Optional ?kfsId=<guid> pins to a specific KFS row (audit path).");
+
         /// <summary>POST /loans/applications/{id}/consents — Record a consent.</summary>
         groupBuilder.MapPost("/applications/{id:guid}/consents", RecordConsent)
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("RecordConsent");
+
+        // ── GAP-110: Fraud pre-submission stage ───────────────────────────────
+
+        /// <summary>
+        /// POST /loans/applications/{id}/fraud-check — Run fraud pre-submission checks.
+        /// Must be called before submit. FLAG verdicts allow submission with operator note.
+        /// FAIL verdicts return 422 and block submission.
+        /// Permission: loan.application.submit (same as submit).
+        /// Rate limit: standard.
+        /// </summary>
+        groupBuilder.MapPost("/applications/{id:guid}/fraud-check", RunFraudChecks)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("RunLoanFraudChecks")
+            .WithSummary("Run fraud pre-submission checks (GAP-110)")
+            .WithDescription(
+                "Executes 6 fraud checks: duplicate PAN/phone/device across orgs (aggregate counts only, " +
+                "never leaks other-org PII), velocity rules (config-driven thresholds), and penny-drop name match. " +
+                "FLAG: submission allowed + operator review note. " +
+                "FAIL: 422 — submission blocked. " +
+                "All results persisted to loan.fraud_checks.");
+
+        /// <summary>
+        /// GET /loans/applications/{id}/fraud-summary — Retrieve fraud check results.
+        /// Permission: loan.fraud.view (operator tier).
+        /// </summary>
+        groupBuilder.MapGet("/applications/{id:guid}/fraud-summary", GetFraudSummary)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetLoanFraudSummary")
+            .WithSummary("Retrieve fraud check decision log for an application (operator tier, GAP-110)");
 
         /// <summary>POST /loans/applications/{id}/submit — Submit for bank review.</summary>
         groupBuilder.MapPost("/applications/{id:guid}/submit", SubmitApplication)
@@ -154,6 +236,21 @@ public sealed class Loans : EndpointGroupBase
             .WithSummary("Versioned loan consent text catalog")
             .WithDescription("Returns current (non-retired) consent text per type for the requested locale. Mobile echoes the returned textVersion in RecordConsent so DPDP audit trail ties back to exactly what the user saw.");
 
+        // ── KPI Strip ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// GET /loans/kpi — org-scoped counts for the LoansListPage KpiStrip.
+        /// Response: { totalApps, submitted, underReview, awaitingDocs, approved, disbursed }
+        /// </summary>
+        groupBuilder.MapGet("/kpi", static async (ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new GetLoanKpiQuery(), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetLoanKpi")
+            .WithSummary("Org-scoped loan KPI counts for the LoansListPage KpiStrip.");
+
         // ── Admin Dashboard ───────────────────────────────────────────────────
 
         groupBuilder.MapGet("/admin/dashboard-stats", static async (ISender sender, CancellationToken ct) =>
@@ -179,6 +276,31 @@ public sealed class Loans : EndpointGroupBase
     }
 
     // ── Handler delegates ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// POST /loans/applications/{id}/kfs?locale=hi
+    /// NEW-D10: binds optional locale query param (en/hi/bn). Validated by GenerateKfsCommandValidator.
+    /// </summary>
+    private static async Task<IResult> GenerateKfs(
+        Guid id, ISender sender, CancellationToken ct, string? locale = null)
+    {
+        var result = await sender.Send(new GenerateKfsCommand(id, locale), ct);
+        return result.IsSuccess
+            ? Results.Created($"/loans/applications/{id}/kfs/{result.Value.KfsId}", result.Value)
+            : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
+    /// <summary>
+    /// GET /loans/applications/{id}/kfs?kfsId=&amp;locale=hi
+    /// NEW-D10: binds optional locale query param. Falls back to en if locale variant not found.
+    /// Never fails solely because of locale — RBI KFS is statutory.
+    /// </summary>
+    private static async Task<IResult> GetKfs(
+        Guid id, ISender sender, CancellationToken ct, Guid? kfsId = null, string? locale = null)
+    {
+        var result = await sender.Send(new GetKfsQuery(id, kfsId, locale), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound(result.Error.Message);
+    }
 
     private static async Task<IResult> StartApplication(
         StartApplicationCommand command, ISender sender, CancellationToken ct)
@@ -227,7 +349,7 @@ public sealed class Loans : EndpointGroupBase
         var ip = http.Connection.RemoteIpAddress?.ToString();
         var ua = http.Request.Headers.UserAgent.ToString();
         var result = await sender.Send(
-            new RecordConsentCommand(id, req.ConsentType, req.ConsentTextVersion, ip, ua), ct);
+            new RecordConsentCommand(id, req.ConsentType, req.ConsentTextVersion, ip, ua, req.KfsId, req.ConsentLocale), ct);
         return result.IsSuccess
             ? Results.Created($"/loans/applications/{id}/consents/{result.Value.ConsentId}", result.Value)
             : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
@@ -297,14 +419,17 @@ public sealed class Loans : EndpointGroupBase
     }
 
     private static async Task<IResult> GetEligibilityResult(
-        Guid orgId, ISender sender, CancellationToken ct)
+        ISender sender, CancellationToken ct, Guid? orgId = null)
     {
-        var result = await sender.Send(new GetEligibilityResultQuery(orgId, null), ct);
+        // SWEEP-B FIX: orgId is a required query param — made nullable to return 400 not 500 on missing param.
+        if (!orgId.HasValue)
+            return Results.BadRequest(new { error = "orgId query parameter is required.", code = "LOAN.MissingOrgId" });
+        var result = await sender.Send(new GetEligibilityResultQuery(orgId.Value, null), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
     }
 
     private static async Task<IResult> GetPartnerBanks(
-        bool includeInactive, ISender sender, CancellationToken ct)
+        ISender sender, CancellationToken ct, bool includeInactive = false)
     {
         var result = await sender.Send(new GetPartnerBanksQuery(includeInactive), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
@@ -367,6 +492,57 @@ public sealed class Loans : EndpointGroupBase
             : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
     }
 
+    // ── Loan Product handlers ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// GET /loans/products — Returns paginated active loan product catalog.
+    /// Mobile LoanHubScreen: listLoanProducts({ pageSize: 50 }).
+    /// </summary>
+    private static async Task<IResult> ListLoanProducts(
+        [AsParameters] ProductListParams p, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new ListLoanProductsQuery(p.Page, p.PageSize), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    /// <summary>
+    /// GET /loans/products/{id} — Returns a single active loan product.
+    /// Mobile: getLoanProduct(productId).
+    /// </summary>
+    private static async Task<IResult> GetLoanProduct(
+        Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetLoanProductQuery(id), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.NotFound(result.Error.Message);
+    }
+
+    // ── GAP-110: Fraud check handlers ─────────────────────────────────────────
+
+    private static async Task<IResult> RunFraudChecks(
+        Guid id, RunFraudChecksRequest req, ISender sender, CancellationToken ct)
+    {
+        var command = new RunFraudChecksCommand(
+            id,
+            req.ApplicantPan,
+            req.ApplicantPhone,
+            req.DeviceId,
+            req.BankAccountNumber,
+            req.IfscCode,
+            req.DeclaredName);
+
+        var result = await sender.Send(command, ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
+    private static async Task<IResult> GetFraudSummary(
+        Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetFraudSummaryQuery(id), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
     private static int MapError(SnapAccount.Shared.Domain.Error error)
         => error.Type switch
         {
@@ -384,16 +560,32 @@ public sealed class Loans : EndpointGroupBase
 /// <summary>Query parameters for listing applications.</summary>
 internal record ListParams(string? Status = null, int Page = 1, int PageSize = 20);
 
+/// <summary>Query parameters for listing loan products.</summary>
+internal record ProductListParams(int Page = 1, int PageSize = 20);
+
 /// <summary>Request body for updating a loan application.</summary>
 internal record UpdateApplicationRequest(decimal? RequestedAmount, int? TenureMonths, string? Purpose);
 
 /// <summary>Request body for attaching a document.</summary>
 internal record AttachDocumentRequest(Guid DocumentId, LoanService.Domain.Entities.ApplicationDocumentType DocumentType);
 
-/// <summary>Request body for recording consent.</summary>
+/// <summary>
+/// Request body for recording consent.
+/// <para>
+/// <c>ConsentLocale</c> — BCP-47 locale tag (e.g. "en", "hi") identifying the language of the
+/// consent text that was displayed to the user. Obtained from the <c>locale</c> field returned by
+/// GET /loans/consents/catalog. Defaults to "en". Required for DPDP / RBI audit trail (GAP-040).
+/// </para>
+/// </summary>
+/// <summary>
+/// Request body for recording consent.
+/// GAP-021: <see cref="KfsId"/> is required — the borrower must acknowledge a KFS before consent.
+/// </summary>
 internal record RecordConsentRequest(
     LoanService.Domain.Entities.ConsentType ConsentType,
-    string ConsentTextVersion);
+    string ConsentTextVersion,
+    Guid KfsId,
+    string ConsentLocale = "en");
 
 /// <summary>Request body for assigning to bank.</summary>
 internal record AssignToBankRequest(Guid BankId, Guid PackageId);
@@ -403,6 +595,18 @@ internal record GeneratePackageRequest(string OrgName);
 
 /// <summary>Request body for eligibility check.</summary>
 internal record CheckEligibilityRequest(Guid OrgId, Guid? LoanProductId = null);
+
+/// <summary>
+/// GAP-110: Request body for running fraud pre-submission checks.
+/// PAN is validated to format XXXXX9999X (FluentValidation in RunFraudChecksCommandValidator).
+/// </summary>
+internal record RunFraudChecksRequest(
+    string ApplicantPan,
+    string? ApplicantPhone = null,
+    string? DeviceId = null,
+    string? BankAccountNumber = null,
+    string? IfscCode = null,
+    string? DeclaredName = null);
 
 /// <summary>Request body for updating a partner bank.</summary>
 internal record UpdatePartnerBankRequest(

@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 export interface GrievanceFormData {
   subject: string;
@@ -39,6 +39,8 @@ export function RaiseGrievanceModal({
   onSubmit,
   testID,
 }: RaiseGrievanceModalProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -87,7 +89,7 @@ export function RaiseGrievanceModal({
               accessibilityLabel="Close"
               hitSlop={8}
             >
-              <Ionicons name="close" size={22} color={Colors.neutral[600]} />
+              <Ionicons name="close" size={22} color={tokens.textSecondary} />
             </Pressable>
           </View>
 
@@ -96,7 +98,7 @@ export function RaiseGrievanceModal({
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.infoBox}>
-              <Ionicons name="information-circle-outline" size={18} color={Colors.brand[600]} />
+              <Ionicons name="information-circle-outline" size={18} color={tokens.brandCta} />
               <Text style={styles.infoText}>
                 Submitting a grievance will escalate your case to the Income Tax Department.
                 Ensure your details are accurate.
@@ -111,7 +113,7 @@ export function RaiseGrievanceModal({
                 value={subject}
                 onChangeText={setSubject}
                 placeholder="e.g. Refund not received after 45 days"
-                placeholderTextColor={Colors.neutral[400]}
+                placeholderTextColor={tokens.textTertiary}
                 maxLength={120}
                 accessibilityLabel="Grievance subject"
               />
@@ -125,7 +127,7 @@ export function RaiseGrievanceModal({
                 value={description}
                 onChangeText={setDescription}
                 placeholder="Describe your issue in detail (min 20 characters)"
-                placeholderTextColor={Colors.neutral[400]}
+                placeholderTextColor={tokens.textTertiary}
                 multiline
                 numberOfLines={5}
                 maxLength={500}
@@ -143,7 +145,7 @@ export function RaiseGrievanceModal({
                 value={contactEmail}
                 onChangeText={setContactEmail}
                 placeholder="yourname@email.com"
-                placeholderTextColor={Colors.neutral[400]}
+                placeholderTextColor={tokens.textTertiary}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 accessibilityLabel="Contact email"
@@ -152,7 +154,7 @@ export function RaiseGrievanceModal({
 
             {error && (
               <View style={styles.errorBox}>
-                <Ionicons name="alert-circle-outline" size={16} color={Colors.error[600]} />
+                <Ionicons name="alert-circle-outline" size={16} color={tokens.errorFg} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
@@ -186,10 +188,11 @@ export function RaiseGrievanceModal({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg.base,
+    backgroundColor: tk.canvas,
   },
   header: {
     flexDirection: 'row',
@@ -198,18 +201,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: tk.border,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
   },
   closeBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -220,7 +223,7 @@ const styles = StyleSheet.create({
   infoBox: {
     flexDirection: 'row',
     gap: 10,
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
     borderRadius: 12,
     padding: 14,
     alignItems: 'flex-start',
@@ -228,7 +231,7 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 13,
-    color: Colors.brand[700],
+    color: tk.brandFg,
     lineHeight: 19,
   },
   fieldGroup: {
@@ -237,17 +240,17 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
   },
   input: {
     borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: Colors.neutral[900],
-    backgroundColor: Colors.surface.default,
+    color: tk.textPrimary,
+    backgroundColor: tk.raised,
     minHeight: 48,
   },
   textArea: {
@@ -256,13 +259,13 @@ const styles = StyleSheet.create({
   },
   charCount: {
     fontSize: 11,
-    color: Colors.neutral[400],
+    color: tk.textTertiary,
     textAlign: 'right',
   },
   errorBox: {
     flexDirection: 'row',
     gap: 8,
-    backgroundColor: Colors.error[50],
+    backgroundColor: tk.errorTint,
     borderRadius: 10,
     padding: 12,
     alignItems: 'flex-start',
@@ -270,14 +273,14 @@ const styles = StyleSheet.create({
   errorText: {
     flex: 1,
     fontSize: 13,
-    color: Colors.error[600],
+    color: tk.errorFg,
   },
   footer: {
     flexDirection: 'row',
     gap: 12,
     padding: 20,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
+    borderTopColor: tk.border,
   },
   cancelBtn: {
     flex: 1,
@@ -285,12 +288,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
   },
   cancelText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
   },
   submitBtn: {
     flex: 2,
@@ -298,7 +301,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.brand[600],
+    backgroundColor: tk.brandCta,
   },
   submitBtnDisabled: {
     opacity: 0.4,
@@ -306,6 +309,7 @@ const styles = StyleSheet.create({
   submitText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
   },
-});
+  }),
+);

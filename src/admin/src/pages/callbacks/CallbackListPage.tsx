@@ -1,8 +1,7 @@
 /**
  * CallbackListPage — Admin Callback Queue
  * Route: /callbacks
- * Phase: 6E
- * TODO Phase 6F: role-gate to CA + Admin + Ops only
+ * Phase: 6E — GAP-053: role-gated via route + <Can> for KPI CTA
  */
 import { useState, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
@@ -12,6 +11,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Can } from '@/components/shared/Can'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime, formatDateTime } from '@/lib/utils'
 import { t } from '@/i18n'
@@ -213,9 +213,12 @@ export default function CallbackListPage() {
         title={t('admin.callbacks.title')}
         actions={
           <div className="flex gap-2">
-            <Button variant="secondary" size="sm" leftIcon={<BarChart3 className="h-4 w-4" />} onClick={() => void navigate('/callbacks/kpi')}>
-              {t('admin.callbacks.cta.kpi')}
-            </Button>
+            {/* KPI page is Admin/Ops only — CAs can view list but not KPI */}
+            <Can anyOf={['callback.kpi.read', 'admin.dashboard.read']}>
+              <Button variant="secondary" size="sm" leftIcon={<BarChart3 className="h-4 w-4" />} onClick={() => void navigate('/callbacks/kpi')}>
+                {t('admin.callbacks.cta.kpi')}
+              </Button>
+            </Can>
           </div>
         }
       />

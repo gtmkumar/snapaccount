@@ -8,6 +8,7 @@ using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Infrastructure.Auth;
 using System.Reflection;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
 Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateBootstrapLogger();
@@ -26,6 +27,13 @@ try
         .Enrich.WithProperty("Service", "NotificationService"));
 
     builder.Services.AddNotificationInfrastructure(builder.Configuration);
+
+    // BUG-W7-01: Register JsonStringEnumConverter globally so that PascalCase string enum values
+    // (e.g. {"channel":"Push"}) are correctly deserialized from request bodies and serialized to
+    // responses. The UpperSnakeEnumConverter in EF config only affects DB persistence — it has no
+    // effect on ASP.NET Core minimal-API JSON binding.
+    builder.Services.ConfigureHttpJsonOptions(opts =>
+        opts.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
     builder.Services.AddOpenApi();
     builder.Services.AddHealthChecks();
@@ -92,6 +100,9 @@ try
 
     // Auto-discover and register all EndpointGroupBase subclasses in this assembly
     app.MapEndpoints(Assembly.GetExecutingAssembly());
+
+    // GAP-005: Fail-fast in non-Development when SESSION_JWT_SECRET is absent.
+    SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);
 
     app.Run();
 }

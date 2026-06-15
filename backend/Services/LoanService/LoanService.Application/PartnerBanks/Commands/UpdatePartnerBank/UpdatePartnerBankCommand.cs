@@ -55,8 +55,10 @@ public sealed class UpdatePartnerBankCommandHandler(
 
         if (!string.IsNullOrEmpty(request.ApiConfigJson) && !string.IsNullOrEmpty(bank.ApiConfigKeyRef))
         {
-            bank.ApiConfigEncrypted = await credentialEncryption.EncryptAsync(
+            // SWEEP-FIX WEB-03: ApiConfigEncrypted is string? (jsonb in DB) — convert byte[] to Base64.
+            var encryptedBytes = await credentialEncryption.EncryptAsync(
                 request.ApiConfigJson, bank.ApiConfigKeyRef, cancellationToken);
+            bank.ApiConfigEncrypted = Convert.ToBase64String(encryptedBytes);
         }
 
         await db.SaveChangesAsync(cancellationToken);

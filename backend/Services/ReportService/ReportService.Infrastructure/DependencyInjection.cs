@@ -67,7 +67,7 @@ public static class DependencyInjection
         // GCS storage for report files
         services.AddSingleton<IReportStorageService, ReportStorageService>();
 
-        // Register all 7 report generators — resolved via IEnumerable<IReportGenerator> in handler
+        // Register all report generators — resolved via IEnumerable<IReportGenerator> in handler
         services.AddTransient<IReportGenerator, TrialBalanceReportGenerator>();
         services.AddTransient<IReportGenerator, ProfitAndLossReportGenerator>();
         services.AddTransient<IReportGenerator, BalanceSheetReportGenerator>();
@@ -75,6 +75,10 @@ public static class DependencyInjection
         services.AddTransient<IReportGenerator, TaxLiabilityReportGenerator>();
         services.AddTransient<IReportGenerator, LedgerByAccountReportGenerator>();
         services.AddTransient<IReportGenerator, LoanPackageReportGenerator>();
+        // GAP-032: Tally XML export (feature-flagged via Report:TallyExportEnabled)
+        services.AddTransient<IReportGenerator, TallyExportGenerator>();
+        // GAP-043: Chat thread PDF export (cross-schema read from chat.messages)
+        services.AddTransient<IReportGenerator, ChatThreadPdfGenerator>();
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, CurrentUser>();

@@ -15,7 +15,7 @@
  */
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { t } from '@/i18n'
 import { UserPlus, Shield, Users2, LayoutGrid, BarChart3 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -35,19 +35,18 @@ const ROLE_OPTIONS: AdminRole[] = ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'S
 const MODULE_OPTIONS = ['GST', 'ITR', 'Loans', 'Reports', 'Documents']
 
 export default function TeamPage() {
-  const { t } = useTranslation()
   const [showInvite, setShowInvite] = useState(false)
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <PageHeader
-          title={t('team.title', 'Team')}
-          subtitle={t('team.subtitle', 'Manage SnapAccount staff, roles, and workload distribution.')}
+          title={t('team.title')}
+          subtitle={t('team.subtitle')}
         />
         <Button variant="primary" onClick={() => setShowInvite(true)}>
           <UserPlus className="h-4 w-4 mr-1" />
-          {t('team.invite', 'Invite Teammate')}
+          {t('team.invite')}
         </Button>
       </div>
 
@@ -55,19 +54,19 @@ export default function TeamPage() {
         <TabList>
           <TabTrigger id="staff">
             <Users2 className="h-4 w-4 mr-1 inline-block align-text-bottom" aria-hidden="true" />
-            {t('team.tab.staff', 'Staff')}
+            {t('team.tab.staff')}
           </TabTrigger>
           <TabTrigger id="workload">
             <LayoutGrid className="h-4 w-4 mr-1 inline-block align-text-bottom" aria-hidden="true" />
-            {t('team.tab.workload', 'Workload')}
+            {t('team.tab.workload')}
           </TabTrigger>
           <TabTrigger id="kpis">
             <BarChart3 className="h-4 w-4 mr-1 inline-block align-text-bottom" aria-hidden="true" />
-            {t('team.tab.kpis', 'KPIs')}
+            {t('team.tab.kpis')}
           </TabTrigger>
           <TabTrigger id="roles">
             <Shield className="h-4 w-4 mr-1 inline-block align-text-bottom" aria-hidden="true" />
-            {t('team.tab.roles', 'Roles')}
+            {t('team.tab.roles')}
           </TabTrigger>
         </TabList>
 
@@ -136,7 +135,6 @@ interface InviteDialogProps {
 }
 
 function InviteDialog({ open, onClose, onSent }: InviteDialogProps) {
-  const { t } = useTranslation()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<AdminRole>('CA')
@@ -145,10 +143,10 @@ function InviteDialog({ open, onClose, onSent }: InviteDialogProps) {
   const inviteMutation = useMutation({
     mutationFn: () => inviteTeamMember({ name, email, role, modules } satisfies InviteTeamMemberParams),
     onSuccess: () => {
-      toast.success(t('team.inviteSent', 'Invitation sent!'))
+      toast.success(t('team.inviteSent'))
       onSent()
     },
-    onError: () => toast.error(t('team.inviteError', 'Failed to send invitation')),
+    onError: () => toast.error(t('team.inviteError')),
   })
 
   const toggleModule = (mod: string) => {
@@ -159,8 +157,8 @@ function InviteDialog({ open, onClose, onSent }: InviteDialogProps) {
     <Dialog
       open={open}
       onClose={onClose}
-      title={t('team.inviteTitle', 'Invite Teammate')}
-      description={t('team.inviteDesc', 'Send an invitation with a 72-hour magic link.')}
+      title={t('team.inviteTitle')}
+      description={t('team.inviteDesc')}
       size="lg"
       footer={
         <>
@@ -170,10 +168,10 @@ function InviteDialog({ open, onClose, onSent }: InviteDialogProps) {
             loading={inviteMutation.isPending}
             disabled={!name || !email}
           >
-            {t('team.sendInvite', 'Send invitation')}
+            {t('team.sendInvite')}
           </Button>
           <Button variant="ghost" onClick={onClose}>
-            {t('common.cancel', 'Cancel')}
+            {t('common.cancel')}
           </Button>
         </>
       }
@@ -182,7 +180,7 @@ function InviteDialog({ open, onClose, onSent }: InviteDialogProps) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-              {t('team.name', 'Name')} *
+              {t('team.name')} *
             </label>
             <input
               value={name}
@@ -193,7 +191,7 @@ function InviteDialog({ open, onClose, onSent }: InviteDialogProps) {
           </div>
           <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-              {t('team.email', 'Email')} *
+              {t('team.email')} *
             </label>
             <input
               type="email"
@@ -207,7 +205,7 @@ function InviteDialog({ open, onClose, onSent }: InviteDialogProps) {
 
         <div>
           <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
-            {t('team.role', 'Role')} *
+            {t('team.role')} *
           </label>
           <div className="grid grid-cols-2 gap-2">
             {ROLE_OPTIONS.slice(1).map(r => (
@@ -240,7 +238,7 @@ function InviteDialog({ open, onClose, onSent }: InviteDialogProps) {
         {(role === 'CA' || role === 'SUPPORT_EXECUTIVE') && (
           <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
-              {t('team.modules', 'Module Access')}
+              {t('team.modules')}
             </label>
             <div className="flex flex-wrap gap-2">
               {MODULE_OPTIONS.map(mod => (

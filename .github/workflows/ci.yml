@@ -236,7 +236,377 @@ jobs:
           retention-days: 7
 
   # ─────────────────────────────────────────────
-  # Job 4: Docker build smoke test (no push)
+  # Job 4: Full migration-replay on fresh postgres:17 + pgvector  (GAP-071 / D4)
+  #
+  # Applies every SQL migration file in numeric order (000 → 061 + 999) plus the
+  # dev seed (200_dev_business_data.sql if it exists) to a brand-new PostgreSQL
+  # container with ON_ERROR_STOP=1.  Any SQL error fails the job immediately.
+  #
+  # Why separate from the EF dry-run in Job 3?
+  #   Job 3 generates EF-managed migration scripts per service.  This job applies
+  #   the raw SQL files in database/migrations/ — the authoritative source for the
+  #   shared-schema pattern (one DB, schema-per-service, plain SQL migrations).
+  #   These are different artefacts and can diverge; this job catches that.
+  #
+  # Note: depends on billing being restored (GAP-002 / TL-1).  The job is authored
+  # now and will activate automatically when GitHub Actions billing is enabled.
+  # ─────────────────────────────────────────────
+  migration-replay:
+    name: Migration Replay (000→061 + 999)
+    runs-on: ubuntu-latest
+    # Run independently of dotnet-build-test — failures in either are distinct issues.
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: snapaccount
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d snapaccount"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable pgvector extension
+        run: |
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;" \
+            -v ON_ERROR_STOP=1
+
+      - name: Apply migrations 000→061 in numeric order
+        # Sort by the numeric prefix (e.g. 000_, 001_, ..., 061_) then apply each.
+        # ON_ERROR_STOP=1 causes psql to exit with a non-zero code on any SQL error,
+        # which fails this CI step immediately.
+        run: |
+          set -euo pipefail
+          MIGRATION_DIR="database/migrations"
+          echo "Migration directory: ${MIGRATION_DIR}"
+
+          # Find all numeric migration files (NOT 200_dev* or 999_seed*),
+          # sort numerically, apply in order.
+          MIGRATION_FILES=$(
+            ls "${MIGRATION_DIR}"/*.sql \
+              | grep -v '200_' \
+              | grep -v '999_' \
+              | sort -t_ -k1,1n
+          )
+
+          echo "Will apply:"
+          echo "${MIGRATION_FILES}"
+
+          for f in ${MIGRATION_FILES}; do
+            echo "────────────────────────────────────────"
+            echo "Applying: $(basename ${f})"
+            PGPASSWORD=migration_test psql \
+              -h localhost -p 5432 -U postgres -d snapaccount \
+              -v ON_ERROR_STOP=1 \
+              -f "${f}"
+            echo "  ✓ $(basename ${f})"
+          done
+
+      - name: Apply seed reference data (999_seed_reference_data.sql)
+        run: |
+          set -euo pipefail
+          SEED_FILE="database/migrations/999_seed_reference_data.sql"
+          echo "Applying seed: ${SEED_FILE}"
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -v ON_ERROR_STOP=1 \
+            -f "${SEED_FILE}"
+          echo "  ✓ Seed data applied"
+
+      - name: Apply dev seed (100_dev_users + 200_dev_business_data)
+        # GAP-072 resolved by db-engineer: 200_dev_business_data.sql is now self-sufficient
+        # and lives at database/dev-seed/ (NOT database/migrations/).
+        # Apply 100_ first (canonical users + org), then 200_ (business data that
+        # references the org/user UUIDs seeded by 100_).
+        # Both steps are strict: ON_ERROR_STOP=1, no `|| true`.
+        # Any drift in either file now fails the CI job immediately.
+        run: |
+          set -euo pipefail
+
+          SEED_100="database/dev-seed/100_dev_users.sql"
+          SEED_200="database/dev-seed/200_dev_business_data.sql"
+
+          echo "Applying dev seed 100: ${SEED_100}"
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -v ON_ERROR_STOP=1 \
+            -f "${SEED_100}"
+          echo "  ✓ 100_dev_users.sql applied"
+
+          echo "Applying dev seed 200: ${SEED_200}"
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -v ON_ERROR_STOP=1 \
+            -f "${SEED_200}"
+          echo "  ✓ 200_dev_business_data.sql applied"
+
+      - name: Verify schema integrity
+        # Quick sanity check — confirm expected tables exist in key schemas.
+        run: |
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -c "
+              SELECT table_schema, COUNT(*) as table_count
+              FROM information_schema.tables
+              WHERE table_schema IN (
+                'auth','document','accounting','gst','loan','itr',
+                'chat','notification','report','subscription','ai','callback'
+              )
+              AND table_type = 'BASE TABLE'
+              GROUP BY table_schema
+              ORDER BY table_schema;
+            " \
+            -v ON_ERROR_STOP=1
+
+          echo "Migration replay completed successfully."
+
+      - name: Verify callback.kpi_daily_snapshot MV exists (P6-HANDOFF-07)
+        # Confirms the materialized view provisioned in Wave 1 (migration 061) is present.
+        # This MV is required for the callback KPI scheduler job (D5).
+        run: |
+          PGPASSWORD=migration_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -c "
+              SELECT matviewname, matviewowner
+              FROM pg_matviews
+              WHERE schemaname = 'callback' AND matviewname = 'kpi_daily_snapshot';
+            " \
+            -v ON_ERROR_STOP=1 | tee /tmp/mv_check.txt
+
+          if ! grep -q "kpi_daily_snapshot" /tmp/mv_check.txt; then
+            echo "::error::callback.kpi_daily_snapshot materialized view not found!"
+            echo "  Check migration 061_loan_consent_locale_and_catalog_alignment.sql"
+            exit 1
+          fi
+          echo "  ✓ callback.kpi_daily_snapshot exists"
+
+  # ─────────────────────────────────────────────
+  # Job 5: Aspire health-check smoke test  (GAP-071 / D4)
+  #
+  # Design rationale:
+  #   Booting the full .NET Aspire AppHost in GitHub Actions CI is impractical:
+  #     (a) Aspire AppHost requires the Aspire workload (dotnet workload install aspire)
+  #         which adds ~5 min to cold-start and is not cached by default.
+  #     (b) 12 simultaneous .NET services + Redis require ~8 GB RAM — exceeds
+  #         ubuntu-latest (7 GB) without upgrade to ubuntu-latest-8-core (costs money).
+  #     (c) Firebase/GCP credentials are absent in CI, causing service startup failures
+  #         that mask the actual healthz check.
+  #     (d) Aspire runs services on dynamic ports; the stable port assignment
+  #         (5101–5112) only applies when WithDevLoopDefaults is active with a local
+  #         user-secrets DB connection string.
+  #
+  #   PRACTICAL VARIANT IMPLEMENTED:
+  #     Each service is started individually with DEV_AUTH_BYPASS=true,
+  #     ASPNETCORE_ENVIRONMENT=Testing, and a test-only PostgreSQL connection.
+  #     A single /healthz curl verifies the service starts up and responds.
+  #     Services are started in parallel (matrix job), so total CI time is bounded
+  #     by the slowest service rather than the sum.
+  #
+  #   TRADEOFF vs. full AppHost boot:
+  #     - Does NOT test inter-service communication (service discovery, Pub/Sub subscriptions).
+  #     - Does NOT test Redis-backed features (SignalR backplane, distributed cache).
+  #     - DOES test: service startup succeeds, DB migrations applied, DI wired correctly,
+  #       no missing required configuration at startup, /healthz returns 200.
+  #
+  #   Full Aspire integration smoke test is tracked as a separate enhancement item
+  #   for when the team has self-hosted runners with ≥16 GB RAM.
+  # ─────────────────────────────────────────────
+  aspire-healthz-smoke:
+    name: Service HealthZ Smoke (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    needs: migration-replay   # healthz tests run against a freshly migrated schema
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: snapaccount
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: healthz_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d snapaccount"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    strategy:
+      fail-fast: false   # report ALL failing services, not just the first
+      matrix:
+        include:
+          - service: AuthService
+            project: backend/Services/AuthService/AuthService.Api
+            port: 5101
+          - service: DocumentService
+            project: backend/Services/DocumentService/DocumentService.Api
+            port: 5102
+          - service: AccountingService
+            project: backend/Services/AccountingService/AccountingService.Api
+            port: 5103
+          - service: GstService
+            project: backend/Services/GstService/GstService.Api
+            port: 5104
+          - service: LoanService
+            project: backend/Services/LoanService/LoanService.Api
+            port: 5105
+          - service: ItrService
+            project: backend/Services/ItrService/ItrService.Api
+            port: 5106
+          - service: ChatService
+            project: backend/Services/ChatService/ChatService.Api
+            port: 5107
+          - service: NotificationService
+            project: backend/Services/NotificationService/NotificationService.Api
+            port: 5108
+          - service: ReportService
+            project: backend/Services/ReportService/ReportService.Api
+            port: 5109
+          - service: SubscriptionService
+            project: backend/Services/SubscriptionService/SubscriptionService.Api
+            port: 5110
+          - service: AiService
+            project: backend/Services/AiService/AiService.Api
+            port: 5111
+          - service: CallbackService
+            project: backend/Services/CallbackService/CallbackService.Api
+            port: 5112
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore .NET packages
+        run: dotnet restore backend/
+        working-directory: ${{ github.workspace }}
+
+      - name: Build ${{ matrix.service }}
+        run: |
+          dotnet build "${{ matrix.project }}" \
+            --no-restore -c Release \
+            --verbosity minimal
+
+      - name: Apply migrations to CI PostgreSQL
+        # Each matrix job runs its own postgres service container.
+        # We replay migrations here so the service under test has a valid schema.
+        # (Migration replay job above uses a separate container — matrix jobs
+        #  each get their own ephemeral container.)
+        run: |
+          set -euo pipefail
+          PGPASSWORD=healthz_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;" \
+            -v ON_ERROR_STOP=1
+
+          for f in $(ls database/migrations/*.sql | grep -v '200_' | sort -t_ -k1,1n); do
+            PGPASSWORD=healthz_test psql \
+              -h localhost -p 5432 -U postgres -d snapaccount \
+              -v ON_ERROR_STOP=1 -f "${f}" -q
+          done
+
+          PGPASSWORD=healthz_test psql \
+            -h localhost -p 5432 -U postgres -d snapaccount \
+            -v ON_ERROR_STOP=1 -f database/migrations/999_seed_reference_data.sql -q
+
+          echo "Schema ready for ${{ matrix.service }}"
+
+      - name: Start ${{ matrix.service }} (background)
+        # DEV_AUTH_BYPASS skips Firebase token validation (no Firebase creds in CI).
+        # GCP_ENABLED=false prevents Google PubSub / Secret Manager calls at startup.
+        # ASPNETCORE_ENVIRONMENT=Testing keeps hosted background services idle.
+        run: |
+          dotnet run \
+            --project "${{ matrix.project }}" \
+            --no-build -c Release \
+            --urls "http://localhost:${{ matrix.port }}" \
+            &
+          echo "SERVICE_PID=$!" >> "${GITHUB_ENV}"
+        env:
+          ASPNETCORE_ENVIRONMENT: Testing
+          DEV_AUTH_BYPASS: "true"
+          ConnectionStrings__DefaultConnection: >-
+            Host=localhost;Port=5432;Database=snapaccount;
+            Username=postgres;Password=healthz_test
+          ConnectionStrings__snapaccount: >-
+            Host=localhost;Port=5432;Database=snapaccount;
+            Username=postgres;Password=healthz_test
+          DB_PASSWORD: "healthz_test"
+          REDIS_CONNECTION_STRING: "localhost:6379,abortConnect=false"
+          ConnectionStrings__Redis: "localhost:6379"
+          GCP_PROJECT_ID: "ci-placeholder"
+          # Disable GCP-backed hosted services so they don't fail on missing creds
+          GcpEnabled: "false"
+          GOOGLE_APPLICATION_CREDENTIALS: "/dev/null"
+          PanEncryption__Key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+          SESSION_JWT_SECRET: "ci-placeholder-jwt-secret-minimum-32-characters-long"
+          HostOptions__BackgroundServiceExceptionBehavior: "Ignore"
+
+      - name: Wait for /healthz (up to 60 seconds)
+        run: |
+          set -e
+          PORT="${{ matrix.port }}"
+          TIMEOUT=60
+          INTERVAL=3
+          ELAPSED=0
+
+          echo "Waiting for http://localhost:${PORT}/healthz ..."
+          until curl --silent --fail --max-time 5 "http://localhost:${PORT}/healthz" > /tmp/healthz_resp.txt 2>&1; do
+            ELAPSED=$((ELAPSED + INTERVAL))
+            if [ "${ELAPSED}" -ge "${TIMEOUT}" ]; then
+              echo "::error::${{ matrix.service }} healthz did not respond within ${TIMEOUT}s"
+              echo "Last response:"
+              cat /tmp/healthz_resp.txt || true
+              exit 1
+            fi
+            echo "  ${ELAPSED}s elapsed — retrying..."
+            sleep "${INTERVAL}"
+          done
+
+          HTTP_CODE=$(curl --silent --output /dev/null --write-out "%{http_code}" \
+            "http://localhost:${PORT}/healthz")
+
+          echo "healthz HTTP ${HTTP_CODE}"
+          if [ "${HTTP_CODE}" != "200" ]; then
+            echo "::error::${{ matrix.service }} /healthz returned HTTP ${HTTP_CODE} (expected 200)"
+            cat /tmp/healthz_resp.txt || true
+            exit 1
+          fi
+
+          echo "✓ ${{ matrix.service }} /healthz → 200 OK"
+          cat /tmp/healthz_resp.txt
+
+      - name: Stop service
+        if: always()
+        run: kill "${SERVICE_PID}" 2>/dev/null || true
+
+  # ─────────────────────────────────────────────
+  # Job 6: Docker build smoke test (no push)
   # ─────────────────────────────────────────────
   docker-smoke-test:
     name: Docker Build Smoke Test
@@ -277,3 +647,182 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           tags: snapaccount/${{ steps.lc.outputs.service }}:ci-test
+          load: true   # load into local Docker daemon so subsequent steps can run the image
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Job 7: ReportService font verification + QuestPDF smoke test (NEW-D17)
+  #
+  # Rationale:
+  #   ReportService and LoanService bundle Inter, Noto Sans Devanagari, and
+  #   Noto Sans Bengali fonts at image build time (backend/Shared/fonts/).
+  #   A missing font layer causes silent rendering failures or crashes in
+  #   QuestPDF at runtime — not at startup — so healthz does not catch it.
+  #
+  #   This job:
+  #     (a) Builds the ReportService container image.
+  #     (b) Asserts all expected font files exist at /app/fonts/ inside the image.
+  #     (c) Runs a QuestPDF font-registration smoke test via `dotnet run` against
+  #         the built project (not the container) to verify FontManager.RegisterFont*
+  #         succeeds without throwing. A full PDF render inside the container is
+  #         impractical in CI (requires a writable filesystem at /tmp and a display),
+  #         so we validate font-file presence in the image + registration in the
+  #         host dotnet process — together these cover the failure mode.
+  #
+  # Note (TL-1): CI billing is currently off. This job is syntactically valid and
+  #   will activate automatically when GitHub Actions billing is re-enabled.
+  # ─────────────────────────────────────────────────────────────────────
+  report-font-verify:
+    name: ReportService Font Verification
+    runs-on: ubuntu-latest
+    # Runs independently of docker-smoke-test to avoid the matrix overhead;
+    # only ReportService needs font verification (LoanService uses same font layer).
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── (a) Build the ReportService image ─────────────────────────────────
+      - name: Build ReportService Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          build-args: SERVICE_NAME=ReportService
+          push: false
+          load: true   # load into local Docker daemon for the verify step below
+          cache-from: type=gha,scope=ReportService
+          cache-to: type=gha,mode=max,scope=ReportService
+          tags: snapaccount/report-service:font-verify
+
+      # ── (b) Assert font files exist inside the image ───────────────────────
+      - name: Verify font files are present in /app/fonts/
+        # Runs a minimal shell command inside the image to list expected font files.
+        # Fails with a non-zero exit code if any file is missing (ls returns 1).
+        run: |
+          set -euo pipefail
+
+          echo "Verifying Inter fonts..."
+          docker run --rm --entrypoint sh snapaccount/report-service:font-verify -c \
+            "ls /app/fonts/Inter/Inter-Regular.ttf \
+                /app/fonts/Inter/Inter-Medium.ttf \
+                /app/fonts/Inter/Inter-SemiBold.ttf \
+                /app/fonts/Inter/Inter-Bold.ttf"
+
+          echo "Verifying Noto Sans Devanagari fonts..."
+          docker run --rm --entrypoint sh snapaccount/report-service:font-verify -c \
+            "ls /app/fonts/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf \
+                /app/fonts/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf"
+
+          echo "Verifying Noto Sans Bengali fonts..."
+          docker run --rm --entrypoint sh snapaccount/report-service:font-verify -c \
+            "ls /app/fonts/NotoSansBengali/NotoSansBengali-Regular.ttf \
+                /app/fonts/NotoSansBengali/NotoSansBengali-Bold.ttf"
+
+          echo "All expected font files are present in the image."
+
+      # ── (c) QuestPDF font-registration smoke test (host dotnet process) ────
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore .NET packages
+        working-directory: ${{ github.workspace }}
+        run: dotnet restore backend/
+
+      - name: QuestPDF font-registration smoke test
+        # Builds and runs a minimal C# script that:
+        #   1. Sets QuestPDF license (Community — no key required for testing).
+        #   2. Registers all three font families from backend/Shared/fonts/.
+        #   3. Exits 0 on success, non-zero if any font file is missing or
+        #      FontManager throws (e.g. corrupt TTF header, wrong path).
+        # This covers the registration code path without a full PDF render.
+        # QUESTPDF_FONTS_PATH is the fallback path used in dev/CI (not in the container).
+        env:
+          QUESTPDF_FONTS_PATH: "${{ github.workspace }}/backend/Shared/fonts"
+        run: |
+          set -euo pipefail
+
+          # Write a temporary C# top-level program into a temp project
+          SMOKE_DIR="$(mktemp -d)"
+
+          cat > "${SMOKE_DIR}/smoke.csproj" <<'CSPROJ'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net10.0</TargetFramework>
+              <Nullable>enable</Nullable>
+              <ImplicitUsings>enable</ImplicitUsings>
+            </PropertyGroup>
+            <ItemGroup>
+              <!-- Use the same QuestPDF version as ReportService by resolving from the backend NuGet cache -->
+              <PackageReference Include="QuestPDF" Version="2024.*" />
+            </ItemGroup>
+          </Project>
+          CSPROJ
+
+          cat > "${SMOKE_DIR}/Program.cs" <<'CSHARP'
+          using QuestPDF.Infrastructure;
+          using QuestPDF.Previewer;
+
+          // Set license before any FontManager calls
+          QuestPDF.Settings.License = LicenseType.Community;
+
+          var fontsRoot = Environment.GetEnvironmentVariable("QUESTPDF_FONTS_PATH")
+              ?? "/app/fonts";
+
+          Console.WriteLine($"[smoke] Fonts root: {fontsRoot}");
+
+          var expectedFonts = new[]
+          {
+              ("Inter",                Path.Combine(fontsRoot, "Inter", "Inter-Regular.ttf")),
+              ("Inter",                Path.Combine(fontsRoot, "Inter", "Inter-Medium.ttf")),
+              ("Inter",                Path.Combine(fontsRoot, "Inter", "Inter-SemiBold.ttf")),
+              ("Inter",                Path.Combine(fontsRoot, "Inter", "Inter-Bold.ttf")),
+              ("Noto Sans Devanagari", Path.Combine(fontsRoot, "NotoSansDevanagari", "NotoSansDevanagari-Regular.ttf")),
+              ("Noto Sans Devanagari", Path.Combine(fontsRoot, "NotoSansDevanagari", "NotoSansDevanagari-Bold.ttf")),
+              ("Noto Sans Bengali",    Path.Combine(fontsRoot, "NotoSansBengali", "NotoSansBengali-Regular.ttf")),
+              ("Noto Sans Bengali",    Path.Combine(fontsRoot, "NotoSansBengali", "NotoSansBengali-Bold.ttf")),
+          };
+
+          var missing = new List<string>();
+          foreach (var (name, path) in expectedFonts)
+          {
+              if (!File.Exists(path))
+              {
+                  missing.Add(path);
+                  Console.Error.WriteLine($"[smoke] MISSING: {path}");
+              }
+              else
+              {
+                  QuestPDF.Drawing.FontManager.RegisterFontWithCustomName(name, File.OpenRead(path));
+                  Console.WriteLine($"[smoke] OK: {Path.GetFileName(path)} registered as '{name}'");
+              }
+          }
+
+          if (missing.Count > 0)
+          {
+              Console.Error.WriteLine($"[smoke] FAILED: {missing.Count} font file(s) missing.");
+              Console.Error.WriteLine("  Add missing fonts to backend/Shared/fonts/ per docs/devops/questpdf-font-bundling.md");
+              Environment.Exit(1);
+          }
+
+          Console.WriteLine("[smoke] All fonts registered successfully. QuestPDF font-registration smoke test PASSED.");
+          CSHARP
+
+          echo "Running QuestPDF font-registration smoke test..."
+          dotnet run --project "${SMOKE_DIR}/smoke.csproj" \
+            --configuration Release \
+            2>&1
+
+          echo "QuestPDF font-registration smoke test passed."

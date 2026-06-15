@@ -17,6 +17,12 @@ import ItcMismatchPage from '@/pages/gst/ItcMismatchPage'
 // Phase 6B — GST Notice Tracker
 import NoticeTrackerListPage from '@/pages/gst/NoticeTrackerListPage'
 import NoticeDetailPage from '@/pages/gst/NoticeDetailPage'
+// GAP-022 — GST Tax Rate Configuration (gst.admin.taxrates)
+import GstTaxRatesPage from '@/pages/gst/GstTaxRatesPage'
+// GAP-101 — GSTN IMS Inbox (Board #32, mandatory from 1 Apr 2026)
+import ImsInboxPage from '@/pages/gst/ImsInboxPage'
+import ImsInvoiceDetailPage from '@/pages/gst/ImsInvoiceDetailPage'
+import Gstr1aPage from '@/pages/gst/Gstr1aPage'
 import UserListPage from '@/pages/users/UserListPage'
 import UserDetailPage from '@/pages/users/UserDetailPage'
 import SettingsPage from '@/pages/settings/SettingsPage'
@@ -49,6 +55,19 @@ import OrganizationDetailPage from '@/pages/orgs/OrganizationDetailPage'
 import InviteAcceptancePage from '@/pages/auth/InviteAcceptancePage'
 // Admin utilities — audit log (admin.dashboard.read)
 import AuditLogPage from '@/pages/admin/AuditLogPage'
+// GAP-038 / GAP-052 — System Health page (admin.dashboard.read)
+import SystemHealthPage from '@/pages/admin/SystemHealthPage'
+// MCA Compliance — edit log (accounting.editlog.read)
+import EditLogPage from '@/pages/compliance/EditLogPage'
+// GAP-036 — Subscriber list + Invoice management
+import SubscriberListPage from '@/pages/subscriptions/SubscriberListPage'
+import InvoiceManagementPage from '@/pages/subscriptions/InvoiceManagementPage'
+// Wave 7 — GAP-037 Notification Templates
+import TemplateListPage from '@/pages/notifications/TemplateListPage'
+import TemplateEditorPage from '@/pages/notifications/TemplateEditorPage'
+// Wave 7 — GAP-031 CA Appointments
+import CaAvailabilityPage from '@/pages/ca/CaAvailabilityPage'
+import CaAppointmentsPage from '@/pages/ca/CaAppointmentsPage'
 
 // Layout wrapper for protected routes
 // KeyboardShortcutsProvider uses useNavigate() so it must live inside the
@@ -164,6 +183,41 @@ export const router = createBrowserRouter([
       </ProtectedLayout>
     ),
   },
+  // GAP-101: IMS Inbox (specific routes BEFORE dynamic :id, GSTR-1A BEFORE detail)
+  {
+    path: '/gst/ims',
+    element: (
+      <ProtectedLayout>
+        <ImsInboxPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    path: '/gst/ims/gstr1a',
+    element: (
+      <ProtectedLayout>
+        <Gstr1aPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    path: '/gst/ims/:invoiceId',
+    element: (
+      <ProtectedLayout>
+        <ImsInvoiceDetailPage />
+      </ProtectedLayout>
+    ),
+  },
+  // GAP-022: GST Tax Rate Config (specific route BEFORE dynamic :id)
+  {
+    path: '/gst/tax-rates',
+    element: (
+      <ProtectedLayout>
+        <GstTaxRatesPage />
+      </ProtectedLayout>
+    ),
+  },
+
   {
     path: '/gst/:id',
     element: (
@@ -298,6 +352,24 @@ export const router = createBrowserRouter([
       </ProtectedLayout>
     ),
   },
+  // GAP-036 — Subscriber list (platform admin, subscription.plan.create)
+  {
+    path: '/subscriptions/subscribers',
+    element: (
+      <ProtectedLayout>
+        <SubscriberListPage />
+      </ProtectedLayout>
+    ),
+  },
+  // GAP-036 — Invoice management (org-scoped + generate)
+  {
+    path: '/subscriptions/invoices',
+    element: (
+      <ProtectedLayout>
+        <InvoiceManagementPage />
+      </ProtectedLayout>
+    ),
+  },
 
   // Reports — Phase 6F full build
   {
@@ -388,6 +460,25 @@ export const router = createBrowserRouter([
       </ProtectedLayout>
     ),
   },
+  // System Health page (GAP-038/GAP-052 — admin.dashboard.read, SUPER_ADMIN)
+  {
+    path: '/admin/system-health',
+    element: (
+      <ProtectedLayout>
+        <SystemHealthPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // MCA Compliance — Edit Log (accounting.editlog.read)
+  {
+    path: '/compliance/edit-log',
+    element: (
+      <ProtectedLayout>
+        <EditLogPage />
+      </ProtectedLayout>
+    ),
+  },
 
   // Callbacks (Phase 6E)
   {
@@ -411,6 +502,43 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedLayout>
         <CallbackDetailPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // Wave 7 — GAP-037 Notification Templates
+  {
+    path: '/notifications/templates',
+    element: (
+      <ProtectedLayout>
+        <TemplateListPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    // Editor: /notifications/templates/:id (UUID — reconciled to backend id:guid routing)
+    path: '/notifications/templates/:id',
+    element: (
+      <ProtectedLayout>
+        <TemplateEditorPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // Wave 7 — GAP-031 CA Consultations
+  {
+    path: '/ca/availability',
+    element: (
+      <ProtectedLayout>
+        <CaAvailabilityPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    path: '/ca/appointments',
+    element: (
+      <ProtectedLayout>
+        <CaAppointmentsPage />
       </ProtectedLayout>
     ),
   },

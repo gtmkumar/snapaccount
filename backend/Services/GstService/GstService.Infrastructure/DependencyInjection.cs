@@ -70,6 +70,11 @@ public static class DependencyInjection
         services.AddScoped<IItcMismatchReadRepository, ItcMismatchReadRepository>();
         services.AddScoped<IGstCalculationService, GstCalculationService>();
 
+        // GAP-108: Config-driven statutory deadline service for GST notices
+        services.AddScoped<IGstNoticeDeadlineService, GstNoticeDeadlineService>();
+        // GAP-108: Config options abstraction (keeps IConfiguration out of Application layer)
+        services.AddSingleton<IGstServiceOptions, GstServiceOptions>();
+
         // Phase 6B: GSTN/IRP/EWB adapter selection — config-driven, never hardcoded
         var productionApisEnabled = string.Equals(
             configuration["GST_PRODUCTION_APIS_ENABLED"], "true",
@@ -81,6 +86,8 @@ public static class DependencyInjection
             services.AddHttpClient<IGstnApiClient, ProductionGstnApiClient>();
             services.AddHttpClient<IIrpClient, ProductionIrpClient>();
             services.AddHttpClient<IEwbClient, ProductionEwbClient>();
+            // GAP-101: GSTN IMS production client (TODO: provision GSTN_IMS_SESSION_TOKEN via Secret Manager)
+            services.AddHttpClient<IImsGstnClient, ProductionImsGstnClient>();
         }
         else
         {
@@ -88,6 +95,8 @@ public static class DependencyInjection
             services.AddSingleton<IGstnApiClient, MockGstnApiClient>();
             services.AddSingleton<IIrpClient, MockIrpClient>();
             services.AddSingleton<IEwbClient, MockEwbClient>();
+            // GAP-101: GSTN IMS mock client — deterministic seeded invoices for dev/test
+            services.AddSingleton<IImsGstnClient, MockImsGstnClient>();
         }
 
         // GCS for notice attachments
@@ -98,10 +107,32 @@ public static class DependencyInjection
 
         // Phase 6B: Recurring job subscriber for deadline reminders
         services.AddScoped<IGstDeadlineCheckHandler, GstDeadlineCheckHandler>();
-        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<GstRecurringJobsSubscriber>();
+
+        // GAP-053: GcpStartup silent-skip fix — log a warning when GCP-dependent hosted services
+        // are skipped so the disabled state is observable in startup output.
+        var gcpEnabled = SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration);
+        if (gcpEnabled)
+        {
+            services.AddHostedService<GstRecurringJobsSubscriber>();
+        }
+        else
+        {
+            // GAP-053: warn via startup console so the skip is not silent
+            System.Console.Error.WriteLine(
+                "[WARN] GstService: GstRecurringJobsSubscriber skipped — GCP disabled " +
+                "(set GCP_ENABLED=true or provide Firebase:ServiceAccountJson to activate).");
+        }
 
         // SEC-040: DPDP Act 2023 Right-to-Erasure cascade
-        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();
+        if (gcpEnabled)
+        {
+            services.AddHostedService<AccountDeletionSubscriber>();
+        }
+        else
+        {
+            System.Console.Error.WriteLine(
+                "[WARN] GstService: AccountDeletionSubscriber (DPDP erasure) skipped — GCP disabled.");
+        }
 
         // Current user
         services.AddHttpContextAccessor();

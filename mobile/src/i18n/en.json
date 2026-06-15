@@ -19,6 +19,91 @@
         "remove": "Remove",
         "removeConfirmTitle": "Remove document?",
         "removeConfirmBody": "This will remove the document from the upload queue. This cannot be undone."
+      },
+      "title": "Documents",
+      "searchPlaceholder": "Search documents…",
+      "settingsSoon": "Document settings are coming soon.",
+      "count_one": "{{count}} document",
+      "count_other": "{{count}} documents",
+      "sortDate": "Date",
+      "categories": {
+        "all": "All",
+        "sales": "Sales Bills",
+        "purchase": "Purchase Bills",
+        "expenses": "Expenses",
+        "bank": "Bank Statements",
+        "salary": "Salary Slips",
+        "other": "Other"
+      },
+      "empty": {
+        "title": "No documents yet",
+        "body": "Photograph a bill or upload from your gallery to get started.",
+        "cta": "Capture first document"
+      },
+      "error": {
+        "loadFailed": "Couldn't load your documents. Check your connection and try again."
+      },
+      "add": {
+        "title": "Add document",
+        "body": "Choose how to add a document",
+        "photo": "Take photo",
+        "gallery": "Upload from gallery",
+        "permTitle": "Permission needed",
+        "permBody": "Allow photo library access to upload from your gallery.",
+        "galleryError": "Could not pick an image from the gallery."
+      },
+      "sr": {
+        "queued": "Document status: queued, waiting to upload",
+        "uploading": "Document status: uploading, {{percent}} percent",
+        "processing": "Document status: processing, please wait",
+        "ready": "Document status: ready",
+        "failed": "Document status: failed. Double-tap retry to try again."
+      },
+      "detail": {
+        "loading": "Loading…",
+        "share": "Share",
+        "categoryFallback": "Document",
+        "confidence": {
+          "high": "High confidence — auto-processed",
+          "medium": "Medium confidence — please verify the data",
+          "low": "Low confidence — manual review required"
+        },
+        "steps": {
+          "uploaded": "Uploaded",
+          "ocrComplete": "OCR Complete",
+          "inReview": "In Review",
+          "processed": "Processed"
+        },
+        "fields": {
+          "vendor": "Vendor",
+          "amount": "Amount",
+          "date": "Date",
+          "gstin": "GSTIN",
+          "invoiceNo": "Invoice No.",
+          "gstRate": "GST Rate",
+          "tax": "Tax",
+          "total": "Total"
+        },
+        "section": {
+          "status": "Status",
+          "extracted": "Extracted Data",
+          "details": "Details"
+        },
+        "meta": {
+          "category": "Category",
+          "uploaded": "Uploaded",
+          "fileSize": "File Size"
+        },
+        "action": {
+          "share": "Share Document",
+          "download": "Download PDF",
+          "delete": "Delete Document"
+        },
+        "delete": {
+          "body": "Are you sure you want to delete this document? This action cannot be undone.",
+          "confirm": "Delete",
+          "error": "Could not delete the document. Please try again."
+        }
       }
     },
     "camera": {
@@ -157,6 +242,15 @@
           "editPhone": "Edit",
           "rescheduleTitle": "Reschedule",
           "rescheduleSubmit": "Confirm reschedule"
+        },
+        "category": {
+          "general": "General",
+          "gst": "GST Filing",
+          "itr": "ITR Filing",
+          "loan": "Loans",
+          "accounting": "Accounting",
+          "subscription": "Subscription & Billing",
+          "technical": "Technical Support"
         }
       }
     },
@@ -172,6 +266,44 @@
         "profit-and-loss": "Profit & Loss",
         "balance-sheet": "Balance Sheet",
         "trial-balance": "Trial Balance"
+      },
+      "types": {
+        "trialBalance": "Trial Balance",
+        "pnl": "Profit & Loss",
+        "balanceSheet": "Balance Sheet",
+        "cashFlow": "Cash Flow",
+        "taxLiability": "Tax Liability",
+        "ledger": "Ledger",
+        "comparative": "Comparative",
+        "forecast": "Cash Flow Forecast"
+      },
+      "badge": {
+        "new": "NEW",
+        "ai": "AI"
+      },
+      "netProfitLoss": "Net Profit / Loss",
+      "updatedAt": "Updated {{time}}",
+      "tapToLoad": "Tap to load",
+      "comingSoon": "Coming soon",
+      "view": "View",
+      "viewA11y": "View {{report}} report",
+      "export": {
+        "title": "Export for CA / Auditor",
+        "tally": "Tally XML Export",
+        "csv": "Standard CSV Export"
+      },
+      "comparative": {
+        "title": "Comparative Analysis",
+        "subtitle": "YoY & MoM trends",
+        "mom": "Month on month",
+        "yoy": "Year on year",
+        "revenue": "Revenue",
+        "expenses": "Expenses",
+        "profit": "Net profit",
+        "error": "Couldn't load the comparative report.",
+        "emptyTitle": "Not enough data yet",
+        "emptyBody": "Upload documents and record transactions to see trends.",
+        "groupA11y": "{{period}}: revenue {{revenue}}, expenses {{expenses}}, net profit {{profit}}"
       }
     },
     "common": {
@@ -181,7 +313,15 @@
       "retry": "Retry",
       "save": "Save",
       "close": "Close",
-      "error": "Error"
+      "error": "Error",
+      "screenError": {
+        "title": "Something went wrong",
+        "body": "This screen hit an unexpected error. Try again, or go back to the previous screen."
+      },
+      "comingSoon": "Coming soon",
+      "goBack": "Go back",
+      "done": "Done",
+      "continue": "Continue"
     },
     "gst": {
       "notices": {
@@ -191,7 +331,15 @@
         "retry": "Retry",
         "emptyTitle": "No notices",
         "emptyBody": "You have no GST notices. We'll alert you when one arrives.",
-        "archiveGated": "Respond to notice before archiving."
+        "archiveGated": "Respond to notice before archiving.",
+        "filter": {
+          "all": "All",
+          "received": "Received",
+          "underReview": "Under review",
+          "overdue": "Overdue",
+          "responded": "Responded",
+          "closed": "Closed"
+        }
       },
       "noticeDetail": {
         "title": "Notice Details",
@@ -207,7 +355,11 @@
         "successTitle": "Response Submitted",
         "successBody": "Your response has been recorded.",
         "errorTitle": "Submission Failed",
-        "errorBody": "Could not submit your response. Please try again."
+        "errorBody": "Could not submit your response. Please try again.",
+        "statutoryDeadline": "Response deadline",
+        "respondedOn": "Responded on {{date}}",
+        "actionInAdmin": "Reply to this notice in the web admin or message your CA.",
+        "messageCa": "Message your CA"
       },
       "nilReturn": {
         "title": "File Nil Return",
@@ -230,6 +382,238 @@
         "backToDashboard": "Back to Dashboard",
         "errorTitle": "Filing Failed",
         "errorBody": "Could not file nil return. Please try again."
+      },
+      "ims": {
+        "nav": {
+          "title": "IMS Inbox"
+        },
+        "entry": {
+          "title": "IMS Inbox",
+          "subtitle": "Accept or reject supplier invoices · {{period}}",
+          "pendingCount_one": "{{count}} invoice pending",
+          "pendingCount_other": "{{count}} invoices pending"
+        },
+        "period": {
+          "label": "Period",
+          "current": "Current period"
+        },
+        "summary": {
+          "pending": "Pending",
+          "accepted": "Accepted",
+          "rejected": "Rejected",
+          "pendingKept": "Pending (kept)",
+          "total_one": "{{count}} invoice",
+          "total_other": "{{count}} invoices"
+        },
+        "sync": {
+          "button": "Sync from GSTN",
+          "hint": "Pulls inward invoices from GSTN. Your existing decisions are kept.",
+          "lastSynced": "Last synced: {{datetime}}",
+          "never": "Not synced yet",
+          "success": "Synced — {{inserted}} new, {{skipped}} unchanged",
+          "error": "Couldn't sync with GSTN. {{message}}",
+          "rateLimited": "Too many sync attempts. Try again in a minute."
+        },
+        "banner": {
+          "actionRequired_one": "Action required by {{date}}. {{count}} invoice still pending. Anything not actioned will be automatically accepted when GSTR-2B is generated on the 14th.",
+          "actionRequired_other": "Action required by {{date}}. {{count}} invoices still pending. Anything not actioned will be automatically accepted when GSTR-2B is generated on the 14th.",
+          "windowPast": "GSTR-2B for {{period}} has been generated. Pending invoices were deemed accepted. To correct a rejection, use GSTR-1A.",
+          "learnMore": "Learn how IMS works"
+        },
+        "edu": {
+          "title": "How the Invoice Management System works",
+          "what": "Suppliers report invoices to GSTN. You must accept, reject, or keep each one pending. Accepted invoices flow into GSTR-2B and earn you ITC; rejected ones do not.",
+          "cutoff": "GSTR-2B for this period is generated on {{date}}. Act on every invoice before then.",
+          "cutoffNoDate": "GSTR-2B is generated on the 14th of the following month. Act on every invoice before then.",
+          "doingNothing": "If you do nothing, the invoice is automatically accepted on the 14th.",
+          "rejectPath": "Rejected an invoice? The supplier must correct it through a GSTR-1A amendment.",
+          "gotIt": "Got it"
+        },
+        "col": {
+          "supplier": "Supplier",
+          "invoice": "Invoice",
+          "taxableValue": "Taxable value",
+          "tax": "Tax",
+          "invoiceValue": "Invoice value",
+          "source": "Source",
+          "status": "Status",
+          "deadline": "Deadline",
+          "actions": "Actions"
+        },
+        "status": {
+          "PENDING": "Pending",
+          "ACCEPTED": "Accepted",
+          "REJECTED": "Rejected",
+          "PENDING_KEPT": "Pending (kept)",
+          "deemed": "Deemed accepted"
+        },
+        "deadline": {
+          "dueToday": "Due today",
+          "dueTodayA11y": "Deemed acceptance due today",
+          "inDays_one": "Deemed in {{count}} day",
+          "inDays_other": "Deemed in {{count}} days",
+          "a11y_one": "Automatically accepted in {{count}} day if no action is taken",
+          "a11y_other": "Automatically accepted in {{count}} days if no action is taken",
+          "deemedA11y": "Deemed accepted; GSTR-2B generated"
+        },
+        "action": {
+          "accept": "Accept",
+          "reject": "Reject",
+          "keepPending": "Keep pending",
+          "fixViaGstr1a": "Fix via GSTR-1A"
+        },
+        "accept": {
+          "success": "Invoice {{invoiceNumber}} accepted"
+        },
+        "keepPending": {
+          "hint": "You still need to accept or reject before the 14th, or it will be deemed accepted.",
+          "success": "Invoice {{invoiceNumber}} kept pending"
+        },
+        "reject": {
+          "title": "Reject invoice {{invoiceNumber}}?",
+          "consequence": "ITC for this invoice will not be included in GSTR-2B. The supplier must correct it via a GSTR-1A amendment.",
+          "reasonLabel": "Reason for rejection",
+          "reasonRequired": "Please give a reason (at least 3 characters).",
+          "reason": {
+            "price": "Price mismatch",
+            "notReceived": "Goods not received",
+            "duplicate": "Duplicate",
+            "taxRate": "Tax rate wrong",
+            "notMine": "Not my purchase"
+          },
+          "confirm": "Reject invoice",
+          "success": "Invoice {{invoiceNumber}} rejected"
+        },
+        "bulk": {
+          "select": "Select",
+          "selectedCount_one": "{{count}} selected",
+          "selectedCount_other": "{{count}} selected",
+          "cap": "Select up to 100 invoices per action",
+          "keepFirst": "Keep first {{count}}",
+          "preflight": "{{change}} will be {{action}}, {{skip}} skipped (already settled)",
+          "result": "{{changed}} updated, {{skipped}} skipped, {{failed}} failed",
+          "confirmTitle": "Apply bulk action?",
+          "rejectTitle_one": "Reject {{count}} invoice?",
+          "rejectTitle_other": "Reject {{count}} invoices?",
+          "noneEligible": "No selected invoices are eligible for this action.",
+          "failedTitle": "Some actions failed"
+        },
+        "undo": {
+          "label": "Undo",
+          "movedToKept": "Moved back to pending-kept."
+        },
+        "filter": {
+          "all": "All",
+          "searchPlaceholder": "Search supplier or invoice no.",
+          "clear": "Clear filters"
+        },
+        "empty": {
+          "noInvoices": "No invoices in IMS for {{period}}.",
+          "neverSynced": "Sync to pull your inward invoices from GSTN for {{period}}.",
+          "filtered": "No {{status}} invoices match your filters."
+        },
+        "noOrg": {
+          "title": "Link your business first",
+          "body": "GST tools need a business linked to your account. Complete your business setup to start syncing invoices from GSTN.",
+          "cta": "Complete business setup"
+        },
+        "error": {
+          "loadFailed": "Couldn't load IMS invoices.",
+          "alreadySettled": "This invoice is already {{status}} and can't be {{action}}. Use GSTR-1A to correct it.",
+          "actionFailed": "The action couldn't be completed. Please try again.",
+          "retry": "Retry"
+        },
+        "announce": {
+          "filtered": "Showing {{status}} invoices for {{period}}"
+        },
+        "row": {
+          "a11y": "{{supplier}}, GSTIN {{gstin}}, invoice {{invoiceNumber}} dated {{date}}, taxable {{taxable}}, tax {{tax}}, total {{total}}, status {{status}}. {{countdown}}"
+        },
+        "loadMore": "Load more",
+        "detail": {
+          "title": "Invoice detail",
+          "invoiceDate": "Invoice date",
+          "taxBreakdown": "Tax breakdown",
+          "igst": "IGST",
+          "cgst": "CGST",
+          "sgst": "SGST",
+          "cess": "Cess",
+          "rejectionReason": "Rejection reason",
+          "actionLog": "Action history",
+          "noActions": "No actions taken yet.",
+          "bulkTag": "Bulk"
+        }
+      },
+      "gstr1a": {
+        "nav": {
+          "title": "GSTR-1A amendments"
+        },
+        "empty": "No amendments. Rejected invoices that need supplier correction will appear here.",
+        "create": {
+          "cta": "Create GSTR-1A amendment",
+          "typeLabel": "Amendment type",
+          "originalInvoice": "Original invoice no.",
+          "supplierGstin": "Supplier GSTIN",
+          "correctedFigures": "Corrected figures",
+          "draftNote": "This creates a draft only. Submission and filing happen in a later step.",
+          "submit": "Create draft",
+          "success": "Amendment draft created"
+        },
+        "type": {
+          "B2B_AMENDMENT": "B2B amendment",
+          "B2BA": "B2B amendment (prior period)",
+          "CDNR_AMENDMENT": "Credit/debit note amendment",
+          "CDNRA": "Credit/debit note amendment (prior period)"
+        },
+        "status": {
+          "DRAFT": "Draft",
+          "SUBMITTED": "Submitted",
+          "FILED": "Filed"
+        },
+        "col": {
+          "arn": "ARN",
+          "filed": "Filed"
+        },
+        "notFiled": "Not filed"
+      },
+      "approval": {
+        "successTitle": "Return approved!",
+        "successBody": "Our team will file your return within 24 hours of the deadline.",
+        "errorBody": "Could not submit approval. Please try again.",
+        "biometricPrompt": "Verify to approve GST return"
+      },
+      "formType": {
+        "asmt10": {
+          "meaning": "Scrutiny of returns — discrepancy notice"
+        },
+        "drc01": {
+          "meaning": "Show-cause notice (demand)"
+        },
+        "drc01a": {
+          "meaning": "Pre-SCN intimation of liability"
+        },
+        "drc01b": {
+          "meaning": "Liability mismatch (GSTR-1 vs 3B)"
+        },
+        "drc01c": {
+          "meaning": "ITC mismatch (GSTR-2B vs 3B)"
+        },
+        "adt01": {
+          "meaning": "Audit notice (departmental audit)"
+        }
+      },
+      "gstat": {
+        "stepShort": "Stage {{current}}/{{total}}",
+        "stageA11y": "Appeal stage {{current}} of {{total}}: {{label}}",
+        "ladderTitle": "Appeal progress",
+        "backlogFlag": "GSTAT backlog appeal — file by 30/06/2026",
+        "stage": {
+          "appealFiled": "Appeal filed",
+          "replyFiled": "Reply filed",
+          "orderReceived": "Order received",
+          "gstatPending": "GSTAT pending",
+          "resolved": "Resolved"
+        }
       }
     },
     "itr": {
@@ -405,7 +789,8 @@
           "Issued": "Refund issued",
           "Failed": "Refund failed",
           "Adjusted": "Adjusted against demand"
-        }
+        },
+        "error": "Couldn't load your refund status. Try again."
       },
       "notices": {
         "title": "ITR Notices",
@@ -429,6 +814,34 @@
         "responseSuccessBody": "Your response has been recorded.",
         "errorTitle": "Failed to submit",
         "errorBody": "Could not submit your response. Please try again."
+      },
+      "dashboard": {
+        "title": "ITR Filing",
+        "action": {
+          "startFiling": "Start Filing",
+          "docChecklist": "Doc Checklist",
+          "compareRegime": "Compare Regime"
+        },
+        "returnsTitle": "Your ITR Returns",
+        "empty": {
+          "title": "No ITR returns yet",
+          "body": "Start your ITR filing for {{fy}}. Upload Form 16 and other documents to get started."
+        },
+        "regime": {
+          "new": "New Tax Regime",
+          "old": "Old Tax Regime"
+        },
+        "features": {
+          "title": "ITR Filing Features",
+          "items": [
+            "Smart document checklist based on your profile",
+            "Old vs New regime comparison with AI recommendation",
+            "E-verification via Aadhaar OTP or net banking",
+            "Refund tracking timeline",
+            "Notice handling (143(1), 143(2), 139(9))"
+          ]
+        },
+        "error": "Couldn't load your returns. Try again."
       }
     },
     "loan": {
@@ -791,6 +1204,29 @@
           "new": "New conversation"
         }
       },
+      "new": {
+        "title": "New conversation",
+        "category": {
+          "label": "Topic",
+          "general": "General",
+          "gst": "GST",
+          "itr": "Income Tax",
+          "doc": "Documents",
+          "loan": "Loan",
+          "billing": "Billing"
+        },
+        "subject": {
+          "label": "Subject (optional)",
+          "placeholder": "What is this about?"
+        },
+        "message": {
+          "label": "Your message",
+          "placeholder": "Describe your query…"
+        },
+        "submit": "Start conversation",
+        "submitting": "Starting…",
+        "error": "Couldn't start the conversation. Please try again."
+      },
       "detail": {
         "header": {
           "defaultTitle": "Chat",
@@ -830,6 +1266,37 @@
           "tapRetry": "Failed · tap to retry"
         },
         "newMessages": "{{count}} new messages"
+      },
+      "bookmark": {
+        "add": "Bookmark",
+        "remove": "Remove bookmark",
+        "added": "Bookmarked"
+      },
+      "bookmarks": {
+        "title": "Bookmarks",
+        "empty": {
+          "title": "No bookmarks yet",
+          "guidance": "Long-press any message to save it here."
+        },
+        "error": "Couldn't load your bookmarks.",
+        "jumped": "Jumped to bookmarked message",
+        "rowA11y": "Bookmarked message from {{sender}}: {{snippet}}",
+        "rowHint": "Opens the conversation at this message",
+        "sender": {
+          "you": "You",
+          "member": "Team member",
+          "ca": "CA",
+          "admin": "SnapAccount team",
+          "system": "System",
+          "ai": "AI assistant"
+        }
+      },
+      "export": {
+        "action": "Export chat as PDF",
+        "hint": "The PDF is a copy of this conversation for your records.",
+        "preparing": "Preparing your PDF…",
+        "ready": "Your PDF is ready",
+        "failed": "Couldn't generate the PDF"
       }
     },
     "celebration": {
@@ -963,6 +1430,12 @@
         "confirmCta": "Delete My Account",
         "errorTitle": "Could not delete account",
         "errorBody": "Something went wrong. Please try again or contact support if the issue persists."
+      },
+      "title": "Profile",
+      "org": {
+        "currentOrg": "Current Organization",
+        "businessOwner": "Business Owner",
+        "employee": "Employee"
       }
     },
     "auth": {
@@ -974,7 +1447,7 @@
         "loadError": "Could not load. Pull to refresh or try again."
       },
       "preferences": {
-        "title": "Notification Preferences",
+        "title": "Language & Notifications",
         "subtitle": "Choose how we keep you updated",
         "language": "Language",
         "channels": "Channels",
@@ -1060,6 +1533,143 @@
           "notFound": "We could not find this invite. Check the code and try again.",
           "generic": "Something went wrong. Please try again."
         }
+      },
+      "permissions": {
+        "heading": "App Permissions",
+        "subtext": "We need these permissions to work effectively for you",
+        "camera": {
+          "title": "Camera Access",
+          "reason": "To photograph bills and documents. Required for core functionality."
+        },
+        "notifications": {
+          "title": "Push Notifications",
+          "reason": "For GST filing deadlines, ITR reminders, and expert chat messages."
+        },
+        "storage": {
+          "title": "Storage Access",
+          "reason": "To save downloaded reports and upload documents from your gallery."
+        },
+        "required": "Required",
+        "allow": "Allow {{name}}",
+        "notNow": "Not Now",
+        "cameraDenied": {
+          "title": "Camera Required",
+          "body": "You won't be able to photograph documents. You can enable this in Settings later."
+        },
+        "granted": "Permission granted",
+        "denied": "Not granted — enable in device Settings if needed",
+        "continue": "Continue to SnapAccount"
+      },
+      "otp": {
+        "title": "Verify your number",
+        "subtitle": "Enter the 6-digit code sent to",
+        "changeNumber": "Change number",
+        "autoDetected": "OTP auto-detected from SMS",
+        "verifying": "Verifying…",
+        "verifyCta": "Verify & Continue",
+        "validity": "OTP is valid for 5 minutes",
+        "trust": "We only use your number to send a one-time code. Your data is encrypted and never shared without consent.",
+        "assistedHelp": "Trouble receiving the code? Sign in with password instead",
+        "errors": {
+          "tooMany": "Too many attempts. Please wait a few minutes.",
+          "failed": "Verification failed. Please try again.",
+          "resend": "Could not resend the OTP. Please try again.",
+          "invalid": "Incorrect OTP. Please check the code and try again.",
+          "expired": "This OTP has expired. Please request a new one.",
+          "alreadyUsed": "This OTP has already been used. Please request a new one.",
+          "maxAttempts": "Too many incorrect attempts. Please request a new OTP.",
+          "cooldown": "Please wait a moment before requesting a new OTP.",
+          "notFound": "No active OTP found for this number. Please request a new one."
+        }
+      },
+      "language": {
+        "heading": "Choose your language",
+        "subtext": "You can change this anytime in Settings",
+        "continue": "Continue"
+      },
+      "persona": {
+        "heading": "How will you use SnapAccount?",
+        "subtext": "This personalises your app. You can change it later from Settings.",
+        "business": {
+          "title": "I run a business",
+          "description": "GST filing, accounting, loans, document vault & expert CA chat"
+        },
+        "individual": {
+          "title": "I'm a salaried individual",
+          "description": "File your personal ITR, upload Form 16 & get tax support"
+        },
+        "note": "Both options keep your documents in a secure, encrypted vault."
+      },
+      "splash": {
+        "tagline": "Smart accounting for Indian businesses",
+        "madeInIndia": "Made with pride in India"
+      },
+      "wizard": {
+        "back": "Back",
+        "trustPan": "Your PAN is encrypted and never shared without your consent.",
+        "stepProgress": "Step {{current}} of {{total}}: {{label}}",
+        "step": "Step {{current}} of {{total}}",
+        "continue": "Continue",
+        "skipForNow": "Skip for now",
+        "completeSetup": "Complete Setup",
+        "saveFailed": "Could not save your profile. Please try again.",
+        "panLabel": "PAN Number",
+        "fullNameLabel": "Full Name (as on PAN)",
+        "fullNamePlaceholder": "Enter your full name",
+        "dobLabel": "Date of Birth",
+        "dobPlaceholder": "DD/MM/YYYY",
+        "gstinLabel": "GSTIN",
+        "aadhaarLabel": "Aadhaar Number",
+        "aadhaarHint": "Your Aadhaar number is masked and never stored",
+        "businessNameLabel": "Business Name",
+        "businessNamePlaceholder": "Enter your business name",
+        "businessTypeLabel": "Business Type",
+        "businessTypePlaceholder": "Select business type",
+        "businessTypeHint": "Options: {{options}}…",
+        "industryLabel": "Industry / Category",
+        "industryPlaceholder": "e.g. Retail, Manufacturing, Services",
+        "addressLabel": "Business Address",
+        "addressPlaceholder": "Street address, locality",
+        "stateLabel": "State",
+        "statePlaceholder": "Select state",
+        "stateHint": "{{total}} states/UTs available",
+        "pinCodeLabel": "PIN Code",
+        "pinCodePlaceholder": "6-digit postal code",
+        "stepPanTitle": "Your PAN Card",
+        "stepPanSubtitle": "We'll verify your PAN to link your tax profile",
+        "panSafeInfo": "Your PAN is safe. We use it only for government portal verification.",
+        "stepGstinTitle": "Link Your GST Number",
+        "stepGstinSubtitle": "Optional — link GSTIN to auto-import your filing history",
+        "stepAadhaarTitle": "Add Your Aadhaar",
+        "stepAadhaarSubtitle": "Used for loan applications and financial services",
+        "aadhaarMaskWarning": "Your Aadhaar number is masked and never stored in full — UIDAI guidelines. You can verify it later from Profile → Identity Documents.",
+        "stepBusinessTitle": "Business Details",
+        "individualTitle": "Your tax profile",
+        "individualSubtitle": "We'll use your PAN to set up personal ITR filing. No business details needed.",
+        "individualPanInfo": "Your PAN is safe. We use it only for government portal verification. You can add Aadhaar and Form 16 later from your profile.",
+        "valPanInvalid": "Invalid PAN format (e.g. ABCDE1234F)",
+        "valFullNameRequired": "Full name is required",
+        "valDobRequired": "Date of birth is required (DD/MM/YYYY)",
+        "valGstinInvalid": "Invalid GSTIN format (15 characters)",
+        "valBusinessNameRequired": "Business name is required",
+        "valBusinessTypeRequired": "Select a business type",
+        "valIndustryRequired": "Select an industry",
+        "valAddressRequired": "Address is required",
+        "valStateRequired": "Select a state",
+        "valPinCodeInvalid": "Enter a valid 6-digit PIN code"
+      },
+      "phone": {
+        "welcome": "Welcome to",
+        "subheading": "GST, ITR, Loans — all in one place for your business",
+        "sendingOtp": "Sending OTP…",
+        "continueOtp": "Continue with OTP",
+        "orContinue": "or continue with",
+        "passwordOption": "Phone number & password",
+        "sendError": "Could not send the OTP. Check your connection and try again.",
+        "termsPrefix": "By continuing, you agree to our",
+        "termsOfService": "Terms of Service",
+        "and": "and",
+        "privacyPolicy": "Privacy Policy"
       }
     },
     "documents": {
@@ -1156,7 +1766,8 @@
         "resentTitle": "Invite resent",
         "resentBody": "The invite validity has been extended.",
         "revokeConfirmTitle": "Revoke invite?",
-        "revokeConfirmBody": "This will cancel the invite for {{email}}."
+        "revokeConfirmBody": "This will cancel the invite for {{email}}.",
+        "error": "Couldn't load invites."
       },
       "invite": {
         "title": "Invite team member",
@@ -1178,6 +1789,528 @@
         "shareCta": "Share invite",
         "shareMessage": "You have been invited to join an organization on SnapAccount. Tap to accept: {{link}}"
       }
+    },
+    "tabs": {
+      "home": "Home",
+      "documents": "Documents",
+      "gst": "GST",
+      "loans": "Loans",
+      "taxes": "Taxes",
+      "support": "Support",
+      "more": "More"
+    },
+    "more": {
+      "title": "More",
+      "defaultUserName": "SnapAccount User",
+      "expertChat": "Expert Chat",
+      "expertChatDesc": "Chat with CA experts",
+      "itrFiling": "ITR Filing",
+      "itrFilingDesc": "File income tax return",
+      "notifications": "Notifications",
+      "notificationsDesc": "Alerts & updates",
+      "profileSettings": "Profile & Settings",
+      "profileSettingsDesc": "Account settings",
+      "privacyData": "Privacy & Data",
+      "privacyDataDesc": "Manage consents & your rights"
+    },
+    "orgSwitcher": {
+      "title": "Switch Business",
+      "subtitle": "Choose the business you want to work in. Everything in the app — documents, GST, loans and reports — is scoped to the selected business.",
+      "currentLabel": "Current business",
+      "switchCta": "Switch",
+      "switched": "Switched to {{org}}",
+      "currentA11y": "{{org}}, current business",
+      "switchToA11y": "Switch to {{org}}",
+      "entryA11y": "Current business {{org}}. Open business switcher",
+      "singleOrgNote": "You belong to one business right now. Businesses you create or join by invite will appear here.",
+      "empty": "No businesses found"
+    },
+    "kfs": {
+      "title": "Key Facts Statement",
+      "verified": {
+        "chip": "Verified"
+      },
+      "trust": {
+        "banner": "Issued & digitally signed by SnapAccount · cannot be edited",
+        "explainer": {
+          "title": "About this statement",
+          "body": "This statement was prepared and digitally signed by SnapAccount. Its contents cannot be changed."
+        }
+      },
+      "apr": {
+        "label": "Annual Percentage Rate (APR)",
+        "suffix": "p.a.",
+        "caption": "Inclusive of interest + all fees. This is the true cost.",
+        "nominal": "Nominal interest rate: {{rate}}% p.a. ({{type}})"
+      },
+      "snapshot": {
+        "sanctioned": "Sanctioned amount",
+        "tenure": "Tenure",
+        "emi": "Instalment (EMI)",
+        "totalInterest": "Total interest",
+        "totalFees": "Total of all fees",
+        "totalPayable": "Total amount payable"
+      },
+      "fees": {
+        "title": "All fees & charges",
+        "total": "Total fees & charges",
+        "thirdPartyTag": "third-party"
+      },
+      "net": {
+        "label": "Amount credited to your account"
+      },
+      "schedule": {
+        "toggle": "Full repayment schedule ({{count}} instalments)",
+        "col": {
+          "no": "#",
+          "dueDate": "Due date",
+          "emi": "EMI",
+          "principal": "Principal",
+          "interest": "Interest",
+          "balance": "Balance"
+        }
+      },
+      "coolingOff": {
+        "title": "Cooling-off period: {{days}} days",
+        "body": "You may exit within {{days}} days of disbursal by repaying the principal + proportionate APR, with no prepayment penalty."
+      },
+      "grievance": {
+        "title": "Grievance Redressal Officer",
+        "call": "Call",
+        "emailCta": "Email",
+        "escalation": "If unresolved in 30 days, escalate to RBI CMS (cms.rbi.org.in)"
+      },
+      "meta": {
+        "id": "KFS id: {{id}}",
+        "issued": "Issued {{dateTime}}",
+        "signature": "Signature (SHA-256, last 8): {{last8}} · Verified"
+      },
+      "scrollHint": "Please read to the end to continue",
+      "ack": {
+        "checkbox": "I have read and understood the Key Facts Statement."
+      },
+      "cta": {
+        "downloadPdf": "Download PDF",
+        "continue": "Continue to consent",
+        "disabledHint": "Read to the end and tick the acknowledgement to continue.",
+        "retry": "Retry"
+      },
+      "state": {
+        "preparing": {
+          "title": "Preparing your Key Facts Statement",
+          "body": "This usually takes a few moments. Please wait."
+        }
+      },
+      "error": {
+        "integrity": {
+          "title": "Verification failed",
+          "body": "We couldn't verify this statement. For your safety we can't continue. Please contact support."
+        },
+        "malformed": "This statement is incomplete. Please contact support.",
+        "offline": "You're offline. Connect to view your Key Facts Statement.",
+        "ackFailed": "Could not record your acknowledgement. Please retry.",
+        "download": "Could not download PDF. Please try again."
+      }
+    },
+    "privacy": {
+      "center": {
+        "title": "Privacy & Data",
+        "intro": {
+          "title": "Your data, your control.",
+          "body": "Manage consents, export or correct your data, and reach our Data Protection Officer. Protected under the DPDP Act 2023."
+        },
+        "nav": {
+          "consents": "My consents",
+          "consentsCount": "{{active}} active · {{withdrawn}} withdrawn",
+          "export": "Download my data",
+          "correction": "Request a correction",
+          "correctionPending": "{{count}} pending",
+          "deletion": "Delete my account",
+          "deletionContext": "Permanently erase your account and personal data, subject to legal retention (e.g. 7-year financial records)."
+        },
+        "footer": {
+          "policy": "Privacy Policy",
+          "rights": "DPDP Rights"
+        },
+        "loadError": "We couldn't load your consent summary right now. All the privacy options below still work."
+      },
+      "consents": {
+        "title": "My consents",
+        "filter": {
+          "active": "Active",
+          "withdrawn": "Withdrawn",
+          "all": "All"
+        },
+        "status": {
+          "granted": "Granted",
+          "withdrawn": "Withdrawn"
+        },
+        "grantedOn": "Granted {{date}} · Version {{version}}",
+        "withdrawnOn": "Withdrawn {{date}}",
+        "cta": {
+          "withdraw": "Withdraw consent",
+          "regrant": "Re-grant"
+        },
+        "confirm": {
+          "title": "Withdraw consent for {{purpose}}?",
+          "loanLinkedNote": "Withdrawal stops future processing. For applications already in progress, please contact support.",
+          "note": "Withdrawal takes effect immediately and is recorded for audit. This does not delete data already lawfully processed.",
+          "cancel": "Cancel",
+          "confirm": "Withdraw"
+        },
+        "toast": {
+          "withdrawn": "Consent withdrawn."
+        },
+        "error": {
+          "withdraw": "Could not withdraw consent. Please try again.",
+          "load": "Could not load consents. Please retry."
+        },
+        "empty": "No consents on record yet."
+      },
+      "export": {
+        "title": "Download my data",
+        "explainer": {
+          "title": "Get a copy of your SnapAccount data",
+          "body": "Your export includes profile & business details, documents, GST filings, ITR records, loan applications, chat history, and notifications. Large files are delivered as a secure, time-limited download."
+        },
+        "cta": {
+          "request": "Request my data export",
+          "download": "Download",
+          "requestAgain": "Request again",
+          "retry": "Retry"
+        },
+        "status": {
+          "processing": "Preparing your export… We'll notify you when it's ready.",
+          "ready": "Your data export is ready.",
+          "expired": "This export has expired.",
+          "failed": "Export failed. Please try again."
+        },
+        "availableUntil": "Available until {{date}}",
+        "error": {
+          "offline": "Connect to internet to request your data export.",
+          "generic": "Could not process your request. Please try again."
+        }
+      },
+      "correction": {
+        "title": "Request a correction",
+        "field": {
+          "label": "Which information?",
+          "description": "Describe the correction needed",
+          "descriptionPlaceholder": "Describe what needs to be corrected and the correct value…",
+          "options": {
+            "name": "Name",
+            "businessName": "Business name",
+            "gstin": "GSTIN",
+            "panDisplay": "PAN",
+            "phone": "Phone",
+            "email": "Email",
+            "address": "Address",
+            "other": "Other"
+          }
+        },
+        "info": {
+          "reverify": "Some fields (PAN, GSTIN) may need re-verification after correction."
+        },
+        "cta": {
+          "submit": "Submit request",
+          "cancel": "Cancel"
+        },
+        "toast": {
+          "submitted": "Correction request submitted."
+        },
+        "list": {
+          "title": "My correction requests",
+          "newCta": "New"
+        },
+        "status": {
+          "submitted": "Submitted",
+          "underReview": "Under review",
+          "approved": "Approved",
+          "rejected": "Rejected"
+        },
+        "rejectedReason": "Reason: {{reason}}",
+        "empty": "No correction requests yet.",
+        "error": {
+          "submit": "Could not submit your request. Please try again.",
+          "load": "Could not load correction requests."
+        }
+      },
+      "deletion": {
+        "nav": "Delete my account"
+      },
+      "dpo": {
+        "title": "Data Protection Officer",
+        "sla": "We acknowledge requests within {{ackDays}} business days and resolve within {{slaDays}} days.",
+        "escalation": "Unsatisfied? You may complain to the Data Protection Board of India.",
+        "cta": {
+          "call": "Call",
+          "email": "Email",
+          "learnMore": "Learn more",
+          "viewFull": "View full contact"
+        },
+        "pendingTitle": "DPO appointment pending",
+        "pendingBody": "Our Data Protection Officer contact will be published here soon. Until then, raise privacy requests from the Privacy Center — they reach the same team.",
+        "pendingShort": "DPO contact will be published soon",
+        "labels": {
+          "email": "Email",
+          "phone": "Phone",
+          "address": "Address (India)",
+          "hours": "Business Hours"
+        }
+      }
+    },
+    "biometric": {
+      "prompt": "Confirm your identity",
+      "fallback": {
+        "title": "Confirm action",
+        "body": "Your device doesn't support biometrics. Tap Confirm to proceed.",
+        "confirm": "Confirm",
+        "cancel": "Cancel"
+      },
+      "error": "Authentication failed. Please try again."
+    },
+    "pan": {
+      "label": "PAN Number",
+      "hint": "Enter your 10 character PAN number",
+      "error": {
+        "length": "PAN must be 10 characters",
+        "format": "Invalid PAN format (e.g. ABCDE1234F)"
+      },
+      "valid": "PAN format valid",
+      "remaining": "{{count}} characters remaining"
+    },
+    "otp": {
+      "digitLabel": "OTP digit {{index}}",
+      "resend": "Resend OTP",
+      "resendIn": "Resend OTP in {{time}}",
+      "resendInLabel": "Resend OTP, available in {{time}}",
+      "resendAvailable": "You can now resend the OTP",
+      "resendMilestone": "Resend available in {{seconds}} seconds"
+    },
+    "a11y": {
+      "reviewedAll": "I have reviewed the full document",
+      "reviewedAllHint": "Double tap to confirm you have reviewed the document. This unlocks the acknowledgement checkbox.",
+      "gateUnlocked": "Acknowledgement unlocked. You can now select the confirmation checkbox.",
+      "scrollGateHint": "Scroll to the end to enable acceptance",
+      "scrollGateDisabled": "Disabled. Scroll to the end of the document to enable."
+    },
+    "billing": {
+      "title": "Subscription & Billing",
+      "currentPlan": "Current plan",
+      "status": "Status",
+      "price": "Price",
+      "cycle": "Billing cycle",
+      "period": "Current period",
+      "invoices": "Invoices",
+      "invoicesEmpty": "No invoices yet",
+      "invoiceTotal": "Total (incl. GST)",
+      "paidOn": "Paid on {{date}}",
+      "noPlan": {
+        "title": "No active subscription",
+        "body": "You are on the free tier. Paid plans will appear here once available."
+      },
+      "error": {
+        "title": "Couldn't load billing details",
+        "body": "Please check your connection and try again."
+      }
+    },
+    "help": {
+      "title": "Help & Support",
+      "intro": "Talk to a SnapAccount expert — chat instantly or get a call back.",
+      "chatCta": "Chat with an expert",
+      "chatBody": "Start a conversation with our CA support team.",
+      "callbackTitle": "Prefer a call?"
+    },
+    "editBusiness": {
+      "title": "Edit Business Details",
+      "readonlyNote": "Business name and GSTIN are verified details and can't be changed here. Contact support to update them.",
+      "name": "Business name",
+      "gstin": "GSTIN",
+      "address": "Registered address",
+      "addressLine1": "Address line 1",
+      "addressLine2": "Address line 2",
+      "city": "City",
+      "state": "State",
+      "pincode": "PIN code",
+      "pincodeError": "PIN code must be 6 digits",
+      "save": "Save changes",
+      "saved": "Business details updated",
+      "error": {
+        "load": "Couldn't load business details",
+        "save": "Couldn't save changes. Please try again."
+      }
+    },
+    "notifications": {
+      "title": "Notifications",
+      "markAll": "Mark all read",
+      "markAllSoon": "Mark all read is coming soon.",
+      "empty": {
+        "title": "No notifications yet",
+        "body": "GST deadlines, document updates, and expert chat messages will appear here."
+      },
+      "error": {
+        "loadFailed": "Couldn't load notifications. Check your connection and try again."
+      }
+    },
+    "ca": {
+      "book": {
+        "cta": "Book a video consultation",
+        "subtitle": "Talk face-to-face with your CA over Google Meet"
+      },
+      "select": {
+        "title": "Choose your CA",
+        "error": "Couldn't load your CAs.",
+        "emptyTitle": "No CA available yet",
+        "emptyBody": "Your CA will appear here once assigned. Need help? Message support.",
+        "caA11y": "Book a consultation with {{caName}}"
+      },
+      "slot": {
+        "title": "Pick a slot",
+        "rescheduleTitle": "Pick a new slot",
+        "allTimesIst": "All times shown in IST",
+        "empty": "No slots available on this day — try another date",
+        "error": "Couldn't load available slots.",
+        "partOfDay": {
+          "morning": "Morning",
+          "afternoon": "Afternoon",
+          "evening": "Evening"
+        },
+        "dayFullA11y": "{{date}}, fully booked",
+        "slotA11y": "Slot at {{time}}",
+        "bookedA11y": "{{time}}, unavailable",
+        "confirmReschedule": "Confirm new slot"
+      },
+      "confirm": {
+        "title": "Confirm your consultation",
+        "ca": "CA",
+        "date": "Date",
+        "time": "Time",
+        "duration": "Duration",
+        "durationValue": "{{minutes}} min",
+        "channel": "Channel",
+        "channelValue": "Google Meet",
+        "topicLabel": "Consultation topic",
+        "topic": {
+          "accounting": "Accounting",
+          "gst": "GST",
+          "itr": "ITR",
+          "loan": "Loan",
+          "other": "Other"
+        },
+        "topicShort": "Topic",
+        "notesLabel": "What would you like to discuss?",
+        "notesPlaceholder": "Share anything that helps your CA prepare (optional)",
+        "submit": "Confirm booking",
+        "error": "Couldn't complete the booking. Please try again."
+      },
+      "confirmed": {
+        "title": "You're booked",
+        "subtitle": "{{date}} at {{time}}",
+        "reminderNote": "We'll remind you 30 minutes and 5 minutes before.",
+        "viewAppointment": "View appointment"
+      },
+      "appts": {
+        "title": "My appointments",
+        "moreDesc": "Your CA video consultations",
+        "tab": {
+          "upcoming": "Upcoming",
+          "past": "Past"
+        },
+        "empty": {
+          "upcoming": "No upcoming consultations",
+          "upcomingBody": "Book a video consultation with your CA.",
+          "past": "No past consultations yet"
+        },
+        "error": "Couldn't load your consultations.",
+        "cardA11y": "{{caName}}, {{date}}, {{status}}",
+        "callbackEscape": "Request a callback"
+      },
+      "appt": {
+        "join": "Join call",
+        "joinA11y": "Join video call with {{caName}}",
+        "manage": "Manage",
+        "cutoffOpen": "You can reschedule or cancel until {{time}} (2 hours before).",
+        "cutoffClosed": "Rescheduling and cancellation are closed — it's within 2 hours of your appointment.",
+        "cutoffClosedHelp": "Need help? Message your CA in chat.",
+        "reschedule": "Reschedule",
+        "cancel": "Cancel",
+        "cancelConfirm": "Cancel this consultation?",
+        "cancelConsequence": "Your CA will be notified and the slot will be released.",
+        "cancelConfirmCta": "Yes, cancel it",
+        "keep": "Keep appointment",
+        "messageCa": "Message CA"
+      },
+      "rating": {
+        "title": "How was your consultation with {{caName}}?",
+        "commentLabel": "Add a comment (optional)",
+        "submit": "Submit",
+        "later": "Maybe later",
+        "cta": "Rate",
+        "starsA11y": "Rating",
+        "valueA11y": "{{value}} of {{max}} stars"
+      },
+      "detail": {
+        "title": "Appointment",
+        "status": "Status",
+        "reminderNote": "Reminders: 30 min and 5 min before, via push."
+      },
+      "status": {
+        "requested": "Requested",
+        "confirmed": "Confirmed",
+        "inProgress": "In progress",
+        "completed": "Completed",
+        "cancelled": "Cancelled",
+        "noShow": "No show"
+      }
+    },
+    "device": {
+      "meta": {
+        "model": "Device",
+        "location": "Approximate location",
+        "time": "Time",
+        "unknown": "Unknown"
+      },
+      "countdown": {
+        "expiresIn": "Expires in {{time}}",
+        "expired": "Request expired",
+        "milestone": "{{time}} remaining"
+      },
+      "waiting": {
+        "title": "Approve this device",
+        "body": "We sent a request to your other device. Open SnapAccount there to approve this login.",
+        "thisDevice": "This device",
+        "resend": "Resend request",
+        "otherWay": "Can't access your other device? Contact support"
+      },
+      "approval": {
+        "title": "New sign-in attempt",
+        "body": "Someone is trying to sign in to your account from a new device.",
+        "loadError": "Couldn't load the sign-in request.",
+        "denyHint": "Didn't try to sign in? Deny — your account stays protected.",
+        "approve": "Approve",
+        "deny": "Deny",
+        "approveA11y": "Approve sign-in from {{model}}",
+        "denyA11y": "Deny and block this sign-in",
+        "approved": "Device approved",
+        "denied": "Sign-in blocked",
+        "deniedBody": "We blocked the sign-in. Secure your account by reviewing your devices.",
+        "secure": "Review your devices",
+        "later": "Decide later"
+      },
+      "denied": {
+        "title": "Sign-in blocked",
+        "cause": {
+          "denied": "The request was denied on your other device.",
+          "expired": "The request expired."
+        },
+        "support": "If this was you, try again or contact support.",
+        "retry": "Try again",
+        "startAgain": "Start again",
+        "contactSupport": "Contact support"
+      },
+      "pendingCardTitle": "New device wants access",
+      "pendingCardA11y": "Review sign-in request from {{model}}",
+      "softLaunchBanner": "A new device signed in: {{model}}, {{location}}, {{time}}. Not you? Review your devices."
     }
   }
 }

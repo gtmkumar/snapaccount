@@ -1,7 +1,7 @@
-# Memory Index
+# ui-ux-agent memory index
 
-- [Redesign 2026 Design Decisions](project_redesign_2026.md) — Indigo brand palette, Slate neutrals, shadow-first cards, module colors, Indian fintech conventions
-- [Phase 6A/6E Design Extensions](project_phase6_callbacks_notifications.md) — Callback status → Badge variant map, new component additions, deep-link + i18n patterns
-- [Phase 6C Loan Hub](project_phase6c_loan_hub.md) — Consent gating (scroll-to-end + bio), watermarked PDF preview, disclaimer copy, bank adapter primitives, status enum
-- [Phase 6F Polish](project_phase6f_polish.md) — Dark tokens, role-based shell, cmd+k, chat primitives, FY-aware date picker, mobile haptics+offline+celebrations, Razorpay UX
-- [Auth/RBAC Module 1](project_auth_rbac_module1.md) — Role+permission matrix (HRIS pattern), delegation greying rule, orgs list/detail, members+invite modal, public invite-acceptance
+- [hi/bn Indic typography convention](project_indic_typography.md) — +2pt line-height, +30-40% string expansion, Western numerals + Indian grouping; apply to every mobile spec
+- [Phase 7 compliance flows](project_phase7_compliance_flows.md) — KFS placement before LoanConsent + kfsId handoff; DPDP Privacy Center → AuthService B7 endpoint mapping
+- [A11y standard + token canon](project_a11y_and_token_canon.md) — WCAG 2.1 AA+IS 17802; scroll-gate SR blocker; neutral[400] contrast rule; admin success/accent/radius diverge from tokens.json; dark mode 2/63 screens
+- [GSTN IMS inbox spec](project_ims_inbox_spec.md) — board #32; exact status vocab + 409→GSTR-1A; reject-reason client-required; optimistic vs refetch + undo; DueDateChip reuse
+- [Wave 7 feature specs](project_wave7_feature_specs.md) — board #45; CA booking (≥2h cutoff explicit), notif templates, chat bookmarks/export, old-device approval (soft-launch), GST notice taxonomy; no new tokens

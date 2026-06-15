@@ -19,6 +19,12 @@ public class SubscriptionServiceDbContext(DbContextOptions<SubscriptionServiceDb
     public DbSet<Invoice> Invoices => Set<Invoice>();
 
     /// <inheritdoc />
+    public DbSet<RazorpayConfig> RazorpayConfigs => Set<RazorpayConfig>();
+
+    /// <inheritdoc />
+    public DbSet<UsageRecord> UsageRecords => Set<UsageRecord>();
+
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("subscription");

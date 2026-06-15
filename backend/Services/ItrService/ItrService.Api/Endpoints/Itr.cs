@@ -15,6 +15,7 @@ using ItrService.Application.Filings.Commands.MarkFiled;
 using ItrService.Application.Filings.Commands.StartFiling;
 using ItrService.Application.Filings.Commands.SubmitForCaReview;
 using ItrService.Application.Filings.Queries.GetFiling;
+using ItrService.Application.Filings.Queries.GetFilingKpi;
 using ItrService.Application.Filings.Queries.ListFilings;
 using ItrService.Application.Form16.Commands.UploadForm16;
 using ItrService.Application.Notices.Commands.RespondToNotice;
@@ -69,16 +70,34 @@ public sealed class Itr : EndpointGroupBase
 
         // ── Filings ───────────────────────────────────────────────────────────
 
+        // WEB-FIX: assesseeId is now truly optional — omitting it switches to org-wide listing mode
+        // (all filings in the caller's org), supporting status + assessmentYear filters.
+        // This fixes the admin ITR page sending GET /itr/filings?status=UNDER_CA_REVIEW&assessmentYear=AY2026-27
+        // without an assesseeId (which previously returned 400).
         group.MapGet("/filings", async (
-            Guid assesseeId, string? status, int page, int pageSize,
-            IMediator mediator, CancellationToken ct) =>
+            Guid? assesseeId, string? status, string? assessmentYear, IMediator mediator, CancellationToken ct,
+            int page = 1, int pageSize = 20) =>
         {
-            var result = await mediator.Send(new ListFilingsQuery(assesseeId, status, page, pageSize), ct);
+            var result = await mediator.Send(new ListFilingsQuery(assesseeId, status, page, pageSize, assessmentYear), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
         })
         .WithName("ListFilings")
         .WithSummary("List filings")
-        .WithDescription("Returns paginated ITR filings for an assessee.")
+        .WithDescription("Returns paginated ITR filings. When assesseeId is provided, returns filings for that assessee (org-scoped). When omitted, returns all filings across the caller's org (admin mode, requires admin.itr.read permission). Supports status and assessmentYear filter params.")
+        .RequireAuthorization()
+        .WithTags("Filings");
+
+        // GET /itr/filings/kpi — must be declared BEFORE /filings/{id:guid} so "kpi" literal wins.
+        // Response shape: { awaitingReview, slaBreached, avgTimeToReviewDays, totalFilingsAy }
+        group.MapGet("/filings/kpi", async (
+            string? assessmentYear, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetFilingKpiQuery(assessmentYear), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+        })
+        .WithName("GetItrFilingKpi")
+        .WithSummary("Org-scoped ITR filing KPI counts for the admin ITR page KpiStrip.")
+        .WithDescription("Returns { awaitingReview, slaBreached, avgTimeToReviewDays, totalFilingsAy }. Supports optional assessmentYear filter (e.g. AY2026-27). Requires admin.itr.read permission.")
         .RequireAuthorization()
         .WithTags("Filings");
 
@@ -291,9 +310,12 @@ public sealed class Itr : EndpointGroupBase
         // ── Doc Checklist (P6-HANDOFF-23) ─────────────────────────────────────
 
         group.MapGet("/doc-checklist", async (
-            Guid assesseeId, Guid filingId, IMediator mediator, CancellationToken ct) =>
+            Guid? assesseeId, Guid? filingId, IMediator mediator, CancellationToken ct) =>
         {
-            var result = await mediator.Send(new GetDocChecklistQuery(assesseeId, filingId), ct);
+            // SWEEP-B FIX: required query params made nullable → return 400, not 500 binding error.
+            if (!assesseeId.HasValue || !filingId.HasValue)
+                return Results.BadRequest(new { error = "assesseeId and filingId query parameters are required.", code = "ITR.MissingQueryParams" });
+            var result = await mediator.Send(new GetDocChecklistQuery(assesseeId.Value, filingId.Value), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
         })
         .WithName("GetDocChecklist")
@@ -320,9 +342,12 @@ public sealed class Itr : EndpointGroupBase
         .WithTags("Grievances");
 
         group.MapGet("/grievances", async (
-            Guid filingId, IMediator mediator, CancellationToken ct) =>
+            Guid? filingId, IMediator mediator, CancellationToken ct) =>
         {
-            var result = await mediator.Send(new ListGrievancesQuery(filingId), ct);
+            // SWEEP-B FIX: filingId is a required query param — made nullable to return 400 not 500.
+            if (!filingId.HasValue)
+                return Results.BadRequest(new { error = "filingId query parameter is required.", code = "ITR.MissingFilingId" });
+            var result = await mediator.Send(new ListGrievancesQuery(filingId.Value), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
         })
         .WithName("ListGrievances")

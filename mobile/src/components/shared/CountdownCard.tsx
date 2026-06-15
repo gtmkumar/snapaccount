@@ -5,7 +5,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 interface CountdownCardProps {
   title: string;
@@ -22,6 +22,8 @@ function getDaysLeft(dueDate: string): number {
 }
 
 export function CountdownCard({ title, dueDate, description, testID }: CountdownCardProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const daysLeft = getDaysLeft(dueDate);
   const isOverdue = daysLeft < 0;
   const isCritical = daysLeft >= 0 && daysLeft <= 5;
@@ -33,24 +35,24 @@ export function CountdownCard({ title, dueDate, description, testID }: Countdown
   let iconName: React.ComponentProps<typeof Ionicons>['name'];
 
   if (isOverdue) {
-    bgColor = Colors.error[50];
-    borderColor = Colors.error[200];
-    textColor = Colors.error[700];
+    bgColor = tokens.errorTint;
+    borderColor = tokens.errorTintBorder;
+    textColor = tokens.errorFg;
     iconName = 'alert-circle';
   } else if (isCritical) {
-    bgColor = Colors.error[50];
-    borderColor = Colors.error[200];
-    textColor = Colors.error[700];
+    bgColor = tokens.errorTint;
+    borderColor = tokens.errorTintBorder;
+    textColor = tokens.errorFg;
     iconName = 'time';
   } else if (isWarning) {
-    bgColor = Colors.warning[50];
-    borderColor = Colors.warning[200];
-    textColor = Colors.warning[700];
+    bgColor = tokens.warningTint;
+    borderColor = tokens.warningTintBorder;
+    textColor = tokens.warningFg;
     iconName = 'time-outline';
   } else {
-    bgColor = Colors.brand[50];
-    borderColor = Colors.brand[200];
-    textColor = Colors.brand[700];
+    bgColor = tokens.brandTint;
+    borderColor = tokens.brand400;
+    textColor = tokens.brandFg;
     iconName = 'calendar-outline';
   }
 
@@ -87,7 +89,8 @@ export function CountdownCard({ title, dueDate, description, testID }: Countdown
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((_tk: ThemeTokens) =>
+  StyleSheet.create({
   card: {
     borderRadius: 14,
     borderWidth: 1,
@@ -125,4 +128,5 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-});
+  }),
+);

@@ -141,3 +141,50 @@ export async function generateShareLink(id: string): Promise<ShareLink> {
   const res = await api.post(`/reports/${id}/share-link`)
   return ShareLinkSchema.parse(res.data)
 }
+
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// GAP-032 — Tally Export (Wave 7)
+// Backend: POST /reports/tally-export → { PeriodStart?, PeriodEnd? }
+// Returns GenerateReportResponse shape (same as generateReport):
+//   { jobId: Guid, status: string, gcsUri: string?, sha256HashHex: string?, pageCount: int? }
+// Then use GET /reports/:id/download-url to retrieve a signed download URL.
+// There is no tally-specific list endpoint — use listReportJobs with reportType=TallyExport.
+// ---------------------------------------------------------------------------
+
+export const TallyExportJobSchema = z.object({
+  jobId: z.string(),          // Guid from backend (PascalCase serialized as camelCase)
+  status: z.string(),          // "Processing" | "Completed" | "Failed"
+  gcsUri: z.string().nullable().optional(),
+  sha256HashHex: z.string().nullable().optional(),
+  pageCount: z.number().nullable().optional(),
+})
+export type TallyExportJob = z.infer<typeof TallyExportJobSchema>
+
+export interface TallyExportRequest {
+  periodStart?: string   // ISO date
+  periodEnd?: string     // ISO date
+}
+
+/**
+ * Enqueue a Tally XML export job.
+ * POST /reports/tally-export — body: { PeriodStart?, PeriodEnd? }
+ * Returns immediately with job status (synchronous generation in current backend;
+ * use getReportDownloadUrl(job.jobId) to retrieve signed URL when status=Completed).
+ */
+export async function enqueueTallyExport(req: TallyExportRequest = {}): Promise<TallyExportJob> {
+  const res = await api.post('/reports/tally-export', req)
+  return TallyExportJobSchema.parse(res.data)
+}
+
+/**
+ * List recent Tally export jobs — reuses the main report list endpoint with reportType filter.
+ * GET /reports?reportType=TallyExport&page=&pageSize=
+ */
+export async function listTallyExportJobs(params?: { page?: number; pageSize?: number }) {
+  const res = await api.get('/reports', { params: { reportType: 'TallyExport', ...params } })
+  return z.object({
+    items: z.array(ReportJobSummarySchema),
+    totalCount: z.number(),
+  }).parse(res.data)
+}

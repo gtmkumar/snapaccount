@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -38,6 +38,8 @@ export function Input({
   style,
   ...rest
 }: InputProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const hasError = Boolean(error);
@@ -66,7 +68,7 @@ export function Input({
 
         <TextInput
           style={[styles.input, style]}
-          placeholderTextColor={Colors.neutral[400]}
+          placeholderTextColor={tokens.textTertiary}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           secureTextEntry={isSecure}
@@ -103,7 +105,8 @@ export function Input({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     marginBottom: 16,
   },
@@ -114,41 +117,41 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: tk.textSecondary,
     letterSpacing: 0.1,
   },
   required: {
     fontSize: 14,
-    color: Colors.error[500],
+    color: tk.errorFg,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.neutral[0],
+    backgroundColor: tk.raised,
     borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
     borderRadius: 12,
   },
   focused: {
-    borderColor: Colors.brand[500],
+    borderColor: tk.brand500,
     borderWidth: 1.5,
-    shadowColor: Colors.brand[500],
+    shadowColor: tk.brand500,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.12,
     shadowRadius: 4,
     elevation: 1,
   },
   errorBorder: {
-    borderColor: Colors.error[500],
+    borderColor: tk.errorCta,
     borderWidth: 1.5,
-    shadowColor: Colors.error[500],
+    shadowColor: tk.errorFg,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.12,
     shadowRadius: 4,
     elevation: 1,
   },
   disabled: {
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: tk.sunken,
     opacity: 0.7,
   },
   // Sizes
@@ -167,7 +170,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     paddingVertical: 0,
     letterSpacing: 0.1,
   },
@@ -179,19 +182,20 @@ const styles = StyleSheet.create({
   },
   hintText: {
     fontSize: 12,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
     marginTop: 6,
     lineHeight: 16,
   },
   errorText: {
     fontSize: 12,
-    color: Colors.error[600],
+    color: tk.errorFg,
     marginTop: 6,
     lineHeight: 16,
   },
   toggleText: {
     fontSize: 14,
-    color: Colors.brand[500],
+    color: tk.brand500,
     fontWeight: '600',
   },
-});
+  }),
+);

@@ -77,10 +77,10 @@ public sealed class CreateOrganizationCommandHandler(
     {
         var org = new Organization
         {
-            OwnerUserId    = currentUser.UserId,
-            BusinessName   = request.BusinessName,
-            Gstin          = request.Gstin,
-            PanNumber      = request.PanNumber,
+            OwnerUserId     = currentUser.UserId,
+            BusinessName    = request.BusinessName,
+            Gstin           = request.Gstin,
+            PanNumber       = request.PanNumber,
             IsGstRegistered = !string.IsNullOrEmpty(request.Gstin)
         };
 

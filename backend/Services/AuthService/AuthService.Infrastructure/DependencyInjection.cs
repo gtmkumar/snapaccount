@@ -101,11 +101,22 @@ public static class DependencyInjection
 
         // MSG91 OTP SMS sender — used by OtpService to deliver the OTP.
         services.AddHttpClient("Msg91Otp");
+
+        // GAP-038/052: Service health probe client — Aspire service-discovery resolves
+        // http://{service-name} URIs at runtime. Short timeout (3 s) set per-request in the endpoint.
+        services.AddHttpClient("HealthProbe");
         services.AddScoped<IOtpSmsSender, Msg91OtpSmsSender>();
 
         // Domain services
         services.AddScoped<IOtpService, OtpService>();
         services.AddScoped<IFirebaseAuthService, FirebaseAuthService>();
+
+        // GAP-003 / NEW-002: Firebase revoke retry scheduler — Hangfire-backed, observable in dashboard.
+        services.AddScoped<IFirebaseRevokeRetryScheduler, HangfireFirebaseRevokeRetryScheduler>();
+
+        // GAP-020 / DPDP: Data export job scheduler — Hangfire-backed.
+        services.AddScoped<IDataExportJobScheduler, HangfireDataExportScheduler>();
+        services.AddScoped<DataExportJob>();
 
         // SEC-013: PAN encryption service — AES-256 key from GCP Secret Manager
         services.AddSingleton<IPanEncryptionService, AesPanEncryptionService>();
@@ -154,6 +165,17 @@ public static class DependencyInjection
             services.AddScoped<IKycProvider>(sp => sp.GetRequiredService<MockDocumentVerificationProvider>());
             services.AddScoped<IDocumentVerificationProvider>(sp => sp.GetRequiredService<MockDocumentVerificationProvider>());
         }
+
+        // GAP-064: Device integrity verifier — selected by DeviceIntegrity:Provider config key.
+        // Default: "mock" (accepts all tokens, returns PASS; "mock-fail" sentinel → FAIL for testing).
+        // "play_integrity" / "app_attest" → credential-gated stubs; return NotConfigured when creds absent.
+        var integrityProvider = configuration["DeviceIntegrity:Provider"] ?? "mock";
+        if (string.Equals(integrityProvider, "play_integrity", StringComparison.OrdinalIgnoreCase))
+            services.AddScoped<IDeviceIntegrityVerifier, PlayIntegrityVerifier>();
+        else if (string.Equals(integrityProvider, "app_attest", StringComparison.OrdinalIgnoreCase))
+            services.AddScoped<IDeviceIntegrityVerifier, AppAttestVerifier>();
+        else
+            services.AddScoped<IDeviceIntegrityVerifier, MockDeviceIntegrityVerifier>();
 
         // Lightweight provider connection tester ("Test with Sample Query").
         services.AddHttpClient<IAiProviderTester, HttpAiProviderTester>();

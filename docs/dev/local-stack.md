@@ -159,3 +159,12 @@ curl -H 'Authorization: Bearer dev-admin-token' \
 See `docs/dev/static-data-debt.md` for the full inventory and the backend
 endpoints that would need to exist to remove each one. Tracked under
 `STATIC-DATA-DEBT-7` markers in the source.
+
+---
+
+## Related runbooks
+
+- **[Local OTP Runbook](./local-otp-runbook.md)** — how to get the 6-digit OTP
+  when you tap **Continue with OTP** in the mobile app (no SMS locally — the code
+  is printed to the AuthService log) and finish the `/auth/otp/verify` login.
+- **`docs/dev/static-data-debt.md`** — inventory of pages still showing mock data.

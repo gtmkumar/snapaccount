@@ -5,9 +5,19 @@
  *
  * Respects reduceMotion: if enabled, renders simple fade-in without confetti.
  * Auto-dismisses after 6s if no interaction.
+ *
+ * P6-QA-MOBILE-10: "first …" kinds are server-guarded — on mount we POST
+ * /notifications/celebrations/{kind}/fire (idempotent per user × kind). If the
+ * server says alreadyFired, the overlay dismisses itself without showing, so a
+ * celebration can never replay across devices/sessions. Network failure is
+ * fail-open (celebrating twice beats never celebrating).
+ *
+ * P6-QA-MOBILE-11: dismissal fires exactly ONE callback exactly once (the old
+ * `onSecondary?.() ?? onPrimary()` fell through to onPrimary because a void
+ * call returns undefined).
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Pressable,
@@ -18,7 +28,9 @@ import {
 import { useReducedMotion } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { useHaptics } from '../../hooks/useHaptics';
+import { fireCelebration, type ServerCelebrationKind } from '../../api/notifications';
 
 /**
  * Phase 6F: expanded kind enum.
@@ -68,6 +80,18 @@ function formatIndianAmount(n: number): string {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * P6-QA-MOBILE-10: kinds with a backend fired-once record. Kinds not listed
+ * here (APPROVED, custom, …) are event-driven by the parent screen and show
+ * unconditionally.
+ */
+const SERVER_GUARDED_KINDS: Partial<Record<CelebrationKind, ServerCelebrationKind>> = {
+  DISBURSED: 'first_loan_disbursed',
+  firstGst: 'first_gst_filed',
+  firstRefund: 'first_refund_credited',
+  firstItr: 'first_itr_filed',
+};
+
 const KIND_ICON: Record<CelebrationKind, React.ComponentProps<typeof Ionicons>['name']> = {
   APPROVED: 'checkmark-circle',
   DISBURSED: 'cash',
@@ -99,13 +123,63 @@ export function CelebrationOverlay({
   onSecondary,
   testID,
 }: CelebrationOverlayProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
   const reduceMotion = useReducedMotion();
-  const slideAnim = useRef(new Animated.Value(reduceMotion ? 0 : 60)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const haptics = useHaptics();
+  const [slideAnim] = useState(() => new Animated.Value(reduceMotion ? 0 : 60));
+  const [opacityAnim] = useState(() => new Animated.Value(0));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // P6-QA-MOBILE-10: server fire-guard. Guarded kinds stay hidden ('pending')
+  // until the idempotent fire call answers; alreadyFired → 'skipped' (dismiss
+  // without showing). Unguarded kinds show immediately.
+  const serverKind = SERVER_GUARDED_KINDS[kind];
+  const [gate, setGate] = useState<'pending' | 'visible' | 'skipped'>(
+    serverKind ? 'pending' : 'visible',
+  );
+
+  // P6-QA-MOBILE-11: every dismissal path funnels through here — exactly one
+  // callback, exactly once (auto-dismiss timer vs button press can race).
+  const dismissedRef = useRef(false);
+  const dismissOnce = (cb: (() => void) | undefined) => {
+    if (dismissedRef.current) return;
+    dismissedRef.current = true;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    (cb ?? onPrimary)();
+  };
+
   useEffect(() => {
+    if (!serverKind) return;
+    let active = true;
+    fireCelebration(serverKind)
+      .then((res) => {
+        if (!active) return;
+        if (res.alreadyFired) {
+          // Already celebrated on this or another device — dismiss silently so
+          // the parent clears its overlay state.
+          setGate('skipped');
+          dismissOnce(onSecondary);
+        } else {
+          setGate('visible');
+        }
+      })
+      .catch(() => {
+        // Fail-open: a network blip must not swallow the user's milestone.
+        if (active) setGate('visible');
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (gate !== 'visible') return;
+    // §3.4: one-shot celebration burst — shortened to a single Success
+    // notification under reduce-motion. Haptics are additive feedback only.
+    haptics.celebrationBurst(reduceMotion);
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: 0,
@@ -119,16 +193,16 @@ export function CelebrationOverlay({
       }),
     ]).start();
 
-    // Auto-dismiss after 6s
+    // Auto-dismiss after 6s — exactly one callback (P6-QA-MOBILE-11).
     timerRef.current = setTimeout(() => {
-      onSecondary?.() ?? onPrimary();
+      dismissOnce(onSecondary);
     }, 6000);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [gate]);
 
   // ── Resolve copy per kind ──────────────────────────────────────────────────
   type CopyMap = { headline: string; body: string; primary: string; secondary?: string };
@@ -158,65 +232,69 @@ export function CelebrationOverlay({
         };
       case 'firstGst':
         return {
-          headline: t('celebration.firstGst.headline'),
-          body: t('celebration.firstGst.subline', { period, ack }),
-          primary: t('celebration.firstGst.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          headline: t('mobile.celebration.firstGst.headline'),
+          body: t('mobile.celebration.firstGst.subline', { period, ack }),
+          primary: t('mobile.celebration.firstGst.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'firstRefund':
         return {
-          headline: t('celebration.firstRefund.headline'),
-          body: t('celebration.firstRefund.subline', {
+          headline: t('mobile.celebration.firstRefund.headline'),
+          body: t('mobile.celebration.firstRefund.subline', {
             amount: formatIndianAmount(amount),
             date,
           }),
-          primary: t('celebration.firstRefund.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          primary: t('mobile.celebration.firstRefund.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'firstItr':
         return {
-          headline: t('celebration.firstItr.headline'),
-          body: t('celebration.firstItr.subline', { ay }),
-          primary: t('celebration.firstItr.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          headline: t('mobile.celebration.firstItr.headline'),
+          body: t('mobile.celebration.firstItr.subline', { ay }),
+          primary: t('mobile.celebration.firstItr.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'firstNoticeResolved':
         return {
-          headline: t('celebration.firstNoticeResolved.headline'),
-          body: t('celebration.firstNoticeResolved.subline'),
-          primary: t('celebration.firstNoticeResolved.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          headline: t('mobile.celebration.firstNoticeResolved.headline'),
+          body: t('mobile.celebration.firstNoticeResolved.subline'),
+          primary: t('mobile.celebration.firstNoticeResolved.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'planK2Step15':
         return {
-          headline: t('celebration.planK2Step15.headline'),
-          body: t('celebration.planK2Step15.subline'),
-          primary: t('celebration.planK2Step15.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          headline: t('mobile.celebration.planK2Step15.headline'),
+          body: t('mobile.celebration.planK2Step15.subline'),
+          primary: t('mobile.celebration.planK2Step15.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'firstChatResolved':
         return {
-          headline: t('celebration.firstChatResolved.headline'),
-          body: t('celebration.firstChatResolved.subline', { count }),
-          primary: t('celebration.firstChatResolved.cta.primary'),
-          secondary: t('celebration.cta.secondary'),
+          headline: t('mobile.celebration.firstChatResolved.headline'),
+          body: t('mobile.celebration.firstChatResolved.subline', { count }),
+          primary: t('mobile.celebration.firstChatResolved.cta.primary'),
+          secondary: t('mobile.celebration.cta.secondary'),
         };
       case 'custom':
       default:
         return {
-          headline: customHeadline ?? t('celebration.custom.headline'),
+          headline: customHeadline ?? t('mobile.celebration.custom.headline'),
           body: customSubline ?? '',
-          primary: t('celebration.custom.cta.primary'),
+          primary: t('mobile.celebration.custom.cta.primary'),
         };
     }
   })();
 
   const iconName = KIND_ICON[kind];
-  const iconColor = Colors.success[500];
+  const iconColor = tokens.successFg;
   const headline = copy.headline;
   const body = copy.body;
   const primaryLabel = copy.primary;
   const secondaryLabel = copy.secondary;
+
+  // P6-QA-MOBILE-10: nothing renders until the server guard clears (or for
+  // unguarded kinds, immediately).
+  if (gate !== 'visible') return null;
 
   return (
     <Animated.View
@@ -242,7 +320,7 @@ export function CelebrationOverlay({
         <View style={styles.actions}>
           <Pressable
             style={styles.primaryBtn}
-            onPress={onPrimary}
+            onPress={() => dismissOnce(onPrimary)}
             accessibilityRole="button"
             accessibilityLabel={primaryLabel}
           >
@@ -252,7 +330,7 @@ export function CelebrationOverlay({
           {secondaryLabel && (
             <Pressable
               style={styles.secondaryBtn}
-              onPress={onSecondary}
+              onPress={() => dismissOnce(onSecondary)}
               accessibilityRole="button"
               accessibilityLabel={secondaryLabel}
             >
@@ -265,9 +343,10 @@ export function CelebrationOverlay({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(15,23,42,0.85)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -275,7 +354,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   content: {
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 24,
     padding: 28,
     alignItems: 'center',
@@ -297,13 +376,13 @@ const styles = StyleSheet.create({
   headline: {
     fontSize: 26,
     fontWeight: '800',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
   body: {
     fontSize: 15,
-    color: Colors.neutral[600],
+    color: tk.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -313,7 +392,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   primaryBtn: {
-    backgroundColor: Colors.success[600],
+    backgroundColor: tk.successFg,
     borderRadius: 14,
     minHeight: 52,
     alignItems: 'center',
@@ -322,7 +401,7 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: tk.textOnBrand,
   },
   secondaryBtn: {
     borderRadius: 14,
@@ -333,6 +412,7 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
   },
-});
+  }),
+);

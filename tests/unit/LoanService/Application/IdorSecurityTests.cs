@@ -168,13 +168,20 @@ internal sealed class InMemoryLoanDbContext(DbContextOptions<InMemoryLoanDbConte
     public DbSet<LoanPdfPackage> LoanPdfPackages { get; set; } = null!;
     public DbSet<WebhookIdempotencyKey> WebhookIdempotencyKeys { get; set; } = null!;
     public DbSet<ConsentCatalogEntry> ConsentCatalog { get; set; } = null!;
+    public DbSet<KeyFactsStatement> KeyFactsStatements { get; set; } = null!;
+    public DbSet<FraudCheck> FraudChecks { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Minimal configuration for in-memory: convert enum properties to string
         modelBuilder.Entity<LoanApplication>().Property(a => a.Status).HasConversion<string>();
         modelBuilder.Entity<PartnerBank>().Property(b => b.AdapterType).HasConversion<string>();
-        // Ignore JsonDocument properties — not supported by in-memory provider
+        modelBuilder.Entity<FraudCheck>().Property(f => f.CheckType).HasConversion<string>();
+        modelBuilder.Entity<FraudCheck>().Property(f => f.Verdict).HasConversion<string>();
+        // Ignore JsonDocument properties — not supported by in-memory provider.
+        // Also ignore the type globally so EF Core 10 ConstructorBindingConvention
+        // does not attempt to discover it as a complex type during model finalization.
+        modelBuilder.Ignore<System.Text.Json.JsonDocument>();
         modelBuilder.Entity<LoanProduct>().Ignore(p => p.EligibilityCriteriaJsonb);
         // Explicitly configure FK relationships so InMemory provider wires navigation properties
         modelBuilder.Entity<LoanApplication>()

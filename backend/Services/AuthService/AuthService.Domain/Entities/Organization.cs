@@ -5,7 +5,18 @@ namespace AuthService.Domain.Entities;
 public class Organization : BaseAuditableEntity
 {
     public Guid OwnerUserId { get; init; }
-    public string BusinessName { get; init; } = string.Empty;
+
+    // BusinessName: init-settable (construction, object initializers, EF Core materialization)
+    // AND mutable via UpdateSettings (domain method) for ORG_ADMIN name edits.
+    // C# does not allow both `init` and `private set` on one property, so we use a backing field.
+    private string _businessName = string.Empty;
+
+    /// <summary>Organisation display name. Set on creation via object initializer; editable post-creation via <see cref="UpdateSettings"/>.</summary>
+    public string BusinessName
+    {
+        get => _businessName;
+        init => _businessName = value;
+    }
     public string? Gstin { get; init; }
     public string? PanNumber { get; init; }
     public string? BusinessType { get; private set; }
@@ -59,5 +70,35 @@ public class Organization : BaseAuditableEntity
     public void SetGovernmentVerification(bool enabled)
     {
         GovernmentVerificationEnabled = enabled;
+    }
+
+    /// <summary>
+    /// Updates mutable self-service settings (display name, address, logo URL).
+    /// GSTIN and PanNumber are intentionally excluded — those are KYC-verified
+    /// legal identity fields that require a re-verification flow.
+    /// </summary>
+    /// <param name="name">New display name for the organisation (ORG_ADMIN editable).</param>
+    /// <param name="logoUrl">Public URL of the organisation logo.</param>
+    /// <param name="addressLine1">Primary address line.</param>
+    /// <param name="addressLine2">Secondary address line.</param>
+    /// <param name="city">City of registered address.</param>
+    /// <param name="state">State of registered address.</param>
+    /// <param name="pincode">6-digit Indian postal code.</param>
+    public void UpdateSettings(
+        string? name,
+        string? logoUrl,
+        string? addressLine1,
+        string? addressLine2,
+        string? city,
+        string? state,
+        string? pincode)
+    {
+        if (name         is not null) _businessName = name;
+        if (logoUrl      is not null) LogoUrl      = logoUrl;
+        if (addressLine1 is not null) AddressLine1 = addressLine1;
+        if (addressLine2 is not null) AddressLine2 = addressLine2;
+        if (city         is not null) City         = city;
+        if (state        is not null) State        = state;
+        if (pincode      is not null) Pincode      = pincode;
     }
 }

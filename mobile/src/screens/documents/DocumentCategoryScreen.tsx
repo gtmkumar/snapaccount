@@ -4,7 +4,7 @@
  * Matches docs/design/screens/mobile/document-vault.md §Screen 16
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import apiClient from '../../lib/api';
 import type { DocumentStackParamList } from '../../navigation/DocumentStack';
 
@@ -32,16 +32,19 @@ type CategoryItem = {
   color: string;
 };
 
-const CATEGORIES: CategoryItem[] = [
-  { id: 'sales_bill', label: 'Sales Bill', hint: 'Bills you\'ve issued to customers', icon: 'receipt-outline', color: Colors.success[600] },
-  { id: 'purchase_bill', label: 'Purchase Bill', hint: 'Bills from your suppliers', icon: 'cart-outline', color: Colors.brand[600] },
-  { id: 'expense', label: 'Expense Receipt', hint: 'Travel, office, and business expenses', icon: 'wallet-outline', color: Colors.warning[600] },
-  { id: 'bank_statement', label: 'Bank Statement', hint: 'Monthly bank statements (PDF)', icon: 'business-outline', color: Colors.info[600] },
-  { id: 'salary_slip', label: 'Salary Slip', hint: 'For employee ITR documents', icon: 'person-outline', color: Colors.gst },
-  { id: 'other', label: 'Other', hint: 'Misc. documents — re-categorize later', icon: 'document-outline', color: Colors.neutral[600] },
+const buildCategories = (tk: ThemeTokens): CategoryItem[] => [
+  { id: 'sales_bill', label: 'Sales Bill', hint: 'Bills you\'ve issued to customers', icon: 'receipt-outline', color: tk.successFg },
+  { id: 'purchase_bill', label: 'Purchase Bill', hint: 'Bills from your suppliers', icon: 'cart-outline', color: tk.brandCta },
+  { id: 'expense', label: 'Expense Receipt', hint: 'Travel, office, and business expenses', icon: 'wallet-outline', color: tk.warningFg },
+  { id: 'bank_statement', label: 'Bank Statement', hint: 'Monthly bank statements (PDF)', icon: 'business-outline', color: tk.infoFg },
+  { id: 'salary_slip', label: 'Salary Slip', hint: 'For employee ITR documents', icon: 'person-outline', color: tk.gstAccent },
+  { id: 'other', label: 'Other', hint: 'Misc. documents — re-categorize later', icon: 'document-outline', color: tk.textSecondary },
 ];
 
 export function DocumentCategoryScreen({ navigation, route }: Props) {
+  const styles = useStyles();
+  const { tokens } = useTheme();
+  const categories = useMemo(() => buildCategories(tokens), [tokens]);
   const { documentUri } = route.params;
   const [uploading, setUploading] = useState(false);
 
@@ -84,7 +87,7 @@ export function DocumentCategoryScreen({ navigation, route }: Props) {
 
       {/* Category grid */}
       <FlatList
-        data={CATEGORIES}
+        data={categories}
         numColumns={2}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
@@ -116,31 +119,32 @@ export function DocumentCategoryScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[200],
+    borderBottomColor: tk.border,
   },
   backBtn: { padding: 4 },
-  backText: { fontSize: 20, color: Colors.brand[500] },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: Colors.neutral[900] },
+  backText: { fontSize: 20, color: tk.brand500 },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: tk.textPrimary },
   headerSpacer: { width: 28 },
-  subtext: { fontSize: 14, color: Colors.neutral[500], paddingHorizontal: 16, paddingVertical: 12 },
+  subtext: { fontSize: 14, color: tk.textSecondary, paddingHorizontal: 16, paddingVertical: 12 },
   gridContent: { padding: 16 },
   columnWrapper: { gap: 12, marginBottom: 12 },
   categoryCard: {
     flex: 1,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.neutral[200],
+    borderColor: tk.border,
     alignItems: 'flex-start',
   },
   categoryCardDisabled: { opacity: 0.5 },
@@ -152,16 +156,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 10,
   },
-  categoryLabel: { fontSize: 14, fontWeight: '700', color: Colors.neutral[800], marginBottom: 4 },
-  categoryHint: { fontSize: 11, color: Colors.neutral[500], lineHeight: 15 },
+  categoryLabel: { fontSize: 14, fontWeight: '700', color: tk.textPrimary, marginBottom: 4 },
+  categoryHint: { fontSize: 11, color: tk.textSecondary, lineHeight: 15 },
   uploadingOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: Colors.brand[500],
+    backgroundColor: tk.brand500,
     padding: 16,
     alignItems: 'center',
   },
-  uploadingText: { color: Colors.neutral[0], fontSize: 14, fontWeight: '600' },
-});
+  uploadingText: { color: tk.textOnBrand, fontSize: 14, fontWeight: '600' },
+  }),
+);

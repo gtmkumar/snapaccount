@@ -33,6 +33,9 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+// SEC-014 scaffolding: the native package is only added in production
+// dev-client builds (not Expo Go); ambient types live in src/types/modules.d.ts.
+// eslint-disable-next-line import/no-unresolved
 import SslPinning from 'react-native-ssl-pinning';
 
 const API_BASE =

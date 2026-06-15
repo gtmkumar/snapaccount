@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
-# SnapAccount — Phase 6E/6B/6D: Recurring Jobs via Cloud Scheduler + Pub/Sub
+# SnapAccount — Recurring Jobs via Cloud Scheduler + Pub/Sub
 #
-# Provisions:
-#   - Pub/Sub topic: snapaccount.recurring-jobs.due (+ dead-letter)
-#   - Pub/Sub subscription: notification-service-recurring-jobs-sub
-#   - 4 Cloud Scheduler jobs targeting the topic with distinct payloads:
-#       gst-deadline-check          (daily 06:00 IST)  — Phase 6B
-#       itr-deadline-reminders      (daily 09:00 IST)  — Phase 6D (backend gates seasonal fan-out)
-#       itr-refund-polling          (daily 10:00 IST)  — Phase 6D
-#       subscription-renewal-check  (daily 08:00 IST)  — Phase 6E
+# Phase 6E/6B/6D initial jobs (4 jobs):
+#   gst-deadline-check, itr-deadline-reminders, itr-refund-polling, subscription-renewal-check
+#
+# Phase 7 Wave 2 additions (D5 — GAP-012 / GAP-042):
+#   callback-kpi-mv-refresh    — REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot
+#   gst-pre-deadline-callback  — auto-callback if GST return not approved 2 days before deadline
+#   itr-form16-missing         — alert if Form 16 not uploaded 3 days after upload deadline
+#   (itr-deadline-reminders already covers e-verify Day 1/7/15/25/29 — backend gates these)
+#
+# Full job matrix: docs/devops/recurring-jobs-decision.md
 #
 # Schedule change log:
 #   Phase 6E initial: itr-deadline-reminders=07:00, itr-refund-polling=09:00
 #   Phase 6D update:  itr-deadline-reminders=09:00, itr-refund-polling=10:00 (spec-aligned)
+#   Phase 7 Wave 2:   added callback-kpi-mv-refresh, gst-pre-deadline-callback, itr-form16-missing
 #
 # Decision rationale: docs/devops/recurring-jobs-decision.md
 # Scope docs: .claude/orchestrator/phase-6E-scope.md, phase-6B-scope.md, phase-6D-scope.md §devops-engineer
+#             .claude/orchestrator/phase-7-tasks/devops-engineer.md §D5
 #
 # Prerequisites:
 #   - infra/setup.sh completed (APIs enabled, Pub/Sub SA exists)
@@ -103,6 +107,25 @@ if ! gcloud pubsub subscriptions describe "${SUB_NAME}" \
         --labels="app=snapaccount,phase=6e,consumer=notification-service"
 else
     log "Subscription ${SUB_NAME} already exists — skipping"
+fi
+
+# Phase 7: Additional pull subscription for CallbackService recurring-jobs consumer.
+# CallbackService handles: CALLBACK_KPI_MV_REFRESH, GST_PRE_DEADLINE_CALLBACK job types.
+# Uses the same snapaccount.recurring-jobs.due topic (single-topic, payload-discriminated).
+CALLBACK_SUB_NAME="callback-service-recurring-jobs-sub"
+if ! gcloud pubsub subscriptions describe "${CALLBACK_SUB_NAME}" \
+        --project="${GCP_PROJECT_ID}" &>/dev/null; then
+    log "Creating subscription: ${CALLBACK_SUB_NAME}"
+    gcloud pubsub subscriptions create "${CALLBACK_SUB_NAME}" \
+        --topic="${TOPIC}" \
+        --project="${GCP_PROJECT_ID}" \
+        --ack-deadline=600 \
+        --max-delivery-attempts=3 \
+        --dead-letter-topic="${DL_TOPIC}" \
+        --message-retention-duration=7d \
+        --labels="app=snapaccount,phase=7,consumer=callback-service"
+else
+    log "Subscription ${CALLBACK_SUB_NAME} already exists — skipping"
 fi
 
 # Grant Cloud Pub/Sub service account permission to publish to dead-letter
@@ -253,6 +276,62 @@ create_scheduler_job \
     '{"job_type":"SUBSCRIPTION_RENEWAL_CHECK","source":"cloud-scheduler"}' \
     "Daily 08:00 IST: notify orgs with subscription expiring in 7/3/1 days"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 7 Wave 2 Jobs (D5 — GAP-012 / GAP-042)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Job 5: Callback KPI Materialized View Refresh (P6-HANDOFF-07) ──────────
+# Fires daily at 00:30 IST (midnight + 30 min) — off-peak, after day boundary.
+# Executes: REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot
+# The CONCURRENTLY option requires a unique index on (org_id, snapshot_date),
+# which was confirmed present (Wave 1 migration 061).
+# Idempotency: REFRESH MV is idempotent by design — re-running does not create
+# duplicate rows, it updates in-place. Safe to retry on failure.
+# Backend endpoint: CallbackService must implement a POST /callbacks/internal/refresh-kpi-mv
+# that executes the REFRESH command. This endpoint is INTERNAL (no Firebase auth — use
+# service-account OIDC for Cloud Scheduler authentication).
+# PENDING-B19: backend-agent Wave 3 must implement POST /callbacks/internal/refresh-kpi-mv
+create_scheduler_job \
+    "callback-kpi-mv-refresh" \
+    "30 0 * * *" \
+    '{"job_type":"CALLBACK_KPI_MV_REFRESH","source":"cloud-scheduler","mv":"callback.kpi_daily_snapshot"}' \
+    "Daily 00:30 IST: REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot (P6-HANDOFF-07)"
+
+# ── Job 6: GST Pre-Deadline Auto-Callback ──────────────────────────────────
+# Fires daily at 07:00 IST.
+# Handler: checks for orgs where a GST return is due in ≤2 days AND the return
+# has NOT been approved/filed. Creates a CallbackService callback record
+# (priority=HIGH, type=GST_PRE_DEADLINE) so an ops agent calls the user.
+# Complements the GST_DEADLINE_CHECK job (Job 1) which sends notifications;
+# this job creates an actionable callback task for the human ops team.
+# Idempotency: handler must use INSERT ... ON CONFLICT to avoid duplicate callbacks
+# for the same (org_id, return_period, callback_type) within the same day.
+# PENDING-B19: backend-agent Wave 3 must implement the GST_PRE_DEADLINE_CALLBACK handler
+#   in CallbackService — receives the Pub/Sub message and queries GstService for
+#   unApproved returns due in ≤2 days, then creates callback records.
+create_scheduler_job \
+    "gst-pre-deadline-callback" \
+    "0 7 * * *" \
+    '{"job_type":"GST_PRE_DEADLINE_CALLBACK","source":"cloud-scheduler","days_before_deadline":2}' \
+    "Daily 07:00 IST: auto-callback for orgs with unapproved GST return due in ≤2 days (plan E4.1)"
+
+# ── Job 7: ITR Form-16 Missing Alert ─────────────────────────────────────
+# Fires daily at 11:00 IST.
+# Handler: checks for salaried users (ITR-1/2/3) who have an active ITR for the
+# current AY but no Form 16 (Part A or Part B) uploaded, AND it is more than 3
+# days past June 15 (statutory deadline for employers to issue Form 16).
+# Creates a callback record and sends a push notification reminding the user to
+# request Form 16 from their employer.
+# Seasonal: gate in backend — only run June 15 through July 31 (ITR filing window).
+# If fired outside the window, the handler returns immediately (no-op).
+# Idempotency: one alert per user per AY per day (deduplicated via notification table).
+# PENDING-B19: backend-agent Wave 3 must implement the ITR_FORM16_MISSING handler.
+create_scheduler_job \
+    "itr-form16-missing" \
+    "0 11 * * *" \
+    '{"job_type":"ITR_FORM16_MISSING","source":"cloud-scheduler","days_after_deadline":3}' \
+    "Daily 11:00 IST: alert users missing Form 16 more than 3 days after June 15 deadline"
+
 # ─────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────
@@ -271,9 +350,25 @@ gcloud scheduler jobs list \
     --format="table(name,schedule,state)" 2>/dev/null || \
     echo "  (use: gcloud scheduler jobs list --location=${SCHEDULER_REGION})"
 echo ""
+echo "Pub/Sub subscriptions:"
+echo "  notification-service-recurring-jobs-sub — handles: GST_DEADLINE_CHECK, ITR_DEADLINE_REMINDERS,"
+echo "                                             ITR_REFUND_POLLING, SUBSCRIPTION_RENEWAL_CHECK,"
+echo "                                             ITR_FORM16_MISSING"
+echo "  callback-service-recurring-jobs-sub     — handles: CALLBACK_KPI_MV_REFRESH,"
+echo "                                             GST_PRE_DEADLINE_CALLBACK (PENDING-B19)"
+echo ""
+echo "PENDING-B19 (backend Wave 3) — backend-agent must implement:"
+echo "  POST /callbacks/internal/refresh-kpi-mv     — REFRESH MV CONCURRENTLY callback.kpi_daily_snapshot"
+echo "  POST /callbacks/internal/gst-pre-deadline   — auto-callback for unapproved returns ≤2 days to deadline"
+echo "  ITR_FORM16_MISSING handler                  — in NotificationService, gate: June 15 – July 31"
+echo "  ITR_DEADLINE_REMINDERS Day-25 auto-callback — in CallbackService (plan G8.1)"
+echo ""
 echo "Next steps:"
 echo "  1. Verify NotificationService handles job_type payloads from '${TOPIC}'"
-echo "  2. Test job trigger manually:"
+echo "  2. Verify CallbackService handles CALLBACK_KPI_MV_REFRESH and GST_PRE_DEADLINE_CALLBACK (after B19)"
+echo "  3. Test job trigger manually:"
 echo "     gcloud scheduler jobs run gst-deadline-check --location=${SCHEDULER_REGION}"
-echo "  3. Monitor: Cloud Logging > scheduler.googleapis.com/executions"
+echo "     gcloud scheduler jobs run callback-kpi-mv-refresh --location=${SCHEDULER_REGION}"
+echo "  4. Monitor: Cloud Logging > scheduler.googleapis.com/executions"
+echo "  5. Full matrix documentation: docs/devops/recurring-jobs-decision.md"
 echo ""

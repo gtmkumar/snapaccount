@@ -13,6 +13,10 @@
  *   { type: 'loan_disbursed', loanId: '…' }           → LoanStatus
  *   { type: 'loan_approved', loanId: '…' }            → LoanStatus
  *   { type: 'org_invite', token: '…' }                → AcceptInvite
+ *   Wave 7A (GAP-047/031) [confirm 7A payload types]:
+ *   { type: 'device_approval_request', id: '<uuid>' } → DeviceApproval (old device)
+ *   { type: 'device_signin_notice' }                  → Devices (soft-launch notify-only)
+ *   { type: 'ca_appointment_reminder', id: '<uuid>' } → AppointmentDetail
  *   (default)                                         → App root
  */
 
@@ -85,6 +89,25 @@ export function wireNotificationRouter(
       case 'loan_approved':
         if (loanId && isValidUuid(loanId)) {
           nav('LoanStatus', { loanId });
+        }
+        break;
+
+      // Wave 7A (GAP-047): OLD-device approval request — SEC-055 UUID-validate.
+      case 'device_approval_request':
+        if (id && isValidUuid(id)) {
+          nav('DeviceApproval', { requestId: id });
+        }
+        break;
+
+      // Wave 7A (GAP-047): soft-launch notify-only — review devices, no gate.
+      case 'device_signin_notice':
+        navigationRef.navigate('Devices' as never);
+        break;
+
+      // Wave 7A (GAP-031): 30/5-min appointment reminders — SEC-055 validated.
+      case 'ca_appointment_reminder':
+        if (id && isValidUuid(id)) {
+          nav('AppointmentDetail', { appointmentId: id });
         }
         break;
 

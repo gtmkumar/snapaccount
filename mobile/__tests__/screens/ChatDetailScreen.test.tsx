@@ -35,12 +35,17 @@ jest.mock('@react-navigation/native', () => {
 
 // ── Mock: lib/api (prevents real Axios calls from ThemeContext debounce) ──────
 
+// BUG-W7-IOS-001: the screen must take its hub host from lib/api's
+// CHAT_HUB_BASE_URL (ChatService :5107), never from extra.apiBaseUrl.
+const MOCK_CHAT_HUB_BASE_URL = 'http://chat-host.test:5107';
+
 jest.mock('../../src/lib/api', () => ({
   apiClient: {
     get: jest.fn(() => Promise.resolve({ data: null })),
     post: jest.fn(() => Promise.resolve({ data: {} })),
     patch: jest.fn(() => Promise.resolve({ data: {} })),
   },
+  CHAT_HUB_BASE_URL: 'http://chat-host.test:5107',
 }));
 
 // ── Captured SignalR handlers ─────────────────────────────────────────────────
@@ -93,7 +98,7 @@ jest.mock('../../src/api/chat', () => ({
   HubConnectionState: { Disconnected: 'Disconnected', Connected: 'Connected' },
 }));
 
-import { subscribeChatHub } from '../../src/api/chat';
+import { subscribeChatHub, buildChatHubConnection } from '../../src/api/chat';
 import { ChatDetailScreen } from '../../src/screens/chat/ChatDetailScreen';
 
 // ── Wrapper ───────────────────────────────────────────────────────────────────
@@ -168,6 +173,21 @@ describe('ChatDetailScreen', () => {
       </Wrapper>,
     );
     expect(usePreventScreenCapture).toHaveBeenCalled();
+  });
+
+  // ── BUG-W7-IOS-001: hub targets ChatService host, not apiBaseUrl ──────────
+
+  it('builds the SignalR hub against CHAT_HUB_BASE_URL (ChatService), not apiBaseUrl', () => {
+    (buildChatHubConnection as jest.Mock).mockReturnValue(mockHub);
+    render(
+      <Wrapper>
+        <ChatDetailScreen />
+      </Wrapper>,
+    );
+    expect(buildChatHubConnection).toHaveBeenCalledWith(
+      MOCK_CHAT_HUB_BASE_URL,
+      expect.any(Function),
+    );
   });
 
   // ── SignalR: messageReceived ──────────────────────────────────────────────
@@ -349,6 +369,81 @@ describe('ChatDetailScreen', () => {
         Haptics.NotificationFeedbackType.Error,
       );
     });
+  });
+
+  // ── NEW-D08: clientMessageId UUID + retry dedupe ──────────────────────────
+
+  it('send includes a client-generated UUID clientMessageId', async () => {
+    mockSendMessage.mockResolvedValue({
+      messageId: 'm-ok',
+      threadId: 'thread-test-1',
+      senderUserId: 'me',
+      body: 'Hi',
+      createdAt: new Date().toISOString(),
+    });
+
+    const { getByPlaceholderText, getByLabelText } = render(
+      <Wrapper>
+        <ChatDetailScreen />
+      </Wrapper>,
+    );
+
+    await act(async () => {
+      fireEvent.changeText(getByPlaceholderText('Message…'), 'Hi');
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Send'));
+    });
+
+    await waitFor(() => expect(mockSendMessage).toHaveBeenCalledTimes(1));
+    const [, req] = mockSendMessage.mock.calls[0] as [string, { clientMessageId?: string }];
+    expect(req.clientMessageId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+  });
+
+  it('retry after failure reuses the SAME clientMessageId (dedupe key)', async () => {
+    mockSendMessage.mockRejectedValueOnce(new Error('network error'));
+
+    const { getByPlaceholderText, getByLabelText, getByText } = render(
+      <Wrapper>
+        <ChatDetailScreen />
+      </Wrapper>,
+    );
+
+    await act(async () => {
+      fireEvent.changeText(getByPlaceholderText('Message…'), 'Retry me');
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Send'));
+    });
+
+    // First attempt failed — bubble shows the retry affordance
+    await waitFor(() => expect(mockSendMessage).toHaveBeenCalledTimes(1));
+    const firstReq = mockSendMessage.mock.calls[0][1] as { clientMessageId: string };
+    expect(firstReq.clientMessageId).toBeTruthy();
+
+    const failedCaption = await waitFor(() => getByText('Failed · tap to retry'));
+
+    // Second attempt succeeds
+    mockSendMessage.mockResolvedValueOnce({
+      messageId: 'm-server-2',
+      threadId: 'thread-test-1',
+      senderUserId: 'me',
+      body: 'Retry me',
+      createdAt: new Date().toISOString(),
+    });
+
+    await act(async () => {
+      fireEvent.press(failedCaption);
+    });
+
+    await waitFor(() => expect(mockSendMessage).toHaveBeenCalledTimes(2));
+    const secondReq = mockSendMessage.mock.calls[1][1] as { clientMessageId: string };
+
+    // The dedupe contract: same id on retry, never regenerated
+    expect(secondReq.clientMessageId).toBe(firstReq.clientMessageId);
+    expect(mockSendMessage.mock.calls[1][0]).toBe('thread-test-1');
   });
 
   // ── Accessibility ─────────────────────────────────────────────────────────

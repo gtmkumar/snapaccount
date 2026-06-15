@@ -444,7 +444,7 @@ This introduces the 12th microservice. The schema-per-service count moves from 1
 | `callback.callbacks` | The callback request + state machine. Status enum: PENDING / SCHEDULED / IN_PROGRESS / COMPLETED / FOLLOW_UP_NEEDED / ESCALATED_TO_CA / CANCELLED. Category: GST / ITR / DOC / LOAN / BILLING / OTHER. Priority: LOW / NORMAL / HIGH / URGENT. Carries `preferred_window` and `scheduled_at` as TSTZRANGE. SLA + CSAT fields. | `(org_id, requested_at DESC)`, `(assigned_to)`, `(status, org_id)`, `(priority, status)` partial, `(sla_due_at)` partial, `(category, org_id)`, `(linked_entity_type, linked_entity_id)`, GiST on `scheduled_at` | Yes — org member **OR** assigned agent |
 | `callback.call_notes` | CA-authored notes per callback: body, outcome, duration_minutes, visibility (INTERNAL/USER_VISIBLE). | `(callback_id, recorded_at DESC)`, `(author_id)` | Yes — inherits from parent callback visibility |
 | `callback.assignments_log` | Audit of every (re)assignment: `from_user_id`, `to_user_id`, `assigned_by`, `reason`. | `(callback_id, assigned_at DESC)`, `(to_user_id)`, `(assigned_by)` | Yes — inherits from parent callback |
-| `callback.kpi_daily_snapshot` | **MATERIALIZED VIEW**. Per-org daily rollup: counts by status, `avg_ttr_minutes`, `count_sla_breached`, `avg_csat`. Refreshed by scheduled job (ownership TBD with devops-engineer: Hangfire vs Cloud Scheduler decision). Unique index `(org_id, snapshot_date)` supports `REFRESH CONCURRENTLY`. | `(org_id, snapshot_date)` unique, `(snapshot_date)` | **No** — Postgres MVs cannot have RLS. Consumers must filter by `org_id` at the API layer OR via a `SECURITY INVOKER` wrapper function. Flagged to security-reviewer. |
+| `callback.kpi_daily_snapshot` | **MATERIALIZED VIEW**. Per-org daily rollup: counts by status, `avg_ttr_minutes`, `count_sla_breached`, `avg_csat`. Refreshed by scheduled job (ownership TBD with devops-engineer: Hangfire vs Cloud Scheduler decision). Unique index `(org_id, snapshot_date)` supports `REFRESH CONCURRENTLY`. **Org-safe** (`org_id` in SELECT+GROUP BY); audited NEW-D09 — see "Audit: `callback.kpi_daily_snapshot`". `snapshot_date` = IST (`Asia/Kolkata`) day. | `(org_id, snapshot_date)` unique, `(snapshot_date)` | **No** — Postgres MVs cannot have RLS. Consumers must filter by `org_id` at the API layer OR via a `SECURITY INVOKER` wrapper function. Flagged to security-reviewer. |
 
 ### DPDP right-to-erasure changelog (SEC-008 cascade)
 
@@ -888,3 +888,577 @@ All six are `is_system_role = TRUE`, `organization_id = NULL`. `CA` reuses the r
 
 - **backend-agent:** New columns `auth.role.organization_id` (NULL=system) + `auth.role.created_by_user_id`. New table `auth.invitation` (token-based; store **SHA-256** of the token in `token_hash`, never plaintext; `status` ∈ PENDING/ACCEPTED/REVOKED/EXPIRED). Permission names are dot-notation matching `[RequiresPermission]`; the catalog and 6 baseline roles are seeded. Set `app.is_platform_admin='true'` in the DB session for SUPER_ADMIN so RLS allows cross-org reads. Enforce the constrained-delegation rule in the application layer — RLS does not enforce it.
 - **security-reviewer:** Invite-token entropy/expiry/replay (`token_hash` UNIQUE + `expires_at` + `status`), org tenant isolation via RLS on `auth.role`/`auth.invitation`, and privilege-escalation-via-delegation are the focus areas.
+
+---
+
+## Phase 7 Wave 1 Addendum — EF ↔ SQL reconciliation (additive, 2026-06-10)
+
+> Migrations: `060_notification_ef_alignment.sql` (notification — pre-existing), `061_loan_consent_locale_and_catalog_alignment.sql` (loan — NEW).
+> Status: ADDITIVE. No renames, no drops. Full chain (`000`…`061` + `999`) replays clean on an empty PostgreSQL 18 database; all migrations idempotent.
+> Driver: backend-agent Wave 1 merged EF entities/configurations with no backing SQL. NotificationService, CallbackService, and LoanService have **no EF migrations** — the SQL files in `database/migrations/` are canonical, so the entity configs are mapped onto existing columns and any genuinely-missing columns are added here.
+
+### DB1 — NotificationService reconciliation (GAP-070)
+
+**Outcome: already reconciled by `060_notification_ef_alignment.sql` — no new migration required.** All seven entity configurations map cleanly onto existing columns (008 + 017 + 060). Verified column-by-column against a fresh replay:
+
+| EF entity → table | Notable EF→column mappings | Parity |
+|---|---|---|
+| `NotificationEvent` → `notification.notification_event` | `EventCode→event_code`, `DefaultChannels→default_channels` (table added by 060) | ✓ |
+| `NotificationLogEntry` → `notification.notification_log` | `Locale→language`, `ErrorMessage→failure_reason`, `CostInr→cost_inr`, dispatch cols (`user_id`, `event_code`, `channel`, `rendered_body`, `dedupe_key`) added by 060 | ✓ |
+| `DlqItem` → `notification.dlq_items` | `EventCode→event_type`, `LastErrorMessage→failure_reason`, `ExhaustedAt→last_failed_at`, `OriginalPayload→original_payload`, `IsResolved→is_resolved`, `Locale→locale` (last three added by 060) | ✓ |
+| `NotificationTemplate` → `notification.notification_template` | `EventCode→event_type`, `Locale→language`, `Body→body_template`, `SenderName→sender_id`, `IsCurrent→is_current` | ✓ |
+| `NotificationPreference` → `notification.notification_preference` | `EventCode→event_type`, `DoNotDisturb→dnd_enabled` | ✓ |
+| `InboxNotification` → `notification.notification` (partitioned) | read model: `id`, `user_id`, `channel`, `event_type`, `title`, `body`, `is_read`, `status` | ✓ |
+| `PushToken` → `notification.device_push_token` | `Token→push_token`, platform upper-case converter | ✓ |
+
+Seed note: the C# `DbSeeder` writes the event catalogue into `notification.notification_event` (created by 060) and templates into `notification.notification_template`. Because the chain now provides every column the seeder touches, the PR #19 try/catch band-aid (GAP-070) can be removed by backend-agent.
+
+### HANDOFF-2 — CallbackService `assignments_log` + KPI snapshot (GAP-012 / SEC-030)
+
+**Outcome: both objects already exist in `018_callback_schema.sql` and match the EF configurations exactly — no new migration required.**
+
+| Object | Status | EF parity |
+|---|---|---|
+| `callback.assignments_log` (table) | Existed in 018 | `AssignmentLog`: `id`, `callback_id`, `from_user_id`, `to_user_id`, `assigned_by`, `reason` (text), `assigned_at` + audit cols (`created_at`, `updated_at`, `deleted_at`, `created_by`, `updated_by`). All present; indexes `(callback_id, assigned_at)`, `(to_user_id)`, `(assigned_by)` match `HasIndex(...)`. ✓ |
+| `callback.kpi_daily_snapshot` (**MATERIALIZED VIEW**) | Existed in 018 | Keyless `KpiDailySnapshot` (`ToView`) columns `org_id`, `snapshot_date`, `count_pending/scheduled/in_progress/completed/cancelled/escalated/sla_breached`, `avg_ttr_minutes`, `avg_csat`, `total_requested` match the MV projection exactly (bigint→`long`, numeric→`double?`, date→`DateOnly`, uuid→`Guid`). ✓ |
+
+**MV refresh strategy:** `callback.kpi_daily_snapshot` is a materialized view with a unique index `uq_kpi_daily_snapshot_org_date (org_id, snapshot_date)`, which enables non-blocking concurrent refresh:
+
+```sql
+REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot;
+```
+
+Schedule this from a Cloud Scheduler → CallbackService endpoint (or a Hangfire recurring job) — recommended cadence every 15–30 min, plus an on-demand refresh after bulk status transitions. Postgres MVs cannot enforce RLS, so `GetKpiSnapshotQuery` mandatorily filters `WHERE org_id = <caller-claim>` (P6-HANDOFF-04 IDOR control) — the org id is taken from the caller's identity, never from request input. **Owner of the scheduled refresh job: devops-engineer** (Cloud Scheduler vs Hangfire decision still open).
+
+### Audit: `callback.kpi_daily_snapshot` (NEW-D09, 2026-06-11)
+
+Independent audit of the MV against three risks. **Verdict: ORG-SAFE.** No migration was strictly required; `067_callback_kpi_mv_audit_and_subscription_anonymization.sql` was written anyway as an idempotent guard (reasserts the unique index + raises if a CONCURRENTLY-incompatible deployment is ever found).
+
+**Live definition** (`pg_matviews`, abridged):
+
+```sql
+SELECT org_id,
+       date_trunc('day', requested_at AT TIME ZONE 'Asia/Kolkata')::date AS snapshot_date,
+       COUNT(*) FILTER (WHERE status = 'PENDING')   AS count_pending,
+       ... (per-status counts) ...,
+       COUNT(*) FILTER (WHERE sla_breached) AS count_sla_breached,
+       AVG(EXTRACT(EPOCH FROM completed_at - requested_at)/60.0)
+           FILTER (WHERE status = 'COMPLETED')      AS avg_ttr_minutes,
+       AVG(csat_score) FILTER (WHERE csat_score IS NOT NULL) AS avg_csat,
+       COUNT(*) AS total_requested
+FROM   callback.callbacks
+WHERE  deleted_at IS NULL
+GROUP  BY org_id, date_trunc('day', requested_at AT TIME ZONE 'Asia/Kolkata');
+```
+
+| Audit dimension | Finding | Evidence |
+|---|---|---|
+| **(a) Cross-org isolation** | **PASS.** `org_id` is both projected and a `GROUP BY` key, so every output row aggregates exactly one organization's callbacks — no cross-org leakage is structurally possible. The only un-partitioned slice is `snapshot_date`. | `org_id` first column in SELECT + first `GROUP BY` key. Live check: `SELECT count(*), count(DISTINCT org_id) FROM callback.kpi_daily_snapshot` → rows fan out per `(org_id, date)`. |
+| **(b) CONCURRENTLY refresh** | **PASS.** Unique index `uq_kpi_daily_snapshot_org_date (org_id, snapshot_date)` exists (from 018). `REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot;` ran successfully on the live DB. 067 reasserts the index `IF NOT EXISTS` and a `DO` block raises if no UNIQUE index covers the MV. | `\d+` shows `uq_kpi_daily_snapshot_org_date UNIQUE`; live CONCURRENTLY refresh returned `REFRESH MATERIALIZED VIEW`. |
+| **(c) Snapshot-date semantics** | **IST (`Asia/Kolkata`).** `snapshot_date = date_trunc('day', requested_at AT TIME ZONE 'Asia/Kolkata')::date`. `requested_at` is `TIMESTAMPTZ`. **Decision: day boundaries are India Standard Time (UTC+5:30), not UTC** — correct for an India-only product: a callback requested at 02:00 IST (20:30 UTC the prior day) is counted on the IST calendar day the operations team experiences, so daily KPI rollups align with the support team's working day. Documented here as the canonical boundary; any downstream consumer (admin dashboard, reports) must render `snapshot_date` as an IST calendar date and never re-localize it. | `AT TIME ZONE 'Asia/Kolkata'` in the `date_trunc` expression. |
+
+**Observational note (out of NEW-D09 scope — flagged, not changed):** the MV's status filters reference labels `IN_PROGRESS` and `ESCALATED_TO_CA`, but `callback.callbacks.status` currently has a CHECK allowing `PENDING, ASSIGNED, CONFIRMED, COMPLETED, ESCALATED, CANCELLED` (no `IN_PROGRESS`/`ESCALATED_TO_CA`). Those two `FILTER` clauses therefore always evaluate to 0 against the current vocabulary. This is a status-vocabulary drift between 018's MV and a later CHECK change — a backend/data-model decision, not an isolation or refresh defect. Logged for a future reconciliation; the MV is still org-safe.
+
+#### IDOR test scenario (for qa-web — turn into an integration test)
+
+```sql
+-- ============================================================================
+-- NEW-D09 IDOR scenario: prove kpi_daily_snapshot never aggregates across orgs.
+-- Two orgs, callbacks in each on the SAME IST day → expect exactly one MV row
+-- per (org_id, snapshot_date), each row counting ONLY its own org's callbacks.
+-- ============================================================================
+-- Fixed ids for assertions:
+--   org A = 11111111-1111-1111-1111-111111111111
+--   org B = 22222222-2222-2222-2222-222222222222
+-- All requested_at chosen so the IST calendar day is 2026-06-10 for BOTH orgs,
+-- including one near the UTC/IST boundary to prove IST bucketing.
+
+-- Org A: 3 callbacks (2 COMPLETED, 1 PENDING) on 2026-06-10 IST
+INSERT INTO callback.callbacks (org_id, status, requested_at, completed_at, sla_breached, csat_score)
+VALUES
+  ('11111111-1111-1111-1111-111111111111','COMPLETED','2026-06-10 09:00:00+05:30','2026-06-10 10:00:00+05:30',false,5),
+  ('11111111-1111-1111-1111-111111111111','COMPLETED','2026-06-10 11:00:00+05:30','2026-06-10 11:30:00+05:30',false,3),
+  -- 2026-06-09 21:00 UTC == 2026-06-10 02:30 IST → must bucket to 2026-06-10 (IST boundary check)
+  ('11111111-1111-1111-1111-111111111111','PENDING','2026-06-09 21:00:00+00:00',NULL,false,NULL);
+
+-- Org B: 2 callbacks (1 CANCELLED, 1 COMPLETED w/ SLA breach) on 2026-06-10 IST
+INSERT INTO callback.callbacks (org_id, status, requested_at, completed_at, sla_breached, csat_score)
+VALUES
+  ('22222222-2222-2222-2222-222222222222','CANCELLED','2026-06-10 14:00:00+05:30',NULL,false,NULL),
+  ('22222222-2222-2222-2222-222222222222','COMPLETED','2026-06-10 15:00:00+05:30','2026-06-10 18:00:00+05:30',true,4);
+
+REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot;
+
+-- EXPECTED — exactly 2 rows, fully partitioned by org (no cross-org bleed):
+--   org A | 2026-06-10 | count_completed=2 | count_pending=1 | total_requested=3 | count_sla_breached=0 | avg_csat=4.0
+--   org B | 2026-06-10 | count_completed=1 | count_cancelled=1 | total_requested=2 | count_sla_breached=1 | avg_csat=4.0
+-- Assertions for qa-web:
+--   1. SELECT count(*) FROM callback.kpi_daily_snapshot
+--        WHERE snapshot_date='2026-06-10'
+--        AND org_id IN ('1111...','2222...')  => 2  (one row per org, never merged)
+--   2. Org A row total_requested = 3 AND org B row total_requested = 2  (no org sees the other's count)
+--   3. The org A PENDING callback at 2026-06-09 21:00 UTC lands in the 2026-06-10 row (IST bucketing)
+--   4. A query filtering WHERE org_id = '1111...' returns ZERO of org B's metrics (IDOR control)
+-- Cleanup:
+--   DELETE FROM callback.callbacks WHERE org_id IN
+--     ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222');
+--   REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot;
+-- ============================================================================
+```
+
+> The API-layer half (`GetKpiSnapshotQuery` must inject `WHERE org_id = <caller-claim>` and reject any org_id from request input) is qa-web's integration assertion against the CallbackService endpoint; the SQL above sets up the data fixture and the per-org expected rows.
+
+### HANDOFF-SWEEP-02 — subscription DPDP erasure metadata (`067`)
+
+Migration **`067_callback_kpi_mv_audit_and_subscription_anonymization.sql`** also adds two DPDP Act 2023 erasure-metadata columns to `subscription.subscription` (additive, idempotent):
+
+| Change | Column | Detail |
+|---|---|---|
+| ADD `anonymization_reason VARCHAR(200) NULL` | `subscription.subscription` | Free-text reason the subscription PII was anonymized (e.g. data-principal erasure request id). `NULL` = not anonymized. |
+| ADD `anonymized_at TIMESTAMPTZ NULL` | `subscription.subscription` | Timestamp the PII was scrubbed. The billing/audit row is **retained** (7-year retention) while its PII fields are anonymized — reconciles DPDP right-to-erasure with statutory retention. `NULL` = not anonymized. |
+
+No FK, CHECK, or RLS change. No EF migration exists for SubscriptionService, so this SQL is canonical.
+
+### HANDOFF-1 — LoanService consent locale + catalog (GAP-040 / P6-HANDOFF-25)
+
+Migration **`061_loan_consent_locale_and_catalog_alignment.sql`** (NEW). Three column deltas + locale seeds:
+
+| Change | Table | Detail |
+|---|---|---|
+| ADD `consent_locale VARCHAR(10) NOT NULL DEFAULT 'en'` | `loan.consents` | Backs `Consent.ConsentLocale`. BCP-47 locale of the consent text the user actually reviewed — ties the DPDP audit trail to the exact language version. Matches `loan.consent_catalog.locale`. |
+| ADD `deleted_at TIMESTAMPTZ NULL` | `loan.consents` | `Consent : BaseAuditableEntity`; `BaseDbContext` applies a **global** `deleted_at IS NULL` query filter and binds `deleted_at` in every INSERT/SELECT. 027 deliberately omitted it, which broke EF reads/writes. The existing `trg_consents_no_delete` trigger still blocks hard DELETE; soft-delete via `UPDATE deleted_at` (what the ORM emits) is allowed, so the DPDP "never hard-delete" intent is preserved (verified: hard DELETE raises, soft-delete UPDATE succeeds). |
+| ADD `updated_by UUID NULL` | `loan.consent_catalog` | `ConsentCatalogEntry : BaseAuditableEntity` → EF maps `UpdatedBy → updated_by`. 032 created `last_modified_by` instead. `last_modified_by` is retained and marked `-- DEPRECATED` (Phase-7); `updated_by` is the live audit column. |
+
+**Seed data (consent catalog v1.4):** `032` seeded the three current consent types (`CREDIT_BUREAU`, `DATA_SHARE_WITH_BANK`, `DISBURSEMENT_MANDATE`) for locale `en`. `061` adds the **`hi`** and **`bn`** variants — **6 new rows**, catalog now 9 rows (3 types × 3 locales), unique on `(consent_type, text_version, locale)`, inserted with `ON CONFLICT DO NOTHING`. ⚠ The `hi`/`bn` bodies are **placeholder-but-plausible translations tagged `[PLACEHOLDER TRANSLATION — LEGAL REVIEW REQUIRED]`** — legal/compliance must replace them before production (RBI Digital Lending + DPDP legal artifact).
+
+> Note (for backend-agent, observational — not changed here): `loan.consents.consent_type` and `loan.application_documents.*` use PostgreSQL `ENUM` types (`loan.consent_type`, etc.). EF must map the CLR `ConsentType` enum to the `CREDIT_BUREAU`/`DATA_SHARE_WITH_BANK`/`DISBURSEMENT_MANDATE` labels (the repo's `UpperSnakeCaseNameTranslator` handles this). Out of db-engineer scope; flagged for parity awareness only.
+
+---
+
+## Phase 7 Wave 2 Addendum — DPDP self-service, RBI KFS, Razorpay/usage (additive, 2026-06-10)
+
+> Migrations: `062_auth_dpdp_consent_export_correction_and_platform_config.sql` (auth — NEW), `063_loan_key_facts_statement_and_cooling_off.sql` (loan — NEW), `064_subscription_razorpay_config_and_usage_records.sql` (subscription — NEW).
+> Status: ADDITIVE. No renames, no drops. Full chain (`000`…`064` + `999`) replays clean on an empty **PostgreSQL 17** database; all three new migrations are idempotent (verified by a second back-to-back apply with `ON_ERROR_STOP=1`).
+> Driver: backend-agent Wave 2 (B7/B8/B9/B11/B12) merged EF entities/configurations with **no backing SQL**. AuthService, LoanService and SubscriptionService have **no EF migrations** — the SQL files here are canonical. Every new table backs a `BaseAuditableEntity`, so `BaseDbContext` applies the global `deleted_at IS NULL` query filter and binds `created_by`/`updated_by` (uuid, via a string↔Guid value converter) on every write; therefore **all five audit columns** (`created_at`, `updated_at`, `deleted_at`, `created_by`, `updated_by`) are present on every table.
+
+### DB-B11/B12 — AuthService DPDP self-service + SEC-056 ghost-route config (`062`)
+
+Five NEW tables in the `auth` schema:
+
+| EF entity → table | Key columns (EF → SQL) | Indexes (exact EF names) | RLS / triggers |
+|---|---|---|---|
+| `UserConsent` → `auth.user_consent` | `user_id`, `purpose` VARCHAR(200), `purpose_description` VARCHAR(1000), `notice_version` VARCHAR(50), `status` VARCHAR(20), `action_at`, `ip_address` VARCHAR(45), `user_agent` VARCHAR(500), `locale` VARCHAR(20), `withdrawn_at` | `ix_user_consent_user_id`, `ix_user_consent_user_purpose_time (user_id, purpose, action_at)` | RLS user-isolation (`user_id = app.current_user_id`). **APPEND-ONLY**: `trg_user_consent_no_delete` blocks hard DELETE; soft-delete (`UPDATE deleted_at`) allowed (mirrors `loan.consents`). FK→`auth.user` **without** cascade (audit retention). |
+| `DataExportRequest` → `auth.data_export_request` | `user_id`, `status` VARCHAR(20), `gcs_object_path` VARCHAR(500), `download_url` VARCHAR(2000), `download_url_expires_at`, `error_message` VARCHAR(1000), `hangfire_job_id` VARCHAR(100) | `ix_data_export_request_user_id`, `ix_data_export_request_user_status` | RLS user-isolation. FK→`auth.user` `ON DELETE CASCADE`. `updated_at` trigger. |
+| `DataCorrectionRequest` → `auth.data_correction_request` | `user_id`, `data_category` VARCHAR(100), `description` VARCHAR(2000), `status` VARCHAR(30), `reviewer_note` VARCHAR(2000), `reviewed_by_user_id`, `resolved_at` | `ix_data_correction_request_user_id`, `ix_data_correction_request_user_status` | RLS user-isolation. FK `user_id`→`auth.user` CASCADE; FK `reviewed_by_user_id`→`auth.user` `ON DELETE SET NULL`. |
+| `FeatureFlag` → `auth.feature_flag` | `flag_key` VARCHAR(100), `is_enabled` BOOL DEFAULT FALSE, `description` VARCHAR(500). `created_by`/`updated_by` are **inherited** (not in the config) and auto-mapped by `BaseDbContext` → present as uuid. | `ix_feature_flag_flag_key` UNIQUE | **No RLS** (global admin registry; gated by RBAC). `updated_at` trigger. |
+| `PlatformConfig` → `auth.platform_config` | `config_key` VARCHAR(100), `config_value` **JSONB** (EF `ConfigValueJson → config_value`). `created_by`/`updated_by` inherited. | `ix_platform_config_config_key` UNIQUE | **No RLS** (global admin store; gated by RBAC). `updated_at` trigger. |
+
+### DB-B7/B8 — LoanService RBI Key Facts Statement + cooling-off (`063`)
+
+| Object | Detail |
+|---|---|
+| NEW `loan.key_facts_statement` (`KeyFactsStatement`) | `application_id`→`loan.applications(id)` (non-unique; versioning allowed), `annual_percentage_rate` NUMERIC(10,4), `loan_amount` NUMERIC(18,2), `tenure_months` INT, `monthly_emi` NUMERIC(18,2), `fees_json`/`repayment_schedule_json` JSONB, `lender_name` VARCHAR(200), `grievance_officer_contact` VARCHAR(1000), `cooling_off_days` INT, `hmac_signature` VARCHAR(500), `generated_at`, `acknowledged_at`. Index `ix_key_facts_statement_application_id`. RLS org-scoped via parent application (mirrors `loan.consents`). |
+| KFS **immutability** trigger | `trg_kfs_immutable_signed_fields` (BEFORE UPDATE) raises if any **signed** field changes (`application_id`, APR, `loan_amount`, `tenure_months`, `monthly_emi`, fees/schedule JSON, `lender_name`, `grievance_officer_contact`, `cooling_off_days`, `hmac_signature`, `generated_at`). **Allows** `acknowledged_at`, audit cols, and `deleted_at` — required because `RecordConsent` calls `RecordAcknowledgement()` (a single legitimate UPDATE). A blanket no-UPDATE trigger would have broken acknowledgement; verified: signed-field UPDATE raises, `acknowledged_at`/soft-delete UPDATE succeed. |
+| ALTER `loan.applications` | ADD `cooling_off_ends_at TIMESTAMPTZ NULL`, `cooling_off_days INT NULL` (GAP-021 RBI cooling-off window). Table is `loan.applications` (the Phase 6C v2 table) — the handoff's `loan.loan_applications` name was **incorrect**; verified against `LoanApplicationConfiguration.ToTable("applications")`. |
+| `kfs_id` on `loan.consents`? | **Not added.** The handoff asked to check; `RecordConsentCommand` takes a `KfsId` but only uses it to look up + acknowledge the KFS — the `Consent` entity/config has **no `KfsId` property**, so nothing is persisted on `loan.consents`. (Confirmed against `ConsentConfiguration.cs` + `RecordConsentCommandHandler.cs`.) |
+
+### DB-B9 — SubscriptionService Razorpay config + usage metering (`064`)
+
+| EF entity → table | Key columns | Indexes | RLS / notes |
+|---|---|---|---|
+| `RazorpayConfig` → `subscription.razorpay_config` | `key_id` VARCHAR(100), `encrypted_key_secret` VARCHAR(1000), `encrypted_webhook_secret` VARCHAR(1000) NULL, `test_mode` BOOL DEFAULT TRUE, `is_enabled` BOOL DEFAULT FALSE. AES-256-GCM secrets encrypted by the app. | (PK only) | **No RLS** (single-row global integration config; RBAC-gated). `updated_at` trigger. |
+| `UsageRecord` → `subscription.usage_records` (**plural**) | `org_id`, `feature_code` VARCHAR(100), `units` INT DEFAULT 1, `period_start`, `period_end`, `correlation_id` VARCHAR(200) | `ix_usage_records_org_feature_period (org_id, feature_code, period_start)`, `ix_usage_records_org_id` | RLS org-isolation (mirrors `010` org policies). **Distinct** from the pre-existing **singular** `subscription.usage_record` (a per-period rollup from `010`). |
+
+**Partitioning note:** `subscription.usage_records` is an append-only per-event metering ledger and is expected to grow large. It is kept as a single table for now to match the EF model. A future migration may RANGE-partition it by `period_start` (monthly) for retention/pruning — a transparent, additive optimisation that does not change the EF mapping.
+
+### Verification summary (Wave 2)
+
+- **Full-chain replay:** `000`…`064` + `999` applied in order with `ON_ERROR_STOP=1` on a fresh `pgvector/pgvector:pg17` (PostgreSQL 17.9) database — **all 66 files OK**.
+- **Idempotency:** `062`/`063`/`064` re-applied a second time back-to-back — **all OK** (every object guarded by `IF NOT EXISTS` / `CREATE OR REPLACE` / `DROP ... IF EXISTS` + `CREATE`).
+- **EF↔SQL parity:** every column verified column-by-column against `information_schema` (name, type, precision/scale, length, nullability) — exact match for all 8 new tables + the 2 added `loan.applications` columns. All EF `HasDatabaseName` index names present. Trigger/RLS behaviour functionally tested (consent hard-delete blocked + soft-delete allowed; KFS signed-field UPDATE blocked + acknowledgement/soft-delete allowed).
+- **Deviations from handoff:** (1) table is `loan.applications`, not `loan.loan_applications`; (2) no `kfs_id` column on `loan.consents` (entity has no such property); (3) `loan.key_facts_statement` uses a signed-field-only immutability trigger rather than a blanket no-UPDATE trigger, to permit borrower acknowledgement.
+
+## Phase 7 Wave 3 — Document review-decision columns
+
+> Migration: `065_document_review_decision_columns.sql` (document — NEW).
+> Status: ADDITIVE. No renames, no drops, no constraint/RLS changes. Idempotent (re-applied back-to-back with `ON_ERROR_STOP=1` — clean, `ADD COLUMN IF NOT EXISTS` skips).
+> Driver: backend-agent B15 handoff — the document review workflow records who decided an approval/rejection and (on reject) the reason, but the canonical `document.document` table had no columns to persist the decision, causing an EF-entity ↔ DB-table divergence.
+
+### DB-B15 — DocumentService review decision (`065`)
+
+| Column added on `document.document` | Type | Purpose |
+|---|---|---|
+| `rejection_reason` | `TEXT` NULL | Free-text reason captured when a review decision sets status → `REJECTED`. |
+| `approved_by` | `UUID` NULL | `user_id` (auth.user, referenced **by value** — no FK, matching the existing cross-schema convention used by `user_id`/`created_by`/`updated_by`) of the reviewer who recorded the decision. |
+| `approved_at` | `TIMESTAMPTZ` NULL | Timestamp the approve/reject decision was recorded. |
+
+**Partitioning note:** `document.document` is a RANGE-partitioned (by `uploaded_at`) parent. `ADD COLUMN` on the parent propagates automatically to every existing monthly partition and all future partitions — verified present on the parent and on partition `document_2026_06`. `document.document_archive` is a **standalone** archive/lifecycle table (NOT a partition of `document.document` per `pg_inherits`), so it does not receive these columns — that is by design and out of scope for the `Document` EF entity.
+
+### Verification summary (Wave 3)
+
+- Migration applied to the live local DB (`snapaccount`, PostgreSQL 17) with `ON_ERROR_STOP=1` — OK. Re-applied back-to-back — OK (idempotent).
+- Columns verified against `information_schema.columns` on the partitioned parent + a partition: `rejection_reason TEXT`, `approved_by UUID`, `approved_at TIMESTAMPTZ`, all nullable.
+- **Deviation from handoff:** none on naming — the table is `document.document` exactly as the B15 report stated (confirmed via `\d document.*`).
+
+## Phase 7 — EF ↔ DB reconciliation sweep (additive, 2026-06-11)
+
+> Migration: `066_phase7_ef_reconciliation_additive.sql` (cross-service — itr / loan / gst / accounting / notification / subscription).
+> Status: ADDITIVE. No renames, no drops, no type changes. Idempotent (applied with `ON_ERROR_STOP=1`, then re-applied back-to-back — second run emitted only `… already exists, skipping` NOTICEs, zero errors).
+> Driver: backend-agent left `DDL HANDOFF (db-engineer)` comments in the affected EF entity configurations after the Phase-7 EF↔DB sweep. Each item was verified against the live local DB **before** writing DDL — actual (singular/plural) table names were checked and the live column set diffed.
+
+### Replay gaps discovered (flagged loudly)
+
+Two earlier migrations declared schema that **never reached the live DB** — `IF NOT EXISTS` makes the re-application safe everywhere:
+
+| Earlier migration | Declared | Live DB state before 066 | Re-applied by 066 |
+|---|---|---|---|
+| `060_notification_ef_alignment.sql` | `notification.notification_event` table + 6 dispatch columns on `notification.notification_log` (`user_id`, `event_code`, `channel`, `language`, `rendered_body`, `dedupe_key`) | table absent; none of the 6 columns present | item 13 (table), item 12 (columns) |
+| `061_loan_consent_locale_and_catalog_alignment.sql` | `loan.consents.consent_locale` | column absent | item 4 |
+
+These indicate a **migration-replay drift on the local DB** (the SQL files are the canonical schema but the runner did not apply 060/061 in full). DevOps should confirm the CI migration-replay job covers 060/061 → 066 on a clean DB.
+
+### Table-name reconciliations (singular vs plural)
+
+The schema has several legacy/parallel table pairs; 066 targets the **EF-mapped** table in each case (verified via `ToTable(...)` in the EF config and live `information_schema`):
+
+| Concern | EF-mapped (targeted) | Legacy / parallel (not touched) |
+|---|---|---|
+| Loan applications | `loan.applications` | `loan.loan_application` |
+| Partner banks (FK target) | `loan.partner_banks` (PK `id`) | `loan.partner_bank` |
+| Loan consents | `loan.consents` | `loan.loan_consent` |
+| Subscription usage | `subscription.usage_record` (singular) | `subscription.usage_records` (plural, from `064`) |
+| ITR | `itr.assessee_profiles`, `itr.filings` | — |
+
+> **`subscription.usage_record` (singular)**: `UsageRecordConfiguration.ToTable("usage_record")` currently `Ignore()`s `FeatureCode`/`Units`/`CorrelationId` because the columns didn't exist. 066 adds them to the singular table so backend can drop the `Ignore()`s. The plural `usage_records` (064) already has equivalents but is a different table and is left untouched.
+
+### Columns / tables added by `066`
+
+| # | Object | Added | Notes |
+|---|---|---|---|
+| 1 | `itr.assessee_profiles` | `organization_id UUID` **NULLABLE** + idx | Security-relevant — org isolation currently RLS-only. NULLABLE first; **backfill → NOT NULL → EF re-enable is a follow-up migration**. |
+| 2 | `loan.applications` | `assigned_bank_id UUID` → `loan.partner_banks(id)` + idx | FK `fk_loan_applications_assigned_bank`. |
+| 3 | `loan.webhook_idempotency_keys` | **NEW TABLE** | `(bank_id, idempotency_key)` UNIQUE dedupe; `expires_at` idx for TTL. DDL from `WebhookIdempotencyKeyConfiguration.cs`. |
+| 4 | `loan.consents` | `consent_locale VARCHAR(10) DEFAULT 'en'` | Replay gap from `061`. |
+| 5 | `gst.gst_refund` | `tax_period VARCHAR(20)`, `filed_at TIMESTAMPTZ`, `application_number VARCHAR(100)` | `tax_period` distinct from existing `tax_period_from/to` range. |
+| 6 | `gst.lut_filing` | `export_type VARCHAR(20) DEFAULT 'GOODS'`, `is_auto_renewal BOOLEAN DEFAULT FALSE` | |
+| 7 | `gst.gst_annual_return` | `form_type VARCHAR(20)`, `total_turnover/total_tax_paid/total_itc_claimed NUMERIC(20,2)`, `notes TEXT`, `is_reconciled BOOLEAN DEFAULT FALSE`, `reconciled_at TIMESTAMPTZ` | GSTR-9 reconciliation. |
+| 8 | `accounting.account` | `is_postable BOOLEAN DEFAULT TRUE`, `is_from_template BOOLEAN DEFAULT FALSE`, `template_code VARCHAR(20)` | |
+| 9 | `accounting.journal_entry` | `fy_year SMALLINT` | Starting calendar year of the Indian FY. |
+| 10 | `accounting.internal_audit` | `audit_title VARCHAR(300)`, `financial_year VARCHAR(10)`, `auditor_firm_name VARCHAR(300)`, `executive_summary TEXT`, `report_document_id UUID` + idx, `report_issued_at TIMESTAMPTZ` | `report_document_id` references `document.document` by value. |
+| 11 | `accounting.internal_audit_finding` | `title VARCHAR(500)`, `evidence_document_id VARCHAR(100)`, `resolved_at TIMESTAMPTZ` | `evidence_document_id` is a **VARCHAR token per the entity**, not a UUID FK. |
+| 12 | `notification.notification_log` | `user_id UUID`, `event_code VARCHAR(200)`, `channel VARCHAR(30)`, `language VARCHAR(10) DEFAULT 'en'`, `rendered_body TEXT`, `dedupe_key VARCHAR(128)` + 2 idx | Replay gap from `060` (all 6 were the delta). |
+| 13 | `notification.notification_event` | **NEW TABLE** + category idx + `updated_at` trigger | Replay gap from `060`. DDL from `NotificationEventConfiguration.cs`. |
+| 14 | `subscription.usage_record` (singular) | `feature_code VARCHAR(100)`, `units INTEGER DEFAULT 1`, `correlation_id VARCHAR(200)` + partial idx | Lets EF stop `Ignore()`-ing these. |
+| 15 | `itr.filings` | `computation_hash VARCHAR(64)`, `salary_income/house_property_income/business_income/capital_gains/other_income NUMERIC(20,2)` | |
+
+### Follow-ups owed to backend-agent
+
+1. **`itr.assessee_profiles.organization_id`** — separate migration to backfill, then `SET NOT NULL`; backend then re-enables the NOT NULL EF mapping. Until then org isolation on assessee profiles remains RLS-only.
+2. **EF `Ignore()` removals** — backend can now map: `SubscriptionService` `UsageRecord.FeatureCode/Units/CorrelationId` (remove the three `builder.Ignore(...)` lines in `UsageRecordConfiguration.cs`); `LoanService` `WebhookIdempotencyKey` and `NotificationService` `NotificationEvent` entities now have real tables.
+
+### Verification summary (066)
+
+- Applied to live local DB (`snapaccount`, PostgreSQL 17) with `ON_ERROR_STOP=1` — OK. Re-applied back-to-back — OK (only `already exists, skipping` NOTICEs).
+- End-state spot-checked via `information_schema` / `pg_constraint`: `organization_id` nullable=YES; `consent_locale` default `'en'`; FK `fk_loan_applications_assigned_bank` present; `uq_webhook_idem_bank_key` present; `notification.notification_event` exists; 6/6 `notification_log` dispatch columns; 3/3 singular `usage_record` columns; `itr.filings.salary_income = numeric(20,2)`.
+
+## Phase 7 — ITR + invoice DPDP anonymization (additive, `068`, 2026-06-11)
+
+Migration **`068_itr_subscription_invoice_dpdp_anonymization.sql`** closes the live 500 `42703: column f.anonymization_reason does not exist` on the ITR admin listing. Three entities mapped DPDP Act 2023 erasure metadata that their backing tables lacked. Additive, idempotent (`ADD COLUMN IF NOT EXISTS`), applied to the live local DB under `ON_ERROR_STOP=1` and re-run back-to-back cleanly.
+
+| Table | Columns added | Why |
+|---|---|---|
+| `itr.filings` | `anonymization_reason VARCHAR(200)`, `anonymized_at TIMESTAMPTZ` | `Filing` entity; admin listing selects `anonymization_reason`. |
+| `itr.assessee_profiles` | `anonymization_reason VARCHAR(200)`, `anonymized_at TIMESTAMPTZ` | `Assessee` entity. |
+| `subscription.subscription_invoice` | `anonymization_reason VARCHAR(200)`, `anonymized_at TIMESTAMPTZ`, `razorpay_order_id VARCHAR(100)` | `Invoice` entity. Table previously had only `razorpay_invoice_id` (→ `RazorpayPaymentId`); the entity also exposes `RazorpayOrderId`, which had no column. |
+
+The DPDP pair mirrors the shape added to `subscription.subscription` in `067` and to chat/callback/loan tables earlier: anonymize PII in-place on a right-to-erasure request while retaining the row for 7-year compliance retention.
+
+### Completeness check — DPDP `(anonymization_reason, anonymized_at)` pair
+
+Cross-checked every entity carrying `AnonymizationReason` (10 total) against its backing table. After `068`, all 10 tables have the full pair: `callback.callbacks`, `chat.messages`, `itr.notices`, `itr.form_16_extracts`, `itr.filings`, `itr.assessee_profiles`, `loan.applications`, `loan.consents`, `subscription.subscription`, `subscription.subscription_invoice`. No other entity-backed table is missing the pair.
+
+**Out-of-scope observation (flagged, not changed):** a whole-DB scan for asymmetric pairs found `gst.notices` has `anonymized_at` but NOT `anonymization_reason`. This is benign — `GstNotice` has no `AnonymizationReason` property (it anonymizes by nulling `responded_by` via `AnonymizeRespondent()`), and its EF config maps neither anonymization column. So the orphan `anonymized_at` is unused and the missing `anonymization_reason` cannot 500. Logged for a future tidy-up; no action taken under this task's scope.
+
+### Verification summary (068)
+
+- Applied to live local DB (`snapaccount`, PostgreSQL 17) with `ON_ERROR_STOP=1` — OK. Re-applied back-to-back — OK (exit 0).
+- End-state confirmed via `information_schema.columns`: 7/7 columns present with correct types (`anonymization_reason` = `varchar(200)`, `anonymized_at` = `timestamptz`, `razorpay_order_id` = `varchar(100)`).
+
+## Phase 7 — `itr.filings.reviewed_by_ca_id` (additive, `069`, 2026-06-11)
+
+Migration **`069_itr_filings_reviewed_by_ca_id.sql`** closes the next ITR admin-listing 500 after 068: `42703: column f.reviewed_by_ca_id does not exist`. The `Filing` entity exposes `ReviewedByCaId` (Guid?, nullable — CA reviewer user id) with **no** explicit `HasColumnName`, so EF maps it by snake_case convention to `reviewed_by_ca_id`, which the table lacked.
+
+- Added `itr.filings.reviewed_by_ca_id UUID` (nullable).
+- Added partial index `idx_filings_reviewed_by_ca_id ON itr.filings (reviewed_by_ca_id) WHERE reviewed_by_ca_id IS NOT NULL` (reviewer is sparse), mirroring the existing `idx_filings_ca_reviewer` pattern.
+- The id references an `auth` user by value (cross-schema, no FK), consistent with the rest of the schema.
+
+**Orphan column `ca_reviewer_id` (NOT changed):** `itr.filings` already had `ca_reviewer_id` (uuid, nullable, partial index `idx_filings_ca_reviewer`). No EF property maps it (the entity maps `reviewed_by_ca_id`, not `ca_reviewer_id`) and it is empty (0 rows). Per the additive-only rule we did **not** rename `ca_reviewer_id → reviewed_by_ca_id`; we added the EF-expected column alongside and marked the old one `-- DEPRECATED` in 069. Whether to backfill from / drop `ca_reviewer_id` is a backend/data-model decision — flagged to backend-agent.
+
+### Whole-ITR EF ↔ schema verdict (after `069`)
+
+Ran an EF-config-vs-`information_schema` diff across **all 14 ITR tables** (advance_tax, deduction_sections, assessee_profiles, equalisation_levy, grievances, filings, form_16_extracts, notices, lower_tds_certificate, specified_person_check, refund_status_log, tax_computation, tax_slab_versions, transfer_pricing_report), covering both explicitly-mapped (`HasColumnName`) **and** convention-mapped (default snake_case) properties — the latter being the exact class `reviewed_by_ca_id` belonged to.
+
+**Verdict: ITR schema fully reconciled with EF.** Zero missing columns on any ITR table for both mapping styles. `itr.filings` was the last gap; `069` closes it.
+
+### Verification summary (069)
+
+- Applied to live local DB (`snapaccount`, PostgreSQL 17) with `ON_ERROR_STOP=1` — OK. Re-applied back-to-back — OK (exit 0; only `already exists, skipping` index NOTICE).
+- End-state confirmed: `itr.filings.reviewed_by_ca_id` = `uuid` nullable; partial index `idx_filings_reviewed_by_ca_id` present.
+
+## Phase 7 — `loan.products.read` permission seed (data-only, `070`, 2026-06-11)
+
+Migration **`070_auth_seed_loan_products_read_permission.sql`** seeds the RBAC permission behind `GET /loans/products` (`[RequiresPermission("loan.products.read")]`). `auth.permission` had no row named `loan.products.read`, so `PermissionBehavior` (which resolves by permission **name**) let only the wildcard `SUPER_ADMIN` through — every other role 403'd on the mobile loan-product hub.
+
+- **Permission seeded:** `name='loan.products.read'`, `resource='loan'`, `action='products.read'` — following the live loan.* convention (resource = first dot-segment, action = remainder), as in the 036 catalog seed. Idempotent via `ON CONFLICT (name) DO NOTHING`.
+- **Type backfill:** `resource_type_id` set from `auth.resource_type` where `key='loan'` (matches 044's backfill). `action_type_id` left NULL — no `action_type` with key `products.read` exists and we don't invent one (nullable / `ON DELETE SET NULL` design).
+- **Grants (mirror):** granted to exactly the roles already holding `loan.eligibility.check`, resolved by join (not hardcoded) so it self-adjusts. On the live DB that audience = **ORG_ADMIN + SUPER_ADMIN** (2 grants). Set-difference both ways against `loan.eligibility.check` = empty, i.e. exact parity. Idempotent via `ON CONFLICT (role_id, permission_id) DO NOTHING`.
+
+**Audience caveat (flagged to RBAC owner, NOT widened in 070):** `loan.eligibility.check` is currently held only by the two admin-tier roles, so mirroring it does NOT grant `loan.products.read` to customer/staff-tier roles (BUSINESS_OWNER, ORG_MEMBER, EMPLOYEE, etc.). If the loan-product hub is meant for those audiences, that is a separate RBAC decision and a follow-up grant. 070 deliberately stays within the explicit "mirror eligibility.check" scope.
+
+**Fresh-DB note:** the permission catalog + default grants are seeded only by migrations (036 + 070); `database/dev-seed/*` does not touch `auth.permission`/`auth.role_permission`, so no dev-seed file needed editing — fresh DBs get this row by replaying the migration chain.
+
+### Verification summary (070)
+
+- Applied to live local DB with `ON_ERROR_STOP=1` — OK (`INSERT 0 1`, `UPDATE 1`, `INSERT 0 2`). Re-applied back-to-back — OK (`INSERT 0 0`, `UPDATE 0`, `INSERT 0 0`, exit 0).
+- Confirmed: permission row present with `resource_type_id` set / `action_type_id` NULL; non-admin role **ORG_ADMIN** now holds `loan.products.read`; grant audience matches `loan.eligibility.check` exactly.
+
+## Phase 7 — MCA statutory edit log for books of account (`071`, GAP-100, 2026-06-11)
+
+Migration **`071_accounting_mca_edit_log.sql`** implements the Companies (Accounts) Rules audit-trail requirement: a per-transaction, **non-disableable, immutable** edit log of every CREATE/ALTER/DELETE on the books of account, with ≥ 8-year retention.
+
+**`accounting.edit_log`** — append-only table. `id`, `org_id`, `entity_type` (`journal_entry`/`journal_entry_line`/`ledger_entry`/`account`/`ledger`), `entity_id`, `operation` (INSERT/UPDATE/DELETE), `changed_by`, `changed_at` (`clock_timestamp()`), `before_state`/`after_state` JSONB, `change_reason`, `request_id`, `correlation_id`, `fy_year`, `retention_until` (= `changed_at + 8 years`), `created_at`. Deliberately **no `updated_at`/`deleted_at`** — a written row is frozen. Indexes: `(org_id, changed_at)`, `(entity_type, entity_id)`, `(org_id, fy_year)`, `(changed_by)`. RLS org-isolation policy added as defence-in-depth (app connects as owner; primary control is app-layer RBAC).
+
+**Immutability at the DB level (statutory, applies to SUPER_ADMIN and the table owner):** `accounting.reject_edit_log_mutation()` is wired as `BEFORE UPDATE`, `BEFORE DELETE`, and `BEFORE TRUNCATE` triggers that `RAISE EXCEPTION`. A Postgres trigger is *not* bypassed by table ownership, so even the owner / a SUPER_ADMIN connection cannot UPDATE/DELETE/TRUNCATE the log — exactly what the statute requires. `REVOKE UPDATE, DELETE, TRUNCATE … FROM PUBLIC` (and from `snapaccount_app` when that role exists) is added as belt-and-braces.
+
+**Non-disableable capture (DB-level, cannot be bypassed by app code):** `accounting.capture_edit_log()` is an `AFTER INSERT/UPDATE/DELETE FOR EACH ROW` trigger attached to `accounting.journal_entry`, `accounting.journal_entry_line`, `accounting.account`, and `accounting.ledger_entries`. Because capture lives in the database, the log is written whether the change comes from EF, raw SQL, or `psql`. The function reads context from request-scoped GUCs (`app.current_user_id`, `app.change_reason`, `app.request_id`, `app.correlation_id`) using the `missing_ok=TRUE` form so capture never fails when a GUC is unset; `changed_by` falls back to the row's `updated_by`/`created_by`/`posted_by`/`reviewer_user_id` when the GUC is absent. `org_id`/`entity_id`/`fy_year` are resolved generically from the row's `to_jsonb`, so one function serves tables with differing spellings (`organization_id` vs `org_id`, `financial_year` vs `fy_year`).
+
+**`ledger_entry` naming / why `accounting.ledger` is excluded:** the task names a `ledger_entry` table; the real transaction tables are `accounting.ledger_entries` (OCR/posting-pipeline single-pair entries) and `accounting.journal_entry(_line)`. `accounting.ledger` holds **derived running balances** (a `GENERATED` `closing_balance`, period rollups) — a recomputable projection of the journals, not source transactions — so it is intentionally NOT captured to avoid duplicating authoritative entries. If a future path writes ledger balances as source-of-truth, add it to the trigger list. (The `ledger` value remains permitted in `entity_type` for forward compatibility.)
+
+**8-year retention = KEEP.** There is no TTL/purge job. `retention_until` documents the statutory minimum keep-until date; nothing deletes rows.
+
+#### Auditor-report contract (071) — backend/frontend handoff
+
+The FY edit-log export that an auditor/CARO review consumes is a straight read of `accounting.edit_log` filtered by org and financial year, ordered chronologically:
+
+```sql
+SELECT changed_at, entity_type, entity_id, operation, changed_by,
+       change_reason, before_state, after_state, request_id, correlation_id
+FROM   accounting.edit_log
+WHERE  org_id = :org_id
+  AND  fy_year = :fy_year          -- e.g. '2026-27'
+ORDER  BY changed_at, id;
+```
+
+- Org isolation is the caller's responsibility (inject `org_id` from the authenticated identity, like the callback KPI read path) — the MV-style "no trusting request body" rule.
+- For a per-transaction history view, filter `WHERE entity_type = :t AND entity_id = :id ORDER BY changed_at`.
+- `changed_by` may be NULL for changes made before the backend sets `app.current_user_id` per request — backend should set that GUC (`SET LOCAL app.current_user_id = '<uuid>'`, plus optionally `app.change_reason`/`app.request_id`/`app.correlation_id`) at the start of each accounting write transaction so the statutory "who" is always captured. **This is the one backend change needed to make the log fully attributable.**
+- The export is append-only and tamper-evident by construction (no row can be altered/removed after the fact).
+
+#### Verification summary (071)
+
+- Full chain `000…999 + 071` replays clean on a scratch DB; `071` re-runs idempotently (live + scratch).
+- Capture confirmed: inserting an `account` + a `journal_entry` and updating the entry produced 3 `edit_log` rows (account INSERT, journal_entry INSERT + UPDATE) with correct `retention_until = changed_at + 8 years` and `org_id`. With `app.current_user_id` set, `changed_by` is captured from the GUC.
+- Immutability confirmed: `UPDATE`, `DELETE`, and `TRUNCATE` on `accounting.edit_log` all raise `restrict_violation` (append-only by statute). Applied to live `snapaccount`; 4 capture triggers + 3 immutability triggers present.
+
+## Phase 7 — IT Act 2025 act-version dimension on ITR config (`072`, GAP-102, 2026-06-11)
+
+Migration **`072_itr_act_version_dimension.sql`** adds the missing *Act* dimension so 1961-era and 2025-era tax config can coexist and be resolved unambiguously once IT Act 2025 content lands (effective FY/tax-year 2026-27).
+
+- **Additive columns** on the FY/AY-versioned config tables `itr.tax_slab_versions`, `itr.deduction_sections`, and the legacy `itr.tax_slab`: `act_version VARCHAR(20) NOT NULL DEFAULT 'IT_ACT_1961'` (CHECK `IN ('IT_ACT_1961','IT_ACT_2025')`) and `tax_year VARCHAR(10)` (new-Act terminology kept **alongside** `ay`/`financial_year`, not replacing them). Default keeps every existing row resolving exactly as today. New resolution indexes include `act_version`. `tax_year` is backfilled from the existing `ay`/`financial_year` (illustrative convenience).
+- **`itr.act_section_mapping`** reference table for the 1961→2025 renumbering: `old_section`, `new_section`, `act_version_from` (`IT_ACT_2025`), `description`, `is_illustrative` (default TRUE), `source_citation`, audit cols, UNIQUE `(old_section, act_version_from)`. Reference table — no RLS. Seeded with **three ILLUSTRATIVE** rows (80C→123, 80D→126, 87A→157) each flagged `is_illustrative=TRUE` and citation `'ILLUSTRATIVE — verify against Income-tax Act, 2025 enacted text'`. A complete, legally-vetted mapping is a separate content task; the new-clause numbers MUST be verified before any filing output uses them.
+
+**Backend handoff (072):** ItrService config-resolution handlers must add `act_version` to their lookup predicate once 2025-Act config is seeded — for tax year **2026-27 onward**, resolve `WHERE act_version = 'IT_ACT_2025'`; earlier periods stay `'IT_ACT_1961'`. Until then the default keeps every lookup on `IT_ACT_1961`, so this migration is behaviour-neutral. Do not surface illustrative `act_section_mapping` rows as authoritative in the UI.
+
+#### Verification summary (072)
+
+- Applied to live `snapaccount` + scratch chain replay — OK; idempotent re-run OK.
+- Confirmed all 3 tables carry `act_version` + `tax_year`; existing `tax_slab_versions` rows all default to `IT_ACT_1961`; `tax_year` backfilled (e.g. `AY2025-26 → 2025-26`); 3 illustrative mappings seeded with `is_illustrative=TRUE`.
+
+## Phase 7 — callback KPI MV status-vocabulary fix (`073`, GAP-029, 2026-06-11)
+
+Migration **`073_callback_kpi_mv_vocab_fix.sql`** repairs `callback.kpi_daily_snapshot`, whose `FILTER` predicates still used the original `018` status labels (`SCHEDULED`, `IN_PROGRESS`, `ESCALATED_TO_CA`). Migration `056` re-aligned `callback.callbacks.status` to the domain enum vocabulary (`PENDING|ASSIGNED|CONFIRMED|COMPLETED|ESCALATED|CANCELLED`), so those three FILTER counts had been permanently 0.
+
+- The MV is recreated mapping FILTERs to the **real** vocabulary while keeping **every column name identical**: `count_scheduled ← ASSIGNED`, `count_in_progress ← CONFIRMED`, `count_escalated ← ESCALATED` (`count_pending`/`count_completed`/`count_cancelled` unchanged). The IST (`Asia/Kolkata`) day-boundary and all other measures (`count_sla_breached`, `avg_ttr_minutes`, `avg_csat`, `total_requested`) are preserved.
+- Column names are stable, so the EF read model (`KpiDailySnapshotConfiguration`) and `GetKpiSnapshotQuery` are **unaffected** (verified READ-ONLY against the live handler — it binds `count_scheduled`/`count_in_progress`/`count_escalated` and the frontend already labels them Scheduled/InProgress/Escalated). The unique index `uq_kpi_daily_snapshot_org_date (org_id, snapshot_date)` is recreated so `REFRESH … CONCURRENTLY` still works.
+
+#### Verification summary (073)
+
+- Applied to live `snapaccount` + scratch replay — OK; idempotent re-run OK.
+- Column set on the MV is byte-for-byte the same as before; MV definition no longer references `ESCALATED_TO_CA`/`SCHEDULED`/`IN_PROGRESS`.
+- Seeded one callback in each status on the scratch DB → after `REFRESH`, `count_scheduled`/`count_in_progress`/`count_escalated` each = 1 (previously always 0); `REFRESH MATERIALIZED VIEW CONCURRENTLY` succeeds. On live data the existing `ESCALATED` callback now shows `count_escalated = 1`.
+
+## Phase 7 — GSTN IMS + GSTR-1A schema and RBAC (`074`, GAP-101, 2026-06-11)
+
+Migration **`074_gst_ims_gstr1a_schema_and_permissions.sql`** lands the backing tables for the GstService IMS (Invoice Management System — GSTN's mandatory ITC flow from Apr-2026) and GSTR-1A amendments, plus the 5 RBAC permissions guarding the new endpoints. The three EF entity configs carried a "requires db-engineer DDL handoff" note.
+
+**Authoritative shape = the EF configurations** (`ImsInvoiceConfiguration`, `ImsActionLogConfiguration`, `Gstr1aAmendmentConfiguration`), reconstructed column-for-column (the orchestrator's message carried no inline DDL; instruction was to reconstruct from EF and verify exactly). Verified live: every column name, max-length (15/200/50/30/20/6/500/128), `numeric(18,2)`, `jsonb`, and audit column matches the EF `HasColumnName`/`HasMaxLength`/`HasColumnType`; every index name matches the EF `HasDatabaseName`.
+
+- **`gst.ims_invoices`** — inbound supplier invoices for accept/reject/pending. Indexes `ix_ims_invoices_org_period`, `ix_ims_invoices_org_status`, and **unique partial** `uix_ims_invoices_org_supplier_invoice_period (organization_id, supplier_gstin, invoice_number, period) WHERE deleted_at IS NULL` (partial so a soft-deleted row doesn't block re-ingest — matches the EF unique index intent + the house soft-delete convention).
+- **`gst.ims_action_logs`** — **APPEND-ONLY** audit of every IMS action. No `updated_at`/`deleted_at` (permanent records, 7-year retention). Immutable at the DB level reusing the `accounting.edit_log` (071) pattern: `gst.reject_ims_action_log_mutation()` rejects `UPDATE`/`DELETE`/`TRUNCATE` for all roles incl. the owner, plus `REVOKE UPDATE,DELETE,TRUNCATE FROM PUBLIC` (+ `snapaccount_app`). No FK to `ims_invoices` (matches EF — avoids cascade-delete risk on the append log). Indexes `ix_ims_action_logs_invoice_id`, `ix_ims_action_logs_org_acted_at`.
+- **`gst.gstr1a_amendments`** — supplier GSTR-1A amendments (`amendment_payload_json jsonb`). Indexes `ix_gstr1a_amendments_org_period`, `ix_gstr1a_amendments_org_status`, `ix_gstr1a_amendments_original_ims_invoice`.
+
+**RLS — house style chosen over the handoff sketch (orchestrator instruction).** The handoff sketched `org_id = current_setting('app.current_org_id', true)`, but **no `app.current_org_id` GUC exists anywhere** and every live `gst.*` table uses column `organization_id` (which the EF mapping also uses) with the org-**membership** subquery keyed on `current_setting('app.current_user_id', TRUE)::uuid`. All three new tables follow that established `gst.*` pattern. (RLS is defence-in-depth; the app connects as schema owner — primary control is app-layer RBAC + IDOR org filters.)
+
+**RBAC (5 permissions, 070 seed pattern).** Seeded `gst.ims.read`, `gst.ims.action`, `gst.ims.sync`, `gst.gstr1a.read`, `gst.gstr1a.create` (resource=`gst`; `resource_type_id` backfilled by key; `action_type_id` left NULL — no matching `action_type` key exists, consistent with 070, do not invent). Grants mirror the live audience of the closest existing `gst.*` permission, resolved by join (self-adjusting, idempotent):
+
+| Permission | Mirrored from | Granted roles (live) |
+|---|---|---|
+| `gst.ims.read` | `gst.itc.reconcile` | CA, ORG_ADMIN, REVIEWER, SUPER_ADMIN |
+| `gst.gstr1a.read` | `gst.itc.reconcile` | CA, ORG_ADMIN, REVIEWER, SUPER_ADMIN |
+| `gst.ims.action` | `gst.returns.file` | CA, DEV_LIMITED_MANAGER, ORG_ADMIN, SUPER_ADMIN |
+| `gst.ims.sync` | `gst.returns.file` | CA, DEV_LIMITED_MANAGER, ORG_ADMIN, SUPER_ADMIN |
+| `gst.gstr1a.create` | `gst.returns.file` | CA, DEV_LIMITED_MANAGER, ORG_ADMIN, SUPER_ADMIN |
+
+**Audience flag (NOT invented/widened — for RBAC owner):** the orchestrator's example perm `gst.returns.read` does not exist in `auth.permission`. Closest analogues used: reads → `gst.itc.reconcile` (IMS *is* the ITC-matching system, so the reconcile audience is the natural read audience); writes → `gst.returns.file` (closest GST submit/write audience). If product intent differs — e.g. IMS read should reach a broader staff audience, or `gst.ims.sync` should be admin-only — that is a separate RBAC decision and a follow-up grant.
+
+#### Backend handoff (074)
+
+- Backing tables + RLS + permissions now exist; backend can **un-Skip `ImsEfSmokeTests`** (db-engineer changed no tests, per scope).
+- `acted_by` / `actioned_by` are app-populated (no DB GUC). If statutory attribution of IMS actions to a user is required, the backend should set those from the authenticated identity at write time.
+
+#### Verification summary (074)
+
+- Full chain `000…074` replays clean on a scratch DB; applied to live `snapaccount` under `ON_ERROR_STOP=1`; idempotent on back-to-back re-run.
+- EF parity verified: all 51 columns across the 3 tables match the EF configs (names, lengths, numeric/jsonb/uuid types, audit cols); `ims_action_logs` correctly has no `updated_at`/`deleted_at`; all index names match `HasDatabaseName`; unique partial index carries `WHERE deleted_at IS NULL`.
+- RLS enabled with one org-isolation policy per table (house style). Append-only enforced: INSERT into `ims_action_logs` succeeds; `UPDATE`/`DELETE`/`TRUNCATE` raise `restrict_violation`. The single verification row was removed by dropping + re-applying the (brand-new, otherwise-empty) table via the migration — the immutability control was never disabled.
+- 5 permissions present (`resource_type_id` set, `action_type_id` NULL); grants match the mirror table above.
+
+## Phase 7a — AiService RAG chunks/embeddings + AI interaction audit (`075`, 2026-06-11)
+
+Migration **`075_ai_chunks_embeddings_interactions.sql`** lands the three AiService P7a tables (RAG ingestion store + per-call usage/audit log). Shape reconstructed column-for-column from the EF configs (`AiChunkConfiguration`, `AiEmbeddingConfiguration`, `AiInteractionConfiguration`) — same method as 074.
+
+- **`ai.chunks`** — RAG document chunks. `embedding_provider VARCHAR(32)`, `embedding_model VARCHAR(64)`, `page_number` nullable (`int?`), audit cols (`created_by`/`updated_by` are `TEXT` — the EF config sets no `HasMaxLength` on these `string?` props). Indexes `ix_ai_chunks_document_id`, `ix_ai_chunks_organization_id`, and **unique** `uix_ai_chunks_document_index (document_id, chunk_index)`.
+- **`ai.embeddings`** — 1:1 with `ai.chunks` via `chunk_id REFERENCES ai.chunks(id) ON DELETE CASCADE`. **`float_vector FLOAT4[]` NOT NULL** for P7a. No audit columns (the EF config maps none). Indexes `ix_ai_embeddings_org_id`, `ix_ai_embeddings_chunk_id`.
+- **`ai.interactions`** — **APPEND-ONLY** AI usage/audit log. `organization_id` is **nullable** (`AiInteraction.OrganizationId` is `Guid?`); `user_id VARCHAR(128)`, `feature_code VARCHAR(64)`, `provider VARCHAR(32)`, `model VARCHAR(64)`, token/latency ints, `budget_exceeded bool`. Immutable via the `accounting.edit_log` (071) pattern — `ai.reject_interaction_mutation()` rejects `UPDATE`/`DELETE`/`TRUNCATE` for all roles incl. the owner, plus `REVOKE … FROM PUBLIC` (+ `snapaccount_app`). Indexes `ix_ai_interactions_org_id`, `ix_ai_interactions_created_at`, `ix_ai_interactions_org_feature_date (organization_id, feature_code, created_at)`.
+
+**Vector storage — FLOAT4[] in P7a, pgvector deferred to P7b.** pgvector **is already enabled** in this DB (extension `vector` 0.8.2; HNSW used elsewhere), but P7a keeps `FLOAT4[]` per the P7a/EF compatibility decision (the EF column maps `float4[]`; `Pgvector.EntityFrameworkCore` is a P7b concern). The extension is ready for the P7b upgrade. Migration 075 carries an indicative **P7b upgrade DDL block** (commented, not run): add a `vector(768)` column, backfill from `float_vector`, add an HNSW `vector_cosine_ops` index, then deprecate/drop `float_vector` in a later migration. Dimension 768 matches the P7a embedding model (confirm against the live model before applying).
+
+**RLS — house style** (orchestrator instruction; not the handoff's `app.current_org_id` sketch, which references a GUC that does not exist). All three tables use the org-membership subquery keyed on `current_setting('app.current_user_id', TRUE)::uuid`, consistent with `gst.*` (074) and `accounting.*`.
+
+#### Backend handoff (075)
+
+- Tables + RLS + append-only enforcement now exist; AiService P7a ingestion/audit write paths can rely on them.
+- P7b owner: when wiring `Pgvector.EntityFrameworkCore`, use the upgrade DDL block in 075; the float→vector backfill is in-place and additive.
+
+#### Verification summary (075)
+
+- Full chain `000…075` replays clean on a scratch DB; applied to live `snapaccount` under `ON_ERROR_STOP=1`; idempotent on back-to-back re-run.
+- **EF parity verified column-by-column** (33 columns across 3 tables): names, `VARCHAR` lengths (32/64/128), `int4`/`bool`/`timestamptz`/`uuid` types, `float4[]` for the vector, `created_by`/`updated_by` as `TEXT`. Nullability matches the entities exactly — `ai.interactions.organization_id` nullable, `ai.chunks.page_number` nullable; `ai.embeddings` has no audit columns. All index names match `HasDatabaseName`; `ai.embeddings.chunk_id` FK is `ON DELETE CASCADE`.
+- RLS enabled with one org-isolation policy per table (house style). Append-only enforced on `ai.interactions` (verified on the scratch DB per the 074 lesson — no test data written to live): INSERT succeeds; `UPDATE`/`DELETE`/`TRUNCATE` raise `restrict_violation`. FK cascade verified (deleting a chunk removes its embedding).
+
+## Phase 7 — `accounting.editlog.read` permission seed (data-only, `076`, 2026-06-11)
+
+Migration **`076_auth_seed_accounting_editlog_read_permission.sql`** seeds the RBAC permission behind AccountingService's auditor edit-log read endpoints (`[RequiresPermission("accounting.editlog.read")]` — the FY export over `accounting.edit_log` from 071). `auth.permission` had no such row, so `PermissionBehavior` (resolves by NAME) let only the wildcard SUPER_ADMIN through; every other role 403'd.
+
+- **Permission seeded:** `name='accounting.editlog.read'`, `resource='accounting'`, `action='editlog.read'` — matching the live `accounting.*` convention. Idempotent via `ON CONFLICT (name) DO NOTHING`.
+- **Type backfill:** `resource_type_id` set from `auth.resource_type` where `key='accounting'`. `action_type_id` left NULL — no `action_type` with key `editlog.read` exists; not invented (consistent with 070/074).
+- **Grants (mirror):** granted to every role holding `accounting.journal.review` — the closest existing accounting read/inspection audience (the review permission, which also includes REVIEWER) — resolved by join, self-adjusting. Live audience = **accounts_clerk, CA, ORG_ADMIN, REVIEWER, SUPER_ADMIN** (set-difference both ways vs `accounting.journal.review` = empty, i.e. exact parity).
+
+**Audience note (flagged, NOT narrowed/widened):** the auditor edit-log read now reaches the same audience as journal review, including the non-admin `accounts_clerk` + `REVIEWER`. If the statutory edit-log export should be restricted to a narrower set (e.g. CA / external auditor only) or broadened, that is a separate RBAC decision and a follow-up grant — 076 stays within the explicit "mirror the closest accounting read audience" scope.
+
+#### Verification summary (076)
+
+- Full chain `000…076` replays clean on a scratch DB; applied to live `snapaccount` under `ON_ERROR_STOP=1` (`INSERT 0 1`, `UPDATE 1`, `INSERT 0 5`); idempotent re-run — all zeros.
+- Confirmed: permission present (`resource_type_id` set, `action_type_id` NULL); non-admin roles **accounts_clerk** and **REVIEWER** now hold `accounting.editlog.read`; grant audience matches `accounting.journal.review` exactly.
+
+---
+
+## Phase 7 — `notification.notification_log.notification_id` nullable (BUG-W7-02, `087`, 2026-06-12)
+
+Migration **`087_notification_log_notification_id_nullable.sql`** relaxes `NOT NULL` on `notification.notification_log.notification_id` (`NOT NULL → NULL`). The column is an **FK-by-value** to `notification.notification` with **no FK constraint** — the parent table is partitioned, so a cross-partition FK is not declared. It was minted `NOT NULL` by migration `008`.
+
+- **Why:** Wave 7 added two legitimate **log-only** dispatch flows that have no parent notification row — the template-manager **"test send"** (renders + dispatches a template without persisting a notification) and **celebration/milestone** log entries. Both failed at INSERT with `23502` (null value in column `notification_id`). backend-agent already mapped `NotificationLogEntry.notification_id` nullable in the EF config; this aligns the DB.
+- **Safety:** relaxing `NOT NULL` is non-destructive — no existing row is touched and previously populated values are unaffected. The `idx_notification_log_notification_id` btree index (from `008`) is unchanged; btree already permits NULL keys.
+- **Replay-safe:** guarded by an `information_schema.is_nullable = 'NO'` check; `COMMENT ON COLUMN` documents the nullability rationale.
+
+#### Verification summary (087)
+
+- Applied to live `snapaccount` under `ON_ERROR_STOP=1` (`DO`, `COMMENT`); back-to-back re-run clean (idempotent — guard skips the already-applied `ALTER`).
+- `information_schema` confirms `notification_log.notification_id → is_nullable = YES`; `\d notification.notification_log` shows the Nullable column now blank (was `not null`).
+
+---
+
+## Phase 7 — `report.report` status-vocabulary realign + `financial_year` widen (Wave 7 live retest, `088`, 2026-06-12)
+
+Migration **`088_report_status_check_realign_and_fy_widen.sql`** fixes the `report.report` EF↔DB **write-path** divergence found in Wave 7 live retest. The table had **0 rows**, so no data migration was needed. Three changes:
+
+1. **`report_status_check` CHECK** — dropped and recreated: `('PENDING','GENERATING','COMPLETED','FAILED')` → **`('QUEUED','PROCESSING','COMPLETED','FAILED')`**.
+2. **`status` column DEFAULT** — `'PENDING'` → **`'QUEUED'`** (the old default referenced the now-removed value; realigned to the enum's idle state `ReportJobStatus.Queued`).
+3. **`financial_year`** — `varchar(10)` → **`varchar(40)`**.
+
+- **Why (1)+(2) — status realignment:** the C# `ReportJobStatus` enum (`ReportService.Domain/Entities/ReportType.cs`) is `Queued / Processing / Completed / Failed`, but the original DB CHECK allowed `PENDING / GENERATING / COMPLETED / FAILED`, so every report INSERT (the EF write path sets `Processing` on insert, then `Completed`/`Failed`) violated the CHECK. Orchestrator decision: align the DB to the enum under the **house UPPER_SNAKE** serialization convention (matches `auth.user_profile.kyc_status`, `document.document.status`, etc.). Single-word members → `QUEUED / PROCESSING / COMPLETED / FAILED`.
+- **Why (3) — `financial_year` widen:** the GAP-043 chat-thread-PDF flow (`ReportService.Api/Endpoints/Reports.cs` + `Infrastructure/Reports/ChatThreadPdfGenerator.cs`) **encodes a 36-char UUID thread id in `financial_year`** by design — reusing the report job schema without bespoke DDL. A 36-char value overflows `varchar(10)` (`22001`); `varchar(40)` fits the UUID + headroom while staying bounded.
+- **Safety:** 0 rows ⇒ no remap needed; the widening (`varchar(10)→varchar(40)`) never truncates; the CHECK/DEFAULT swap leaves `idx_report_status` (btree) untouched.
+- **Replay-safe:** the DROP is guarded on the constraint def still containing `PENDING`; the DEFAULT change on the current default still containing `PENDING`; the widen on `character_maximum_length = 10`. `COMMENT ON CONSTRAINT` / `COMMENT ON COLUMN` document the rationale.
+
+> **⚠️ Paired backend change (flagged to orchestrator → backend-agent):** `ReportJobConfiguration` maps `Status` with `.HasConversion<string>()`, which persists the **PascalCase** enum member name (`"Queued"/"Processing"/…`) — **not** the UPPER_SNAKE values this CHECK now requires. After migration `088`, EF writes still violate the CHECK **until** the converter is changed to emit UPPER_SNAKE (e.g. `.HasConversion(v => v.ToString().ToUpperInvariant(), v => Enum.Parse<ReportJobStatus>(v, true))`). This migration is the DB half of the orchestrator decision; the EF converter change is the matching backend half and must land together to fully close the write-path bug.
+
+#### Verification summary (088)
+
+- Applied to live `snapaccount` under `ON_ERROR_STOP=1` (`DO`×3, `COMMENT`×2), `EXIT=0`; back-to-back replay clean (`REPLAY_EXIT=0`) with identical post-state — idempotent (guards skip the already-applied DROP/SET DEFAULT/widen).
+- `\d report.report` confirms: `financial_year → character varying(40)`, `status → DEFAULT 'QUEUED'`, `report_status_check → ('QUEUED','PROCESSING','COMPLETED','FAILED')`.
+
+---
+
+## Phase 7 — `auth.device_integrity_checks` device-integrity soft-fail telemetry (GAP-064, `089`, 2026-06-12)
+
+Migration **`089_auth_device_integrity_checks.sql`** formalizes the GAP-064 device-integrity telemetry table that backend-agent had **already applied ad-hoc to the local DB** while building the soft-fail middleware. The file is the canonical DDL; it was reconciled against the ad-hoc state and applied + replayed to prove idempotency.
+
+- **Table** `auth.device_integrity_checks` — append-only log, one row per Play Integrity / App Attest attestation evaluated by `DeviceIntegrityMiddleware` on a protected endpoint. Columns: `id` (uuid PK), `user_id` (nullable FK → `auth."user"(id)` ON DELETE SET NULL), `organization_id` (uuid, no FK — denormalized), `platform` (varchar 20, nullable), `verdict` (varchar 20, NOT NULL — `PASS | FAIL | UNAVAILABLE | SKIPPED`), `endpoint` (varchar 256, NOT NULL), `failure_reason` (varchar 500), `client_ip` (varchar 64), `recorded_at` (timestamptz), plus the standard uuid audit columns (`created_at`/`updated_at`/`deleted_at`/`created_by`/`updated_by`).
+- **Soft-fail design (GAP-064):** the middleware **never blocks** a request during soft-launch — it records the verdict so abuse patterns can be observed and an enforcement threshold tuned before any hard block. Server-side security telemetry, admin-consumed; **not** user-facing.
+- **RLS — intentionally NOT enabled.** Follows the auth/security **log-table precedent** (`auth.otp_request`, `auth.ai_usage_log`, `loan.fraud_checks`): `user_id` is nullable (attestation can run before auth resolves, e.g. OTP-send), the backend is the sole writer, and the only read path is admin/security dashboards that aggregate across **all** users — per-user isolation would break that read path. Documented in the migration header and a guard comment.
+- **Indexes (3):** `ix_device_integrity_checks_recorded_at` (time-series), `ix_device_integrity_checks_user_id_recorded_at` (per-user timeline), `ix_device_integrity_checks_verdict` (verdict-bucketed dashboards).
+- **EF pairing:** `AuthService.Domain/Entities/DeviceIntegrityCheck.cs` + `Configurations/DeviceIntegrityCheckConfiguration.cs` map the table 1:1 (columns, lengths, the 3 indexes, and the nullable `auth.user` FK with `OnDelete(SetNull)`).
+
+#### Drift found & reconciled (089)
+
+The ad-hoc-applied table matched the canonical structure exactly — **no structural drift**: same columns/types/nullability, same 3 indexes, and the FK already resolved to `auth."user"(id)` even though the ad-hoc DDL wrote it **unquoted** (`auth.user`) — Postgres normalizes the unquoted reserved word to the same quoted relation, so no DB fix was required. The migration file uses the **quoted** `auth."user"(id)` form to match the house convention (cf. `083`). The **only** reconciled difference: the ad-hoc table carried **no `COMMENT ON TABLE/COLUMN`**; applying `089` added all 8 comments, aligning the live DB to the documented file.
+
+#### Verification summary (089)
+
+- `\d auth.device_integrity_checks` before authoring confirmed the ad-hoc table existed (6 rows) with the expected shape and `FK → auth."user"(id) ON DELETE SET NULL`.
+- Applied to live `snapaccount` under `ON_ERROR_STOP=1`: `CREATE TABLE`/3×`CREATE INDEX` skipped (already exist, expected), 8×`COMMENT` applied, `APPLY_EXIT=0`. Replayed **twice** back-to-back — `REPLAY_EXIT=0` both times with identical post-state (idempotent; `IF NOT EXISTS` guards + always-safe `COMMENT`).
+- Post-state `\d` confirms 14 columns, 3 indexes + PK, FK `auth."user"(id) ON DELETE SET NULL`; `rowsecurity = f` (log-table, no RLS); table comment present; existing rows preserved (8 — table is live-writing).
+
+---
+
+## Local dev seed — the two seed mechanisms and apply order (GAP-072, Wave 6, 2026-06-11)
+
+A fresh developer environment is seeded by **two independent mechanisms**. Confusing them is the source of most "why is my local DB empty / orphaned" reports.
+
+### 1. LOCAL_AUTH logins — backend runtime seed (NOT SQL)
+The canonical local logins are seeded **at AuthService startup** by `LocalAuthService.EnsureDevAdminAsync` (only when `LOCAL_AUTH=true`), *not* by any file in `database/`. Do **not** add these to SQL — doing so would race/conflict with the backend seeder.
+
+| Login | Password | Role / perms | Org |
+|---|---|---|---|
+| `admin@snapaccount.local`   | `Admin@12345`   | `SUPER_ADMIN`, wildcard `*` (in-code, no DB row) | dev org `11111111-1111-1111-1111-111111111111` |
+| `manager@snapaccount.local` | `Manager@12345` | `DEV_LIMITED_MANAGER`, 7 perms (`org.roles.read/create/update`, `org.permissions.read/grant`, `gst.returns.file`, `document.read`) | same dev org |
+
+All 7 manager permissions and the `SUPER_ADMIN` role already exist in the migrated schema (`036` + later seeds), so the runtime seeder finds them. The dev org `11111111-…` is created by the backend seeder, **not** by `100_dev_users.sql`.
+
+### 2. Business data — SQL dev seed (`database/dev-seed/`)
+Realistic cross-service business data for the admin/mobile UIs lives in `database/dev-seed/`, seeded under a **separate** anchor org/owner so it does not collide with the LOCAL_AUTH dev org:
+
+| File | Seeds | Anchors |
+|---|---|---|
+| `100_dev_users.sql` | 3 `.dev` users + Acme org + owner membership | user `33333333-…`, org `44444444-…` (Acme Trading Co.) |
+| `200_dev_business_data.sql` | loans, GST invoices+ITC (with an intentional ITC mismatch), ITR assessee/filing/grievance, a pending callback, an active subscription, accounting/notification rows | references org `44444444-…`, owner `33333333-…` |
+
+**Apply order:** `…migrations 000→077` → `999_seed_reference_data.sql` → `100_dev_users.sql` → `200_dev_business_data.sql`. All four steps are idempotent (`ON CONFLICT DO NOTHING`); re-running converges to the same state with no duplicate rows.
+
+### Why the cross-service rows are *by value*, not FK
+`loan.applications.org_id`, `gst.gst_invoice.organization_id`, `itr.filings.user_id`, `subscription.subscription.organization_id`, etc. reference `auth.organization` / `auth."user"` **by value with no FK constraint** (schema-per-service isolation). A missing anchor therefore inserts **silently orphaned** rows that no API can resolve — there is no constraint to catch it.
+
+### GAP-072 reconciliation (what changed)
+- The dev-seed SQL was **column-correct** against the `000→077` migrated schema (no column drift). The real drift was **wiring/ordering robustness**:
+  - `200_dev_business_data.sql` now contains a **self-sufficiency guard** that ensures the org/owner/membership anchors exist (mirroring `100_dev_users.sql`) before the business-data inserts. So the file works **standalone** — e.g. when CI's migration-replay applies only the dev seed — *and* chained after `100`, both idempotently. This eliminates the silent-orphan failure mode.
+  - Removed a stray `COMMIT;` (no matching `BEGIN`) at the tail of `999_seed_reference_data.sql` that emitted a harmless `there is no transaction in progress` WARNING on every replay.
+- **Still owed by devops-engineer** (outside `database/` ownership — flagged to orchestrator):
+  - `.github/workflows/ci.yml` migration-replay job references `database/migrations/200_dev_business_data.sql`, but the file lives at `database/dev-seed/200_dev_business_data.sql`; the `[ -f … ]` guard therefore never finds it and the seed is silently skipped (the GAP-072 warning text never even fires). Point CI at `database/dev-seed/100_dev_users.sql` then `…/200_dev_business_data.sql`, and (now that `200` is self-sufficient) flip `|| true` to strict `ON_ERROR_STOP` so seed drift fails the job.
+  - `docker-compose.override.yml` mounts `./database/dev-seed` into a **subdirectory** of `/docker-entrypoint-initdb.d` (`/seed`); the Postgres entrypoint only runs files in the top level of that dir, so the dev seed never auto-applies in the docker path. Mount the files at top level (they sort `100_` before `200_`, after the `00_` extensions script).
+
+### Fresh-setup verification (2026-06-11, PG18 scratch DB + pgvector)
+- Full chain `000→077` replays clean on a brand-new DB under `ON_ERROR_STOP=1`.
+- `999` applies with **zero** warnings (stray COMMIT removed).
+- `200` applied **standalone** (no `100`): RC=0, anchors auto-created, every business row resolves to org `44444444-…` / owner `33333333-…` — no orphans.
+- Canonical chained flow `999 → 100 → 200`, then a full **double re-run** of `100`+`200`: all RC=0, row counts stable (orgs=1, members=1, partner_banks=2, applications=1, subscriptions=1) — idempotent.

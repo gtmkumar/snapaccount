@@ -1,0 +1,55 @@
+using AiService.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace AiService.Infrastructure.Persistence.Configurations;
+
+/// <summary>
+/// EF Core entity configuration for <see cref="AiInteraction"/> — maps to <c>ai.interactions</c>.
+/// Audit table: never soft-deleted, append-only.
+/// </summary>
+public sealed class AiInteractionConfiguration : IEntityTypeConfiguration<AiInteraction>
+{
+    public void Configure(EntityTypeBuilder<AiInteraction> builder)
+    {
+        builder.ToTable("interactions", "ai");
+
+        builder.HasKey(i => i.Id);
+        builder.Property(i => i.Id).HasColumnName("id");
+        builder.Property(i => i.OrganizationId).HasColumnName("organization_id");
+        builder.Property(i => i.UserId).HasColumnName("user_id").HasMaxLength(128).IsRequired();
+        builder.Property(i => i.FeatureCode).HasColumnName("feature_code").HasMaxLength(64).IsRequired();
+        builder.Property(i => i.Provider).HasColumnName("provider").HasMaxLength(32).IsRequired();
+        builder.Property(i => i.Model).HasColumnName("model").HasMaxLength(64).IsRequired();
+        builder.Property(i => i.InputTokens).HasColumnName("input_tokens").IsRequired();
+        builder.Property(i => i.OutputTokens).HasColumnName("output_tokens").IsRequired();
+        builder.Property(i => i.LatencyMs).HasColumnName("latency_ms").IsRequired();
+        builder.Property(i => i.BudgetExceeded).HasColumnName("budget_exceeded").IsRequired();
+        // RV-03 (SEC-AI-02): Reservation flag — true while the AI call is in-flight.
+        // The daily-sum budget query includes reservation rows so concurrent requests see each other.
+        builder.Property(i => i.IsReservation).HasColumnName("is_reservation").IsRequired()
+            .HasDefaultValue(false);
+        builder.Property(i => i.CreatedAt).HasColumnName("created_at");
+        builder.Property(i => i.UpdatedAt).HasColumnName("updated_at");
+        builder.Property(i => i.DeletedAt).HasColumnName("deleted_at");
+
+        // W5-IMS-02 mirror fix: ai.interactions.created_by / updated_by are TEXT columns
+        // in migration 075 (not uuid). BaseDbContext applies GuidStringConverter globally to
+        // all BaseAuditableEntity.CreatedBy/UpdatedBy; that converter tells Npgsql to bind a
+        // uuid provider type, causing InvalidCastException on TEXT columns. Override with
+        // identity HasConversion<string>() so no conversion is applied (plain text path).
+        builder.Property(i => i.CreatedBy)
+            .HasColumnName("created_by")
+            .HasColumnType("text")
+            .HasConversion<string>();
+        builder.Property(i => i.UpdatedBy)
+            .HasColumnName("updated_by")
+            .HasColumnType("text")
+            .HasConversion<string>();
+
+        builder.HasIndex(i => i.OrganizationId).HasDatabaseName("ix_ai_interactions_org_id");
+        builder.HasIndex(i => i.CreatedAt).HasDatabaseName("ix_ai_interactions_created_at");
+        builder.HasIndex(i => new { i.OrganizationId, i.FeatureCode, i.CreatedAt })
+            .HasDatabaseName("ix_ai_interactions_org_feature_date");
+    }
+}

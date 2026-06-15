@@ -2,10 +2,10 @@
  * AccordionSection — Collapsible section for filing summaries, deductions, etc.
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 
 interface AccordionSectionProps {
   title: string;
@@ -22,8 +22,10 @@ export function AccordionSection({
   children,
   testID,
 }: AccordionSectionProps) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  const rotateAnim = useRef(new Animated.Value(defaultOpen ? 1 : 0)).current;
+  const [rotateAnim] = useState(() => new Animated.Value(defaultOpen ? 1 : 0));
 
   const toggle = () => {
     const toValue = isOpen ? 0 : 1;
@@ -55,7 +57,7 @@ export function AccordionSection({
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
         <Animated.View style={{ transform: [{ rotate }] }}>
-          <Ionicons name="chevron-down" size={18} color={Colors.neutral[500]} />
+          <Ionicons name="chevron-down" size={18} color={tokens.textSecondary} />
         </Animated.View>
       </Pressable>
 
@@ -64,13 +66,14 @@ export function AccordionSection({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
   container: {
     borderRadius: 14,
-    backgroundColor: Colors.surface.default,
+    backgroundColor: tk.raised,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.neutral[100],
+    borderColor: tk.border,
   },
   header: {
     flexDirection: 'row',
@@ -86,16 +89,17 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.neutral[900],
+    color: tk.textPrimary,
   },
   subtitle: {
     fontSize: 12,
-    color: Colors.neutral[500],
+    color: tk.textSecondary,
   },
   content: {
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
+    borderTopColor: tk.border,
   },
-});
+  }),
+);

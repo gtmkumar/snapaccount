@@ -12,10 +12,22 @@ services:
     # Expose postgres metrics port for local pgAdmin / DBeaver connections
     ports:
       - "5432:5432"
-    # Extra init SQL for dev: create all schemas + enable pgvector
+    # Init + dev-seed SQL for local development.
+    #
+    # docker-entrypoint-initdb.d executes ONLY top-level *.sql files in
+    # lexicographic order — subdirectories are silently ignored.
+    #
+    # Execution order on first container start:
+    #   00_extensions_and_schemas.sql  (from database/init/)  — extensions + all schemas
+    #   100_dev_users.sql              (from database/dev-seed/) — canonical dev users/org
+    #   200_dev_business_data.sql      (from database/dev-seed/) — business data (depends on 100_)
+    #
+    # The 100_/200_ numeric prefixes ensure the seed files always sort AFTER the
+    # 00_ init script and are applied in the correct dependency order.
     volumes:
       - ./database/init:/docker-entrypoint-initdb.d:ro
-      - ./database/dev-seed:/docker-entrypoint-initdb.d/seed:ro
+      - ./database/dev-seed/100_dev_users.sql:/docker-entrypoint-initdb.d/100_dev_users.sql:ro
+      - ./database/dev-seed/200_dev_business_data.sql:/docker-entrypoint-initdb.d/200_dev_business_data.sql:ro
 
   # ── Dev overrides for all backend services ──
   # Hot reload via `dotnet watch` — mount source code as volume.

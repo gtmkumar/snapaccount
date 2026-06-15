@@ -93,6 +93,27 @@ public class AuthDbContext(DbContextOptions<AuthDbContext> options)
     public DbSet<KycVerification> KycVerifications => Set<KycVerification>();
 
     /// <inheritdoc />
+    public DbSet<UserConsent> UserConsents => Set<UserConsent>();
+
+    /// <inheritdoc />
+    public DbSet<DataExportRequest> DataExportRequests => Set<DataExportRequest>();
+
+    /// <inheritdoc />
+    public DbSet<DataCorrectionRequest> DataCorrectionRequests => Set<DataCorrectionRequest>();
+
+    /// <inheritdoc />
+    public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
+
+    /// <inheritdoc />
+    public DbSet<PlatformConfig> PlatformConfigs => Set<PlatformConfig>();
+
+    /// <summary>GAP-047: Device approval requests (migration 083).</summary>
+    public DbSet<DeviceApprovalRequest> DeviceApprovalRequests => Set<DeviceApprovalRequest>();
+
+    /// <summary>GAP-064: Device integrity attestation telemetry (migration 089).</summary>
+    public DbSet<DeviceIntegrityCheck> DeviceIntegrityChecks => Set<DeviceIntegrityCheck>();
+
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("auth");

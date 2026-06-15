@@ -21,7 +21,9 @@ import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Colors } from '../../constants/colors';
+import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import { ErrorState } from '../../components/shared/ListStates';
+import { useHaptics } from '../../hooks/useHaptics';
 import {
   getCallback,
   rescheduleCallback,
@@ -32,6 +34,7 @@ import {
 } from '../../api/callbacks';
 import { Card } from '../../components/ui/Card';
 import { StatusTimeline } from '../../components/shared/StatusTimeline';
+import { useNowMs } from '../../hooks/useNowMs';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
 
 type NavProp = NativeStackNavigationProp<MoreStackParamList, 'CallbackStatus'>;
@@ -48,14 +51,51 @@ type HeroConfig = {
   iconColor: string;
 };
 
-const HERO_MAP: Record<CallbackStatus, HeroConfig> = {
-  Pending:   { icon: 'time-outline', bg: Colors.warning[100], iconColor: Colors.warning[600] },
-  Assigned:  { icon: 'person-circle-outline', bg: Colors.info[100], iconColor: Colors.info[600] },
-  Confirmed: { icon: 'calendar-outline', bg: Colors.info[100], iconColor: Colors.info[600] },
-  Completed: { icon: 'checkmark-circle-outline', bg: Colors.success[100], iconColor: Colors.success[600] },
-  Escalated: { icon: 'arrow-up-circle-outline', bg: Colors.error[100], iconColor: Colors.error[600] },
-  Cancelled: { icon: 'close-circle-outline', bg: Colors.neutral[100], iconColor: Colors.neutral[500] },
+const heroMapFor = (tk: ThemeTokens): Record<CallbackStatus, HeroConfig> => ({
+  Pending:   { icon: 'time-outline', bg: tk.warningTint, iconColor: tk.warningFg },
+  Assigned:  { icon: 'person-circle-outline', bg: tk.infoTint, iconColor: tk.infoFg },
+  Confirmed: { icon: 'calendar-outline', bg: tk.infoTint, iconColor: tk.infoFg },
+  Completed: { icon: 'checkmark-circle-outline', bg: tk.successTint, iconColor: tk.successFg },
+  Escalated: { icon: 'arrow-up-circle-outline', bg: tk.errorTint, iconColor: tk.errorFg },
+  Cancelled: { icon: 'close-circle-outline', bg: tk.sunken, iconColor: tk.textSecondary },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Category label (AND-15)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The backend serializes CallbackCategory as the enum's numeric value in some
+// payloads (e.g. Gst → 1), so the raw `callback.category` cannot be rendered
+// directly. Map numeric IDs and string names onto localized labels.
+// Enum order mirrors backend CallbackService.Domain/Enums/CallbackCategory.cs.
+
+const CATEGORY_ID_TO_SLUG: Record<number, string> = {
+  0: 'general',
+  1: 'gst',
+  2: 'itr',
+  3: 'loan',
+  4: 'accounting',
+  5: 'subscription',
+  6: 'technical',
 };
+
+const KNOWN_CATEGORY_SLUGS = new Set(Object.values(CATEGORY_ID_TO_SLUG));
+
+function getCategoryLabel(
+  category: unknown,
+  t: (k: string) => string,
+): string {
+  const raw = category == null ? '' : String(category);
+  if (!raw) return '—';
+  const slug = /^\d+$/.test(raw)
+    ? CATEGORY_ID_TO_SLUG[Number(raw)]
+    : KNOWN_CATEGORY_SLUGS.has(raw.toLowerCase())
+      ? raw.toLowerCase()
+      : undefined;
+  // Unknown values (future categories) fall back to the raw string rather
+  // than a broken i18n key.
+  return slug ? t(`mobile.callback.status.category.${slug}`) : raw;
+}
 
 function formatISTTime(iso?: string): string | null {
   if (!iso) return null;
@@ -109,6 +149,7 @@ function getHeroCopy(cb: CallbackDetail, t: (k: string, o?: Record<string, unkno
 function RescheduleModal({ callbackId, onDone, onClose }: {
   callbackId: string; onDone: () => void; onClose: () => void;
 }) {
+  const rsStyles = useRsStyles();
   const { t } = useTranslation();
   const [hour, setHour] = useState(10);
 
@@ -159,31 +200,38 @@ function RescheduleModal({ callbackId, onDone, onClose }: {
   );
 }
 
-const rsStyles = StyleSheet.create({
-  sheet: { padding: 20, backgroundColor: Colors.surface.default, borderRadius: 16, gap: 12 },
-  title: { fontSize: 17, fontWeight: '700', color: Colors.neutral[900] },
-  label: { fontSize: 13, color: Colors.neutral[600] },
+const useRsStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  sheet: { padding: 20, backgroundColor: tk.raised, borderRadius: 16, gap: 12 },
+  title: { fontSize: 17, fontWeight: '700', color: tk.textPrimary },
+  label: { fontSize: 13, color: tk.textSecondary },
   hourRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  hourChip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, backgroundColor: Colors.neutral[100], minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  hourChipActive: { backgroundColor: Colors.brand[50], borderColor: Colors.brand[400], borderWidth: 1 },
-  hourText: { fontSize: 13, color: Colors.neutral[700] },
-  hourTextActive: { color: Colors.brand[700], fontWeight: '600' },
+  hourChip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, backgroundColor: tk.sunken, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  hourChipActive: { backgroundColor: tk.brandTint, borderColor: tk.brand400, borderWidth: 1 },
+  hourText: { fontSize: 13, color: tk.textSecondary },
+  hourTextActive: { color: tk.brandFg, fontWeight: '600' },
   actions: { flexDirection: 'row', gap: 12 },
-  cancelBtn: { flex: 1, borderWidth: 1, borderColor: Colors.neutral[200], borderRadius: 10, paddingVertical: 12, alignItems: 'center', minHeight: 48 },
-  cancelBtnText: { fontSize: 14, color: Colors.neutral[600] },
-  submitBtn: { flex: 1, backgroundColor: Colors.brand[500], borderRadius: 10, paddingVertical: 12, alignItems: 'center', minHeight: 48 },
-  submitBtnDisabled: { backgroundColor: Colors.neutral[200] },
-  submitBtnText: { fontSize: 14, fontWeight: '700', color: Colors.neutral[0] },
-});
+  cancelBtn: { flex: 1, borderWidth: 1, borderColor: tk.border, borderRadius: 10, paddingVertical: 12, alignItems: 'center', minHeight: 48 },
+  cancelBtnText: { fontSize: 14, color: tk.textSecondary },
+  submitBtn: { flex: 1, backgroundColor: tk.brand500, borderRadius: 10, paddingVertical: 12, alignItems: 'center', minHeight: 48 },
+  submitBtnDisabled: { backgroundColor: tk.border },
+  submitBtnText: { fontSize: 14, fontWeight: '700', color: tk.textOnBrand },
+  }),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function CallbackStatusScreen({ navigation, route }: Props) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const { callbackId } = route.params;
   const queryClient = useQueryClient();
+  // Refreshes every 30s so the stale-in-progress banner appears without a refetch.
+  const nowMs = useNowMs(30_000);
 
   const [showReschedule, setShowReschedule] = useState(false);
   const [showAddContext, setShowAddContext] = useState(false);
@@ -240,7 +288,7 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
   };
 
   const staleMinutes = dataUpdatedAt
-    ? Math.floor((Date.now() - dataUpdatedAt) / 60_000)
+    ? Math.floor((nowMs - dataUpdatedAt) / 60_000)
     : null;
   const isStaleInProgress =
     callback?.status === 'Confirmed' && staleMinutes !== null && staleMinutes >= 2;
@@ -252,7 +300,7 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}>
-            <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+            <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
           </Pressable>
           <Text style={styles.headerTitle}>{t('mobile.callback.status.title')}</Text>
           <View style={styles.headerSpacer} />
@@ -273,25 +321,26 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}>
-            <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+            <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
           </Pressable>
           <Text style={styles.headerTitle}>{t('mobile.callback.status.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.errorState}>
-          <Ionicons name="alert-circle-outline" size={48} color={Colors.neutral[300]} />
-          <Text style={styles.errorTitle}>{t('mobile.callback.status.notFound')}</Text>
-          <Pressable style={styles.errorBackBtn} onPress={() => navigation.popToTop()}>
-            <Text style={styles.errorBackBtnText}>{t('mobile.callback.status.backHome')}</Text>
-          </Pressable>
-        </View>
+        <ErrorState
+          message={t('mobile.callback.status.notFound')}
+          retryLabel={t('mobile.common.retry')}
+          onRetry={() => void refetch()}
+          secondaryLabel={t('mobile.callback.status.backHome')}
+          onSecondaryPress={() => navigation.popToTop()}
+          testID="callback-error-state"
+        />
       </SafeAreaView>
     );
   }
 
-  const hero = HERO_MAP[callback.status] ?? HERO_MAP.Pending;
+  const heroMap = heroMapFor(tokens);
+  const hero = heroMap[callback.status] ?? heroMap.Pending;
   const heroCopy = getHeroCopy(callback, t);
-  const formattedScheduledTime = formatISTTime(callback.scheduledAt);
 
   const canReschedule = ['Pending', 'Assigned', 'Confirmed'].includes(callback.status);
   const canCancel = ['Pending', 'Assigned', 'Confirmed'].includes(callback.status);
@@ -311,21 +360,31 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8} accessibilityRole="button">
-          <Ionicons name="arrow-back" size={22} color={Colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={tokens.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('mobile.callback.status.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              haptics.lightTap();
+              void refetch();
+            }}
+            tintColor={tokens.brand500}
+            colors={[tokens.brand500]}
+          />
+        }
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         {/* Stale refresh hint */}
         {isStaleInProgress && (
           <Pressable style={styles.refreshBanner} onPress={() => refetch()}>
-            <Ionicons name="refresh-outline" size={14} color={Colors.brand[600]} />
+            <Ionicons name="refresh-outline" size={14} color={tokens.brandCta} />
             <Text style={styles.refreshBannerText}>{t('mobile.callback.status.actions.refresh')}</Text>
           </Pressable>
         )}
@@ -344,7 +403,7 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
           )}
           {/* Phone number row */}
           <View style={styles.phoneRow}>
-            <Ionicons name="call-outline" size={14} color={Colors.neutral[500]} />
+            <Ionicons name="call-outline" size={14} color={tokens.textSecondary} />
             <Text style={styles.phoneLabel}>{t('mobile.callback.status.actions.phone')}</Text>
             <Text style={styles.phoneNumber}>{callback.phoneNumber}</Text>
           </View>
@@ -371,7 +430,7 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
           <Text style={styles.aboutTitle}>{t('mobile.callback.status.about.title')}</Text>
           <View style={styles.aboutRow}>
             <Text style={styles.aboutKey}>{t('mobile.callback.status.about.category')}</Text>
-            <Text style={styles.aboutVal}>{callback.category}</Text>
+            <Text style={styles.aboutVal}>{getCategoryLabel(callback.category, t)}</Text>
           </View>
           {callback.issueDescription && (
             <View style={styles.aboutRow}>
@@ -390,7 +449,7 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
               value={contextNote}
               onChangeText={setContextNote}
               placeholder="Add more details…"
-              placeholderTextColor={Colors.neutral[400]}
+              placeholderTextColor={tokens.textTertiary}
               multiline
               numberOfLines={3}
               maxLength={500}
@@ -421,7 +480,7 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
               onPress={() => setShowReschedule(true)}
               accessibilityRole="button"
             >
-              <Ionicons name="calendar-outline" size={18} color={Colors.brand[600]} />
+              <Ionicons name="calendar-outline" size={18} color={tokens.brandCta} />
               <Text style={styles.rescheduleBtnText}>{t('mobile.callback.status.actions.reschedule')}</Text>
             </Pressable>
           )}
@@ -432,7 +491,7 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
               onPress={() => setShowAddContext(true)}
               accessibilityRole="button"
             >
-              <Ionicons name="chatbubble-outline" size={18} color={Colors.neutral[600]} />
+              <Ionicons name="chatbubble-outline" size={18} color={tokens.textSecondary} />
               <Text style={styles.addContextBtnText}>{t('mobile.callback.status.actions.addContext')}</Text>
             </Pressable>
           )}
@@ -444,7 +503,7 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
               disabled={isCancelling}
               accessibilityRole="button"
             >
-              <Ionicons name="close-circle-outline" size={18} color={Colors.error[600]} />
+              <Ionicons name="close-circle-outline" size={18} color={tokens.errorFg} />
               <Text style={styles.cancelCallbackBtnText}>
                 {isCancelling ? 'Cancelling…' : t('mobile.callback.status.actions.cancel')}
               </Text>
@@ -456,39 +515,40 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg.base },
+const useStyles = createThemedStyles((tk: ThemeTokens) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: tk.canvas },
   scrollContent: { padding: 16, gap: 16, paddingBottom: 40 },
 
   // Header
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.surface.default,
-    borderBottomWidth: 1, borderBottomColor: Colors.neutral[100],
+    backgroundColor: tk.raised,
+    borderBottomWidth: 1, borderBottomColor: tk.border,
   },
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: Colors.neutral[900] },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: tk.textPrimary },
   headerSpacer: { width: 44 },
 
   // Loading
   loadingState: { flex: 1, alignItems: 'center', gap: 16, paddingTop: 60 },
-  skeletonCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: Colors.neutral[100] },
-  skeletonLine: { width: '70%', height: 20, borderRadius: 8, backgroundColor: Colors.neutral[100] },
+  skeletonCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: tk.sunken },
+  skeletonLine: { width: '70%', height: 20, borderRadius: 8, backgroundColor: tk.sunken },
 
   // Error
   errorState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 },
-  errorTitle: { fontSize: 16, color: Colors.neutral[600], textAlign: 'center' },
-  errorBackBtn: { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: Colors.brand[500], borderRadius: 10, minHeight: 44 },
-  errorBackBtnText: { color: Colors.neutral[0], fontWeight: '700' },
+  errorTitle: { fontSize: 16, color: tk.textSecondary, textAlign: 'center' },
+  errorBackBtn: { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: tk.brandCta, borderRadius: 10, minHeight: 44 },
+  errorBackBtnText: { color: tk.textOnBrand, fontWeight: '700' },
 
   // Stale refresh
   refreshBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.brand[50], borderRadius: 8,
+    backgroundColor: tk.brandTint, borderRadius: 8,
     padding: 10, alignSelf: 'center',
   },
-  refreshBannerText: { fontSize: 13, color: Colors.brand[600], fontWeight: '600' },
+  refreshBannerText: { fontSize: 13, color: tk.brandCta, fontWeight: '600' },
 
   // Hero
   hero: { alignItems: 'center', gap: 8, paddingVertical: 24 },
@@ -496,55 +556,56 @@ const styles = StyleSheet.create({
     width: 96, height: 96, borderRadius: 48,
     alignItems: 'center', justifyContent: 'center', marginBottom: 8,
   },
-  heroPrimary: { fontSize: 22, fontWeight: '800', color: Colors.neutral[900], textAlign: 'center', letterSpacing: -0.3 },
-  heroSecondary: { fontSize: 15, color: Colors.neutral[600], textAlign: 'center', lineHeight: 22 },
-  heroAgent: { fontSize: 13, color: Colors.neutral[500], fontWeight: '500' },
+  heroPrimary: { fontSize: 22, fontWeight: '800', color: tk.textPrimary, textAlign: 'center', letterSpacing: -0.3 },
+  heroSecondary: { fontSize: 15, color: tk.textSecondary, textAlign: 'center', lineHeight: 22 },
+  heroAgent: { fontSize: 13, color: tk.textSecondary, fontWeight: '500' },
   phoneRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  phoneLabel: { fontSize: 12, color: Colors.neutral[500] },
-  phoneNumber: { fontSize: 13, fontWeight: '600', color: Colors.neutral[700] },
+  phoneLabel: { fontSize: 12, color: tk.textSecondary },
+  phoneNumber: { fontSize: 13, fontWeight: '600', color: tk.textSecondary },
 
   // Timeline card
   timelineCard: { marginBottom: 0 },
 
   // About card
   aboutCard: { gap: 8 },
-  aboutTitle: { fontSize: 14, fontWeight: '700', color: Colors.neutral[800], marginBottom: 4 },
+  aboutTitle: { fontSize: 14, fontWeight: '700', color: tk.textPrimary, marginBottom: 4 },
   aboutRow: { flexDirection: 'row', gap: 8 },
-  aboutKey: { fontSize: 13, color: Colors.neutral[500], width: 80 },
-  aboutVal: { fontSize: 13, color: Colors.neutral[800], flex: 1 },
+  aboutKey: { fontSize: 13, color: tk.textSecondary, width: 80 },
+  aboutVal: { fontSize: 13, color: tk.textPrimary, flex: 1 },
 
   // Add context card
   contextCard: { gap: 10 },
-  contextTitle: { fontSize: 14, fontWeight: '600', color: Colors.neutral[800] },
+  contextTitle: { fontSize: 14, fontWeight: '600', color: tk.textPrimary },
   contextInput: {
-    borderWidth: 1, borderColor: Colors.neutral[200], borderRadius: 10,
-    padding: 12, fontSize: 14, color: Colors.neutral[900],
+    borderWidth: 1, borderColor: tk.border, borderRadius: 10,
+    padding: 12, fontSize: 14, color: tk.textPrimary,
     minHeight: 80, textAlignVertical: 'top',
   },
   contextActions: { flexDirection: 'row', gap: 10 },
-  contextCancelBtn: { flex: 1, borderWidth: 1, borderColor: Colors.neutral[200], borderRadius: 8, paddingVertical: 10, alignItems: 'center', minHeight: 44 },
-  contextCancelText: { fontSize: 14, color: Colors.neutral[600] },
-  contextSubmitBtn: { flex: 1, backgroundColor: Colors.brand[500], borderRadius: 8, paddingVertical: 10, alignItems: 'center', minHeight: 44 },
-  contextSubmitBtnDisabled: { backgroundColor: Colors.neutral[200] },
-  contextSubmitText: { fontSize: 14, fontWeight: '700', color: Colors.neutral[0] },
+  contextCancelBtn: { flex: 1, borderWidth: 1, borderColor: tk.border, borderRadius: 8, paddingVertical: 10, alignItems: 'center', minHeight: 44 },
+  contextCancelText: { fontSize: 14, color: tk.textSecondary },
+  contextSubmitBtn: { flex: 1, backgroundColor: tk.brand500, borderRadius: 8, paddingVertical: 10, alignItems: 'center', minHeight: 44 },
+  contextSubmitBtnDisabled: { backgroundColor: tk.border },
+  contextSubmitText: { fontSize: 14, fontWeight: '700', color: tk.textOnBrand },
 
   // Actions
   actions: { gap: 10 },
   rescheduleBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderWidth: 1, borderColor: Colors.brand[200], borderRadius: 12,
+    borderWidth: 1, borderColor: tk.brandTintBorder, borderRadius: 12,
     paddingVertical: 14, minHeight: 52,
-    backgroundColor: Colors.brand[50],
+    backgroundColor: tk.brandTint,
   },
-  rescheduleBtnText: { fontSize: 15, fontWeight: '600', color: Colors.brand[600] },
+  rescheduleBtnText: { fontSize: 15, fontWeight: '600', color: tk.brandCta },
   addContextBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     borderRadius: 12, paddingVertical: 14, minHeight: 52,
   },
-  addContextBtnText: { fontSize: 15, color: Colors.neutral[600] },
+  addContextBtnText: { fontSize: 15, color: tk.textSecondary },
   cancelCallbackBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     borderRadius: 12, paddingVertical: 14, minHeight: 52,
   },
-  cancelCallbackBtnText: { fontSize: 15, color: Colors.error[600], fontWeight: '600' },
-});
+  cancelCallbackBtnText: { fontSize: 15, color: tk.errorFg, fontWeight: '600' },
+  }),
+);

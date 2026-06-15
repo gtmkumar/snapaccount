@@ -1,6 +1,7 @@
 using MediatR;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Domain;
+using SubscriptionService.Application.Config.Commands.UpdateRazorpayConfig;
 using SubscriptionService.Application.Plans.Commands.CreatePlan;
 using SubscriptionService.Application.Plans.Commands.UpdatePlan;
 using SubscriptionService.Application.Plans.Queries.ListPlans;
@@ -13,6 +14,7 @@ using SubscriptionService.Application.Subscriptions.Commands.UpgradeSubscription
 using SubscriptionService.Application.Subscriptions.Queries.GetMrrDashboard;
 using SubscriptionService.Application.Subscriptions.Queries.GetSubscription;
 using SubscriptionService.Application.Subscriptions.Queries.ListInvoices;
+using SubscriptionService.Application.Subscriptions.Queries.ListSubscribers;
 using SubscriptionService.Domain.Enums;
 
 namespace SubscriptionService.Api.Endpoints;
@@ -120,12 +122,30 @@ public sealed class Subscriptions : EndpointGroupBase
             .RequireRateLimiting("standard")
             .WithName("GetMrrDashboard")
             .WithSummary("MRR dashboard. Requires subscription.plan.create permission.");
+
+        // GET /subscriptions/admin/list — platform-admin subscriber list (paginated)
+        // GAP-036: admin subscriber management page (SubscriberListPage.tsx)
+        g.MapGet("/admin/list", ListSubscribers)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("ListSubscribers")
+            .WithSummary("Platform-admin paginated subscriber list with plan tier, status, MRR, renewal date. " +
+                         "Requires subscription.plan.create permission.");
+
+        // GAP-034: PATCH /subscriptions/config/razorpay — admin-configured Razorpay credentials
+        g.MapMethods("/config/razorpay", ["PATCH"], PatchRazorpayConfig)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("PatchRazorpayConfig")
+            .WithSummary("Update Razorpay API credentials. Requires subscription.config.write permission.");
     }
 
     // ── Handlers ──────────────────────────────────────────────────────────────
 
+    // BINDING-FIX: includeInactive was a required bool causing 500 when not supplied.
+    // Default false — public listing shows only active plans; admins opt-in with ?includeInactive=true.
     private static async Task<IResult> ListPlans(
-        bool includeInactive, ISender sender, CancellationToken ct)
+        ISender sender, CancellationToken ct, bool includeInactive = false)
     {
         var result = await sender.Send(new ListPlansQuery(includeInactive), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
@@ -149,12 +169,26 @@ public sealed class Subscriptions : EndpointGroupBase
         return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
     }
 
+    /// <summary>
+    /// CONTRACT: returns 200+body when an active subscription exists;
+    /// 404 (typed error body) when the org has no subscription yet.
+    /// Clients must treat 404 as "no subscription / free tier" — NOT as an error.
+    /// Mobile client: already handles 404 → null (see mobile/src/api/subscriptions.ts).
+    /// Admin client: should catch 404 and treat as no-subscription state.
+    /// </summary>
     private static async Task<IResult> GetSubscription(ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new GetSubscriptionQuery(), ct);
-        return result.IsSuccess
-            ? result.Value != null ? Results.Ok(result.Value) : Results.NotFound()
-            : MapError(result.Error);
+        if (!result.IsSuccess)
+            return MapError(result.Error);
+
+        return result.Value is not null
+            ? Results.Ok(result.Value)
+            : Results.NotFound(new
+            {
+                code = "Subscription.NotFound",
+                message = "This organisation has no active subscription."
+            });
     }
 
     private static async Task<IResult> Subscribe(
@@ -218,6 +252,27 @@ public sealed class Subscriptions : EndpointGroupBase
         return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
     }
 
+    private static async Task<IResult> ListSubscribers(
+        [AsParameters] SubscriberListParams p, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new ListSubscribersQuery(p.Page, p.PageSize, p.Status, p.Tier), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+    }
+
+    private static async Task<IResult> PatchRazorpayConfig(
+        PatchRazorpayConfigRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new UpdateRazorpayConfigCommand(
+                req.KeyId,
+                req.KeySecret,
+                req.WebhookSecret,
+                req.TestMode,
+                req.IsEnabled), ct);
+        return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
+    }
+
     private static IResult MapError(Error error)
         => error.Type switch
         {
@@ -253,6 +308,12 @@ internal record SubscribeRequest(
 
 internal record UpgradeRequest(Guid NewPlanId);
 internal record DowngradeRequest(Guid NewPlanId);
+internal record PatchRazorpayConfigRequest(
+    string KeyId,
+    string KeySecret,
+    string? WebhookSecret,
+    bool TestMode = true,
+    bool IsEnabled = false);
 
 internal record RecordPaymentRequest(
     string RazorpayPaymentId,
@@ -261,3 +322,10 @@ internal record RecordPaymentRequest(
     DateTime NewPeriodEnd);
 
 internal record PageParams(int Page = 1, int PageSize = 20);
+
+/// <summary>Query parameters for GET /subscriptions/admin/list.</summary>
+internal record SubscriberListParams(
+    int Page = 1,
+    int PageSize = 25,
+    string? Status = null,
+    string? Tier = null);
