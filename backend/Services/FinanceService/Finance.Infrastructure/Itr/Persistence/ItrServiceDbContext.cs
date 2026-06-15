@@ -1,5 +1,6 @@
 using ItrService.Application.Common.Interfaces;
 using ItrService.Domain.Entities;
+using ItrService.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Infrastructure.Persistence;
 
@@ -64,7 +65,9 @@ public class ItrServiceDbContext(DbContextOptions<ItrServiceDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("itr");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(ItrServiceDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(ItrServiceDbContext).Assembly,
+            type => type.Namespace == typeof(ItrNoticeConfiguration).Namespace);
         base.OnModelCreating(modelBuilder);
     }
 }

@@ -1,5 +1,6 @@
 using CallbackService.Application.Common.Interfaces;
 using CallbackService.Domain.Entities;
+using CallbackService.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Infrastructure.Persistence;
 
@@ -22,7 +23,9 @@ public class CallbackDbContext(DbContextOptions<CallbackDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("callback");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(CallbackDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(CallbackDbContext).Assembly,
+            type => type.Namespace == typeof(KpiDailySnapshotConfiguration).Namespace);
         base.OnModelCreating(modelBuilder);
     }
 }

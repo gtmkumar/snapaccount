@@ -2,11 +2,12 @@
  * NoticeTrackerListPage — GST notice tracker (Phase 6B)
  * Route: /gst/notices
  */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
-import { Inbox, Plus, Search } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { toast } from 'sonner'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { DueDateChip } from '@/components/ui/DueDateChip'
@@ -15,13 +16,19 @@ import { GstatStageChip, type GstatStage } from '@/components/ui/GstatStageChip'
 import { SelectionToolbar } from '@/components/ui/SelectionToolbar'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { Card } from '@/components/ui/Card'
-import { cn } from '@/lib/utils'
+import { Input } from '@/components/ui/Input'
+import { NativeSelect } from '@/components/ui/NativeSelect'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { Modal } from '@/components/ui/Modal'
+import { cn, formatDate } from '@/lib/utils'
 import { t } from '@/i18n'
 import {
   listGstNotices,
   createGstNotice,
   assignGstNotice,
   markGstNoticeUnderReview,
+  getNoticesDueSummary,
   type GstNotice,
   type GstNoticeStatus,
   type GstNoticeType,
@@ -43,16 +50,20 @@ function noticeStatusBadge(status: GstNoticeStatus) {
   return <Badge variant={cfg.variant}>{cfg.label}</Badge>
 }
 
+const formInputClass =
+  'rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] text-[var(--text-primary)] focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--border-focus)]/20'
+
 // ---------------------------------------------------------------------------
 // Upload Notice Modal
 // ---------------------------------------------------------------------------
 
 interface UploadNoticeModalProps {
+  open: boolean
   onClose: () => void
   onCreated: () => void
 }
 
-function UploadNoticeModal({ onClose, onCreated }: UploadNoticeModalProps) {
+function UploadNoticeModal({ open, onClose, onCreated }: UploadNoticeModalProps) {
   const [form, setForm] = useState({
     orgId: '',
     gstin: '',
@@ -95,102 +106,98 @@ function UploadNoticeModal({ onClose, onCreated }: UploadNoticeModalProps) {
     if (validate()) mutation.mutate()
   }
 
-  const inputClass = 'w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none'
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="upload-notice-title">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
-        <h2 id="upload-notice-title" className="text-base font-semibold text-neutral-900">
-          {t('admin.gst.notice.upload.title')}
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={t('admin.gst.notice.upload.title')}
+      size="md"
+      footer={
+        <div className="flex gap-2 justify-end w-full">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {t('admin.gst.notice.upload.cancel')}
+          </Button>
+          <Button type="submit" form="upload-notice-form" variant="primary" disabled={mutation.isPending}>
+            {mutation.isPending ? t('admin.gst.notice.upload.uploading') : t('admin.gst.notice.upload.submit')}
+          </Button>
+        </div>
+      }
+    >
+      <form id="upload-notice-form" onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+            {t('admin.gst.notice.field.gstin')} *
+          </label>
+          <input
+            type="text"
+            value={form.gstin}
+            onChange={e => setForm(f => ({ ...f, gstin: e.target.value.toUpperCase() }))}
+            maxLength={15}
+            placeholder="27AABCS1429B1ZB"
+            className={cn('w-full px-3 py-2 text-sm outline-none', formInputClass, errors.gstin && 'border-error-500')}
+          />
+          {errors.gstin && <p className="text-xs text-error-600 mt-0.5">{errors.gstin}</p>}
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+            {t('admin.gst.notice.field.noticeNumber')} *
+          </label>
+          <input
+            type="text"
+            value={form.noticeNumber}
+            onChange={e => setForm(f => ({ ...f, noticeNumber: e.target.value }))}
+            placeholder="GST/24/ASMT/0931"
+            className={cn('w-full px-3 py-2 text-sm outline-none', formInputClass, errors.noticeNumber && 'border-error-500')}
+          />
+          {errors.noticeNumber && <p className="text-xs text-error-600 mt-0.5">{errors.noticeNumber}</p>}
+        </div>
+        <NativeSelect
+          label={`${t('admin.gst.notice.field.noticeType')} *`}
+          value={form.noticeType}
+          onChange={e => setForm(f => ({ ...f, noticeType: e.target.value as GstNoticeType }))}
+        >
+          {(['ASMT-10', 'ASMT-11', 'DRC-01', 'DRC-03', 'REG-17', 'OTHER'] as GstNoticeType[]).map(type => (
+            <option key={type} value={type}>{type}</option>
+          ))}
+        </NativeSelect>
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-neutral-600 mb-1">
-              {t('admin.gst.notice.field.gstin')} *
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              {t('admin.gst.notice.field.noticeDate')} *
             </label>
             <input
-              type="text"
-              value={form.gstin}
-              onChange={e => setForm(f => ({ ...f, gstin: e.target.value.toUpperCase() }))}
-              maxLength={15}
-              placeholder="27AABCS1429B1ZB"
-              className={cn(inputClass, errors.gstin && 'border-error-500')}
+              type="date"
+              value={form.noticeDate}
+              onChange={e => setForm(f => ({ ...f, noticeDate: e.target.value }))}
+              className={cn('w-full px-3 py-2 text-sm outline-none', formInputClass, errors.noticeDate && 'border-error-500')}
             />
-            {errors.gstin && <p className="text-xs text-error-600 mt-0.5">{errors.gstin}</p>}
+            {errors.noticeDate && <p className="text-xs text-error-600 mt-0.5">{errors.noticeDate}</p>}
           </div>
           <div>
-            <label className="block text-xs font-medium text-neutral-600 mb-1">
-              {t('admin.gst.notice.field.noticeNumber')} *
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              {t('admin.gst.notice.field.dueDate')}
             </label>
             <input
-              type="text"
-              value={form.noticeNumber}
-              onChange={e => setForm(f => ({ ...f, noticeNumber: e.target.value }))}
-              placeholder="GST/24/ASMT/0931"
-              className={cn(inputClass, errors.noticeNumber && 'border-error-500')}
-            />
-            {errors.noticeNumber && <p className="text-xs text-error-600 mt-0.5">{errors.noticeNumber}</p>}
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-neutral-600 mb-1">
-              {t('admin.gst.notice.field.noticeType')} *
-            </label>
-            <select
-              value={form.noticeType}
-              onChange={e => setForm(f => ({ ...f, noticeType: e.target.value as GstNoticeType }))}
-              className={inputClass}
-            >
-              {(['ASMT-10', 'ASMT-11', 'DRC-01', 'DRC-03', 'REG-17', 'OTHER'] as GstNoticeType[]).map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">
-                {t('admin.gst.notice.field.noticeDate')} *
-              </label>
-              <input
-                type="date"
-                value={form.noticeDate}
-                onChange={e => setForm(f => ({ ...f, noticeDate: e.target.value }))}
-                className={cn(inputClass, errors.noticeDate && 'border-error-500')}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-neutral-600 mb-1">
-                {t('admin.gst.notice.field.dueDate')}
-              </label>
-              <input
-                type="date"
-                value={form.dueDate}
-                onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
-                className={inputClass}
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-neutral-600 mb-1">
-              {t('admin.gst.notice.field.description')}
-            </label>
-            <textarea
-              value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              rows={2}
-              className={inputClass}
+              type="date"
+              value={form.dueDate}
+              onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
+              className={cn('w-full px-3 py-2 text-sm outline-none', formInputClass)}
             />
           </div>
-          <div className="flex gap-2 pt-2">
-            <Button type="submit" variant="primary" fullWidth disabled={mutation.isPending}>
-              {mutation.isPending ? t('admin.gst.notice.upload.uploading') : t('admin.gst.notice.upload.submit')}
-            </Button>
-            <Button type="button" variant="secondary" onClick={onClose}>
-              {t('admin.gst.notice.upload.cancel')}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+            {t('admin.gst.notice.field.description')}
+          </label>
+          <textarea
+            value={form.description}
+            onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+            rows={2}
+            className={cn('w-full px-3 py-2 text-sm outline-none resize-none', formInputClass)}
+          />
+        </div>
+      </form>
+    </Modal>
   )
 }
 
@@ -201,21 +208,22 @@ function UploadNoticeModal({ onClose, onCreated }: UploadNoticeModalProps) {
 function NoticeRowCard({ notice, onClick }: { notice: GstNotice; onClick: () => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="w-full text-left min-h-[88px] p-4 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 space-y-1.5 transition-colors"
+      className="w-full text-left min-h-[88px] p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-raised)] hover:bg-[var(--surface-sunken)] space-y-1.5 transition-colors"
     >
       <div className="flex items-center justify-between gap-2">
         {noticeStatusBadge(notice.status)}
         {notice.dueDate && <DueDateChip dueDate={notice.dueDate} size="sm" />}
       </div>
-      <p className="text-sm font-semibold text-neutral-900 font-mono">{notice.noticeNumber}</p>
+      <p className="text-sm font-semibold text-[var(--text-primary)] font-mono">{notice.noticeNumber}</p>
       <div className="flex items-center gap-1.5 flex-wrap">
         <NoticeFormTypeBadge formType={notice.noticeType as NoticeFormType} size="sm" />
-        <span className="text-xs text-neutral-400">· GSTIN {notice.gstin}</span>
+        <span className="text-xs text-[var(--text-tertiary)]">· GSTIN {notice.gstin || '—'}</span>
       </div>
-      <p className="text-xs text-neutral-400">
-        Received {new Date(notice.createdAt).toLocaleDateString('en-IN')}
-        {notice.assignedCaName ? ` · Assigned to ${notice.assignedCaName}` : ' · Unassigned'}
+      <p className="text-xs text-[var(--text-tertiary)]">
+        Received {formatDate(notice.noticeDate)}
+        {notice.assignedCaName ? ` · Assigned to ${notice.assignedCaName}` : ` · ${t('admin.gst.notice.unassigned')}`}
       </p>
     </button>
   )
@@ -242,6 +250,14 @@ export default function NoticeTrackerListPage() {
     status: statusFilter || undefined,
     dueBucket: (dueFilter as ListNoticesParams['dueBucket']) || undefined,
   }
+
+  const isFiltered = !!(search || statusFilter || dueFilter)
+
+  const { data: dueSummary } = useQuery({
+    queryKey: ['gst-notices-due-summary'],
+    queryFn: getNoticesDueSummary,
+    staleTime: 60_000,
+  })
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['gst-notices', queryParams],
@@ -294,268 +310,285 @@ export default function NoticeTrackerListPage() {
   const totalCount = data?.totalCount ?? 0
   const isEmpty = !isLoading && !isError && notices.length === 0
 
+  const subtitle = useMemo(() => {
+    if (dueSummary) {
+      const parts: string[] = []
+      if (dueSummary.overdue > 0) parts.push(`${dueSummary.overdue} overdue`)
+      if (dueSummary.dueThisWeek > 0) parts.push(`${dueSummary.dueThisWeek} due this week`)
+      parts.push(`${totalCount} total`)
+      return parts.join(' · ')
+    }
+    return totalCount > 0 ? `${totalCount} notices` : undefined
+  }, [dueSummary, totalCount])
+
+  function clearFilters() {
+    setSearch('')
+    setStatusFilter('')
+    setDueFilter('')
+    setFilters(f => ({ ...f, page: 1 }))
+  }
+
   function handleCreated() {
     setShowUploadModal(false)
     void queryClient.invalidateQueries({ queryKey: ['gst-notices'] })
-    toast.success(t('admin.gst.notice.upload.success'))
+    void queryClient.invalidateQueries({ queryKey: ['gst-notices-due-summary'] })
   }
 
+  const statCards = dueSummary
+    ? [
+        { label: t('admin.gst.notice.filter.overdue'), value: dueSummary.overdue, tone: 'text-error-600' },
+        { label: t('admin.gst.notice.filter.thisWeek'), value: dueSummary.dueThisWeek, tone: 'text-warning-600' },
+        { label: 'Due in 2 days', value: dueSummary.dueIn2Days, tone: 'text-brand-600' },
+        { label: 'Total open', value: dueSummary.total, tone: 'text-[var(--text-primary)]' },
+      ]
+    : []
+
   return (
-    <main aria-labelledby="gst-notices-title" className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <nav aria-label="Breadcrumb" className="text-xs text-neutral-400 mb-1">
-            <span>GST</span>
-            <span className="mx-1">›</span>
-            <span className="text-neutral-600">{t('admin.gst.notice.breadcrumb')}</span>
-          </nav>
-          <h1 id="gst-notices-title" className="text-xl font-bold text-neutral-900">
-            {t('admin.gst.notice.title')}
-          </h1>
-        </div>
-        <Button
-          variant="primary"
-          size="sm"
-          leftIcon={<Plus className="h-4 w-4" />}
-          onClick={() => setShowUploadModal(true)}
-        >
-          {t('admin.gst.notice.cta.upload')}
-        </Button>
-      </div>
-
-      {/* Filter bar (sticky) */}
-      <div className="sticky top-16 z-10 bg-white border-b border-neutral-100 py-2 -mx-4 px-4 flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-neutral-400" aria-hidden="true" />
-          <input
-            type="search"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder={t('admin.gst.notice.filter.search')}
-            className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-neutral-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 outline-none"
-          />
-        </div>
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="text-sm rounded-lg border border-neutral-300 px-3 py-1.5 focus:outline-none focus:border-brand-500"
-          aria-label={t('admin.gst.notice.filter.status')}
-        >
-          <option value="">{t('admin.gst.notice.filter.allStatuses')}</option>
-          <option value="RECEIVED">{t('admin.gst.notice.status.received')}</option>
-          <option value="UNDER_REVIEW">{t('admin.gst.notice.status.underReview')}</option>
-          <option value="RESPONDED">{t('admin.gst.notice.status.responded')}</option>
-          <option value="CLOSED">{t('admin.gst.notice.status.closed')}</option>
-        </select>
-        <select
-          value={dueFilter}
-          onChange={e => setDueFilter(e.target.value)}
-          className="text-sm rounded-lg border border-neutral-300 px-3 py-1.5 focus:outline-none focus:border-brand-500"
-          aria-label={t('admin.gst.notice.filter.due')}
-        >
-          <option value="">{t('admin.gst.notice.filter.allDates')}</option>
-          <option value="overdue">{t('admin.gst.notice.filter.overdue')}</option>
-          <option value="this_week">{t('admin.gst.notice.filter.thisWeek')}</option>
-          <option value="this_month">{t('admin.gst.notice.filter.thisMonth')}</option>
-        </select>
-        {(search || statusFilter || dueFilter) && (
-          <button
-            onClick={() => { setSearch(''); setStatusFilter(''); setDueFilter('') }}
-            className="text-xs text-brand-600 hover:underline"
+    <div className="space-y-5">
+      <PageHeader
+        title={t('admin.gst.notice.title')}
+        subtitle={subtitle}
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Plus className="h-4 w-4" />}
+            onClick={() => setShowUploadModal(true)}
           >
-            {t('admin.gst.notice.filter.clearAll')}
-          </button>
-        )}
-      </div>
+            {t('admin.gst.notice.cta.upload')}
+          </Button>
+        }
+      />
 
-      {/* Error state */}
+      {/* KPI strip */}
+      {statCards.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {statCards.map(card => (
+            <Card key={card.label} padding="sm">
+              <p className="text-xs text-[var(--text-tertiary)]">{card.label}</p>
+              <p className={cn('text-2xl font-bold mt-1 tabular-nums', card.tone)}>{card.value}</p>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Filter bar */}
+      <Card padding="sm">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="w-full sm:w-72">
+            <Input
+              placeholder={t('admin.gst.notice.filter.search')}
+              value={search}
+              onChange={e => { setSearch(e.target.value); setFilters(f => ({ ...f, page: 1 })) }}
+              prefix={<Search className="h-4 w-4" />}
+              size="sm"
+              className="bg-[var(--surface-raised)] text-[var(--text-primary)] ring-1 ring-[var(--border-default)] focus:ring-[var(--border-focus)]"
+            />
+          </div>
+          <NativeSelect
+            label={t('admin.gst.notice.filter.status')}
+            value={statusFilter}
+            onChange={e => { setStatusFilter(e.target.value); setFilters(f => ({ ...f, page: 1 })) }}
+            aria-label={t('admin.gst.notice.filter.status')}
+            className="min-w-[160px]"
+          >
+            <option value="">{t('admin.gst.notice.filter.allStatuses')}</option>
+            <option value="RECEIVED">{t('admin.gst.notice.status.received')}</option>
+            <option value="UNDER_REVIEW">{t('admin.gst.notice.status.underReview')}</option>
+            <option value="RESPONDED">{t('admin.gst.notice.status.responded')}</option>
+            <option value="CLOSED">{t('admin.gst.notice.status.closed')}</option>
+          </NativeSelect>
+          <NativeSelect
+            label={t('admin.gst.notice.filter.due')}
+            value={dueFilter}
+            onChange={e => { setDueFilter(e.target.value); setFilters(f => ({ ...f, page: 1 })) }}
+            aria-label={t('admin.gst.notice.filter.due')}
+            className="min-w-[160px]"
+          >
+            <option value="">{t('admin.gst.notice.filter.allDates')}</option>
+            <option value="overdue">{t('admin.gst.notice.filter.overdue')}</option>
+            <option value="this_week">{t('admin.gst.notice.filter.thisWeek')}</option>
+            <option value="this_month">{t('admin.gst.notice.filter.thisMonth')}</option>
+          </NativeSelect>
+          {isFiltered && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-xs text-[var(--text-link)] hover:underline self-end pb-1"
+            >
+              {t('admin.gst.notice.filter.clearAll')}
+            </button>
+          )}
+        </div>
+      </Card>
+
       {isError && (
         <AlertBanner
           type="error"
           title={t('admin.gst.notice.error.load')}
           actions={
-            <button onClick={() => void refetch()} className="text-xs font-medium text-error-700 underline">
+            <button type="button" onClick={() => void refetch()} className="text-xs font-medium underline">
               {t('admin.gst.notice.error.retry')}
             </button>
           }
         />
       )}
 
-      {/* Loading skeleton */}
-      {isLoading && (
-        <div className="space-y-2 animate-pulse">
-          {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-            <div key={i} className="h-12 bg-neutral-100 rounded-xl" />
-          ))}
-        </div>
-      )}
+      {isLoading && <Skeleton variant="dataTableDense" />}
 
-      {/* Empty state */}
       {isEmpty && (
         <Card>
-          <div className="flex flex-col items-center py-12 gap-3">
-            <Inbox className="h-10 w-10 text-neutral-300" aria-hidden="true" />
-            <p className="text-base font-semibold text-neutral-700">
-              {search || statusFilter || dueFilter
-                ? t('admin.gst.notice.empty.filtered')
-                : t('admin.gst.notice.empty.title')}
-            </p>
-            <p className="text-sm text-neutral-400 text-center max-w-xs">
-              {search || statusFilter || dueFilter
-                ? t('admin.gst.notice.empty.filteredBody')
-                : t('admin.gst.notice.empty.body')}
-            </p>
-            {(search || statusFilter || dueFilter) && (
-              <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setStatusFilter(''); setDueFilter('') }}>
-                {t('admin.gst.notice.filter.clearAll')}
-              </Button>
-            )}
-          </div>
+          <EmptyState
+            variant={isFiltered ? 'search.noResults' : 'notice.inbox'}
+            title={isFiltered ? t('admin.gst.notice.empty.filtered') : t('admin.gst.notice.empty.title')}
+            description={isFiltered ? t('admin.gst.notice.empty.filteredBody') : t('admin.gst.notice.empty.body')}
+            primaryCta={!isFiltered ? { label: t('admin.gst.notice.cta.upload'), onPress: () => setShowUploadModal(true) } : undefined}
+            secondaryCta={isFiltered ? { label: t('admin.gst.notice.filter.clearAll'), onPress: clearFilters } : undefined}
+          />
         </Card>
       )}
 
-      {/* Desktop table */}
       {!isLoading && !isError && notices.length > 0 && (
         <>
-          <div className="hidden md:block overflow-x-auto rounded-xl bg-white shadow-sm">
-            <table className="w-full text-sm" role="grid" aria-label={t('admin.gst.notice.table.ariaLabel')}>
-              <thead>
-                <tr className="bg-neutral-50 border-b border-neutral-200">
-                  <th scope="col" className="px-4 py-3 w-8">
-                    <input
-                      type="checkbox"
-                      aria-label="Select all"
-                      checked={selectedIds.size === notices.length}
-                      onChange={e => {
-                        if (e.target.checked) setSelectedIds(new Set(notices.map(n => n.id)))
-                        else clearSelection()
-                      }}
-                      className="h-4 w-4 rounded border-neutral-300"
-                    />
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                    {t('admin.gst.notice.col.noticeNumber')}
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                    {t('admin.gst.notice.col.type')}
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                    {t('gst.notice.gstat.column')}
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                    {t('admin.gst.notice.col.gstin')}
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                    {t('admin.gst.notice.col.received')}
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                    {t('admin.gst.notice.col.due')}
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                    {t('admin.gst.notice.col.status')}
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                    {t('admin.gst.notice.col.ca')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
-                {notices.map((notice) => (
-                  <tr
-                    key={notice.id}
-                    className={cn(
-                      'hover:bg-neutral-50 cursor-pointer',
-                      selectedIds.has(notice.id) && 'bg-brand-50'
-                    )}
-                    onClick={() => void navigate(`/gst/notices/${notice.id}`)}
-                    aria-selected={selectedIds.has(notice.id)}
-                  >
-                    <td className="px-4 py-3" onClick={e => { e.stopPropagation(); toggleSelect(notice.id) }}>
+          <Card padding="none" className="overflow-hidden">
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm" role="grid" aria-label={t('admin.gst.notice.table.ariaLabel')}>
+                <thead>
+                  <tr className="bg-[var(--surface-sunken)] border-b border-[var(--border-subtle)]">
+                    <th scope="col" className="px-4 py-3 w-8">
                       <input
                         type="checkbox"
-                        checked={selectedIds.has(notice.id)}
-                        onChange={() => toggleSelect(notice.id)}
-                        aria-label={`Select notice ${notice.noticeNumber}`}
-                        className="h-4 w-4 rounded border-neutral-300"
-                        onClick={e => e.stopPropagation()}
+                        aria-label="Select all"
+                        checked={selectedIds.size === notices.length && notices.length > 0}
+                        onChange={e => {
+                          if (e.target.checked) setSelectedIds(new Set(notices.map(n => n.id)))
+                          else clearSelection()
+                        }}
+                        className="h-4 w-4 rounded border-[var(--border-default)]"
                       />
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-neutral-800">{notice.noticeNumber}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <NoticeFormTypeBadge formType={notice.noticeType as NoticeFormType} size="sm" />
-                    </td>
-                    <td className="px-4 py-3">
-                      {notice.gstatStage ? (
-                        <GstatStageChip currentStage={notice.gstatStage as GstatStage} />
-                      ) : (
-                        <span className="text-xs text-neutral-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-neutral-700">{notice.gstin}</span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-neutral-500">
-                      {new Date(notice.noticeDate).toLocaleDateString('en-IN')}
-                    </td>
-                    <td className="px-4 py-3">
-                      {notice.dueDate
-                        ? <DueDateChip dueDate={notice.dueDate} />
-                        : <span className="text-xs text-neutral-400">—</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3">
-                      {noticeStatusBadge(notice.status)}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-neutral-500">
-                      {notice.assignedCaName ?? (
-                        <span className="text-neutral-300">{t('admin.gst.notice.unassigned')}</span>
-                      )}
-                    </td>
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
+                      {t('admin.gst.notice.col.noticeNumber')}
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
+                      {t('admin.gst.notice.col.type')}
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
+                      {t('gst.notice.gstat.column')}
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
+                      {t('admin.gst.notice.col.gstin')}
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
+                      {t('admin.gst.notice.col.received')}
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
+                      {t('admin.gst.notice.col.due')}
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
+                      {t('admin.gst.notice.col.status')}
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
+                      {t('admin.gst.notice.col.ca')}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-subtle)]">
+                  {notices.map(notice => (
+                    <tr
+                      key={notice.id}
+                      className={cn(
+                        'hover:bg-[var(--surface-sunken)] cursor-pointer transition-colors',
+                        selectedIds.has(notice.id) && 'bg-brand-500/5',
+                      )}
+                      onClick={() => void navigate(`/gst/notices/${notice.id}`)}
+                      aria-selected={selectedIds.has(notice.id)}
+                    >
+                      <td className="px-4 py-3" onClick={e => { e.stopPropagation(); toggleSelect(notice.id) }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(notice.id)}
+                          onChange={() => toggleSelect(notice.id)}
+                          aria-label={`Select notice ${notice.noticeNumber}`}
+                          className="h-4 w-4 rounded border-[var(--border-default)]"
+                          onClick={e => e.stopPropagation()}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-[var(--text-primary)]">{notice.noticeNumber}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <NoticeFormTypeBadge formType={notice.noticeType as NoticeFormType} size="sm" />
+                      </td>
+                      <td className="px-4 py-3">
+                        {notice.gstatStage ? (
+                          <GstatStageChip currentStage={notice.gstatStage as GstatStage} />
+                        ) : (
+                          <span className="text-xs text-[var(--text-disabled)]">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-[var(--text-secondary)]">{notice.gstin || '—'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-[var(--text-tertiary)]">
+                        {formatDate(notice.noticeDate)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {notice.dueDate
+                          ? <DueDateChip dueDate={notice.dueDate} />
+                          : <span className="text-xs text-[var(--text-tertiary)]">—</span>
+                        }
+                      </td>
+                      <td className="px-4 py-3">{noticeStatusBadge(notice.status)}</td>
+                      <td className="px-4 py-3 text-xs text-[var(--text-tertiary)]">
+                        {notice.assignedCaName ?? (
+                          <span className="text-[var(--text-disabled)]">{t('admin.gst.notice.unassigned')}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-          {/* Mobile cards */}
-          <div className="md:hidden space-y-2">
-            {notices.map(notice => (
-              <NoticeRowCard
-                key={notice.id}
-                notice={notice}
-                onClick={() => void navigate(`/gst/notices/${notice.id}`)}
-              />
-            ))}
-          </div>
+            <div className="md:hidden p-3 space-y-2">
+              {notices.map(notice => (
+                <NoticeRowCard
+                  key={notice.id}
+                  notice={notice}
+                  onClick={() => void navigate(`/gst/notices/${notice.id}`)}
+                />
+              ))}
+            </div>
+          </Card>
 
-          {/* Pagination */}
-          <div className="flex items-center justify-between text-sm text-neutral-500">
+          <div className="flex items-center justify-between text-sm text-[var(--text-tertiary)]">
             <span>{t('admin.gst.notice.pagination.total', { count: totalCount })}</span>
             <div className="flex gap-1">
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={(filters.page ?? 1) <= 1}
                 onClick={() => setFilters(f => ({ ...f, page: Math.max(1, (f.page ?? 1) - 1) }))}
-                className="px-3 py-1 rounded border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40"
               >
                 {t('admin.gst.notice.pagination.prev')}
-              </button>
-              <span className="px-3 py-1">{t('admin.gst.notice.pagination.page', { page: filters.page ?? 1 })}</span>
-              <button
+              </Button>
+              <span className="px-3 py-1.5 text-[var(--text-primary)]">
+                {t('admin.gst.notice.pagination.page', { page: filters.page ?? 1 })}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={(filters.page ?? 1) * (filters.pageSize ?? 25) >= totalCount}
                 onClick={() => setFilters(f => ({ ...f, page: (f.page ?? 1) + 1 }))}
-                className="px-3 py-1 rounded border border-neutral-200 hover:bg-neutral-50 disabled:opacity-40"
               >
                 {t('admin.gst.notice.pagination.next')}
-              </button>
+              </Button>
             </div>
           </div>
         </>
       )}
 
-      {/* Selection toolbar */}
       <SelectionToolbar
         selectedCount={selectedIds.size}
         onClear={clearSelection}
@@ -573,13 +606,11 @@ export default function NoticeTrackerListPage() {
         ]}
       />
 
-      {/* Upload modal */}
-      {showUploadModal && (
-        <UploadNoticeModal
-          onClose={() => setShowUploadModal(false)}
-          onCreated={handleCreated}
-        />
-      )}
-    </main>
+      <UploadNoticeModal
+        open={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onCreated={handleCreated}
+      />
+    </div>
   )
 }

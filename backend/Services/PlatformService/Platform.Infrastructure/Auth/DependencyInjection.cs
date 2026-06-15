@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.ServiceDiscovery;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Infrastructure.Auth;
 using SnapAccount.Shared.Infrastructure.Messaging;
@@ -104,7 +105,8 @@ public static class DependencyInjection
 
         // GAP-038/052: Service health probe client — Aspire service-discovery resolves
         // http://{service-name} URIs at runtime. Short timeout (3 s) set per-request in the endpoint.
-        services.AddHttpClient("HealthProbe");
+        services.AddServiceDiscovery();
+        services.AddHttpClient("HealthProbe").AddServiceDiscovery();
         services.AddScoped<IOtpSmsSender, Msg91OtpSmsSender>();
 
         // Domain services

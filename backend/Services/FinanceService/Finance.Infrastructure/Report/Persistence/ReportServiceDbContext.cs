@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ReportService.Application.Common.Interfaces;
 using ReportService.Domain.Entities;
+using ReportService.Infrastructure.Persistence.Configurations;
 using SnapAccount.Shared.Infrastructure.Persistence;
 
 namespace ReportService.Infrastructure.Persistence;
@@ -18,7 +19,9 @@ public sealed class ReportServiceDbContext(DbContextOptions<ReportServiceDbConte
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("report");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(ReportServiceDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(ReportServiceDbContext).Assembly,
+            type => type.Namespace == typeof(ReportJobConfiguration).Namespace);
         base.OnModelCreating(modelBuilder);
     }
 }

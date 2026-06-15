@@ -1,5 +1,6 @@
 using LoanService.Application.Common.Interfaces;
 using LoanService.Domain.Entities;
+using LoanService.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Infrastructure.Persistence;
 using System.Text.Json;
@@ -50,7 +51,9 @@ public class LoanServiceDbContext(DbContextOptions<LoanServiceDbContext> options
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("loan");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(LoanServiceDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(LoanServiceDbContext).Assembly,
+            type => type.Namespace == typeof(LoanApplicationConfiguration).Namespace);
         base.OnModelCreating(modelBuilder);
 
         // SWEEP-FIX: loan.consents has NO deleted_at column (immutable 7-year retention table,

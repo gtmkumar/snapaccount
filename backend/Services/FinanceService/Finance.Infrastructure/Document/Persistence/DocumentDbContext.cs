@@ -46,7 +46,9 @@ public class DocumentDbContext(DbContextOptions<DocumentDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("document");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(DocumentDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(DocumentDbContext).Assembly,
+            type => type.Namespace == "DocumentService.Infrastructure.Persistence.Configurations");
         base.OnModelCreating(modelBuilder);
 
         // The DB schema (built from database/migrations/*.sql) uses snake_case, SINGULAR

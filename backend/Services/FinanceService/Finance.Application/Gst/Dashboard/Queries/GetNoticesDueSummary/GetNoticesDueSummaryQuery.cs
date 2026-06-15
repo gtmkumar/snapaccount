@@ -27,27 +27,27 @@ public sealed class GetNoticesDueSummaryQueryHandler(IGstDbContext db)
     : IQueryHandler<GetNoticesDueSummaryQuery, NoticesDueSummaryDto>
 {
     // A notice is no longer "due" once it has been responded to or closed.
-    private static readonly string[] TerminalStatuses = ["RESPONDED", "CLOSED"];
-
+    // (Status filter is inlined in the handler for reliable EF SQL translation.)
     public async Task<Result<NoticesDueSummaryDto>> Handle(GetNoticesDueSummaryQuery request, CancellationToken ct)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var in2Days = today.AddDays(2);
         var inWeek = today.AddDays(7);
 
-        var open = db.GstNotices.Where(n => n.DeletedAt == null && !TerminalStatuses.Contains(n.Status));
+        // Open = not yet responded or closed. Avoid Contains() on a static array — some
+        // EF Core + Npgsql builds fail to translate it inside aggregate projections.
+        var open = db.GstNotices.Where(n =>
+            n.DeletedAt == null &&
+            n.Status != "RESPONDED" &&
+            n.Status != "CLOSED");
 
-        // Single round-trip: conditional counts aggregate to SUM(CASE WHEN …) in SQL.
-        var summary = await open
-            .GroupBy(_ => 1)
-            .Select(g => new NoticesDueSummaryDto(
-                g.Count(n => n.DueDate != null && n.DueDate < today),
-                g.Count(n => n.DueDate != null && n.DueDate >= today && n.DueDate <= in2Days),
-                g.Count(n => n.DueDate != null && n.DueDate >= today && n.DueDate <= inWeek),
-                g.Count()))
-            .FirstOrDefaultAsync(ct);
+        var overdue = await open.CountAsync(n => n.DueDate != null && n.DueDate < today, ct);
+        var dueIn2Days = await open.CountAsync(
+            n => n.DueDate != null && n.DueDate >= today && n.DueDate <= in2Days, ct);
+        var dueThisWeek = await open.CountAsync(
+            n => n.DueDate != null && n.DueDate >= today && n.DueDate <= inWeek, ct);
+        var total = await open.CountAsync(ct);
 
-        return Result<NoticesDueSummaryDto>.Success(
-            summary ?? new NoticesDueSummaryDto(0, 0, 0, 0));
+        return new NoticesDueSummaryDto(overdue, dueIn2Days, dueThisWeek, total);
     }
 }

@@ -61,14 +61,14 @@ export function GstatStageChip({ currentStage, className }: GstatStageChipProps)
     <span
       className={cn(
         'inline-flex items-center gap-1 text-xs font-medium rounded px-2 py-0.5',
-        'bg-violet-50 text-violet-800 border border-violet-200 whitespace-nowrap',
+        'bg-[var(--chip-violet-bg)] text-[var(--chip-violet-fg)] border border-[var(--chip-violet-border)] whitespace-nowrap',
         className
       )}
       aria-label={ariaLabel}
       title={ariaLabel}
     >
       {current != null && (
-        <span className="text-violet-500 font-mono" aria-hidden="true">
+        <span className="text-[var(--chip-violet-fg)] opacity-80 font-mono" aria-hidden="true">
           {current}/{total}
         </span>
       )}

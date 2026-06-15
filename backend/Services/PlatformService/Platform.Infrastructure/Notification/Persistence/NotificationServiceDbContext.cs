@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NotificationService.Application.Interfaces;
 using NotificationService.Domain.Entities;
+using NotificationService.Infrastructure.Persistence.Configurations;
 using SnapAccount.Shared.Infrastructure.Persistence;
 
 namespace NotificationService.Infrastructure.Persistence;
@@ -25,7 +26,9 @@ public class NotificationServiceDbContext(
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("notification");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(NotificationServiceDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(NotificationServiceDbContext).Assembly,
+            type => type.Namespace == typeof(NotificationEventConfiguration).Namespace);
         base.OnModelCreating(modelBuilder);
     }
 }

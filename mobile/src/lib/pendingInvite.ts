@@ -20,7 +20,7 @@
  * persisted token simply fails validation with a localized error).
  */
 
-import * as SecureStore from 'expo-secure-store';
+import { secureStorage } from './secureStorage';
 
 const PENDING_INVITE_KEY = 'snapaccount.pendingInviteToken';
 
@@ -38,7 +38,7 @@ function isPlausibleToken(token: string): boolean {
 export async function storePendingInviteToken(token: string): Promise<void> {
   if (!isPlausibleToken(token)) return;
   try {
-    await SecureStore.setItemAsync(PENDING_INVITE_KEY, token.trim());
+    await secureStorage.setItem(PENDING_INVITE_KEY, token.trim());
   } catch {
     // Non-fatal — manual code entry remains available.
   }
@@ -47,7 +47,7 @@ export async function storePendingInviteToken(token: string): Promise<void> {
 /** Read the pending token without clearing it (returns null when absent). */
 export async function peekPendingInviteToken(): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync(PENDING_INVITE_KEY);
+    return await secureStorage.getItem(PENDING_INVITE_KEY);
   } catch {
     return null;
   }
@@ -60,8 +60,8 @@ export async function peekPendingInviteToken(): Promise<string | null> {
  */
 export async function consumePendingInviteToken(): Promise<string | null> {
   try {
-    const token = await SecureStore.getItemAsync(PENDING_INVITE_KEY);
-    if (token) await SecureStore.deleteItemAsync(PENDING_INVITE_KEY);
+    const token = await secureStorage.getItem(PENDING_INVITE_KEY);
+    if (token) await secureStorage.removeItem(PENDING_INVITE_KEY);
     return token;
   } catch {
     return null;
@@ -71,7 +71,7 @@ export async function consumePendingInviteToken(): Promise<string | null> {
 /** Explicitly clear the pending token (accept success / decline / sign-out). */
 export async function clearPendingInviteToken(): Promise<void> {
   try {
-    await SecureStore.deleteItemAsync(PENDING_INVITE_KEY);
+    await secureStorage.removeItem(PENDING_INVITE_KEY);
   } catch {
     // Non-fatal.
   }

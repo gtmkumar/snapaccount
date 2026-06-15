@@ -1,5 +1,6 @@
 using AccountingService.Application.Common.Interfaces;
 using AccountingService.Domain.Entities;
+using AccountingService.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Infrastructure.Persistence;
 
@@ -55,7 +56,9 @@ public class AccountingDbContext(DbContextOptions<AccountingDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("accounting");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AccountingDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(AccountingDbContext).Assembly,
+            type => type.Namespace == typeof(EditLogConfiguration).Namespace);
         base.OnModelCreating(modelBuilder);
     }
 }

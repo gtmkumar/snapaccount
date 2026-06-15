@@ -1,5 +1,6 @@
 using GstService.Application.Common.Interfaces;
 using GstService.Domain.Entities;
+using GstService.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Infrastructure.Persistence;
 
@@ -83,6 +84,8 @@ public class GstDbContext(DbContextOptions<GstDbContext> options)
         // where those columns are character varying(128), NOT uuid) call
         // HasConversion<string>() after this base call, which wins the last-write.
         base.OnModelCreating(modelBuilder);
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(GstDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(GstDbContext).Assembly,
+            type => type.Namespace == typeof(GstNoticeConfiguration).Namespace);
     }
 }

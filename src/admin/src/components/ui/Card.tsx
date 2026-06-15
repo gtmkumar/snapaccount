@@ -48,12 +48,12 @@ export function Card({
   return (
     <div
       className={cn(
-        'bg-white transition-all duration-200',
+        'bg-[var(--surface-raised)] text-[var(--text-primary)] transition-all duration-200',
         paddingClasses[padding],
         shadowClasses[shadow],
         radiusClasses[radius],
-        !selected && !border && 'shadow-sm',
-        border && !selected && 'border border-neutral-200',
+        !selected && !border && 'shadow-sm border border-[var(--border-subtle)]',
+        border && !selected && 'border border-[var(--border-subtle)]',
         selected && 'ring-2 ring-brand-500 shadow-md',
         clickable && !selected && 'cursor-pointer hover:shadow-md hover:-translate-y-px',
         className

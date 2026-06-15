@@ -2,7 +2,7 @@
 const Constants = {
   expoConfig: {
     extra: {
-      apiBaseUrl: 'http://localhost:5000/api',
+      apiBaseUrl: 'http://localhost:5000',
     },
     name: 'SnapAccount',
     version: '1.0.0',

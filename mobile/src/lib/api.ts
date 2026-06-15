@@ -28,10 +28,21 @@ declare module 'axios' {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config — single API gateway (YARP :5000) routes to Platform / Finance / Assist.
-// Physical device: set apiBaseUrl in app.json to http://<LAN-IP>:5000
+// Mobile calls the gateway directly (unlike the admin Vite proxy which strips /api).
+// Physical device: set EXPO_PUBLIC_API_BASE_URL=http://<LAN-IP>:5000 in .env.local
 // ─────────────────────────────────────────────────────────────────────────────
 
 const extra = Constants.expoConfig?.extra ?? {};
+
+/**
+ * Strip a trailing `/api` segment if present. The YARP gateway routes are
+ * `/auth/…`, `/gst/…` etc. — NOT `/api/auth/…`. The admin panel uses a Vite
+ * proxy that adds then strips `/api`; mobile must hit the gateway root.
+ */
+export function normalizeGatewayBaseUrl(url: string): string {
+  const trimmed = url.replace(/\/+$/, '');
+  return trimmed.endsWith('/api') ? trimmed.slice(0, -4) : trimmed;
+}
 
 /**
  * The Android emulator cannot reach the host machine via `localhost` (that
@@ -46,12 +57,20 @@ function resolveHost(url: string): string {
   return url;
 }
 
-const API_BASE_URL = resolveHost(
-  (extra.apiBaseUrl as string | undefined) ?? 'http://localhost:5000',
-);
+function resolveGatewayBaseUrl(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_API_BASE_URL;
+  const fromExtra = extra.apiBaseUrl as string | undefined;
+  const raw = fromEnv ?? fromExtra ?? 'http://localhost:5000';
+  return resolveHost(normalizeGatewayBaseUrl(raw));
+}
 
-/** SignalR chat hub — same gateway host; routes /hubs/chat → Assist composite. */
-export const CHAT_HUB_BASE_URL: string = API_BASE_URL;
+const API_BASE_URL = resolveGatewayBaseUrl();
+
+/** SignalR chat hub — gateway routes /hubs/chat → Assist composite. */
+const chatOverride = extra.chatBaseUrl as string | undefined;
+export const CHAT_HUB_BASE_URL: string = chatOverride
+  ? resolveHost(normalizeGatewayBaseUrl(chatOverride))
+  : API_BASE_URL;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GAP-064 — device integrity attestation headers (Wave 8 pinned contract).

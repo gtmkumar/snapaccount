@@ -1,5 +1,6 @@
 using ChatService.Application.Common.Interfaces;
 using ChatService.Domain.Entities;
+using ChatService.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Infrastructure.Persistence;
 
@@ -48,7 +49,9 @@ public class ChatServiceDbContext(DbContextOptions<ChatServiceDbContext> options
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("chat");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(ChatServiceDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(ChatServiceDbContext).Assembly,
+            type => type.Namespace == typeof(ChatThreadConfiguration).Namespace);
         base.OnModelCreating(modelBuilder);
     }
 }

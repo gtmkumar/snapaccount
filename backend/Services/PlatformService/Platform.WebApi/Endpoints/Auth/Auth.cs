@@ -318,7 +318,7 @@ public sealed class Auth : EndpointGroupBase
     private static async Task<IResult> GetMe(ISender sender)
     {
         var result = await sender.Send(new GetCurrentUserQuery());
-        return result.IsSuccess ? Results.Ok(result.Value) : Results.Unauthorized();
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
     }
 
     // GET /auth/me/permissions [Authorize]

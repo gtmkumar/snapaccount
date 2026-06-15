@@ -187,6 +187,120 @@ export const GstNoticesListSchema = z.object({
   pageSize: z.number(),
 })
 
+/** Backend list DTO from GET /gst/notices (Finance ListNoticesQuery). */
+const GstNoticeListItemBackendSchema = z.object({
+  id: z.string(),
+  noticeNumber: z.string(),
+  noticeType: z.string(),
+  formType: z.string().optional(),
+  status: z.string(),
+  issuedDate: z.string(),
+  statutoryDeadline: z.string().nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+  deadlineOverridden: z.boolean().optional(),
+  description: z.string().nullable().optional(),
+  assignedCaId: z.string().nullable().optional(),
+  respondedAt: z.string().nullable().optional(),
+  appealStage: z.string().optional(),
+  appealDeadline: z.string().nullable().optional(),
+  isGstatBacklogFlagged: z.boolean().optional(),
+})
+
+const GstNoticesListBackendSchema = z.object({
+  items: z.array(GstNoticeListItemBackendSchema),
+  totalCount: z.number(),
+  page: z.number(),
+  pageSize: z.number(),
+})
+
+/** Backend detail DTO from GET /gst/notices/{id}. */
+const GstNoticeDetailBackendSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  noticeNumber: z.string(),
+  noticeType: z.string(),
+  formType: z.string().optional(),
+  issuedBy: z.string().nullable().optional(),
+  status: z.string(),
+  issuedDate: z.string(),
+  statutoryDeadline: z.string().nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+  deadlineOverridden: z.boolean().optional(),
+  daysRemaining: z.number().nullable().optional(),
+  isOverdue: z.boolean().optional(),
+  description: z.string().nullable().optional(),
+  assignedCaId: z.string().nullable().optional(),
+  respondedAt: z.string().nullable().optional(),
+  respondedBy: z.string().nullable().optional(),
+  attachmentsJson: z.string().nullable().optional(),
+  responseAttachmentsJson: z.string().nullable().optional(),
+  appealStage: z.string().optional(),
+  appealDeadline: z.string().nullable().optional(),
+  appealDaysRemaining: z.number().nullable().optional(),
+  isGstatBacklogFlagged: z.boolean().optional(),
+})
+
+function normalizeNoticeType(raw: string): string {
+  return raw.trim().replace(/_/g, '-').toUpperCase()
+}
+
+function parseNoticeType(raw: string): GstNoticeType {
+  const normalized = normalizeNoticeType(raw)
+  const parsed = GstNoticeTypeSchema.safeParse(normalized)
+  return parsed.success ? parsed.data : 'OTHER'
+}
+
+function parseNoticeStatus(raw: string): GstNoticeStatus {
+  const parsed = GstNoticeStatusSchema.safeParse(raw)
+  return parsed.success ? parsed.data : 'RECEIVED'
+}
+
+function mapBackendListItem(
+  item: z.infer<typeof GstNoticeListItemBackendSchema>,
+): GstNotice {
+  return {
+    id: String(item.id),
+    organizationId: '',
+    gstin: '',
+    noticeNumber: item.noticeNumber,
+    noticeType: parseNoticeType(item.noticeType),
+    noticeDate: item.issuedDate,
+    dueDate: item.dueDate ?? null,
+    statutoryDeadline: item.statutoryDeadline ?? null,
+    status: parseNoticeStatus(item.status),
+    description: item.description ?? null,
+    assignedCaId: item.assignedCaId ? String(item.assignedCaId) : null,
+    gstatStage: item.appealStage as GstatStageType,
+    isGstatBacklogEligible: item.isGstatBacklogFlagged,
+    createdAt: item.issuedDate,
+    updatedAt: item.respondedAt ?? item.issuedDate,
+  }
+}
+
+function mapBackendDetail(
+  item: z.infer<typeof GstNoticeDetailBackendSchema>,
+): GstNotice {
+  return {
+    id: String(item.id),
+    organizationId: String(item.organizationId),
+    gstin: '',
+    noticeNumber: item.noticeNumber,
+    noticeType: parseNoticeType(item.noticeType),
+    noticeDate: item.issuedDate,
+    dueDate: item.dueDate ?? null,
+    statutoryDeadline: item.statutoryDeadline ?? null,
+    status: parseNoticeStatus(item.status),
+    description: item.description ?? null,
+    assignedCaId: item.assignedCaId ? String(item.assignedCaId) : null,
+    respondedAt: item.respondedAt ?? null,
+    respondedBy: item.respondedBy ? String(item.respondedBy) : null,
+    gstatStage: item.appealStage as GstatStageType,
+    isGstatBacklogEligible: item.isGstatBacklogFlagged,
+    createdAt: item.issuedDate,
+    updatedAt: item.respondedAt ?? item.issuedDate,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Phase 6B: E-Invoice (IRP)
 // ---------------------------------------------------------------------------
@@ -373,13 +487,25 @@ export interface ListNoticesParams {
 }
 
 export async function listGstNotices(params: ListNoticesParams = {}) {
-  const res = await api.get('/gst/notices', { params })
-  return GstNoticesListSchema.parse(res.data)
+  const { orgId, ...rest } = params
+  const res = await api.get('/gst/notices', {
+    params: {
+      ...rest,
+      ...(orgId ? { organizationId: orgId } : {}),
+    },
+  })
+  const parsed = GstNoticesListBackendSchema.parse(res.data)
+  return {
+    items: parsed.items.map(mapBackendListItem),
+    totalCount: parsed.totalCount,
+    page: parsed.page,
+    pageSize: parsed.pageSize,
+  }
 }
 
 export async function getGstNotice(id: string) {
   const res = await api.get(`/gst/notices/${id}`)
-  return GstNoticeSchema.parse(res.data)
+  return mapBackendDetail(GstNoticeDetailBackendSchema.parse(res.data))
 }
 
 export interface CreateNoticeRequest {

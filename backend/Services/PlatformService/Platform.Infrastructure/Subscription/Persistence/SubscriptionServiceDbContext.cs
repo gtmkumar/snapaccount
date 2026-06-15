@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Infrastructure.Persistence;
 using SubscriptionService.Application.Common.Interfaces;
 using SubscriptionService.Domain.Entities;
+using SubscriptionService.Infrastructure.Persistence.Configurations;
 
 namespace SubscriptionService.Infrastructure.Persistence;
 
@@ -28,7 +29,9 @@ public class SubscriptionServiceDbContext(DbContextOptions<SubscriptionServiceDb
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("subscription");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(SubscriptionServiceDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(SubscriptionServiceDbContext).Assembly,
+            type => type.Namespace == typeof(PlanConfiguration).Namespace);
         base.OnModelCreating(modelBuilder);
     }
 }

@@ -27,6 +27,7 @@
     <PackageReference Include="Hangfire.Core" Version="1.*" />
     <PackageReference Include="Google.Cloud.PubSub.V1" Version="3.*" />
     <PackageReference Include="MediatR" Version="12.*" />
+    <PackageReference Include="Microsoft.Extensions.ServiceDiscovery" Version="10.*" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Platform.Application/Platform.Application.csproj" />

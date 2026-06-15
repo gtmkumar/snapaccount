@@ -50,11 +50,11 @@ function formatAriaLabel(days: number, dueDate: string): string {
 }
 
 const bucketClasses: Record<DueBucket, string> = {
-  overdue: 'bg-red-100 text-red-700 border-l-2 border-red-600',
-  critical: 'bg-amber-100 text-amber-800',
-  warning: 'bg-amber-50 text-amber-700',
-  normal: 'bg-slate-100 text-slate-700',
-  far: 'bg-slate-50 text-slate-600',
+  overdue: 'bg-[var(--semantic-error-bg)] text-[var(--semantic-error-fg)] border-l-2 border-[var(--semantic-error-fg)]',
+  critical: 'bg-[var(--semantic-warning-bg)] text-[var(--semantic-warning-fg)]',
+  warning: 'bg-[var(--chip-amber-bg)] text-[var(--chip-amber-fg)]',
+  normal: 'bg-[var(--chip-slate-bg)] text-[var(--chip-slate-fg)]',
+  far: 'bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)]',
 }
 
 const sizeClasses: Record<DueDateChipSize, string> = {

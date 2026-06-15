@@ -22,6 +22,8 @@ IResourceBuilder<T> WithDevLoopDefaults<T>(IResourceBuilder<T> b, int httpPort)
     if (!string.IsNullOrEmpty(gac)) b = b.WithEnvironment("GOOGLE_APPLICATION_CREDENTIALS", gac);
     if (!string.IsNullOrEmpty(localAuth)) b = b.WithEnvironment("LOCAL_AUTH", localAuth);
     if (!string.IsNullOrEmpty(localAuthSecret)) b = b.WithEnvironment("LOCAL_AUTH__SECRET", localAuthSecret);
+    // SEC-013: dev PAN encryption key (32 zero bytes) — matches CI smoke test
+    b = b.WithEnvironment("PanEncryption__Key", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
     return b
         .WithEndpoint("http", e => { e.Port = httpPort; e.IsProxied = false; }, createIfNotExists: false)
         .WithReference(snapAccountDb)

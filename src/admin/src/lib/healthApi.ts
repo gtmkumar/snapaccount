@@ -36,20 +36,12 @@ export type AggregateHealth = z.infer<typeof AggregateHealthSchema>
 
 // ── Service definitions ───────────────────────────────────────────────────────
 
-/** Known service names — matches Aspire service references. */
+/** Known service names — matches Aspire composite service references. */
 export const KNOWN_SERVICES = [
-  'auth-service',
-  'document-service',
-  'accounting-service',
-  'gst-service',
-  'loan-service',
-  'itr-service',
-  'chat-service',
-  'notification-service',
-  'report-service',
-  'subscription-service',
-  'ai-service',
-  'callback-service',
+  'api-gateway',
+  'platform-service',
+  'finance-service',
+  'assist-service',
 ] as const
 
 export type KnownService = (typeof KNOWN_SERVICES)[number]
@@ -117,11 +109,14 @@ async function probeService(name: string): Promise<ServiceHealth> {
  * falling back to per-service probes.
  */
 export async function getAggregateHealth(): Promise<AggregateHealth> {
-  // Try the aggregate endpoint first (will exist when devops proxy is deployed)
+  // Try the aggregate endpoint first (composite architecture exposes this on Platform).
   try {
     const res = await api.get('/admin/health/aggregate', { timeout: 8_000 })
     return AggregateHealthSchema.parse(res.data)
-  } catch {
+  } catch (err) {
+    const status = (err as { response?: { status?: number } })?.response?.status
+    // Auth failures must not fall through to per-service probes (those routes 404 on the gateway).
+    if (status === 401 || status === 403) throw err
     // Proxy not available — fan out per-service probes
   }
 

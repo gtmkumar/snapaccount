@@ -61,6 +61,12 @@ const makeNotice = (overrides = {}) => ({
 
 describe('NoticeTrackerListPage', () => {
   beforeEach(() => {
+    vi.spyOn(gstApi, 'getNoticesDueSummary').mockResolvedValue({
+      overdue: 0,
+      dueIn2Days: 0,
+      dueThisWeek: 1,
+      total: 1,
+    })
     vi.spyOn(gstApi, 'listGstNotices').mockResolvedValue({
       items: [makeNotice()],
       totalCount: 1,
@@ -72,7 +78,7 @@ describe('NoticeTrackerListPage', () => {
   it('shows loading skeleton before data arrives', () => {
     vi.spyOn(gstApi, 'listGstNotices').mockReturnValue(new Promise(() => {}))
     renderPage()
-    const skeletons = document.querySelectorAll('.animate-pulse')
+    const skeletons = document.querySelectorAll('.skeleton-shimmer')
     expect(skeletons.length).toBeGreaterThan(0)
   })
 
@@ -98,8 +104,7 @@ describe('NoticeTrackerListPage', () => {
   it('renders filter bar search input', async () => {
     renderPage()
     await screen.findAllByText(/ASMT10-2024-001/)
-    const searchInputs = document.querySelectorAll('input[type="text"], input[type="search"]')
-    expect(searchInputs.length).toBeGreaterThan(0)
+    expect(screen.getByPlaceholderText(/Search notice/i)).toBeInTheDocument()
   })
 
   it('renders Upload Notice button', async () => {

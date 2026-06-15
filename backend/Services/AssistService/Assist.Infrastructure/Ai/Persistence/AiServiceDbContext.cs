@@ -1,5 +1,6 @@
 using AiService.Application.Common.Interfaces;
 using AiService.Domain.Entities;
+using AiService.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Infrastructure.Persistence;
 
@@ -35,6 +36,8 @@ public class AiServiceDbContext(DbContextOptions<AiServiceDbContext> options)
         // InvalidCastException on full-entity materialisation (FirstOrDefaultAsync / ToListAsync
         // with no projection). Running base first means per-entity configs win the last-write.
         base.OnModelCreating(modelBuilder);
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AiServiceDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(AiServiceDbContext).Assembly,
+            type => type.Namespace == typeof(AiChunkConfiguration).Namespace);
     }
 }

@@ -3,9 +3,9 @@
  * Persists to expo-secure-store for encrypted storage of sensitive auth data
  */
 
-import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { secureStorage } from '../lib/secureStorage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -76,20 +76,8 @@ export interface AuthState {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SecureStore adapter for zustand persist
+// Persist adapter (SecureStore on native, localStorage on Expo web)
 // ─────────────────────────────────────────────────────────────────────────────
-
-const secureStorage = {
-  getItem: async (key: string): Promise<string | null> => {
-    return SecureStore.getItemAsync(key);
-  },
-  setItem: async (key: string, value: string): Promise<void> => {
-    await SecureStore.setItemAsync(key, value);
-  },
-  removeItem: async (key: string): Promise<void> => {
-    await SecureStore.deleteItemAsync(key);
-  },
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Store

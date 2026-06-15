@@ -1,5 +1,6 @@
 using AuthService.Application.Common.Interfaces;
 using AuthService.Domain.Entities;
+using AuthService.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Infrastructure.Persistence;
 
@@ -117,7 +118,9 @@ public class AuthDbContext(DbContextOptions<AuthDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("auth");
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AuthDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(AuthDbContext).Assembly,
+            type => type.Namespace == typeof(UserConfiguration).Namespace);
         // AuditLogEntry lives in shared.audit_log — exclude it from EF migrations.
         // The shared.audit_log table is owned by migration 012 (partitioned by month).
         modelBuilder.Entity<AuditLogEntry>().ToTable(

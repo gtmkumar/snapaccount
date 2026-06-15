@@ -14,7 +14,7 @@ import { getNoticesDueSummary } from '@/lib/gstApi'
 export function NoticesDueWidget() {
   const navigate = useNavigate()
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['gst-notices-due-summary'],
     queryFn: getNoticesDueSummary,
     staleTime: 60_000,
@@ -48,6 +48,8 @@ export function NoticesDueWidget() {
             </div>
           ))}
         </div>
+      ) : isError ? (
+        <p className="text-sm text-error-600">{t('admin.gst.notice.widget.loadError')}</p>
       ) : (
         <div className="space-y-3">
           <div className="flex justify-between items-center">

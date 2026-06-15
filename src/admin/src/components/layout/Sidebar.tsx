@@ -289,7 +289,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'flex flex-col h-full bg-neutral-800 transition-all duration-300',
+        'flex flex-col h-full bg-[var(--nav-sidebar-bg)] transition-all duration-300',
         collapsed ? 'w-16' : 'w-60'
       )}
       aria-label="Main navigation"
@@ -305,7 +305,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         {!collapsed && (
           <div>
             <p className="font-bold text-white leading-tight">SnapAccount</p>
-            <p className="text-xs text-neutral-400">Admin Panel</p>
+            <p className="text-xs text-[var(--nav-sidebar-text)]">Admin Panel</p>
           </div>
         )}
       </div>
@@ -323,10 +323,10 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
               onClick={onMobileClose}
               className={({ isActive: navActive }) => cn(
                 'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150',
-                'focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-800',
+                'focus-visible:ring-2 focus-visible:ring-[var(--nav-sidebar-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--nav-sidebar-bg)]',
                 (isActive || navActive)
-                  ? 'bg-white/10 text-white'
-                  : 'text-neutral-400 hover:bg-white/5 hover:text-white',
+                  ? 'bg-[var(--nav-sidebar-active-bg)] text-[var(--nav-sidebar-text-active)]'
+                  : 'text-[var(--nav-sidebar-text)] hover:bg-[var(--nav-sidebar-hover)] hover:text-[var(--nav-sidebar-text-active)]',
                 collapsed && 'justify-center px-0'
               )}
               title={collapsed ? item.label : undefined}
@@ -335,7 +335,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
               {/* Active left accent bar */}
               {location.pathname.startsWith(item.href) && (
                 <span
-                  className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-brand-400"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-[var(--nav-sidebar-accent)]"
                   aria-hidden="true"
                 />
               )}
@@ -354,7 +354,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       </nav>
 
       {/* Bottom section */}
-      <div className="border-t border-white/10 p-2 space-y-0.5">
+      <div className="border-t border-[var(--nav-sidebar-border)] p-2 space-y-0.5">
         {/* User profile */}
         {user && (
           <div className={cn(
@@ -366,14 +366,14 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                 ? user.displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
                 : user.email?.[0]?.toUpperCase() ?? '?'}
               {/* Online indicator */}
-              <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-success-500 ring-2 ring-neutral-800" aria-hidden="true" />
+              <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-success-500 ring-2 ring-[var(--nav-sidebar-bg)]" aria-hidden="true" />
             </div>
             {!collapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">
                   {user.displayName ?? user.email}
                 </p>
-                <p className="text-xs text-neutral-400 truncate capitalize">
+                <p className="text-xs text-[var(--nav-sidebar-text)] truncate capitalize">
                   {user.role.toLowerCase().replace('_', ' ')}
                 </p>
               </div>
@@ -385,9 +385,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         <button
           onClick={() => void signOut()}
           className={cn(
-            'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-neutral-400',
-            'hover:bg-white/5 hover:text-white transition-colors duration-150',
-            'focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-800',
+            'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-[var(--nav-sidebar-text)]',
+            'hover:bg-[var(--nav-sidebar-hover)] hover:text-[var(--nav-sidebar-text-active)] transition-colors duration-150',
+            'focus-visible:ring-2 focus-visible:ring-[var(--nav-sidebar-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--nav-sidebar-bg)]',
             collapsed && 'justify-center px-0'
           )}
           title={collapsed ? 'Sign out' : undefined}
@@ -401,9 +401,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         <button
           onClick={onToggle}
           className={cn(
-            'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-neutral-500',
-            'hover:bg-white/5 hover:text-neutral-300 transition-colors duration-150',
-            'focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-800',
+            'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-[var(--nav-sidebar-text-muted)]',
+            'hover:bg-[var(--nav-sidebar-hover)] hover:text-[var(--nav-sidebar-text)] transition-colors duration-150',
+            'focus-visible:ring-2 focus-visible:ring-[var(--nav-sidebar-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--nav-sidebar-bg)]',
             collapsed && 'justify-center px-0'
           )}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}

@@ -288,6 +288,7 @@
   "admin.gst.notice.widget.dueIn2Days": "Due in 2 days",
   "admin.gst.notice.widget.dueThisWeek": "Due this week",
   "admin.gst.notice.widget.cta": "View All Notices",
+  "admin.gst.notice.widget.loadError": "Could not load notice summary",
   "itr.admin.page.title": "ITR — Income Tax",
   "itr.admin.tabs.verificationQueue": "Verification Queue",
   "itr.admin.tabs.computationPanel": "CA Computation Panel",
