@@ -1771,6 +1771,7 @@
   "dashboard.refresh": "Refresh",
   "dashboard.refreshAriaLabel": "Refresh dashboard",
   "dashboard.sampleDataBadge": "Sample data",
+  "dashboard.statsPartialError": "Some dashboard metrics could not be loaded",
   "dashboard.tier1.heading": "Needs attention",
   "dashboard.tier2.heading": "Operational KPIs",
   "dashboard.tier3.heading": "Trends & queues",

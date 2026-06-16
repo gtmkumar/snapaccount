@@ -28,7 +28,7 @@ IResourceBuilder<T> WithDevLoopDefaults<T>(IResourceBuilder<T> b, int httpPort)
         .WithEndpoint("http", e => { e.Port = httpPort; e.IsProxied = false; }, createIfNotExists: false)
         .WithReference(snapAccountDb)
         .WithEnvironment("ConnectionStrings__DefaultConnection", snapAccountDb)
-        .WithEnvironment("DB_PASSWORD", "postgres")
+        .WithEnvironment("DB_PASSWORD", "postgresql")
         .WithEnvironment("HostOptions__BackgroundServiceExceptionBehavior", "Ignore");
 }
 

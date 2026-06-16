@@ -22,7 +22,7 @@ interface WatermarkBadgeProps {
 function WatermarkBadge({ status }: WatermarkBadgeProps) {
   if (status === 'checking') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-neutral-500">
+      <span className="inline-flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
         <span className="h-3 w-3 animate-spin rounded-full border border-neutral-400 border-t-transparent" aria-hidden="true" />
         {t('admin.pdfViewer.checking')}
       </span>
@@ -55,13 +55,13 @@ export function DisclaimerCard({ compact = false }: DisclaimerCardProps) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-amber-200 bg-amber-50',
+        'rounded-lg border border-[var(--semantic-warning-fg)]/20 bg-[var(--semantic-warning-bg)]',
         compact ? 'px-3 py-2' : 'px-4 py-3'
       )}
       role="note"
       aria-label={t('admin.disclaimer.ariaLabel')}
     >
-      <p className={cn('text-amber-800', compact ? 'text-xs' : 'text-sm')}>
+      <p className={cn('text-[var(--semantic-warning-fg)]', compact ? 'text-xs' : 'text-sm')}>
         {t('admin.disclaimer.loanPackage')}
       </p>
     </div>
@@ -106,10 +106,10 @@ export function PdfViewerWebPackagePane({
 
       {/* Meta strip */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-4 text-xs text-neutral-500">
+        <div className="flex items-center gap-4 text-xs text-[var(--text-tertiary)]">
           {pageCount != null && (
             <span>
-              <span className="font-medium text-neutral-700">{pageCount}</span>{' '}
+              <span className="font-medium text-[var(--text-primary)]">{pageCount}</span>{' '}
               {t('admin.pdfViewer.pages')}
             </span>
           )}
@@ -120,7 +120,7 @@ export function PdfViewerWebPackagePane({
           )}
           {sha256Hash && (
             <span
-              className="font-mono text-neutral-400"
+              className="font-mono text-[var(--text-disabled)]"
               title={sha256Hash}
               aria-label={`SHA-256: ${sha256Hash.slice(0, 8)}…`}
             >
@@ -159,11 +159,11 @@ export function PdfViewerWebPackagePane({
 
       {/* PDF preview */}
       {pdfUrl ? (
-        <div className="rounded-lg border border-neutral-200 overflow-hidden">
+        <div className="rounded-lg border border-[var(--border-default)] overflow-hidden bg-[var(--surface-raised)]">
           <Button
             variant="ghost"
             size="sm"
-            className="w-full rounded-none border-b border-neutral-100 text-xs justify-start px-3"
+            className="w-full rounded-none border-b border-[var(--border-subtle)] text-xs justify-start px-3"
             onClick={() => setExpanded(v => !v)}
             aria-expanded={expanded}
           >
@@ -181,7 +181,7 @@ export function PdfViewerWebPackagePane({
           )}
         </div>
       ) : (
-        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-8 text-center text-sm text-neutral-400">
+        <div className="rounded-lg border border-[var(--border-default)] bg-[var(--surface-sunken)] p-8 text-center text-sm text-[var(--text-tertiary)]">
           {t('admin.pdfViewer.noPackage')}
         </div>
       )}

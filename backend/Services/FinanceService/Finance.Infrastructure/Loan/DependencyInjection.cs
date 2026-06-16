@@ -24,6 +24,14 @@ namespace LoanService.Infrastructure;
 /// </summary>
 public static class DependencyInjection
 {
+    // A SINGLE shared translator instance — reused across every DbContext build.
+    // Passing `new UpperSnakeCaseNameTranslator()` per build gives each DbContextOptions a
+    // different enum-mapping fingerprint, so EF Core builds a fresh internal service provider
+    // every time and throws ManyServiceProvidersCreatedWarning after 20 contexts (every
+    // /loans/* request then 500s). A static instance keeps the fingerprint stable.
+    private static readonly LoanService.Infrastructure.Persistence.UpperSnakeCaseNameTranslator
+        EnumNameTranslator = new();
+
     /// <summary>Adds all LoanService infrastructure services to the DI container.</summary>
     public static IServiceCollection AddLoanInfrastructure(
         this IServiceCollection services,
@@ -53,7 +61,9 @@ public static class DependencyInjection
                     // UPPER_SNAKE labels — map it so Npgsql sends the enum type (a plain string
                     // parameter fails with "operator does not exist: application_status_v2 = text").
                     npgsql.MapEnum<Domain.Entities.LoanApplicationStatus>(
-                        "application_status_v2", "loan", new UpperSnakeCaseNameTranslator());
+                        "application_status_v2", "loan", EnumNameTranslator);
+                    npgsql.MapEnum<Domain.Entities.BankAdapterType>(
+                        "partner_bank_adapter_type", "loan", EnumNameTranslator);
                 });
             options.ConfigureWarnings(w =>
                 w.Ignore(RelationalEventId.PendingModelChangesWarning));

@@ -5,11 +5,12 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { toast } from 'sonner'
 import { Search, ChevronDown } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { FilterBar } from '@/components/layout/FilterBar'
 import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Card } from '@/components/ui/Card'
+import { NativeSelect } from '@/components/ui/NativeSelect'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -108,25 +109,25 @@ function AssignCell({
       {isOpen && dropdownPos && (
         <div
           ref={dropdownRef}
-          className="z-50 bg-white border border-gray-200 rounded-xl shadow-xl w-72"
+          className="z-50 bg-[var(--surface-raised)] border border-[var(--border-default)] rounded-xl shadow-[var(--shadow-lg)] w-72"
           style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left }}
           onMouseDown={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation() }}
         >
           {/* Header */}
-          <div className="px-4 py-3 border-b">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('gstQueue.assignToCA')}</p>
+          <div className="px-4 py-3 border-b border-[var(--border-default)]">
+            <p className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">{t('gstQueue.assignToCA')}</p>
           </div>
           {/* Search */}
-          <div className="px-3 py-2 border-b">
+          <div className="px-3 py-2 border-b border-[var(--border-default)]">
             <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
               <input
                 ref={searchRef}
                 type="text"
                 value={caSearch}
                 onChange={e => setCaSearch(e.target.value)}
                 placeholder={t('gstQueue.searchCA')}
-                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-8 pr-3 py-1.5 text-sm border border-[var(--border-default)] bg-[var(--surface-base)] text-[var(--text-primary)] rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 onClick={e => e.stopPropagation()}
                 onMouseDown={e => e.stopPropagation()}
               />
@@ -135,12 +136,12 @@ function AssignCell({
           {/* CA List */}
           <div className="max-h-48 overflow-y-auto">
             {filteredCAs.length === 0 ? (
-              <div className="px-4 py-3 text-sm text-gray-400 text-center">{t('gstQueue.noCAsFound')}</div>
+              <div className="px-4 py-3 text-sm text-[var(--text-tertiary)] text-center">{t('gstQueue.noCAsFound')}</div>
             ) : (
               filteredCAs.map(ca => (
                 <button
                   key={ca.userId}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 flex items-center justify-between transition-colors"
+                  className="w-full text-left px-4 py-2.5 hover:bg-[var(--surface-hover)] flex items-center justify-between transition-colors"
                   onClick={(e) => {
                     e.stopPropagation()
                     e.nativeEvent.stopImmediatePropagation()
@@ -148,16 +149,16 @@ function AssignCell({
                     handleClose()
                   }}
                 >
-                  <span className="text-sm font-medium text-gray-800">{ca.name}</span>
-                  <span className="text-xs text-gray-400 ml-3 shrink-0">{ca.role}</span>
+                  <span className="text-sm font-medium text-[var(--text-primary)]">{ca.name}</span>
+                  <span className="text-xs text-[var(--text-tertiary)] ml-3 shrink-0">{ca.role}</span>
                 </button>
               ))
             )}
           </div>
           {/* Footer */}
-          <div className="border-t px-3 py-2">
+          <div className="border-t border-[var(--border-default)] px-3 py-2">
             <button
-              className="w-full text-center px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
+              className="w-full text-center px-3 py-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-md transition-colors"
               onClick={(e) => {
                 e.stopPropagation()
                 e.nativeEvent.stopImmediatePropagation()
@@ -345,64 +346,59 @@ export default function GstFilingQueuePage() {
       )}
 
       {/* Filters */}
-      <Card padding="sm">
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="w-64">
-            <Input
-              placeholder={t('gstQueue.searchPlaceholder')}
-              value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              prefix={<Search className="h-4 w-4" />}
-              size="sm"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">{t('gstQueue.filterReturnType')}</label>
-            <select
-              value={returnTypeFilter}
-              onChange={(e) => setReturnTypeFilter(e.target.value)}
-              className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label={t('gstQueue.filterReturnType')}
-            >
-              <option value="">{t('gstQueue.allTypes')}</option>
-              <option value="GSTR-1">GSTR-1</option>
-              <option value="GSTR-3B">GSTR-3B</option>
-              <option value="GSTR-9">GSTR-9</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">{t('gstQueue.filterStatus')}</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label={t('gstQueue.filterStatus')}
-            >
-              <option value="">{t('gstQueue.allStatuses')}</option>
-              <option value="DRAFT">{t('gstQueue.statusDraft')}</option>
-              <option value="PENDING_APPROVAL">{t('gstQueue.statusPendingApproval')}</option>
-              <option value="APPROVED">{t('gstQueue.statusApproved')}</option>
-              <option value="FILED">{t('gstQueue.statusFiled')}</option>
-              <option value="REVISION_NEEDED">{t('gstQueue.statusRevisionNeeded')}</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">{t('gstQueue.filterCA')}</label>
-            <select
-              value={caFilter}
-              onChange={(e) => setCaFilter(e.target.value)}
-              className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label={t('gstQueue.filterCA')}
-            >
-              <option value="">{t('gstQueue.allCAs')}</option>
-              <option value="Unassigned">{t('gstQueue.unassigned')}</option>
-              {caList.map(ca => (
-                <option key={ca.userId} value={ca.userId}>{ca.name}</option>
-              ))}
-            </select>
-          </div>
+      <FilterBar>
+        <div className="w-64">
+          <Input
+            placeholder={t('gstQueue.searchPlaceholder')}
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            prefix={<Search className="h-4 w-4" />}
+            size="sm"
+          />
         </div>
-      </Card>
+
+        <NativeSelect
+          label={t('gstQueue.filterReturnType')}
+          value={returnTypeFilter}
+          onChange={(e) => setReturnTypeFilter(e.target.value)}
+          aria-label={t('gstQueue.filterReturnType')}
+          className="min-w-[10rem]"
+        >
+          <option value="">{t('gstQueue.allTypes')}</option>
+          <option value="GSTR-1">GSTR-1</option>
+          <option value="GSTR-3B">GSTR-3B</option>
+          <option value="GSTR-9">GSTR-9</option>
+        </NativeSelect>
+
+        <NativeSelect
+          label={t('gstQueue.filterStatus')}
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label={t('gstQueue.filterStatus')}
+          className="min-w-[10rem]"
+        >
+          <option value="">{t('gstQueue.allStatuses')}</option>
+          <option value="DRAFT">{t('gstQueue.statusDraft')}</option>
+          <option value="PENDING_APPROVAL">{t('gstQueue.statusPendingApproval')}</option>
+          <option value="APPROVED">{t('gstQueue.statusApproved')}</option>
+          <option value="FILED">{t('gstQueue.statusFiled')}</option>
+          <option value="REVISION_NEEDED">{t('gstQueue.statusRevisionNeeded')}</option>
+        </NativeSelect>
+
+        <NativeSelect
+          label={t('gstQueue.filterCA')}
+          value={caFilter}
+          onChange={(e) => setCaFilter(e.target.value)}
+          aria-label={t('gstQueue.filterCA')}
+          className="min-w-[10rem]"
+        >
+          <option value="">{t('gstQueue.allCAs')}</option>
+          <option value="Unassigned">{t('gstQueue.unassigned')}</option>
+          {caList.map(ca => (
+            <option key={ca.userId} value={ca.userId}>{ca.name}</option>
+          ))}
+        </NativeSelect>
+      </FilterBar>
 
       <DataTable
         data={filteredData}

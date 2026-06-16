@@ -5,11 +5,12 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { t } from '@/i18n'
 import { Search, Filter, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { FilterBar } from '@/components/layout/FilterBar'
 import { DataTable } from '@/components/ui/DataTable'
 import { Badge, StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Card } from '@/components/ui/Card'
+import { NativeSelect } from '@/components/ui/NativeSelect'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { Can } from '@/components/shared/Can'
 import { formatRelativeTime, getOcrConfidenceBg } from '@/lib/utils'
@@ -200,67 +201,57 @@ export default function DocumentQueuePage() {
       )}
 
       {/* Filters */}
-      <Card padding="sm">
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="w-64">
-            <Input
-              placeholder={t('docQueue.search')}
-              value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              prefix={<Search className="h-4 w-4" />}
-              size="sm"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">
-              {t('docQueue.filter.status')}
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-              className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label={t('docQueue.filter.status')}
-            >
-              <option value="">{t('docQueue.filter.allStatuses')}</option>
-              <option value="UPLOADED">{t('docQueue.filter.uploaded')}</option>
-              <option value="OCR_COMPLETE">{t('docQueue.filter.ocrComplete')}</option>
-              <option value="IN_REVIEW">{t('docQueue.filter.inReview')}</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">
-              {t('docQueue.filter.ocr')}
-            </label>
-            <select
-              value={ocrFilter}
-              onChange={(e) => setOcrFilter(e.target.value)}
-              className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label={t('docQueue.filter.ocr')}
-            >
-              <option value="all">{t('docQueue.filter.allOcr')}</option>
-              <option value="high">{t('docQueue.filter.ocrHigh')}</option>
-              <option value="medium">{t('docQueue.filter.ocrMedium')}</option>
-              <option value="low">{t('docQueue.filter.ocrLow')}</option>
-            </select>
-          </div>
-
-          <Button
-            variant="ghost"
+      <FilterBar>
+        <div className="w-64">
+          <Input
+            placeholder={t('docQueue.search')}
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            prefix={<Search className="h-4 w-4" />}
             size="sm"
-            leftIcon={<Filter className="h-4 w-4" />}
-            onClick={() => {
-              setGlobalFilter('')
-              setStatusFilter('')
-              setOcrFilter('all')
-              setPage(1)
-            }}
-          >
-            {t('docQueue.filter.reset')}
-          </Button>
+          />
         </div>
-      </Card>
+
+        <NativeSelect
+          label={t('docQueue.filter.status')}
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+          aria-label={t('docQueue.filter.status')}
+          className="min-w-[10rem]"
+        >
+          <option value="">{t('docQueue.filter.allStatuses')}</option>
+          <option value="UPLOADED">{t('docQueue.filter.uploaded')}</option>
+          <option value="OCR_COMPLETE">{t('docQueue.filter.ocrComplete')}</option>
+          <option value="IN_REVIEW">{t('docQueue.filter.inReview')}</option>
+        </NativeSelect>
+
+        <NativeSelect
+          label={t('docQueue.filter.ocr')}
+          value={ocrFilter}
+          onChange={(e) => setOcrFilter(e.target.value)}
+          aria-label={t('docQueue.filter.ocr')}
+          className="min-w-[10rem]"
+        >
+          <option value="all">{t('docQueue.filter.allOcr')}</option>
+          <option value="high">{t('docQueue.filter.ocrHigh')}</option>
+          <option value="medium">{t('docQueue.filter.ocrMedium')}</option>
+          <option value="low">{t('docQueue.filter.ocrLow')}</option>
+        </NativeSelect>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={<Filter className="h-4 w-4" />}
+          onClick={() => {
+            setGlobalFilter('')
+            setStatusFilter('')
+            setOcrFilter('all')
+            setPage(1)
+          }}
+        >
+          {t('docQueue.filter.reset')}
+        </Button>
+      </FilterBar>
 
       {/* Table */}
       <DataTable

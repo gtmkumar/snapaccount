@@ -11,6 +11,12 @@ namespace LoanService.Infrastructure.Persistence;
 /// <see cref="Domain.Entities.LoanApplicationStatus"/> uses idiomatic C# PascalCase. The default
 /// Npgsql snake-case translator would produce lower-case labels, so we supply this one to
 /// <c>MapEnum</c> in <c>DependencyInjection</c>.
+///
+/// A separator is inserted only at a lower→upper boundary, so runs of consecutive capitals
+/// (acronyms / brand names) stay intact: <c>OAuth → OAUTH</c>, not <c>O_AUTH</c>. The latter
+/// label does not exist in <c>loan.partner_bank_adapter_type</c> (EMAIL/REST/OAUTH); mapping to it
+/// makes Npgsql reject the enum at datasource init, which fails <em>every</em> LoanServiceDbContext
+/// query with a 500.
 /// </summary>
 public sealed class UpperSnakeCaseNameTranslator : INpgsqlNameTranslator
 {
@@ -27,7 +33,9 @@ public sealed class UpperSnakeCaseNameTranslator : INpgsqlNameTranslator
         for (var i = 0; i < clrName.Length; i++)
         {
             var c = clrName[i];
-            if (i > 0 && char.IsUpper(c))
+            // Separate words at a lower→upper boundary only. Consecutive capitals are one
+            // word (OAuth → OAUTH), so an uppercase preceded by another uppercase gets no '_'.
+            if (i > 0 && char.IsUpper(c) && !char.IsUpper(clrName[i - 1]))
                 sb.Append('_');
             sb.Append(char.ToUpperInvariant(c));
         }

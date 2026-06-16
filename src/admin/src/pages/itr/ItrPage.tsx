@@ -476,9 +476,9 @@ function NoticeTrackerTab({ ay }: { ay: string }) {
 
       {isLoading ? (
         <div className="space-y-2 animate-pulse">
-          {[1, 2, 3].map(i => <div key={i} className="h-12 bg-neutral-100 rounded-xl" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-12 bg-[var(--surface-sunken)] rounded-xl" />)}
         </div>
-      ) : notices.length === 0 ? (
+      ) : isError ? null : notices.length === 0 ? (
         <Card>
           <div className="flex flex-col items-center py-12 gap-3">
             <Inbox className="h-10 w-10 text-neutral-300" />

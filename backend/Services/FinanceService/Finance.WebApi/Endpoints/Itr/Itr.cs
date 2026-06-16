@@ -20,6 +20,7 @@ using ItrService.Application.Filings.Queries.ListFilings;
 using ItrService.Application.Form16.Commands.UploadForm16;
 using ItrService.Application.Notices.Commands.RespondToNotice;
 using ItrService.Application.Notices.Commands.UploadNotice;
+using ItrService.Application.Notices.Queries.ListNotices;
 using ItrService.Application.Refunds.Queries.GetRefundStatus;
 using ItrService.Application.TaxSlabs.Queries.GetDeductionCatalog;
 using ItrService.Application.TaxSlabs.Queries.GetTaxSlabs;
@@ -239,6 +240,21 @@ public sealed class Itr : EndpointGroupBase
         .WithTags("Form 16");
 
         // ── Notices ───────────────────────────────────────────────────────────
+
+        group.MapGet("/notices", async (
+            Guid? assesseeId, Guid? filingId, string? status, string? assessmentYear,
+            IMediator mediator, CancellationToken ct,
+            int page = 1, int pageSize = 20) =>
+        {
+            var result = await mediator.Send(
+                new ListNoticesQuery(assesseeId, filingId, status, assessmentYear, page, pageSize), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+        })
+        .WithName("ListItrNotices")
+        .WithSummary("List ITR notices for admin Notice Tracker")
+        .WithDescription("Org-scoped paginated list. Supports assessmentYear (e.g. AY2026-27), status, assesseeId, filingId filters.")
+        .RequireAuthorization()
+        .WithTags("Notices");
 
         group.MapPost("/filings/{id:guid}/notices", async (
             Guid id, UploadNoticeRequest req, IMediator mediator, CancellationToken ct) =>

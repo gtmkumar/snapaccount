@@ -107,6 +107,16 @@ public sealed class ItrNoticeConfiguration : IEntityTypeConfiguration<ItrNotice>
             .IsRequired()
             .HasDefaultValue("OTHER");
 
+        builder.Property<decimal?>("DemandAmount")
+            .HasColumnName("demand_amount")
+            .HasColumnType("numeric(20,2)");
+
+        builder.Property<string>("Priority")
+            .HasColumnName("priority")
+            .HasMaxLength(20)
+            .IsRequired()
+            .HasDefaultValue("NORMAL");
+
         builder.HasIndex(n => n.FilingId).HasDatabaseName("idx_itr_notices_filing_id");
         builder.HasIndex(n => n.AssesseeId).HasDatabaseName("idx_itr_notices_user_id");
         builder.HasIndex(n => n.Status).HasDatabaseName("idx_itr_notices_status");

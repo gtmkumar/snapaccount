@@ -17,17 +17,19 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { FilterBar } from '@/components/layout/FilterBar'
 import { DataTable } from '@/components/ui/DataTable'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
+import { Input } from '@/components/ui/Input'
+import { NativeSelect } from '@/components/ui/NativeSelect'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { AmountDisplay } from '@/components/ui/AmountDisplay'
 import { BankAdapterTypeBadge } from '@/components/ui/BankAdapterTypeBadge'
 import { SelectionToolbar } from '@/components/ui/SelectionToolbar'
-import { formatDate, cn } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 import { t } from '@/i18n'
 import {
   listLoanApplications,
@@ -65,13 +67,13 @@ function LoanStatusBadge({ status }: { status: LoanApplicationStatus }) {
 // ---------------------------------------------------------------------------
 
 function DaysInStageCell({ days }: { days: number | null | undefined }) {
-  if (days == null) return <span className="text-neutral-400">—</span>
+  if (days == null) return <span className="text-[var(--text-disabled)]">—</span>
   const cls =
     days > 7
-      ? 'text-error-700 font-semibold'
+      ? 'text-error-500 font-semibold'
       : days > 3
-        ? 'text-warning-700 font-medium'
-        : 'text-neutral-700'
+        ? 'text-warning-500 font-medium'
+        : 'text-[var(--text-secondary)]'
   return <span className={cls}>{days}d</span>
 }
 
@@ -260,20 +262,37 @@ export default function LoansListPage() {
   const columns = useMemo<ColumnDef<LoanApplicationSummary>[]>(() => [
     {
       id: 'select',
-      header: ({ table }) => (
-        <input
-          type="checkbox"
-          checked={table.getIsAllRowsSelected()}
-          onChange={table.getToggleAllRowsSelectedHandler()}
-          aria-label={t('admin.loans.selectAll')}
-          className="rounded border-neutral-300"
-        />
-      ),
+      header: () => {
+        const allSelected =
+          filteredApplications.length > 0 &&
+          filteredApplications.every(a => selectedIds.has(a.applicationId))
+        const someSelected =
+          filteredApplications.some(a => selectedIds.has(a.applicationId)) && !allSelected
+        return (
+          <input
+            type="checkbox"
+            checked={allSelected}
+            ref={el => {
+              if (el) el.indeterminate = someSelected
+            }}
+            onChange={(e) => {
+              if (e.target.checked) {
+                setSelectedIds(new Set(filteredApplications.map(a => a.applicationId)))
+              } else {
+                setSelectedIds(new Set())
+              }
+            }}
+            aria-label={t('admin.loans.selectAll')}
+            className="rounded border-[var(--border-default)] accent-brand-500"
+          />
+        )
+      },
       cell: ({ row }) => (
         <input
           type="checkbox"
           checked={selectedIds.has(row.original.applicationId)}
-          onChange={() => {
+          onChange={(e) => {
+            e.stopPropagation()
             const id = row.original.applicationId
             setSelectedIds(prev => {
               const next = new Set(prev)
@@ -282,8 +301,9 @@ export default function LoansListPage() {
               return next
             })
           }}
+          onClick={(e) => e.stopPropagation()}
           aria-label={t('admin.loans.selectRow')}
-          className="rounded border-neutral-300"
+          className="rounded border-[var(--border-default)] accent-brand-500"
         />
       ),
       size: 40,
@@ -301,9 +321,9 @@ export default function LoansListPage() {
       header: t('admin.loans.col.org'),
       cell: ({ row }) => (
         <div>
-          <div className="font-medium text-neutral-900 text-sm">{row.original.orgName ?? '—'}</div>
+          <div className="font-medium text-[var(--text-primary)] text-sm">{row.original.orgName ?? '—'}</div>
           {row.original.pan && (
-            <div className="text-xs text-neutral-400">{row.original.pan}</div>
+            <div className="text-xs text-[var(--text-tertiary)]">{row.original.pan}</div>
           )}
         </div>
       ),
@@ -315,7 +335,7 @@ export default function LoansListPage() {
       cell: ({ row }) => (
         <div className="text-sm">
           {row.original.bankName && (
-            <span className="text-neutral-500 text-xs">{row.original.bankName} · </span>
+            <span className="text-[var(--text-tertiary)] text-xs">{row.original.bankName} · </span>
           )}
           {row.original.productName ?? '—'}
         </div>
@@ -362,7 +382,7 @@ export default function LoansListPage() {
       header: t('admin.loans.col.submitted'),
       cell: ({ getValue }) => {
         const v = getValue<string | null>()
-        return v ? <span className="text-xs text-neutral-600">{formatDate(v)}</span> : <span className="text-neutral-400">—</span>
+        return v ? <span className="text-xs text-[var(--text-secondary)]">{formatDate(v)}</span> : <span className="text-[var(--text-disabled)]">—</span>
       },
       size: 130,
     },
@@ -386,19 +406,19 @@ export default function LoansListPage() {
           type="button"
           onClick={e => { e.stopPropagation(); void navigate(`/loans/${row.original.applicationId}`) }}
           aria-label={t('admin.loans.action.view')}
-          className="p-1 rounded hover:bg-neutral-100 text-neutral-500"
+          className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-tertiary)]"
         >
           <Eye className="h-4 w-4" />
         </button>
       ),
       size: 48,
     },
-  ], [t, navigate, selectedIds])
+  ], [t, navigate, selectedIds, filteredApplications])
 
   const emptyState = (
     <div className="py-16 text-center space-y-3">
-      <CreditCard className="h-10 w-10 mx-auto text-neutral-300" aria-hidden="true" />
-      <p className="text-neutral-500 font-medium">
+      <CreditCard className="h-10 w-10 mx-auto text-[var(--text-disabled)]" aria-hidden="true" />
+      <p className="text-[var(--text-secondary)] font-medium">
         {search || statusFilter
           ? t('admin.loans.emptyFiltered')
           : t('admin.loans.empty')}
@@ -439,55 +459,49 @@ export default function LoansListPage() {
       )}
 
       {/* Filter bar */}
-      <Card className="p-4">
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-48">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" aria-hidden="true" />
-            <input
-              type="search"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t('admin.loans.searchPlaceholder')}
-              className={cn(
-                'w-full rounded-lg border border-neutral-200 pl-9 pr-3 py-2 text-sm',
-                'focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent',
-                'placeholder:text-neutral-400'
-              )}
-              aria-label={t('admin.loans.search')}
-            />
-          </div>
-
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as LoanApplicationStatus | '')}
-            className="rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            aria-label={t('admin.loans.filter.status')}
-          >
-            <option value="">{t('admin.loans.filter.allStatuses')}</option>
-            {(Object.keys(LOAN_STATUS_CONFIG) as LoanApplicationStatus[]).map(s => (
-              <option key={s} value={s}>{t(`admin.loans.status.${s.toLowerCase()}`)}</option>
-            ))}
-          </select>
-
-          <Button
-            variant="ghost"
+      <FilterBar align="center">
+        <div className="flex-1 min-w-48">
+          <Input
+            type="search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={t('admin.loans.searchPlaceholder')}
+            prefix={<Search className="h-4 w-4" />}
             size="sm"
-            leftIcon={<Download className="h-4 w-4" />}
-            onClick={() => exportCsv(filteredApplications)}
-          >
-            {t('admin.loans.export')}
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            leftIcon={<RefreshCw className="h-4 w-4" />}
-            onClick={() => void refetch()}
-          >
-            {t('common.refresh')}
-          </Button>
+            aria-label={t('admin.loans.search')}
+          />
         </div>
-      </Card>
+
+        <NativeSelect
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value as LoanApplicationStatus | '')}
+          aria-label={t('admin.loans.filter.status')}
+          className="min-w-[11rem]"
+        >
+          <option value="">{t('admin.loans.filter.allStatuses')}</option>
+          {(Object.keys(LOAN_STATUS_CONFIG) as LoanApplicationStatus[]).map(s => (
+            <option key={s} value={s}>{t(`admin.loans.status.${s.toLowerCase()}`)}</option>
+          ))}
+        </NativeSelect>
+
+        <Button
+          variant="secondary"
+          size="sm"
+          leftIcon={<Download className="h-4 w-4" />}
+          onClick={() => exportCsv(filteredApplications)}
+        >
+          {t('admin.loans.export')}
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={<RefreshCw className="h-4 w-4" />}
+          onClick={() => void refetch()}
+        >
+          {t('common.refresh')}
+        </Button>
+      </FilterBar>
 
       {/* Selection toolbar */}
       {selectedIds.size > 0 && (

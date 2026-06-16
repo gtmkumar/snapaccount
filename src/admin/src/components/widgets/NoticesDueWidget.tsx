@@ -24,7 +24,7 @@ export function NoticesDueWidget() {
   const hasUrgent = (data?.overdue ?? 0) > 0 || (data?.dueIn2Days ?? 0) > 0
 
   return (
-    <Card>
+    <Card className="flex flex-col h-full">
       <CardHeader
         title={t('admin.gst.notice.widget.title')}
         actions={
@@ -39,49 +39,51 @@ export function NoticesDueWidget() {
         }
       />
 
-      {isLoading ? (
-        <div className="space-y-3 animate-pulse">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="flex justify-between">
-              <div className="h-3 bg-neutral-100 rounded w-28" />
-              <div className="h-3 bg-neutral-100 rounded w-8" />
+      <div className="flex-1">
+        {isLoading ? (
+          <div className="space-y-3 animate-pulse">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="flex justify-between">
+                <div className="h-3 bg-[var(--surface-sunken)] rounded w-28" />
+                <div className="h-3 bg-[var(--surface-sunken)] rounded w-8" />
+              </div>
+            ))}
+          </div>
+        ) : isError ? (
+          <p className="text-sm text-[var(--semantic-error-fg)]">{t('admin.gst.notice.widget.loadError')}</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex justify-between items-center gap-3">
+              <span className="text-sm text-[var(--text-secondary)]">
+                {t('admin.gst.notice.widget.overdue')}
+              </span>
+              <span className={`text-sm font-semibold tabular-nums shrink-0 ${
+                (data?.overdue ?? 0) > 0 ? 'text-error-600' : 'text-[var(--text-tertiary)]'
+              }`}>
+                {data?.overdue ?? 0}
+              </span>
             </div>
-          ))}
-        </div>
-      ) : isError ? (
-        <p className="text-sm text-error-600">{t('admin.gst.notice.widget.loadError')}</p>
-      ) : (
-        <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-neutral-500">
-              {t('admin.gst.notice.widget.overdue')}
-            </span>
-            <span className={`text-sm font-semibold tabular-nums ${
-              (data?.overdue ?? 0) > 0 ? 'text-error-600' : 'text-neutral-500'
-            }`}>
-              {data?.overdue ?? 0}
-            </span>
+            <div className="flex justify-between items-center gap-3">
+              <span className="text-sm text-[var(--text-secondary)]">
+                {t('admin.gst.notice.widget.dueIn2Days')}
+              </span>
+              <span className={`text-sm font-semibold tabular-nums shrink-0 ${
+                (data?.dueIn2Days ?? 0) > 0 ? 'text-warning-600' : 'text-[var(--text-tertiary)]'
+              }`}>
+                {data?.dueIn2Days ?? 0}
+              </span>
+            </div>
+            <div className="flex justify-between items-center gap-3">
+              <span className="text-sm text-[var(--text-secondary)]">
+                {t('admin.gst.notice.widget.dueThisWeek')}
+              </span>
+              <span className="text-sm font-semibold tabular-nums text-[var(--text-primary)] shrink-0">
+                {data?.dueThisWeek ?? 0}
+              </span>
+            </div>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-neutral-500">
-              {t('admin.gst.notice.widget.dueIn2Days')}
-            </span>
-            <span className={`text-sm font-semibold tabular-nums ${
-              (data?.dueIn2Days ?? 0) > 0 ? 'text-warning-700' : 'text-neutral-500'
-            }`}>
-              {data?.dueIn2Days ?? 0}
-            </span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-neutral-500">
-              {t('admin.gst.notice.widget.dueThisWeek')}
-            </span>
-            <span className="text-sm font-semibold tabular-nums text-neutral-700">
-              {data?.dueThisWeek ?? 0}
-            </span>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <Button
         variant="primary"

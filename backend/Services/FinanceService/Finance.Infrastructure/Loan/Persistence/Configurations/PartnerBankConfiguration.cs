@@ -14,10 +14,8 @@ public sealed class PartnerBankConfiguration : IEntityTypeConfiguration<PartnerB
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.LogoUrl).HasMaxLength(500);
-        builder.Property(x => x.AdapterType)
-            .HasConversion<string>()
-            .HasMaxLength(20)
-            .IsRequired();
+        // Native PG enum loan.partner_bank_adapter_type (EMAIL/REST/OAUTH) — mapped via MapEnum in DI.
+        builder.Property(x => x.AdapterType).IsRequired();
         builder.Property(x => x.ContactEmail).HasMaxLength(200);
         // SWEEP-FIX WEB-03: DB column is jsonb, not bytea. Property type changed to string.
         builder.Property(x => x.ApiConfigEncrypted).HasColumnType("jsonb");
