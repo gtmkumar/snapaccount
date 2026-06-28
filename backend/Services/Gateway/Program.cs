@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
+using Yarp.ReverseProxy.Transforms;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -87,12 +89,67 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
+// ── Edge request logging & correlation-id propagation (project-brief §6, GAP-114) ──
+// YARP copies inbound headers downstream by default, but it never *mints* a correlation id
+// when the client omits one, so a request that fans out to several composites has no single
+// id tying the edge access log to the per-service logs. This transform stamps the id the
+// gateway minted (see the CorrelationId middleware below) onto every proxied request, so the
+// composites' OpenTelemetry traces and our edge access log share one X-Correlation-Id.
+const string CorrelationIdHeader = "X-Correlation-Id";
+
 builder.Services.AddReverseProxy()
-    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
+    .AddTransforms(transformBuilderContext =>
+    {
+        transformBuilderContext.AddRequestTransform(transformContext =>
+        {
+            if (transformContext.HttpContext.Items.TryGetValue(CorrelationIdHeader, out var value)
+                && value is string correlationId
+                && !string.IsNullOrEmpty(correlationId))
+            {
+                transformContext.ProxyRequest.Headers.Remove(CorrelationIdHeader);
+                transformContext.ProxyRequest.Headers.TryAddWithoutValidation(
+                    CorrelationIdHeader, correlationId);
+            }
+
+            return ValueTask.CompletedTask;
+        });
+    });
 
 var app = builder.Build();
 
 app.UseForwardedHeaders();
+
+// Mint/honour a correlation id, echo it on the response, and emit one structured access-log
+// line per request (method, path, status, latency, client-IP, correlation-id). Registered
+// first so it wraps the rate limiter — throttled (429) requests are logged and correlated too.
+app.Use(async (context, next) =>
+{
+    var correlationId = context.Request.Headers[CorrelationIdHeader].FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(correlationId))
+        correlationId = Guid.NewGuid().ToString("N");
+
+    context.Items[CorrelationIdHeader] = correlationId;
+    context.Response.Headers[CorrelationIdHeader] = correlationId;
+
+    var stopwatch = Stopwatch.StartNew();
+    try
+    {
+        await next();
+    }
+    finally
+    {
+        stopwatch.Stop();
+        app.Logger.LogInformation(
+            "gateway {Method} {Path} -> {StatusCode} in {ElapsedMs}ms cid={CorrelationId} ip={ClientIp}",
+            context.Request.Method,
+            context.Request.Path.Value,
+            context.Response.StatusCode,
+            stopwatch.ElapsedMilliseconds,
+            correlationId,
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+    }
+});
 
 app.MapDefaultEndpoints();
 

@@ -27,6 +27,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StyleSheet } from 'react-native';
 import { ThemeProvider } from './src/contexts/ThemeContext';
+import { ForceUpdateGate } from './src/components/ForceUpdateGate';
 import { RootNavigator } from './src/navigation/RootNavigator';
 // i18n — must be imported before any component that calls useTranslation()
 import './src/i18n';
@@ -59,7 +60,9 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
-            <RootNavigator />
+            <ForceUpdateGate>
+              <RootNavigator />
+            </ForceUpdateGate>
           </ThemeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>

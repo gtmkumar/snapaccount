@@ -83,33 +83,51 @@
 
 ## C. Filed — smaller / documentation
 
-### GAP-114 — No gateway request/response logging or correlation-id propagation — **Medium**
+### GAP-114 — No gateway request/response logging or correlation-id propagation — **Medium** → ✅ FIXED (2026-06-28)
 - `project-brief.md §6` lists "Request/response logging" as a gateway responsibility.
-  `Gateway/Program.cs` has none — no access log, no correlation-id minted/propagated to the
-  composites. Per-service OpenTelemetry exists, but there is no single edge audit/forensic
+  `Gateway/Program.cs` had none — no access log, no correlation-id minted/propagated to the
+  composites. Per-service OpenTelemetry exists, but there was no single edge audit/forensic
   trail tying a client request to its downstream fan-out.
-- **Plan:** add request-logging middleware at the gateway that mints an `X-Correlation-Id`
-  (or honours an inbound one), logs method/path/status/latency/client-IP, and forwards the
-  header via a YARP transform so composites enrich their logs with it.
-- **Owner:** devops-engineer + backend-agent. **Priority: Medium**
+- **Fix (this pass):** added correlation-id middleware in `Gateway/Program.cs` that mints an
+  `X-Correlation-Id` (or honours an inbound one), echoes it on the response, and emits one
+  structured access-log line per request (method / path / status / latency / client-IP / cid).
+  Registered first so it wraps the rate limiter → throttled (429) requests are logged + correlated
+  too. A YARP `AddRequestTransform` stamps the (possibly minted) id onto every proxied request so
+  the composites' OpenTelemetry traces share the same `X-Correlation-Id`. Gateway builds clean.
+- **Follow-up (not blocking):** composites could enrich their Serilog scope from the inbound
+  `X-Correlation-Id`; consider sampling/structured-sink config for the edge access log in prod.
 
-### GAP-115 — No disaster-recovery plan (RPO/RTO, multi-region, Cloud SQL failover) — **Medium**
+### GAP-115 — No disaster-recovery plan (RPO/RTO, multi-region, Cloud SQL failover) — **Medium** → ✅ DONE (plan; 2026-06-28)
 - Risk register (`project-brief.md §15`) names "GCP region outage" with only a vague
   "multi-region failover consideration" — never converted to a tracked plan. A
   `backup-restore-runbook` exists but the first PITR restore drill was never executed
   (see NEW-D05). For a financial system under DPDP retention, untested restorability + no
   RPO/RTO targets is a real continuity gap.
-- **Plan:** `docs/devops/disaster-recovery.md` — define RPO/RTO, Cloud SQL HA + read-replica
-  / cross-region failover posture, GCS dual-region for `*-reports`/document buckets, and an
-  executed PITR drill record (closes NEW-D05). **Owner:** devops-engineer. **Priority: Medium**
+- **Done (this pass):** authored `docs/devops/disaster-recovery.md` — per-tier RPO/RTO targets
+  (Tier-0 DB RPO ≤ 5 min / RTO ≤ 1 h), Cloud SQL HA (zone) + `asia-south2` cross-region read-replica
+  promotion (region) staying India-only for DPDP localization, GCS dual-region for Tier-1 buckets,
+  Redis/Pub/Sub posture, a step-by-step region-loss failover + failback runbook, and a drill
+  matrix that wires the PITR pass-bar to these targets. The plan is "not done" until the first
+  PITR drill report (NEW-D05) is filed.
+- **Remaining (deploy-time / TL-gated):** provision the `asia-south2` replica, confirm/convert
+  Tier-1 buckets to dual-region + cross-region backup export, and execute the first PITR + tabletop
+  failover drills. **Owner:** devops-engineer. **Priority: Low** (plan shipped; only cloud execution remains).
 
-### GAP-116 — No mobile force-update / minimum-supported-version kill-switch — **Medium**
-- `mobile/app.json` + the gap docs have no force-update, minimum-version gate, or remote
+### GAP-116 — No mobile force-update / minimum-supported-version kill-switch — **Medium** → ✅ FIXED (2026-06-28)
+- `mobile/app.json` + the gap docs had no force-update, minimum-version gate, or remote
   kill-switch. For a fintech app that must push security fixes (e.g. TLS-pin rotation, GAP-006)
   and retire vulnerable client versions, this is operationally important.
-- **Plan:** a lightweight `/platform/app/min-version` (or Firebase Remote Config) check on
-  launch → soft "update available" nudge + hard "update required" block below the floor.
-  **Owner:** mobile-dev + backend-agent. **Priority: Medium**
+- **Fix (this pass) — backend:** anonymous `GET /app/min-version?platform=&version=` (PlatformService,
+  config-driven `AppVersion:{Ios|Android}:*`, MediatR `GetAppVersionPolicyQuery` mirroring the
+  privacy-contact config-endpoint pattern). Server computes `updateRequired` (current < floor) +
+  `updateAvailable` (current < latest); **fail-open** — unknown platform / unparseable version never
+  blocks. New gateway route `platform-app` (`/app/{**catch-all}` → platform). 13 unit tests.
+- **Fix (this pass) — mobile:** `src/api/appVersion.ts` client (fail-open, 6 s timeout) +
+  `ForceUpdateGate` wrapping `RootNavigator` in `App.tsx`: `updateRequired` → non-dismissible
+  full-screen block with store-link CTA; `updateAvailable` → dismissible nudge banner; else (or any
+  error) renders children. i18n `mobile.appUpdate.*` added en/hi/bn (parity preserved). 3 component tests.
+- **Verified:** backend builds 0 err, AuthService 793 (+13); mobile type-check/lint clean, jest 862 (+3, +1 suite).
+- **Follow-up (TL):** set production `AppVersion:*` floors per release; optionally back with Firebase Remote Config.
 
 ---
 
@@ -134,7 +152,9 @@
 | Priority | Items |
 |---|---|
 | **High** | GAP-112 (✅ fixed — gateway rate limiting) |
-| **Medium** | GAP-113 (✅ migration done; scheduler wiring → devops), GAP-114 (gateway logging), GAP-115 (DR plan), GAP-116 (mobile force-update) |
+| **Medium** | GAP-113 (✅ migration + scheduler wiring done; deploy → devops), GAP-114 (✅ fixed — gateway logging + correlation-id), GAP-115 (✅ DR plan written; replica/drill → devops), GAP-116 (✅ fixed — mobile force-update gate) |
+
+> **2026-06-28 update:** GAP-114 and GAP-116 are fully closed in code (gateway + PlatformService + mobile, all tests green); GAP-115's DR plan is written (`docs/devops/disaster-recovery.md`) with only deploy-time replica provisioning + the first drill remaining. **All tier-3 items are now either fixed or down to deploy-time/TL-gated execution — no delegable code work remains in this supplement.**
 
 > Correction log: GAP-113 was briefly mis-rated **High/acute** on a false "no default partition → 2027 hard-fail" reading; both tables have DEFAULT partitions, so it is a Medium degradation issue, not an outage.
 

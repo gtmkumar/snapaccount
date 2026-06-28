@@ -2575,6 +2575,18 @@
           "never": "Never"
         }
       }
+    },
+    "appUpdate": {
+      "required": {
+        "title": "Update required",
+        "message": "This version of SnapAccount is no longer supported. Please update to the latest version to continue."
+      },
+      "available": {
+        "message": "A new version of SnapAccount is available.",
+        "action": "Update"
+      },
+      "cta": "Update now",
+      "dismiss": "Dismiss"
     }
   }
 }
