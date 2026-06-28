@@ -17,6 +17,7 @@ namespace ChatService.Infrastructure.SignalR;
 /// Groups: one group per thread_id.
 /// Redis backplane: Microsoft.AspNetCore.SignalR.StackExchangeRedis.
 /// SEC-053: SendMessage hub method has per-connection sliding-window rate check (60 msg/min/user).
+/// DG-INFRA-06: increments/decrements <see cref="SignalRMetrics.ActiveConnections"/> on connect/disconnect.
 /// </summary>
 [Authorize]
 public sealed class ChatHub(
@@ -24,13 +25,14 @@ public sealed class ChatHub(
     PresenceService presenceService,
     IDistributedCache cache,
     ISender sender,
+    SignalRMetrics metrics,
     ILogger<ChatHub> logger) : Hub
 {
     /// <summary>
     /// Called on client connect.
     /// Validates the user is a participant in the thread they subscribe to,
     /// then joins them to the thread's SignalR group.
-    /// Updates Redis presence key.
+    /// Updates Redis presence key and increments the active-connections metric.
     /// </summary>
     public override async Task OnConnectedAsync()
     {
@@ -45,11 +47,14 @@ public sealed class ChatHub(
         logger.LogInformation("ChatHub: User {UserId} connected (connection {ConnectionId})",
             userId, Context.ConnectionId);
 
+        // DG-INFRA-06: track active WebSocket connections
+        metrics.ActiveConnections.Add(1);
+
         await presenceService.SetOnlineAsync(userId);
         await base.OnConnectedAsync();
     }
 
-    /// <summary>Called on client disconnect. Clears Redis presence.</summary>
+    /// <summary>Called on client disconnect. Clears Redis presence and decrements the active-connections metric.</summary>
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         var userId = GetUserId();
@@ -58,6 +63,9 @@ public sealed class ChatHub(
             await presenceService.SetOfflineAsync(userId);
             logger.LogInformation("ChatHub: User {UserId} disconnected.", userId);
         }
+
+        // DG-INFRA-06: track active WebSocket connections
+        metrics.ActiveConnections.Add(-1);
 
         await base.OnDisconnectedAsync(exception);
     }

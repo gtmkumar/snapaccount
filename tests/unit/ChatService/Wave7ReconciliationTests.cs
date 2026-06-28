@@ -253,7 +253,8 @@ public sealed class Wave7ReconciliationTests
             RatingComment:        null,
             RatedAt:              null,
             CancelledByCa:        false,
-            CaCancellationReason: null);
+            CaCancellationReason: null,
+            CaSummaryNote:        null);
 
         dto.Topic.Should().Be("GST");
         dto.CancelledByCa.Should().BeFalse();

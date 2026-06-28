@@ -1,3 +1,5 @@
+using AccountingService.Application.Dashboard.Queries.GetDashboardMetrics;
+using AccountingService.Application.Dashboard.Queries.GetRecentActivities;
 using AccountingService.Application.EditLog.Queries.ExportEditLog;
 using AccountingService.Application.EditLog.Queries.GetEditLog;
 using AccountingService.Application.FiscalYear.Commands.CloseFiscalYear;
@@ -34,6 +36,29 @@ public sealed class Accounting : EndpointGroupBase
     /// <inheritdoc />
     public override void Map(RouteGroupBuilder groupBuilder)
     {
+        // DG-DASH-01: GET /accounting/dashboard-metrics — mobile Home KPI cards
+        // Mobile: HomeScreen.tsx line 83, DashboardMetrics interface lines 39-47.
+        // Permission: accounting.reports.read (PermissionBehavior enforces).
+        // Rate limit: standard (100 req/min per user).
+        groupBuilder.MapGet("/dashboard-metrics", GetDashboardMetrics)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GetDashboardMetrics")
+            .WithSummary("DG-DASH-01: Mobile Home KPI metrics — totalSales, totalExpenses, netPnL, " +
+                         "gstPayable, salesTrend, expensesTrend, period. Org-scoped, current Indian FY. " +
+                         "Permission: accounting.reports.read.");
+
+        // DG-DASH-01: GET /accounting/recent-activities?limit=N — mobile Home activity feed
+        // Mobile: HomeScreen.tsx line 100, ActivityItem interface lines 49-55.
+        // Permission: accounting.reports.read (PermissionBehavior enforces).
+        groupBuilder.MapGet("/recent-activities", GetRecentActivities)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GetRecentActivities")
+            .WithSummary("DG-DASH-01: Mobile Home activity feed — recent documents + GST events. " +
+                         "Returns ActivityItem[] (id, type, description, amount?, timestamp). " +
+                         "Permission: accounting.reports.read. Max limit=50.");
+
         // POST /accounting/journal-entries — post a manual journal batch
         groupBuilder.MapPost("/journal-entries", PostJournalBatch)
             .RequireAuthorization()
@@ -101,6 +126,47 @@ public sealed class Accounting : EndpointGroupBase
             .WithName("ExportAccountingEditLog")
             .WithSummary("Stream full MCA edit log for a financial year as CSV (statutory FY export). " +
                          "Permission: accounting.editlog.read.");
+    }
+
+    // ── DG-DASH-01 handlers ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// GET /accounting/dashboard-metrics
+    /// Mobile: HomeScreen.tsx GET '/accounting/dashboard-metrics' → DashboardMetrics.
+    /// </summary>
+    private static async Task<IResult> GetDashboardMetrics(
+        ISender sender,
+        ICurrentUser currentUser)
+    {
+        if (currentUser.OrganizationId is null)
+            return Results.BadRequest(new { error = "No organisation associated with this user." });
+
+        var result = await sender.Send(new GetDashboardMetricsQuery(currentUser.OrganizationId.Value));
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.Type == ErrorType.Forbidden
+                ? Results.Forbid()
+                : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
+    }
+
+    /// <summary>
+    /// GET /accounting/recent-activities?limit=N
+    /// Mobile: HomeScreen.tsx GET '/accounting/recent-activities?limit=5' → ActivityItem[].
+    /// </summary>
+    private static async Task<IResult> GetRecentActivities(
+        ISender sender,
+        ICurrentUser currentUser,
+        int limit = 5)
+    {
+        if (currentUser.OrganizationId is null)
+            return Results.BadRequest(new { error = "No organisation associated with this user." });
+
+        var result = await sender.Send(new GetRecentActivitiesQuery(currentUser.OrganizationId.Value, limit));
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.Type == ErrorType.Forbidden
+                ? Results.Forbid()
+                : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
     }
 
     private static async Task<IResult> PostJournalBatch(

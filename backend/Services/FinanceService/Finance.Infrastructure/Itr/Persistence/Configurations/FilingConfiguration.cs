@@ -41,24 +41,23 @@ public sealed class FilingConfiguration : IEntityTypeConfiguration<Filing>
         // SWEEP-FIX: CaRejectionReason → ca_review_notes (column name differs in DB)
         builder.Property(f => f.CaRejectionReason).HasMaxLength(2000).HasColumnName("ca_review_notes");
 
-        // SWEEP-FIX: ComputationHash, SalaryIncome, HousePropertyIncome, BusinessIncome,
-        //            CapitalGains, OtherIncome have NO columns in itr.filings.
-        // DB uses gross_total_income, total_income, total_tax, tax_paid, refund_due, payable instead.
-        // DDL HANDOFF (db-engineer): add the following to itr.filings if granular income breakdowns needed:
-        //   computation_hash VARCHAR(64)
-        //   salary_income NUMERIC(18,2)
-        //   house_property_income NUMERIC(18,2)
-        //   business_income NUMERIC(18,2)
-        //   capital_gains NUMERIC(18,2)
-        //   other_income NUMERIC(18,2)
-        builder.Ignore(f => f.ComputationHash);
-        builder.Ignore(f => f.SalaryIncome);
-        builder.Ignore(f => f.HousePropertyIncome);
-        builder.Ignore(f => f.BusinessIncome);
-        builder.Ignore(f => f.CapitalGains);
-        builder.Ignore(f => f.OtherIncome);
+        // DG-ITR-04: dedicated ca_notes column (distinct from rejection reason). Added migration 097.
+        builder.Property(f => f.CaNotes).HasColumnName("ca_notes");
 
-        // DB also has tax_slab_version_id, gross_total_income, total_tax, etc. — shadow properties
+        // DG-ITR-05: user_id NOT NULL (024_itr_assessee_filings.sql:79). EF must write it.
+        builder.Property(f => f.UserId).IsRequired().HasColumnName("user_id");
+
+        // DG-ITR-08: Income-head columns added by migration 066. Remove the stale Ignore() calls.
+        // Columns: computation_hash, salary_income, house_property_income, business_income,
+        //          capital_gains, other_income (all NUMERIC(20,2)).
+        builder.Property(f => f.ComputationHash).HasMaxLength(64).HasColumnName("computation_hash");
+        builder.Property(f => f.SalaryIncome).HasColumnType("numeric(20,2)").HasColumnName("salary_income");
+        builder.Property(f => f.HousePropertyIncome).HasColumnType("numeric(20,2)").HasColumnName("house_property_income");
+        builder.Property(f => f.BusinessIncome).HasColumnType("numeric(20,2)").HasColumnName("business_income");
+        builder.Property(f => f.CapitalGains).HasColumnType("numeric(20,2)").HasColumnName("capital_gains");
+        builder.Property(f => f.OtherIncome).HasColumnType("numeric(20,2)").HasColumnName("other_income");
+
+        // Shadow properties for DB-only fields not on the entity
         builder.Property<Guid?>("TaxSlabVersionId").HasColumnName("tax_slab_version_id");
         builder.Property<decimal?>("GrossTotalIncome").HasColumnName("gross_total_income").HasColumnType("numeric(18,2)");
 

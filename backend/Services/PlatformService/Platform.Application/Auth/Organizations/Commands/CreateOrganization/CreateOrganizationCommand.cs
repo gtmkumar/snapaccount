@@ -60,11 +60,14 @@ public sealed class CreateOrganizationCommandValidator : AbstractValidator<Creat
 
 /// <summary>
 /// Creates the organization aggregate and persists it via the repository.
+/// SEC-013 (DG-SEC-02): encrypts organization PAN with AES-256-GCM before persisting,
+/// mirroring the user-profile PAN path in UpdateUserProfileCommand.
 /// </summary>
 public sealed class CreateOrganizationCommandHandler(
     IOrganizationRepository organizationRepository,
     IAuthDbContext db,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    IPanEncryptionService panEncryptionService)
     : ICommandHandler<CreateOrganizationCommand, CreateOrganizationResponse>
 {
     /// <summary>System role granted to the creator so they can administer their org (invite, roles, etc.).</summary>
@@ -75,12 +78,18 @@ public sealed class CreateOrganizationCommandHandler(
         CreateOrganizationCommand request,
         CancellationToken cancellationToken)
     {
+        // SEC-013 / DG-SEC-02: Encrypt org PAN before storing. Never persist plaintext PAN.
+        // The organisation PAN carries the same KYC sensitivity as the user PAN.
+        var encryptedPan = !string.IsNullOrEmpty(request.PanNumber)
+            ? panEncryptionService.Encrypt(request.PanNumber.Trim().ToUpperInvariant())
+            : request.PanNumber;
+
         var org = new Organization
         {
             OwnerUserId     = currentUser.UserId,
             BusinessName    = request.BusinessName,
             Gstin           = request.Gstin,
-            PanNumber       = request.PanNumber,
+            PanNumber       = encryptedPan,
             IsGstRegistered = !string.IsNullOrEmpty(request.Gstin)
         };
 

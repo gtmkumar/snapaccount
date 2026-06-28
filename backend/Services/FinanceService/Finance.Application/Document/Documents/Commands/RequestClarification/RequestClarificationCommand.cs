@@ -1,6 +1,8 @@
 using DocumentService.Application.Common.Interfaces;
+using DocumentService.Application.Documents.Interfaces;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Application.Behaviors;
 using SnapAccount.Shared.Domain;
@@ -35,12 +37,14 @@ public sealed class RequestClarificationCommandValidator : AbstractValidator<Req
 
 /// <summary>
 /// Handles <see cref="RequestClarificationCommand"/>.
-/// Persists the clarification request as an audit record and surfaces it to the
-/// document owner. Current behavior: saves the message via a future notification event.
+/// Persists the clarification request as an audit record and fires a DOC_CLARIFICATION_REQUESTED
+/// notification to the document owner via the event publisher.
 /// </summary>
 public sealed class RequestClarificationCommandHandler(
     IDocumentDbContext db,
-    ICurrentUser currentUser) : ICommandHandler<RequestClarificationCommand>
+    ICurrentUser currentUser,
+    ILogger<RequestClarificationCommandHandler> logger,
+    IDocumentEventPublisher? eventPublisher = null) : ICommandHandler<RequestClarificationCommand>
 {
     /// <inheritdoc />
     public async Task<Result> Handle(RequestClarificationCommand request, CancellationToken cancellationToken)
@@ -69,9 +73,22 @@ public sealed class RequestClarificationCommandHandler(
         // UpdatedAt will be stamped by AuditableEntityInterceptor.
         await db.SaveChangesAsync(cancellationToken);
 
-        // TODO: Publish DOC_CLARIFICATION_REQUESTED notification event to NotificationService
-        // when the event is added to NotificationEventCatalog (proposed code: DOC_CLARIFICATION_REQUESTED,
-        // channels: Push,InApp). Notify doc.UserId with request.Message content.
+        // DG-NOTIF-01: Publish DOC_CLARIFICATION_REQUESTED notification event.
+        // eventPublisher is optional — null in tests / local dev without GCP.
+        if (eventPublisher is not null && doc.UserId.HasValue)
+        {
+            try
+            {
+                await eventPublisher.PublishClarificationRequestedAsync(doc, request.Message, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Fire-and-forget: clarification already saved; notification is best-effort.
+                logger.LogWarning(ex,
+                    "RequestClarificationCommandHandler: notification publish failed for document {DocumentId}",
+                    doc.Id);
+            }
+        }
 
         return Result.Success();
     }

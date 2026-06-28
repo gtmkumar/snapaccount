@@ -41,12 +41,12 @@ public sealed class FilingAdminListTests : IDisposable
         _assesseeId2 = assessee2.Id;
 
         // Seed filings
-        _db.Filings.Add(Filing.Create(_assesseeId1, "AY2025-26", "ITR-1", "NEW")); // DRAFT
-        var reviewFiling = Filing.Create(_assesseeId1, "AY2026-27", "ITR-1", "NEW");
+        _db.Filings.Add(Filing.Create(_assesseeId1, "AY2025-26", "ITR-1", "NEW", Guid.NewGuid())); // DRAFT
+        var reviewFiling = Filing.Create(_assesseeId1, "AY2026-27", "ITR-1", "NEW", Guid.NewGuid());
         reviewFiling.UpdateIncomeHeads(500000m, 0m, 0m, 0m, 0m);
         _db.Filings.Add(reviewFiling);
-        _db.Filings.Add(Filing.Create(_assesseeId2, "AY2026-27", "ITR-4", "OLD")); // DRAFT
-        _db.Filings.Add(Filing.Create(assesseeOther.Id, "AY2026-27", "ITR-1", "NEW")); // other org
+        _db.Filings.Add(Filing.Create(_assesseeId2, "AY2026-27", "ITR-4", "OLD", Guid.NewGuid())); // DRAFT
+        _db.Filings.Add(Filing.Create(assesseeOther.Id, "AY2026-27", "ITR-1", "NEW", Guid.NewGuid())); // other org
         _db.SaveChanges();
     }
 

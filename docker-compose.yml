@@ -181,12 +181,52 @@ services:
     networks:
       - backend
 
+  # ── API Gateway: YARP reverse proxy (:5000 → composites) ──
+  # Routes: /auth/* → platform-service, /documents/* → finance-service, /chat/* → assist-service, etc.
+  # appsettings.json cluster addresses are overridden via ReverseProxy__Clusters__* env vars so
+  # the gateway can reach the other containers by their Docker Compose service names.
+  # VITE_API_BASE_URL in admin-panel should point here (:5000) in container environments;
+  # for local bare-metal dev the Aspire AppHost maps the gateway to :6060.
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.gateway
+    container_name: snapaccount-gateway
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      # YARP cluster destinations — override the Aspire service-discovery addresses with
+      # Docker Compose service names so containers can reach each other.
+      ReverseProxy__Clusters__platform__Destinations__platform__Address: http://platform-service:8080
+      ReverseProxy__Clusters__finance__Destinations__finance__Address: http://finance-service:8080
+      ReverseProxy__Clusters__assist__Destinations__assist__Address: http://assist-service:8080
+      # Rate limiting: disable in local dev to avoid throttling rapid test loops
+      RateLimiting__Enabled: "false"
+    ports:
+      - "5000:8080"
+    depends_on:
+      platform-service:
+        condition: service_healthy
+      finance-service:
+        condition: service_healthy
+      assist-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - backend
+      - frontend
+
   admin-panel:
     build:
       context: ./src/admin
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5201}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5000}
         VITE_FIREBASE_API_KEY: ${FIREBASE_WEB_API_KEY}
         VITE_FIREBASE_AUTH_DOMAIN: ${FIREBASE_AUTH_DOMAIN}
         VITE_FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
@@ -196,7 +236,7 @@ services:
     ports:
       - "3000:8080"
     depends_on:
-      - platform-service
+      - api-gateway
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s

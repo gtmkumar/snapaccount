@@ -63,6 +63,15 @@ jest.mock('../../src/api/itr', () => ({
   ),
 }));
 
+// DG-AUTH-06: stub the IFSC lookup so the Bank step's auto-detect is deterministic.
+jest.mock('../../src/lib/ifsc', () => ({
+  lookupIfsc: jest.fn(() =>
+    Promise.resolve({ bank: 'HDFC Bank', branch: 'Koramangala', city: 'Bengaluru', fromFallback: false }),
+  ),
+}));
+import { lookupIfsc } from '../../src/lib/ifsc';
+const mockLookupIfsc = lookupIfsc as jest.Mock;
+
 import { EmployeeProfileWizardScreen } from '../../src/screens/itr/EmployeeProfileWizardScreen';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn() } as never;
@@ -77,6 +86,12 @@ describe('EmployeeProfileWizardScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUpdateItrProfile.mockResolvedValue({ assesseeId: 'a1', panLast4: '1234', fullName: 'Test User' });
+    mockLookupIfsc.mockResolvedValue({
+      bank: 'HDFC Bank',
+      branch: 'Koramangala',
+      city: 'Bengaluru',
+      fromFallback: false,
+    });
   });
 
   it('renders header and Step 0 (Personal) on initial mount', () => {
@@ -109,19 +124,19 @@ describe('EmployeeProfileWizardScreen', () => {
     expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
   });
 
-  it('navigates forward through all 5 steps and on final step calls navigate to DocChecklist', async () => {
+  it('navigates forward through all 6 steps and on final step calls navigate to DocChecklist', async () => {
     const { getByText } = render(
       <Wrapper><EmployeeProfileWizardScreen navigation={mockNavigation} route={mockRoute} /></Wrapper>,
     );
 
-    // Steps 0-3: press Next
-    for (let i = 0; i < 4; i++) {
+    // Steps 0-4 (Personal → Employment → Deductions → Investments → Bank): press Next
+    for (let i = 0; i < 5; i++) {
       await act(async () => {
         fireEvent.press(getByText('mobile.itr.wizard.next'));
       });
     }
 
-    // Step 4 is Review — button label changes to submit
+    // Step 5 is Review — button label changes to submit
     await waitFor(() => expect(getByText('mobile.itr.wizard.submit')).toBeTruthy());
 
     await act(async () => {
@@ -154,13 +169,51 @@ describe('EmployeeProfileWizardScreen', () => {
     const { getByText, getByTestId } = render(
       <Wrapper><EmployeeProfileWizardScreen navigation={mockNavigation} route={mockRoute} /></Wrapper>,
     );
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       await act(async () => {
         fireEvent.press(getByText('mobile.itr.wizard.next'));
       });
     }
     await waitFor(() => expect(getByTestId('summary-list')).toBeTruthy());
     expect(getByText('mobile.itr.wizard.step4Title')).toBeTruthy();
+  });
+
+  it('Bank step auto-detects the bank name on a valid IFSC (DG-AUTH-06)', async () => {
+    const { getByText, getByLabelText, getByTestId } = render(
+      <Wrapper><EmployeeProfileWizardScreen navigation={mockNavigation} route={mockRoute} /></Wrapper>,
+    );
+
+    // Advance to step 4 (Bank): Personal → Employment → Deductions → Investments → Bank
+    for (let i = 0; i < 4; i++) {
+      await act(async () => {
+        fireEvent.press(getByText('mobile.itr.wizard.next'));
+      });
+    }
+    await waitFor(() => expect(getByText('mobile.itr.wizard.step4BankTitle')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.changeText(getByLabelText('mobile.itr.wizard.ifsc'), 'HDFC0001234');
+    });
+
+    await waitFor(() => {
+      expect(mockLookupIfsc).toHaveBeenCalledWith('HDFC0001234');
+      expect(getByTestId('bank-detected')).toBeTruthy();
+    });
+  });
+
+  it('Bank step does not call IFSC lookup for an incomplete IFSC', async () => {
+    const { getByText, getByLabelText } = render(
+      <Wrapper><EmployeeProfileWizardScreen navigation={mockNavigation} route={mockRoute} /></Wrapper>,
+    );
+    for (let i = 0; i < 4; i++) {
+      await act(async () => {
+        fireEvent.press(getByText('mobile.itr.wizard.next'));
+      });
+    }
+    await act(async () => {
+      fireEvent.changeText(getByLabelText('mobile.itr.wizard.ifsc'), 'HDFC00');
+    });
+    expect(mockLookupIfsc).not.toHaveBeenCalled();
   });
 
   it('PUT /itr/profile is called once per Next press', async () => {

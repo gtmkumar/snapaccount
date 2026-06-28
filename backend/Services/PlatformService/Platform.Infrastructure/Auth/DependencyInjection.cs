@@ -51,8 +51,10 @@ public static class DependencyInjection
         services.AddScoped<ISaveChangesInterceptor, AuditableEntityInterceptor>();
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
 
-        // SEC-RLS-001: set Postgres session vars for RLS per connection open
-        services.AddScoped<RlsSessionInterceptor>();
+        // SEC-RLS-001: set Postgres session vars for RLS per connection open.
+        // Auth uses the local interceptor (which references AuthService.Domain.Permissions constants).
+        // Finance/Assist use the shared version from Shared.Infrastructure.
+        services.AddScoped<AuthService.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>();
 
         // Singleton TimeProvider — interceptor uses this for UTC timestamps
         services.AddSingleton(TimeProvider.System);
@@ -63,7 +65,7 @@ public static class DependencyInjection
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
             // SEC-RLS-001: RlsSessionInterceptor sets app.current_user_id per connection
-            options.AddInterceptors(sp.GetRequiredService<RlsSessionInterceptor>());
+            options.AddInterceptors(sp.GetRequiredService<AuthService.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>());
             options.UseNpgsql(
                 connectionString,
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", "auth"));
@@ -119,6 +121,14 @@ public static class DependencyInjection
         // GAP-020 / DPDP: Data export job scheduler — Hangfire-backed.
         services.AddScoped<IDataExportJobScheduler, HangfireDataExportScheduler>();
         services.AddScoped<DataExportJob>();
+
+        // DG-SEC-04: DPDP data-export cross-schema aggregator and GCS storage service.
+        // Aggregator reads document/gst/loan/itr/accounting/chat/callback schemas via raw
+        // Npgsql (avoids cross-project references to Finance/Assist DbContext types).
+        // Storage service uploads the bundle to GCS:DpdpExportsBucket and generates a
+        // 24-hour signed URL; falls back to local temp dir when GCS credentials are absent.
+        services.AddScoped<IDpdpDataAggregator, NpgsqlDpdpDataAggregator>();
+        services.AddScoped<IDataExportStorageService, GcsDataExportStorageService>();
 
         // SEC-013: PAN encryption service — AES-256 key from GCP Secret Manager
         services.AddSingleton<IPanEncryptionService, AesPanEncryptionService>();

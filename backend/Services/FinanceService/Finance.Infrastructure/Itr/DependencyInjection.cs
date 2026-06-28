@@ -37,9 +37,14 @@ public static class DependencyInjection
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
         services.AddSingleton(TimeProvider.System);
 
+        // DG-SEC-01: RLS session-var interceptor for itr.* tenant isolation
+        services.AddScoped<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>();
+
         services.AddDbContext<ItrServiceDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
+            // DG-SEC-01: RLS connection interceptor
+            options.AddInterceptors(sp.GetRequiredService<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>());
             options.UseNpgsql(
                 connectionString,
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", "itr"));

@@ -1,6 +1,7 @@
 using FluentValidation;
 using LoanService.Application.Common.Interfaces;
 using LoanService.Application.Services;
+using LoanService.Domain.ValueObjects;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Application.Behaviors;
 using SnapAccount.Shared.Domain;
@@ -17,12 +18,25 @@ public record CheckEligibilityCommand(
     Guid OrgId,
     Guid? LoanProductId) : ICommand<CheckEligibilityResponse>;
 
-/// <summary>Eligibility check response.</summary>
+/// <summary>
+/// Eligibility check response.
+/// DG-LOAN-07: Extended with <see cref="EligibilityStatus"/> (tri-state) and
+/// <see cref="UnmetCriteriaByProduct"/> (per-product remediation guidance).
+/// <see cref="IsEligible"/> is retained for backward compatibility.
+/// </summary>
 public record CheckEligibilityResponse(
     decimal Score,
     bool IsEligible,
     IReadOnlyList<string> Reasons,
-    IReadOnlyList<Guid> QualifyingProductIds);
+    IReadOnlyList<Guid> QualifyingProductIds,
+    /// <summary>DG-LOAN-07: Tri-state eligibility status (Eligible/PartiallyEligible/NotEligible).</summary>
+    EligibilityStatus EligibilityStatus = EligibilityStatus.NotEligible,
+    /// <summary>
+    /// DG-LOAN-07: Per-product unmet-criteria strings for non-qualifying products.
+    /// Key = product id; value = list of human-readable actions needed to qualify.
+    /// Empty when fully Eligible.
+    /// </summary>
+    IReadOnlyDictionary<Guid, IReadOnlyList<string>>? UnmetCriteriaByProduct = null);
 
 /// <summary>Validates CheckEligibilityCommand.</summary>
 public sealed class CheckEligibilityCommandValidator : AbstractValidator<CheckEligibilityCommand>
@@ -51,10 +65,13 @@ public sealed class CheckEligibilityCommandHandler(
         var score = await eligibilityEngine.ComputeAsync(
             request.OrgId, request.LoanProductId, cancellationToken);
 
+        // DG-LOAN-07: surface the tri-state EligibilityStatus and per-product unmet criteria.
         return new CheckEligibilityResponse(
             score.Score,
             score.IsEligible,
             score.Reasons,
-            score.QualifyingProductIds);
+            score.QualifyingProductIds,
+            score.EligibilityStatus,
+            score.UnmetCriteriaByProduct);
     }
 }

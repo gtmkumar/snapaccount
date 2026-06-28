@@ -398,6 +398,8 @@ export default function BankCommunicationsPage() {
               </div>
             }
             pageSize={50}
+            tableId="bank-comms"
+            density="compact"
           />
         </div>
 

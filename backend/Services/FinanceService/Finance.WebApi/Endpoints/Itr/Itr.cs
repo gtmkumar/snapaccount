@@ -13,7 +13,10 @@ using ItrService.Application.Filings.Commands.ComputeTax;
 using ItrService.Application.Filings.Commands.MarkEVerified;
 using ItrService.Application.Filings.Commands.MarkFiled;
 using ItrService.Application.Filings.Commands.StartFiling;
+using ItrService.Application.Filings.Queries.SuggestItrForm;
 using ItrService.Application.Filings.Commands.SubmitForCaReview;
+using ItrService.Application.Filings.Commands.UpdateFilingDraft;
+using ItrService.Application.Filings.Queries.GetComputationVersions;
 using ItrService.Application.Filings.Queries.GetFiling;
 using ItrService.Application.Filings.Queries.GetFilingKpi;
 using ItrService.Application.Filings.Queries.ListFilings;
@@ -102,9 +105,52 @@ public sealed class Itr : EndpointGroupBase
         .RequireAuthorization()
         .WithTags("Filings");
 
+        // GET /itr/filings/suggest-form — must be declared BEFORE /filings/{id:guid}.
+        // DG-ITR-10: derives the recommended ITR form from income heads + assessee type.
+        // Optionally validates a caller-supplied form (callerSuppliedForm query param).
+        group.MapGet("/filings/suggest-form", async (
+            string assesseeType,
+            string assessmentYear,
+            decimal salaryIncome,
+            decimal housePropertyIncome,
+            decimal businessIncome,
+            decimal capitalGains,
+            decimal otherIncome,
+            IMediator mediator,
+            CancellationToken ct,
+            bool hasMultipleHouseProperties = false,
+            bool isPresumptiveTaxation = false,
+            bool hasForeignAssets = false,
+            decimal? annualTurnoverCr = null,
+            string? callerSuppliedForm = null) =>
+        {
+            var query = new SuggestItrFormQuery(
+                assesseeType, salaryIncome, housePropertyIncome, businessIncome,
+                capitalGains, otherIncome, assessmentYear,
+                hasMultipleHouseProperties, isPresumptiveTaxation, hasForeignAssets,
+                annualTurnoverCr, callerSuppliedForm);
+            var result = await mediator.Send(query, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+        })
+        .WithName("SuggestItrForm")
+        .WithSummary("Suggest ITR form from income profile (DG-ITR-10)")
+        .WithDescription(
+            "Derives the recommended ITR form (ITR-1..4) from the assessee's income heads and assessee type, " +
+            "per Indian Income Tax rules. Rules are config-driven and versioned by assessment year. " +
+            "When callerSuppliedForm is provided, also validates eligibility. " +
+            "Returns { suggestedForm, isOutsideAutoScope, reasons, validation? }.")
+        .RequireAuthorization()
+        .WithTags("Filings");
+
         group.MapPost("/filings", async (StartFilingRequest req, IMediator mediator, CancellationToken ct) =>
         {
-            var command = new StartFilingCommand(req.AssesseeId, req.AssessmentYear, req.ItrFormType, req.Regime);
+            // DG-ITR-10: ItrFormType is optional — omit it to let the server auto-derive the form.
+            var command = new StartFilingCommand(
+                req.AssesseeId, req.AssessmentYear, req.ItrFormType, req.Regime,
+                req.SalaryIncome, req.HousePropertyIncome, req.BusinessIncome,
+                req.CapitalGains, req.OtherIncome,
+                req.HasMultipleHouseProperties, req.IsPresumptiveTaxation,
+                req.HasForeignAssets, req.AnnualTurnoverCr);
             var result = await mediator.Send(command, ct);
             return result.IsSuccess
                 ? Results.Created($"/itr/filings/{result.Value.FilingId}", result.Value)
@@ -112,7 +158,11 @@ public sealed class Itr : EndpointGroupBase
         })
         .WithName("StartFiling")
         .WithSummary("Start a new ITR filing")
-        .WithDescription("Creates a filing in DRAFT status. Idempotent per (assesseeId, assessmentYear).")
+        .WithDescription(
+            "Creates a filing in DRAFT status. Idempotent per (assesseeId, assessmentYear). " +
+            "DG-ITR-10: itrFormType is optional — omit to auto-derive from income heads. " +
+            "When provided, validates eligibility against IT rules; ineligible forms return 400. " +
+            "Response includes resolvedItrFormType and formWarnings for sub-optimal choices.")
         .RequireAuthorization()
         .WithTags("Filings");
 
@@ -127,15 +177,54 @@ public sealed class Itr : EndpointGroupBase
         .RequireAuthorization()
         .WithTags("Filings");
 
+        // DG-ITR-07: GET /itr/filings/{id}/computation-versions — versioned computation history.
+        // Admin CA panel Col 3 (ItrFilingDetailPage) queries this to show version history,
+        // diff viewer, and Restore action. Returns newest-first.
+        group.MapGet("/filings/{id:guid}/computation-versions", async (
+            Guid id, IMediator mediator, CancellationToken ct) =>
+        {
+            var result = await mediator.Send(new GetComputationVersionsQuery(id), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+        })
+        .WithName("GetComputationVersions")
+        .WithSummary("Get computation version history for a filing")
+        .WithDescription("Returns all versioned tax-computation snapshots for the filing, ordered newest-first. Each entry contains the exact input and result JSON used, matching the admin ComputationVersionSchema. DG-ITR-07.")
+        .RequireAuthorization()
+        .WithTags("Tax Computation");
+
+        // DG-ITR-02: PATCH /itr/filings/{id} — draft autosave + CA notes
+        // Admin CA tax-computation panel calls this every 30s and on explicit Save Draft.
+        // Persists income-head inputs + ca_notes without changing status.
+        group.MapPatch("/filings/{id:guid}", async (Guid id, UpdateFilingDraftRequest req, IMediator mediator, CancellationToken ct) =>
+        {
+            var command = new UpdateFilingDraftCommand(
+                id,
+                req.SalaryIncome,
+                req.HousePropertyIncome,
+                req.BusinessIncome,
+                req.CapitalGains,
+                req.OtherIncome,
+                req.CaNotes);
+            var result = await mediator.Send(command, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
+        })
+        .WithName("UpdateFilingDraft")
+        .WithSummary("Autosave filing draft inputs and CA notes")
+        .WithDescription("Persists income-head values and CA notes without changing status. Called every 30s by the admin CA panel autosave. Allowed in DRAFT, CA_REJECTED, or UNDER_CA_REVIEW state. Returns updated FilingDetailDto. DG-ITR-02.")
+        .RequireAuthorization()
+        .WithTags("Filings");
+
         // ── Tax Computation ───────────────────────────────────────────────────
 
         group.MapPost("/filings/{id:guid}/compute", async (
             Guid id, ComputeTaxRequest req, IMediator mediator, CancellationToken ct) =>
         {
+            // DG-ITR-09: pass NewRegimeDeductionClaims through to the engine.
             var command = new ComputeTaxCommand(
                 id, req.SalaryIncome, req.HousePropertyIncome, req.BusinessIncome,
                 req.CapitalGains, req.OtherIncome, req.Section80C, req.Section80D,
-                req.Section80E, req.OtherDeductions, req.AdvanceTaxPaid, req.TdsPaid);
+                req.Section80E, req.OtherDeductions, req.AdvanceTaxPaid, req.TdsPaid,
+                NewRegimeDeductionClaims: req.NewRegimeDeductionClaims);
             var result = await mediator.Send(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
         })
@@ -149,10 +238,13 @@ public sealed class Itr : EndpointGroupBase
         group.MapPost("/filings/{id:guid}/compare-regimes", async (
             Guid id, CompareRegimesRequest req, IMediator mediator, CancellationToken ct) =>
         {
+            // DG-ITR-09: pass NewRegimeDeductionClaims so the comparison's new-regime branch
+            // applies the same catalog-driven deductions as the direct compute endpoint.
             var command = new CompareRegimesCommand(
                 id, req.SalaryIncome, req.HousePropertyIncome, req.BusinessIncome,
                 req.CapitalGains, req.OtherIncome, req.Section80C, req.Section80D,
-                req.Section80E, req.OtherDeductions, req.AdvanceTaxPaid, req.TdsPaid);
+                req.Section80E, req.OtherDeductions, req.AdvanceTaxPaid, req.TdsPaid,
+                NewRegimeDeductionClaims: req.NewRegimeDeductionClaims);
             var result = await mediator.Send(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
         })
@@ -433,14 +525,51 @@ public sealed record UpdateProfileRequest(
     string? Address,
     decimal? AnnualTurnoverCr);
 
-/// <summary>Request body for POST /itr/filings.</summary>
+/// <summary>
+/// Request body for POST /itr/filings.
+/// DG-ITR-10: <see cref="ItrFormType"/> is now optional — when omitted, the server
+/// auto-derives the form from income heads and assessee type per IT rules.
+/// Income head fields default to 0 and are used only for form determination.
+/// </summary>
 public sealed record StartFilingRequest(
     Guid AssesseeId,
     string AssessmentYear,
-    string ItrFormType,
-    string Regime);
+    string Regime,
+    /// <summary>
+    /// Optional ITR form override (ITR-1..7).
+    /// When null, the server auto-derives using ItrFormResolver.
+    /// When provided, validated against income profile; ineligible forms → 400.
+    /// </summary>
+    string? ItrFormType = null,
+    // ── Income heads for auto-determination ──────────────────────────────────
+    decimal SalaryIncome = 0,
+    decimal HousePropertyIncome = 0,
+    decimal BusinessIncome = 0,
+    decimal CapitalGains = 0,
+    decimal OtherIncome = 0,
+    bool HasMultipleHouseProperties = false,
+    bool IsPresumptiveTaxation = false,
+    bool HasForeignAssets = false,
+    decimal? AnnualTurnoverCr = null);
 
-/// <summary>Request body for POST /itr/filings/{id}/compute.</summary>
+/// <summary>
+/// Request body for PATCH /itr/filings/{id} — draft autosave.
+/// DG-ITR-02: all fields are optional (partial update). Admin sends { ...inputs, caNotes }.
+/// </summary>
+public sealed record UpdateFilingDraftRequest(
+    decimal? SalaryIncome,
+    decimal? HousePropertyIncome,
+    decimal? BusinessIncome,
+    decimal? CapitalGains,
+    decimal? OtherIncome,
+    string? CaNotes);
+
+/// <summary>
+/// Request body for POST /itr/filings/{id}/compute.
+/// DG-ITR-09: NewRegimeDeductionClaims is an optional dictionary of section-code → claimed INR amount
+/// for new-regime-eligible deduction sections (e.g. {"80CCD(2)": 50000}).
+/// The engine loads allowed sections from the deduction catalog (config-driven per AY) and caps claims.
+/// </summary>
 public sealed record ComputeTaxRequest(
     decimal SalaryIncome,
     decimal HousePropertyIncome,
@@ -452,9 +581,14 @@ public sealed record ComputeTaxRequest(
     decimal Section80E,
     decimal OtherDeductions,
     decimal AdvanceTaxPaid,
-    decimal TdsPaid);
+    decimal TdsPaid,
+    Dictionary<string, decimal>? NewRegimeDeductionClaims = null);
 
-/// <summary>Request body for POST /itr/filings/{id}/compare-regimes.</summary>
+/// <summary>
+/// Request body for POST /itr/filings/{id}/compare-regimes.
+/// DG-ITR-09: NewRegimeDeductionClaims is forwarded to the engine's new-regime branch
+/// so the comparison reflects the correct new-regime-eligible deductions.
+/// </summary>
 public sealed record CompareRegimesRequest(
     decimal SalaryIncome,
     decimal HousePropertyIncome,
@@ -466,7 +600,8 @@ public sealed record CompareRegimesRequest(
     decimal Section80E,
     decimal OtherDeductions,
     decimal AdvanceTaxPaid,
-    decimal TdsPaid);
+    decimal TdsPaid,
+    Dictionary<string, decimal>? NewRegimeDeductionClaims = null);
 
 /// <summary>Request body for CA approve.</summary>
 public sealed record CaApproveRequest(Guid CaUserId);

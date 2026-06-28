@@ -3,6 +3,8 @@ using DocumentService.Application.Common.Interfaces;
 using DocumentService.Application.Documents.Interfaces;
 using DocumentService.Application.Interfaces;
 using DocumentService.Domain.Entities;
+using DocumentService.Infrastructure.SignalR;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -19,7 +21,8 @@ public sealed class InlineOcrJobEnqueuer(
     IDocumentDbContext db,
     IOcrServiceResolver resolver,
     IAiUsageReporter usageReporter,
-    ILogger<InlineOcrJobEnqueuer> logger) : IOcrJobEnqueuer
+    ILogger<InlineOcrJobEnqueuer> logger,
+    IHubContext<DocumentHub>? hubContext = null) : IOcrJobEnqueuer
 {
     public async Task EnqueueAsync(Guid documentId, CancellationToken cancellationToken)
     {
@@ -77,5 +80,26 @@ public sealed class InlineOcrJobEnqueuer(
         logger.LogInformation(
             "Inline OCR: document {DocumentId} PROCESSED with {Count} fields (vendor={Vendor}, amount={Amount}).",
             documentId, fields.Count, vendor, amount);
+
+        // DG-DOC-07: Push real-time status change (PROCESSED) to the document owner's client.
+        // Best-effort: push failure is non-fatal; mobile poll continues as fallback.
+        if (hubContext is not null && doc.UserId.HasValue)
+        {
+            try
+            {
+                var groupName = DocumentHub.UserGroupName(doc.UserId.Value.ToString());
+                await hubContext.Clients
+                    .Group(groupName)
+                    .SendAsync("DocumentStatusChanged",
+                        new { DocumentId = doc.Id, Status = doc.Status },
+                        cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "DocumentHub: Failed to push OCR-complete status for document {DocumentId}. " +
+                    "Mobile polling is the fallback.", documentId);
+            }
+        }
     }
 }

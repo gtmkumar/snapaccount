@@ -296,11 +296,10 @@ internal sealed class TestAiDbContext(DbContextOptions<TestAiDbContext> options)
             .WithOne(e => e.Chunk).HasForeignKey<AiEmbedding>(e => e.ChunkId);
 
         modelBuilder.Entity<AiEmbedding>().HasKey(e => e.Id);
-        modelBuilder.Entity<AiEmbedding>()
-            .Property(e => e.Vector)
-            .HasConversion(
-                v => string.Join(",", v),
-                s => s.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(float.Parse).ToArray());
+        // DG-CHAT-01: AiEmbedding now exposes a pgvector `Embedding` (Pgvector.Vector) property
+        // instead of the old float[] `Vector`. The in-memory test provider cannot map the
+        // pgvector type, and these ExtractFields tests do not exercise embeddings, so ignore it.
+        modelBuilder.Entity<AiEmbedding>().Ignore(e => e.Embedding);
 
         modelBuilder.Entity<AiInteraction>().HasKey(i => i.Id);
         modelBuilder.Entity<AiInteraction>().Property(i => i.IsReservation).HasDefaultValue(false);

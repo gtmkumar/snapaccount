@@ -84,6 +84,7 @@ export function UserApprovalScreen({ navigation, route }: Props) {
     // GAP-063 / M4: Use centralized useBiometricGate hook.
     const passed = await triggerBiometric({
       promptMessage: t('mobile.biometric.prompt'),
+      flowKey: 'itr.approve',
     });
     if (passed) {
       setBiometricPassed(true);

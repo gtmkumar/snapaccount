@@ -30,6 +30,8 @@ import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/T
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import { updateItrProfile } from '../../api/itr';
 import type { AssesseeType } from '../../api/itr';
+import { isValidIFSC } from '../../lib/utils';
+import { lookupIfsc } from '../../lib/ifsc';
 import type { ItrStackParamList } from '../../navigation/ItrStack';
 
 type NavProp = NativeStackNavigationProp<ItrStackParamList, 'EmployeeProfileWizard'>;
@@ -61,10 +63,22 @@ interface WizardState {
   capitalGains: string;
   housePropertyIncome: string;
   otherIncome: string;
-  // Step 4: Review — derived from above
+  // Step 4: Bank Account (DG-AUTH-06 — needed for ITR refund credit)
+  accountNumber: string;
+  confirmAccountNumber: string;
+  ifsc: string;
+  bankName: string;
+  // Step 5: Review — derived from above
 }
 
-const STEPS = ['Personal', 'Employment', 'Deductions', 'Investments', 'Review'];
+const STEPS = ['Personal', 'Employment', 'Deductions', 'Investments', 'Bank', 'Review'];
+
+/** Mask all but the last 4 digits of a bank account number for display. */
+function maskAccount(account: string): string {
+  const clean = account.replace(/\s/g, '');
+  if (clean.length <= 4) return clean;
+  return `${'•'.repeat(clean.length - 4)}${clean.slice(-4)}`;
+}
 
 export function EmployeeProfileWizardScreen({ navigation, route }: Props) {
   const { tokens } = useTheme();
@@ -90,6 +104,10 @@ export function EmployeeProfileWizardScreen({ navigation, route }: Props) {
     capitalGains: '',
     housePropertyIncome: '',
     otherIncome: '',
+    accountNumber: '',
+    confirmAccountNumber: '',
+    ifsc: '',
+    bankName: '',
   });
 
   const updateMutation = useMutation({
@@ -171,6 +189,9 @@ export function EmployeeProfileWizardScreen({ navigation, route }: Props) {
             <StepInvestments state={state} set={set} t={t} />
           )}
           {currentStep === 4 && (
+            <StepBank state={state} set={set} t={t} />
+          )}
+          {currentStep === 5 && (
             <StepReview state={state} onEdit={setCurrentStep} t={t} />
           )}
         </ScrollView>
@@ -424,6 +445,126 @@ function StepInvestments({
   );
 }
 
+function StepBank({
+  state,
+  set,
+  t,
+}: {
+  state: WizardState;
+  set: (k: keyof WizardState, v: string) => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const { tokens } = useTheme();
+  const styles = useStyles();
+  const [lookingUp, setLookingUp] = useState(false);
+  const [lookupFailed, setLookupFailed] = useState(false);
+
+  const accountsMatch =
+    !state.confirmAccountNumber ||
+    state.accountNumber === state.confirmAccountNumber;
+  const ifscValid = !state.ifsc || isValidIFSC(state.ifsc);
+
+  // DG-AUTH-06: on a valid 11-char IFSC, auto-detect the bank/branch name.
+  const handleIfscChange = async (raw: string) => {
+    const next = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11);
+    set('ifsc', next);
+    setLookupFailed(false);
+    if (state.bankName) set('bankName', '');
+    if (!isValidIFSC(next)) return;
+
+    setLookingUp(true);
+    try {
+      const details = await lookupIfsc(next);
+      if (details) {
+        set('bankName', details.branch ? `${details.bank} — ${details.branch}` : details.bank);
+      } else {
+        setLookupFailed(true);
+      }
+    } catch {
+      setLookupFailed(true);
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
+  return (
+    <View style={styles.stepContent}>
+      <Text style={styles.stepTitle}>{t('mobile.itr.wizard.step4BankTitle')}</Text>
+
+      <View style={styles.infoNote}>
+        <Ionicons name="information-circle-outline" size={16} color={tokens.brandCta} />
+        <Text style={styles.infoNoteText}>{t('mobile.itr.wizard.bankRefundNote')}</Text>
+      </View>
+
+      <FieldGroup label={t('mobile.itr.wizard.accountNumber')}>
+        <TextInput
+          style={styles.input}
+          value={state.accountNumber}
+          onChangeText={(v) => set('accountNumber', v.replace(/[^0-9]/g, '').slice(0, 18))}
+          placeholder="00000000000000"
+          placeholderTextColor={tokens.textTertiary}
+          keyboardType="number-pad"
+          accessibilityLabel={t('mobile.itr.wizard.accountNumber')}
+        />
+        {state.accountNumber.length > 4 && (
+          <Text style={styles.fieldHint}>{maskAccount(state.accountNumber)}</Text>
+        )}
+      </FieldGroup>
+
+      <FieldGroup label={t('mobile.itr.wizard.confirmAccountNumber')}>
+        <TextInput
+          style={[styles.input, !accountsMatch && styles.inputError]}
+          value={state.confirmAccountNumber}
+          onChangeText={(v) => set('confirmAccountNumber', v.replace(/[^0-9]/g, '').slice(0, 18))}
+          placeholder="00000000000000"
+          placeholderTextColor={tokens.textTertiary}
+          keyboardType="number-pad"
+          accessibilityLabel={t('mobile.itr.wizard.confirmAccountNumber')}
+        />
+        {!accountsMatch && (
+          <Text style={styles.errorHint}>{t('mobile.itr.wizard.accountMismatch')}</Text>
+        )}
+      </FieldGroup>
+
+      <FieldGroup label={t('mobile.itr.wizard.ifsc')}>
+        <View style={styles.ifscRow}>
+          <TextInput
+            style={[styles.input, styles.ifscInput, !ifscValid && styles.inputError]}
+            value={state.ifsc}
+            onChangeText={handleIfscChange}
+            placeholder="HDFC0001234"
+            placeholderTextColor={tokens.textTertiary}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={11}
+            accessibilityLabel={t('mobile.itr.wizard.ifsc')}
+          />
+          {lookingUp && (
+            <ActivityIndicator
+              style={styles.ifscSpinner}
+              color={tokens.brandCta}
+              testID="ifsc-spinner"
+            />
+          )}
+        </View>
+        {!ifscValid && (
+          <Text style={styles.errorHint}>{t('mobile.itr.wizard.ifscInvalid')}</Text>
+        )}
+        {state.bankName ? (
+          <View style={styles.bankDetectedRow}>
+            <Ionicons name="checkmark-circle" size={16} color={tokens.successFg} />
+            <Text style={styles.bankDetectedText} testID="bank-detected">
+              {t('mobile.itr.wizard.bankDetected', { bank: state.bankName })}
+            </Text>
+          </View>
+        ) : lookupFailed ? (
+          <Text style={styles.fieldHint}>{t('mobile.itr.wizard.bankNotDetected')}</Text>
+        ) : null}
+      </FieldGroup>
+    </View>
+  );
+}
+
 function StepReview({
   state,
   onEdit,
@@ -446,6 +587,8 @@ function StepReview({
           { label: t('mobile.itr.wizard.employerName'), value: state.employerName || '—', onEdit: () => onEdit(1) },
           { label: '80C Deduction', value: state.section80C ? `₹${parseInt(state.section80C).toLocaleString('en-IN')}` : '₹0', onEdit: () => onEdit(2) },
           { label: '80D Deduction', value: state.section80D ? `₹${parseInt(state.section80D).toLocaleString('en-IN')}` : '₹0', onEdit: () => onEdit(2) },
+          { label: t('mobile.itr.wizard.accountNumber'), value: state.accountNumber ? maskAccount(state.accountNumber) : '—', onEdit: () => onEdit(4) },
+          { label: t('mobile.itr.wizard.bankName'), value: state.bankName || '—', onEdit: () => onEdit(4) },
         ]}
       />
     </View>
@@ -490,6 +633,7 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   fieldGroup: { gap: 8 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: tk.textSecondary },
   fieldHint: { fontSize: 12, color: tk.textTertiary },
+  errorHint: { fontSize: 12, color: tk.errorFg },
   input: {
     height: 48,
     borderWidth: 1.5,
@@ -500,6 +644,12 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     color: tk.textPrimary,
     backgroundColor: tk.raised,
   },
+  inputError: { borderColor: tk.errorCta },
+  ifscRow: { flexDirection: 'row', alignItems: 'center' },
+  ifscInput: { flex: 1 },
+  ifscSpinner: { marginLeft: 12 },
+  bankDetectedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  bankDetectedText: { flex: 1, fontSize: 13, fontWeight: '600', color: tk.successFg },
   textArea: {
     height: 88,
     paddingTop: 12,

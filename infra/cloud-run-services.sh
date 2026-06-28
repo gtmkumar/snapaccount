@@ -182,6 +182,65 @@ gcloud run deploy "${ASSIST_SERVICE_NAME}" \
 log "  Deployed: ${ASSIST_SERVICE_NAME} (session-affinity=ON, min-instances=1, memory=1Gi)"
 
 # ─────────────────────────────────────────────
+# API Gateway (YARP reverse proxy — DG-INFRA-01)
+#
+# The gateway is stateless (no DB, no Redis) and routes requests to the 3
+# composite Cloud Run services by their internal service names. It exposes
+# CORS, global rate limiting, and the /healthz endpoint to the load balancer.
+#
+# ingress=all because it is the public entry point that the LB sits in front of.
+# no-allow-unauthenticated: Cloud Run IAM must grant invoker to LB service account
+# (or set allow-unauthenticated=true if using LB + Cloud Armor for AuthN instead).
+#
+# Upstream composite addresses use Cloud Run internal DNS:
+#   https://<service-name> resolves within the same GCP project's Cloud Run mesh.
+# ─────────────────────────────────────────────
+section "API Gateway (YARP)"
+
+GATEWAY_SERVICE_NAME="api-gateway${NAME_SUFFIX}"
+GATEWAY_IMAGE=$(image_uri "api-gateway")
+
+# Derive upstream composite service URLs (with env suffix for staging)
+PLATFORM_URL="https://platform-service${NAME_SUFFIX}"
+FINANCE_URL="https://finance-service${NAME_SUFFIX}"
+ASSIST_URL="https://assist-service${NAME_SUFFIX}"
+
+GATEWAY_ENV="ASPNETCORE_ENVIRONMENT=$([ "${ENVIRONMENT}" = "production" ] && echo Production || echo Staging)"
+GATEWAY_ENV="${GATEWAY_ENV},ASPNETCORE_URLS=http://+:8080"
+# Override YARP cluster destinations to point at the deployed composites.
+# These env var names follow the ASP.NET Core config key format for JSON path
+# ReverseProxy:Clusters:<cluster>:Destinations:<dest>:Address
+GATEWAY_ENV="${GATEWAY_ENV},ReverseProxy__Clusters__platform__Destinations__platform__Address=${PLATFORM_URL}"
+GATEWAY_ENV="${GATEWAY_ENV},ReverseProxy__Clusters__finance__Destinations__finance__Address=${FINANCE_URL}"
+GATEWAY_ENV="${GATEWAY_ENV},ReverseProxy__Clusters__assist__Destinations__assist__Address=${ASSIST_URL}"
+# Rate limiting: enabled by default (600 req/60s per IP). Ops can disable without redeploy
+# by updating the Secret Manager feature flag or env var.
+GATEWAY_ENV="${GATEWAY_ENV},RateLimiting__Enabled=true"
+
+log "Deploying ${GATEWAY_SERVICE_NAME}..."
+gcloud run deploy "${GATEWAY_SERVICE_NAME}" \
+    --image="${GATEWAY_IMAGE}" \
+    --region="${REGION}" \
+    --platform=managed \
+    --port=8080 \
+    --min-instances="$([ "${ENVIRONMENT}" = "production" ] && echo 1 || echo 0)" \
+    --max-instances="$([ "${ENVIRONMENT}" = "production" ] && echo 5 || echo 2)" \
+    --concurrency=200 \
+    --cpu=1 \
+    --memory=256Mi \
+    --cpu-throttling \
+    --vpc-connector="${VPC_CONNECTOR}" \
+    --vpc-egress=private-ranges-only \
+    --ingress=all \
+    --no-allow-unauthenticated \
+    --set-env-vars="${GATEWAY_ENV}" \
+    --update-labels="environment=${ENVIRONMENT},app=snapaccount,role=gateway" \
+    --timeout=60 \
+    --quiet
+
+log "  Deployed: ${GATEWAY_SERVICE_NAME} (YARP → ${PLATFORM_URL} | ${FINANCE_URL} | ${ASSIST_URL})"
+
+# ─────────────────────────────────────────────
 # Admin Panel (public-facing — allow unauthenticated)
 # ─────────────────────────────────────────────
 section "Admin Panel (React)"
@@ -216,7 +275,7 @@ echo " Region: ${REGION}"
 echo "═══════════════════════════════════════════════"
 echo ""
 echo "Deployed services:"
-SERVICES=(platform-service finance-service assist-service admin-panel)
+SERVICES=(platform-service finance-service assist-service api-gateway admin-panel)
 for svc in "${SERVICES[@]}"; do
     URL=$(gcloud run services describe "${svc}${NAME_SUFFIX}" \
         --region="${REGION}" \

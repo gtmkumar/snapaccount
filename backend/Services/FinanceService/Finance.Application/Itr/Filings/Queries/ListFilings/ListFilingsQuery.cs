@@ -28,7 +28,10 @@ public record ListFilingsQuery(
 
 public record ListFilingsResponse(IReadOnlyList<FilingSummaryDto> Items, int TotalCount, int Page, int PageSize);
 
-/// <summary>Filing summary DTO for paginated list view.</summary>
+/// <summary>
+/// Filing summary DTO for paginated list view.
+/// DG-ITR-03: createdAt + updatedAt added (admin FilingSchema requires them on list items too).
+/// </summary>
 public record FilingSummaryDto(
     Guid Id,
     Guid AssesseeId,
@@ -37,7 +40,10 @@ public record FilingSummaryDto(
     string Regime,
     string Status,
     decimal? PayableOrRefund,
-    DateTime? FiledAt);
+    DateTime? FiledAt,
+    // DG-ITR-03: required timestamps
+    DateTime CreatedAt,
+    DateTime UpdatedAt);
 
 public sealed class ListFilingsQueryValidator : AbstractValidator<ListFilingsQuery>
 {
@@ -107,7 +113,8 @@ public sealed class ListFilingsQueryHandler(IItrDbContext dbContext, ICurrentUse
             .ToListAsync(cancellationToken);
 
         var dtos = items.Select(f =>
-            new FilingSummaryDto(f.Id, f.AssesseeId, f.AssessmentYear, f.ItrFormType, f.Regime, f.Status, null, f.FiledAt)
+            new FilingSummaryDto(f.Id, f.AssesseeId, f.AssessmentYear, f.ItrFormType, f.Regime, f.Status, null, f.FiledAt,
+                f.CreatedAt, f.UpdatedAt)
         ).ToList();
 
         return new ListFilingsResponse(dtos, total, request.Page, request.PageSize);

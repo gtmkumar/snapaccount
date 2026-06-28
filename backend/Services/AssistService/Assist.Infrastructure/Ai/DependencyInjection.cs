@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Pgvector.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Infrastructure.Auth;
 using SnapAccount.Shared.Infrastructure.Persistence.Interceptors;
@@ -47,13 +48,25 @@ public static class DependencyInjection
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
         services.AddSingleton(TimeProvider.System);
 
+        // DG-SEC-01: RLS session-var interceptor for ai.* tenant isolation
+        services.AddScoped<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>();
+
         // EF Core — schema isolated to 'ai.*'
+        // DG-CHAT-01: UseVector() enables Npgsql pgvector type support so that
+        // Pgvector.Vector properties are correctly read/written as PostgreSQL vector columns.
         services.AddDbContext<AiServiceDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
+            // DG-SEC-01: RLS connection interceptor
+            options.AddInterceptors(sp.GetRequiredService<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>());
             options.UseNpgsql(
                 connectionString,
-                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", "ai"));
+                npgsql =>
+                {
+                    npgsql.MigrationsHistoryTable("__ef_migrations_history", "ai");
+                    // DG-CHAT-01: Register pgvector type at the Npgsql data-source level.
+                    npgsql.UseVector();
+                });
             options.ConfigureWarnings(w =>
                 w.Ignore(RelationalEventId.PendingModelChangesWarning));
         });

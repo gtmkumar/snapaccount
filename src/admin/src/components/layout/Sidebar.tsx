@@ -31,6 +31,8 @@ import {
   ScrollText,
   Inbox,
   Activity,
+  Video,
+  LineChart,
 } from 'lucide-react'
 import type { AdminRole } from '@/hooks/useAuth'
 
@@ -117,6 +119,22 @@ const navItems: NavItem[] = [
     icon: MessageSquare,
     requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE'],
   },
+  // DG-CHAT-09: Video Call Calendar (Screen 82)
+  {
+    label: 'Video Calls',
+    href: '/ca/appointments',
+    icon: Video,
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA'],
+    requiredServerPermission: 'ca.appointments.read',
+  },
+  // DG-CHAT-09: Chat Analytics (Screen 83)
+  {
+    label: 'Chat Analytics',
+    href: '/chat/analytics',
+    icon: LineChart,
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredServerPermission: 'admin.dashboard.read',
+  },
   {
     label: 'Users',
     href: '/users',
@@ -140,6 +158,35 @@ const navItems: NavItem[] = [
     href: '/reports',
     icon: BarChart3,
     requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA'],
+  },
+  // DG-DASH-06: Reports & Analytics sub-pages (Screens 100-103)
+  {
+    label: 'Operational',
+    href: '/reports/operational',
+    icon: BarChart3,
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredServerPermission: 'admin.dashboard.read',
+  },
+  {
+    label: 'Platform Revenue',
+    href: '/reports/revenue',
+    icon: BarChart3,
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredServerPermission: 'admin.dashboard.read',
+  },
+  {
+    label: 'User Analytics',
+    href: '/reports/users',
+    icon: BarChart3,
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredServerPermission: 'admin.dashboard.read',
+  },
+  {
+    label: 'Compliance',
+    href: '/reports/compliance',
+    icon: BarChart3,
+    requiredRoles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'],
+    requiredServerPermission: 'admin.dashboard.read',
   },
   {
     // GAP-053: role-gated to Admin, Ops and CA only — SUPPORT_EXECUTIVE removed
@@ -339,7 +386,6 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
               key={item.href}
               to={item.href}
               onClick={onMobileClose}
-              isActive={() => isActive}
               className={() => cn(
                 'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150',
                 'focus-visible:ring-2 focus-visible:ring-[var(--nav-sidebar-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--nav-sidebar-bg)]',

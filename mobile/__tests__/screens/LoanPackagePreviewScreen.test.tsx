@@ -16,6 +16,10 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
+// DG-MOBUX-07: the submit-time gate now uses useBiometricGate, which keeps a
+// module-level grace ledger. Reset it between tests so a prior unlock doesn't
+// suppress the prompt under the same flowKey.
+import { __resetBiometricGraceForTests } from '../../src/hooks/useBiometricGate';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -293,6 +297,7 @@ describe('LoanPackagePreviewScreen — signed URL fetch (staleTime:0)', () => {
 describe('LoanPackagePreviewScreen — submit-time biometric gate', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    __resetBiometricGraceForTests();
     mockGetLoanApplication.mockResolvedValue(MOCK_APP);
     mockGetLoanPackageDownloadUrl.mockResolvedValue({
       url: 'https://gcs.example.com/pkg.pdf',

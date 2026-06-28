@@ -39,13 +39,19 @@ public sealed class GetReportQueryHandler(
 
         // SWEEP-FIX WEB-06: Format, Sha256HashHex, StartedAt are EF-ignored (no columns in
         // report.report). Return safe defaults until DDL handoff adds the columns.
+        // DG-DASH-02: emit status/format in the casing the frontend Zod schema expects:
+        //   status  → QUEUED | GENERATING | COMPLETE | FAILED  (ReportStatusSchema)
+        //   format  → Pdf | Json                                (ReportFormatSchema)
         var job = await db.ReportJobs
             .Where(j => j.Id == request.JobId && j.OrgId == orgId && j.DeletedAt == null)
             .Select(j => new ReportJobDto(
                 j.Id,
                 j.ReportType.ToString(),
-                "PDF",              // Format — no DB column yet
-                j.Status.ToString(),
+                "Pdf",              // Format — no DB column yet; "Pdf" matches ReportFormatSchema
+                j.Status == ReportJobStatus.Queued ? "QUEUED"
+                    : j.Status == ReportJobStatus.Processing ? "GENERATING"
+                    : j.Status == ReportJobStatus.Completed ? "COMPLETE"
+                    : "FAILED",
                 j.FinancialYear,
                 j.PeriodStart,
                 j.PeriodEnd,

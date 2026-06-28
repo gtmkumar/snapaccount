@@ -29,6 +29,11 @@
     <PackageReference Include="MediatR" Version="12.*" />
     <PackageReference Include="QuestPDF" Version="2025.*" />
     <PackageReference Include="Hangfire.Core" Version="1.*" />
+    <!-- DG-DOC-07: IHubContext<DocumentHub> for document status-change SignalR push.
+         Use StackExchangeRedis (which transitively pulls in SignalR.Core) — the same
+         pattern as Assist.Infrastructure. The Redis backplane is optional in dev (only
+         the type reference is needed; Redis itself is not required for IHubContext<T>). -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.*" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Finance.Application/Finance.Application.csproj" />

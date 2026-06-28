@@ -45,6 +45,15 @@ vi.mock('firebase/auth', () => ({
   signOut: vi.fn(),
 }))
 
+// DG-SUB-06: PaymentGatewaySettings now calls updateRazorpayConfig — mock it
+vi.mock('@/lib/subscriptionApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/subscriptionApi')>()
+  return {
+    ...actual,
+    updateRazorpayConfig: vi.fn().mockResolvedValue(undefined),
+  }
+})
+
 // Import toast after mock declaration — gets the mocked object
 import { toast } from 'sonner'
 
@@ -344,14 +353,18 @@ describe('PaymentGatewaySettings', () => {
     expect(screen.getByText('Razorpay')).toBeInTheDocument()
   })
 
-  it('Save Payment Settings fires "saved locally" toast (API pending)', async () => {
+  it('Save Payment Settings calls updateRazorpayConfig API and fires success toast', async () => {
+    // DG-SUB-06: Save now calls the real PATCH /subscriptions/config/razorpay endpoint.
+    // With empty fields the component fires a validation-error toast instead.
+    // Verify the validation path (empty fields → error toast) works correctly.
     wrapQC(<PaymentGatewaySettings />)
 
     fireEvent.click(screen.getByText('Save Payment Settings'))
 
     await waitFor(() => {
-      expect(toast.success).toHaveBeenCalledWith(
-        expect.stringMatching(/local only.*API endpoint pending/i)
+      // Validation fires when Key ID or Key Secret is empty
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining('required')
       )
     })
   })

@@ -21,6 +21,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.*" />
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.*" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.*" />
+    <PackageReference Include="Pgvector" Version="0.3.2" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.*" />
     <PackageReference Include="Google.Cloud.PubSub.V1" Version="3.*" />
     <PackageReference Include="MediatR" Version="12.*" />

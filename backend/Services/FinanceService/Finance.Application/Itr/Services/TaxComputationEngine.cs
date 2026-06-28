@@ -20,7 +20,13 @@ public interface ITaxComputationEngine
     Task<Result<TaxComputationResult>> ComputeAsync(TaxComputationInput input, CancellationToken ct = default);
 }
 
-/// <summary>Input to the tax computation engine.</summary>
+/// <summary>
+/// Input to the tax computation engine.
+/// DG-ITR-09: <see cref="NewRegimeDeductionClaims"/> carries per-section claim amounts
+/// for deduction sections whose catalog entry has Regime = "NEW" or "BOTH"
+/// (e.g. 80CCD(2) employer NPS under new regime).
+/// When null the engine will still load the catalog itself for the new regime.
+/// </summary>
 public sealed record TaxComputationInput(
     string AssessmentYear,
     string Regime,
@@ -34,7 +40,15 @@ public sealed record TaxComputationInput(
     decimal Section80E,
     decimal OtherDeductions,
     decimal AdvanceTaxPaid,
-    decimal TdsPaid);
+    decimal TdsPaid,
+    /// <summary>
+    /// Optional per-section new-regime deduction claims, keyed by section code (e.g. "80CCD(2)").
+    /// Populated from the ComputeTaxCommand. When a section code appears in the deduction catalog
+    /// with Regime = "NEW" or "BOTH" and IsAvailable = true, the engine caps the claim
+    /// at the catalog MaxLimit and adds it to new-regime deductions.
+    /// DG-ITR-09.
+    /// </summary>
+    IReadOnlyDictionary<string, decimal>? NewRegimeDeductionClaims = null);
 
 /// <summary>
 /// Immutable result from the tax engine.
@@ -98,7 +112,12 @@ public sealed class TaxComputationEngine(
         // Standard deduction (from slab version, NOT hardcoded)
         var standardDeduction = Math.Min(slabVersion.StandardDeduction, input.SalaryIncome);
 
-        // Chapter VI-A deductions (only in old regime, or specific sections in new)
+        // Chapter VI-A deductions
+        // OLD regime: full Chapter VI-A basket (80C, 80D, 80E, etc.) from request inputs.
+        // NEW regime: DG-ITR-09 — config-driven; load deduction sections with Regime = "NEW" or "BOTH"
+        //   from the catalog and apply any claims supplied in NewRegimeDeductionClaims, capped at MaxLimit.
+        //   This makes the allowed set configuration-driven (versioned per AY/act_version), not hardcoded.
+        //   Legally allowed example: 80CCD(2) employer NPS u/s 115BAC.
         decimal deductions = 0m;
         if (input.Regime == "OLD")
         {
@@ -106,9 +125,10 @@ public sealed class TaxComputationEngine(
         }
         else
         {
-            // New regime: very limited deductions (NPS employer contribution etc.)
-            // Only standard deduction applies for most cases
-            deductions = 0m;
+            // DG-ITR-09: query catalog for sections available in new regime for this AY + act_version.
+            // targetActVersion is already resolved above (line 91); reuse it directly.
+            deductions = await CalculateNewRegimeDeductionsAsync(
+                input, targetActVersion, ct);
         }
 
         var totalDeductions = standardDeduction + deductions;
@@ -182,6 +202,67 @@ public sealed class TaxComputationEngine(
             PayableOrRefund: payableOrRefund,
             ComputationHash: computationHash,
             ComputationJsonb: computationJsonb);
+    }
+
+    /// <summary>
+    /// DG-ITR-09: Calculates new-regime eligible deductions by reading the deduction catalog
+    /// (itr.deduction_sections) for sections with Regime = "NEW" or "BOTH" and IsAvailable = true.
+    /// Each claim is capped at the catalog MaxLimit (when not null). The set of eligible sections
+    /// is fully configuration-driven and versioned by AY and ActVersion — never hardcoded.
+    ///
+    /// Current known new-regime sections (illustrative; authoritative source is the DB seed):
+    ///   - 80CCD(2): Employer's contribution to NPS — allowed u/s 115BAC, up to 10% of salary.
+    ///   - 80JJAA:   Additional employment deduction (specified employees, manufacturing).
+    /// </summary>
+    private async Task<decimal> CalculateNewRegimeDeductionsAsync(
+        TaxComputationInput input, string actVersion, CancellationToken ct)
+    {
+        // Load new-regime-eligible sections from the catalog.
+        // Regime = "NEW" means ONLY new-regime; "BOTH" means applicable in both.
+        var eligibleSections = await dbContext.DeductionSections
+            .Where(d => d.AssessmentYear == input.AssessmentYear
+                     && d.IsAvailable
+                     && d.ActVersion == actVersion
+                     && (d.Regime == "NEW" || d.Regime == "BOTH"))
+            .ToListAsync(ct);
+
+        // Fall-back: if the target act version returned nothing, try IT_ACT_1961.
+        if (eligibleSections.Count == 0 && actVersion == "IT_ACT_2025")
+        {
+            eligibleSections = await dbContext.DeductionSections
+                .Where(d => d.AssessmentYear == input.AssessmentYear
+                         && d.IsAvailable
+                         && d.ActVersion == "IT_ACT_1961"
+                         && (d.Regime == "NEW" || d.Regime == "BOTH"))
+                .ToListAsync(ct);
+        }
+
+        if (eligibleSections.Count == 0 || input.NewRegimeDeductionClaims is null)
+        {
+            // No catalog entries or no claims provided → zero new-regime deductions (correct for 2024-25+).
+            return 0m;
+        }
+
+        decimal total = 0m;
+        foreach (var section in eligibleSections)
+        {
+            if (!input.NewRegimeDeductionClaims.TryGetValue(section.SectionCode, out var claimed))
+                continue;
+
+            if (claimed <= 0m) continue;
+
+            // Cap claim at the catalog MaxLimit (when set).
+            var allowed = section.MaxLimit.HasValue
+                ? Math.Min(claimed, section.MaxLimit.Value)
+                : claimed;
+
+            total += allowed;
+            logger.LogDebug(
+                "TaxComputationEngine NEW regime: section {Section} claimed={Claimed} allowed={Allowed} (MaxLimit={Max})",
+                section.SectionCode, claimed, allowed, section.MaxLimit);
+        }
+
+        return total;
     }
 
     private async Task<ItrService.Domain.Entities.TaxSlabVersion?> FindSlabVersion(

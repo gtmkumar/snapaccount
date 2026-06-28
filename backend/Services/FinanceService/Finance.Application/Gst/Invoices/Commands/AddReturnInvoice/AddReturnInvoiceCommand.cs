@@ -1,6 +1,7 @@
 using FluentValidation;
 using GstService.Application.Common.Interfaces;
 using GstService.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Application.Behaviors;
 using SnapAccount.Shared.Domain;
@@ -11,6 +12,8 @@ namespace GstService.Application.Invoices.Commands.AddReturnInvoice;
 /// Adds a GST invoice to a specific return (POST /gst/returns/{id}/invoices).
 /// P6-HANDOFF-13: uses canonical gst.invoices table.
 /// Phase 6B: replaces the 501 stub.
+/// DG-GST-01: after persisting the invoice, recalculates the return totals
+/// (output CGST/SGST/IGST/cess, ITC) from all gst.invoices for that return.
 /// </summary>
 [RequiresPermission("gst.invoices.create")]
 public record AddReturnInvoiceCommand(
@@ -67,11 +70,10 @@ public sealed class AddReturnInvoiceCommandHandler(IGstDbContext dbContext)
         CancellationToken cancellationToken)
     {
         // Verify the return exists and belongs to the org
-        var gstReturn = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-            .FirstOrDefaultAsync(
-                dbContext.GstReturns.Where(r => r.Id == request.GstReturnId
-                    && r.OrganizationId == request.OrganizationId
-                    && r.DeletedAt == null),
+        var gstReturn = await dbContext.GstReturns
+            .FirstOrDefaultAsync(r => r.Id == request.GstReturnId
+                && r.OrganizationId == request.OrganizationId
+                && r.DeletedAt == null,
                 cancellationToken);
 
         if (gstReturn is null)
@@ -100,6 +102,54 @@ public sealed class AddReturnInvoiceCommandHandler(IGstDbContext dbContext)
         dbContext.GstInvoices.Add(invoice);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        // DG-GST-01: Recalculate return totals from all invoices for this return.
+        // This ensures TotalTaxableValue/TotalIgst/TotalCgst/TotalSgst/TotalCess/NetTaxPayable
+        // are always derived from the canonical gst.invoices rows, never left at zero.
+        await RecalculateReturnTotalsAsync(gstReturn, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
         return new AddReturnInvoiceResponse(invoice.Id, request.GstReturnId, invoice.TotalInvoiceValue);
+    }
+
+    /// <summary>
+    /// Aggregates all invoices and ITC records for the return and calls
+    /// <see cref="GstReturn.UpdateTotals"/> so the return header reflects real figures.
+    /// Output tax = sum of invoices assigned to this return.
+    /// ITC available = sum of eligible itc_records linked to this return.
+    /// NetTaxPayable = (outputIgst + outputCgst + outputSgst + outputCess) − itcAvailable.
+    /// </summary>
+    private async Task RecalculateReturnTotalsAsync(GstReturn gstReturn, CancellationToken ct)
+    {
+        // Sum output tax from all invoices assigned to this return.
+        // Credit notes / debit notes have the same sign as entered (caller responsibility).
+        var invoiceTotals = await dbContext.GstInvoices
+            .Where(i => i.GstReturnId == gstReturn.Id && i.DeletedAt == null)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                TaxableValue = g.Sum(i => i.TaxableValue),
+                Igst         = g.Sum(i => i.IgstAmount),
+                Cgst         = g.Sum(i => i.CgstAmount),
+                Sgst         = g.Sum(i => i.SgstAmount),
+                Cess         = g.Sum(i => i.CessAmount),
+            })
+            .FirstOrDefaultAsync(ct);
+
+        var totalTaxableValue = invoiceTotals?.TaxableValue ?? 0m;
+        var totalIgst         = invoiceTotals?.Igst         ?? 0m;
+        var totalCgst         = invoiceTotals?.Cgst         ?? 0m;
+        var totalSgst         = invoiceTotals?.Sgst         ?? 0m;
+        var totalCess         = invoiceTotals?.Cess         ?? 0m;
+
+        // Sum eligible ITC for this return (GSTR-2B / 2A credits assigned to this return period).
+        var itcAvailable = await dbContext.ItcRecords
+            .Where(r => r.GstReturnId == gstReturn.Id && r.IsEligible && r.DeletedAt == null)
+            .SumAsync(r => r.IgstCredit + r.CgstCredit + r.SgstCredit + r.CessCredit, ct);
+
+        // Net tax payable = output tax − ITC; floor at zero (excess ITC is a refund scenario).
+        var outputTax     = totalIgst + totalCgst + totalSgst + totalCess;
+        var netTaxPayable = Math.Max(0m, outputTax - itcAvailable);
+
+        gstReturn.UpdateTotals(totalTaxableValue, totalIgst, totalCgst, totalSgst, totalCess, itcAvailable, netTaxPayable);
     }
 }

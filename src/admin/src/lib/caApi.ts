@@ -256,6 +256,8 @@ export const AppointmentSchema = z.object({
   // Wave 7A: CA-cancel fields
   cancelledByCa: z.boolean().optional(),
   caCancellationReason: z.string().nullable().optional(),
+  // DG-CHAT-05: CA post-call summary note (migration 105)
+  caSummaryNote: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string().nullable().optional(),
 })
@@ -488,4 +490,19 @@ export async function rateAppointment(id: string, rating: number, comment?: stri
  */
 export async function cancelAppointmentAsCA(id: string, reason: string): Promise<void> {
   await api.post(`/appointments/${id}/cancel-by-ca`, { reason })
+}
+
+/**
+ * CA writes (or overwrites) a post-call summary note on a COMPLETED appointment.
+ * PUT /appointments/{id}/ca-summary { summaryNote }
+ * perm: chat.slots.manage
+ * DG-CHAT-05: the note is visible to the user on the appointment detail screen.
+ * Returns { appointmentId, caSummaryNote }.
+ */
+export async function writeCaSummary(
+  appointmentId: string,
+  summaryNote: string,
+): Promise<{ appointmentId: string; caSummaryNote: string | null }> {
+  const res = await api.put(`/appointments/${appointmentId}/ca-summary`, { summaryNote })
+  return res.data as { appointmentId: string; caSummaryNote: string | null }
 }

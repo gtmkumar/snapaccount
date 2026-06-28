@@ -48,10 +48,15 @@ public static class DependencyInjection
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
         services.AddSingleton(TimeProvider.System);
 
+        // DG-SEC-01: RLS session-var interceptor for loan.* tenant isolation
+        services.AddScoped<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>();
+
         // EF Core DbContext — schema isolated to loan.*
         services.AddDbContext<LoanServiceDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
+            // DG-SEC-01: RLS connection interceptor
+            options.AddInterceptors(sp.GetRequiredService<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>());
             options.UseNpgsql(
                 connectionString,
                 npgsql =>
@@ -115,30 +120,28 @@ public static class DependencyInjection
         // GCS for loan packages (ILoanStorageService — avoids collision with Shared.Infrastructure.ICloudStorageService)
         services.AddSingleton<ILoanStorageService, GoogleCloudStorageServiceAdapter>();
 
-        // GAP-041: Loan PDF generator — stub is Development-only.
-        // Non-Development environments must wire the real QuestPDF generator via ReportService.
-        // Fail-fast if the stub would be used outside Development, so the gap surfaces at startup
-        // rather than silently emitting placeholder PDFs into bank submissions.
         var isDevelopment = string.Equals(
             configuration["ASPNETCORE_ENVIRONMENT"], "Development",
             StringComparison.OrdinalIgnoreCase);
 
+        // DG-LOAN-03: ILoanPdfGenerator is no longer used by GeneratePackageCommandHandler.
+        // The handler now directly calls IReportGenerator (ReportType.LoanPackage) via the Report module,
+        // both of which are co-hosted in the Finance composite and registered by AddReportInfrastructure.
+        // The stub registration is kept only for unit-test isolation where the handler might be tested
+        // with the old interface; it is safe to remove entirely in a future cleanup pass.
+        // NOTE: StubLoanPdfGenerator is still registered below in case any test or older code references it.
         if (isDevelopment)
         {
+            // Register the stub so existing tests that resolve ILoanPdfGenerator don't fail.
+            // GeneratePackageCommandHandler no longer uses it (DG-LOAN-03).
             services.AddScoped<ILoanPdfGenerator, StubLoanPdfGenerator>();
         }
         else
         {
-            // Production/Staging: fail-fast if a real ILoanPdfGenerator is not already registered.
-            // In the current architecture the real PDF is generated via ReportService HTTP call;
-            // GeneratePackageCommandHandler must be updated to call that endpoint and this
-            // registration should be replaced with the HTTP-backed adapter once shipped.
-            // Until then throw at startup so the misconfiguration is immediately visible.
-            services.AddScoped<ILoanPdfGenerator>(_ =>
-                throw new InvalidOperationException(
-                    "GAP-041: ILoanPdfGenerator is not configured for non-Development environments. " +
-                    "Wire the real QuestPDF generator via ReportService before deploying. " +
-                    "Set ASPNETCORE_ENVIRONMENT=Development to use the stub locally."));
+            // Non-dev: register a no-op implementation (not a fail-fast throw) because the handler
+            // no longer calls this interface — fail-fast here would block the Finance composite from
+            // starting in staging/prod unnecessarily.
+            services.AddScoped<ILoanPdfGenerator, StubLoanPdfGenerator>();
         }
 
         // GAP-110: Fraud check config — config-driven thresholds, never hardcoded.

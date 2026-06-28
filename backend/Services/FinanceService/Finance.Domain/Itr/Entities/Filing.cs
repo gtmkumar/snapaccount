@@ -6,7 +6,7 @@ namespace ItrService.Domain.Entities;
 /// <summary>
 /// An ITR filing for a specific assessment year.
 /// State machine: DRAFT → UNDER_CA_REVIEW → USER_APPROVED → FILED → E_VERIFIED → REFUND_ISSUED
-/// Side transitions: REJECTED_BY_CA, NOTICE_RECEIVED.
+/// Side transitions: CA_REJECTED (DG-ITR-06: aligned to DB CHECK constraint), NOTICE_RECEIVED.
 /// P6-HANDOFF-20: itr_v_uri is NEVER persisted — always regenerated from itr_v_object_key on demand.
 /// </summary>
 public class Filing : BaseAuditableEntity
@@ -28,7 +28,7 @@ public class Filing : BaseAuditableEntity
 
     /// <summary>
     /// Current filing status.
-    /// DRAFT | UNDER_CA_REVIEW | USER_APPROVED | FILED | E_VERIFIED | REFUND_ISSUED | REJECTED_BY_CA | NOTICE_RECEIVED
+    /// DRAFT | UNDER_CA_REVIEW | CA_REJECTED | USER_APPROVED | FILED | E_VERIFIED | REFUND_ISSUED | NOTICE_RECEIVED (DG-ITR-06)
     /// </summary>
     public string Status { get; private set; } = "DRAFT";
 
@@ -70,8 +70,21 @@ public class Filing : BaseAuditableEntity
     /// <summary>CA user who reviewed this filing.</summary>
     public Guid? ReviewedByCaId { get; private set; }
 
-    /// <summary>Reason given by CA if rejected.</summary>
+    /// <summary>Reason given by CA if rejected (maps to ca_review_notes column).</summary>
     public string? CaRejectionReason { get; private set; }
+
+    /// <summary>
+    /// CA working notes — autosaved from the admin CA tax-computation panel.
+    /// Distinct from <see cref="CaRejectionReason"/> which is the formal rejection reason.
+    /// Maps to the ca_notes column. DG-ITR-04.
+    /// </summary>
+    public string? CaNotes { get; private set; }
+
+    /// <summary>
+    /// The user this filing belongs to (NOT NULL in DB). DG-ITR-05.
+    /// Set at StartFiling from ICurrentUser.UserId.
+    /// </summary>
+    public Guid UserId { get; private set; }
 
     /// <summary>ITR-V PDF GCS object key (NOT a signed URL — P6-HANDOFF-20).</summary>
     public string? ItrVObjectKey { get; private set; }
@@ -96,16 +109,39 @@ public class Filing : BaseAuditableEntity
 
     private Filing() { }
 
-    /// <summary>Creates a new filing in DRAFT status.</summary>
-    public static Filing Create(Guid assesseeId, string assessmentYear, string itrFormType, string regime)
+    /// <summary>Creates a new filing in DRAFT status. DG-ITR-05: userId is required (NOT NULL in DB).</summary>
+    public static Filing Create(Guid assesseeId, string assessmentYear, string itrFormType, string regime, Guid userId)
     {
         return new Filing
         {
             AssesseeId = assesseeId,
             AssessmentYear = assessmentYear,
             ItrFormType = itrFormType,
-            Regime = regime
+            Regime = regime,
+            UserId = userId
         };
+    }
+
+    /// <summary>
+    /// Autosaves draft income-head inputs and optional CA notes without changing status.
+    /// DG-ITR-02: called by UpdateFilingDraftCommandHandler (PATCH /itr/filings/{id}).
+    /// Only allowed in DRAFT or CA_REJECTED state (CA may also edit notes during review).
+    /// </summary>
+    public Result UpdateDraft(
+        decimal? salaryIncome, decimal? housePropertyIncome, decimal? businessIncome,
+        decimal? capitalGains, decimal? otherIncome, string? caNotes)
+    {
+        if (Status is not ("DRAFT" or "CA_REJECTED" or "UNDER_CA_REVIEW"))
+            return Result.Failure(Error.Conflict("Filing.InvalidState",
+                $"Cannot update draft from '{Status}'. Only DRAFT, CA_REJECTED, or UNDER_CA_REVIEW allowed."));
+
+        if (salaryIncome.HasValue) SalaryIncome = salaryIncome.Value;
+        if (housePropertyIncome.HasValue) HousePropertyIncome = housePropertyIncome.Value;
+        if (businessIncome.HasValue) BusinessIncome = businessIncome.Value;
+        if (capitalGains.HasValue) CapitalGains = capitalGains.Value;
+        if (otherIncome.HasValue) OtherIncome = otherIncome.Value;
+        if (caNotes is not null) CaNotes = caNotes;
+        return Result.Success();
     }
 
     /// <summary>Updates income heads.</summary>
@@ -155,12 +191,15 @@ public class Filing : BaseAuditableEntity
         return Result.Success();
     }
 
-    /// <summary>CA rejects the filing — sends it back to DRAFT.</summary>
+    /// <summary>
+    /// CA rejects the filing. DG-ITR-06: uses CA_REJECTED (matches the DB CHECK constraint
+    /// in 024_itr_assessee_filings.sql:103). The previous 'REJECTED_BY_CA' violated the CHECK.
+    /// </summary>
     public Result RejectByCa(Guid caId, string reason)
     {
         if (Status != "UNDER_CA_REVIEW")
             return Result.Failure(Error.Conflict("Filing.InvalidState", $"Cannot reject from '{Status}'."));
-        Status = "REJECTED_BY_CA";
+        Status = "CA_REJECTED";
         ReviewedByCaId = caId;
         CaRejectionReason = reason;
         return Result.Success();

@@ -1,5 +1,7 @@
 # SnapAccount — Orchestrator Status
 
+> **2026-06-28 — Fresh doc-vs-implementation audit on `feature/repository-refactor`.** A 13-area parallel audit (with per-gap adversarial verification) found **104 verified real gaps** (8 critical / 36 high / 35 medium / 25 low) — mostly frontend/mobile↔backend contract divergences, orphaned engines (GSTR-3B, Razorpay client, notification fan-out, semantic RAG), and real security holes (RLS GUC never set, org PAN plaintext, no Document DPDP erasure). Inventory: **`gap-analysis-2026-06-28-doc-vs-impl.md`** (IDs `DG-*`). 4-wave subagent plan: **`remediation-plan-2026-06-28.md`**. NOTE: the "all delegable gaps closed" line below was true for the OLD 12-service branch's Phase-7 scope; this new audit measured the docs against the *current* code and found additional implementation gaps.
+
 ## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 8 COMPLETE — 2026-06-12; all delegable gaps closed, remaining queue is TL-gated)
 
 ### Phase 7 Wave 8 — GAP-064 device integrity attestation + SignalR local-dev fix (2026-06-12, COMPLETE — live-verified on local stack)

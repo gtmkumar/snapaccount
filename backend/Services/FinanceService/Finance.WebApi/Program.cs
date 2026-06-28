@@ -2,6 +2,7 @@ using AccountingService.Application;
 using AccountingService.Infrastructure;
 using DocumentService.Application;
 using DocumentService.Infrastructure;
+using DocumentService.Infrastructure.SignalR;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using GstService.Application;
@@ -121,6 +122,12 @@ try
         FirebaseApp.Create(new AppOptions { Credential = credential });
     }
 
+    // DG-DOC-07: SignalR for real-time document status push (DocumentHub at /hubs/documents).
+    // In production (GCP + Redis) add a Redis backplane via:
+    //   .AddStackExchangeRedis(redisConnStr)
+    // For local dev the in-memory backplane is sufficient.
+    builder.Services.AddSignalR();
+
     builder.Services.AddExceptionHandler<CustomExceptionHandler>();
     builder.Services.AddProblemDetails();
 
@@ -142,6 +149,10 @@ try
     app.MapHealthChecks("/healthz");
 
     app.MapEndpoints(Assembly.GetExecutingAssembly());
+
+    // DG-DOC-07: Document status change hub for real-time mobile push.
+    app.MapHub<DocumentHub>("/hubs/documents")
+        .RequireAuthorization();
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {

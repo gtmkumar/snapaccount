@@ -50,16 +50,24 @@ public sealed class DisbursementWebhookSecurityTests
     private static byte[] BuildPayload(Guid applicationId) =>
         JsonSerializer.SerializeToUtf8Bytes(new
         {
-            applicationId = applicationId,
-            eventType = "DISBURSED",
-            disbursedAmount = 5_00_000m,
-            bankReferenceNo = "REF-001"
+            disbursement_id = "DISB-001",
+            loan_id = applicationId.ToString(),
+            event_type = "DISBURSED",
+            amount = 500000L,    // paise (DG-LOAN-02: integer paise, not decimal rupees)
+            currency = "INR",
+            utr_number = "UTR-TEST-001",
+            bank_account_number = "XXXX1234",
+            failure_reason = (string?)null
         }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
+    /// <summary>
+    /// DG-LOAN-02: computes the HMAC and formats it with the "sha256=" prefix,
+    /// as a real bank would send in the X-Bank-Signature header.
+    /// </summary>
     private static string ComputeHmac(byte[] secret, byte[] body)
     {
         var hash = HMACSHA256.HashData(secret, body);
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        return $"sha256={Convert.ToHexString(hash).ToLowerInvariant()}";
     }
 
     // Helper: add a PartnerBank and return its auto-generated Id
@@ -130,10 +138,10 @@ public sealed class DisbursementWebhookSecurityTests
         // Act
         var result = await handler.ProcessAsync(
             bankId, idempotencyKey: "attacker-key-001",
-            signature: fakeSignature, rawBody: body, ct: CancellationToken.None);
+            bankSignature: fakeSignature, rawBody: body, ct: CancellationToken.None);
 
-        // Assert: must be hard-rejected; no event published
-        result.Status.Should().Be(WebhookProcessingStatus.Rejected,
+        // DG-LOAN-02: no-secret bank → SignatureMismatch (401) to prevent unauthenticated injection
+        result.Status.Should().Be(WebhookProcessingStatus.SignatureMismatch,
             "a bank with no WebhookSecretRef must be unconditionally rejected — " +
             "HMAC is the sole trust boundary for this unauthenticated endpoint");
         result.Reason.Should().Contain("webhook secret is not configured");
@@ -167,7 +175,8 @@ public sealed class DisbursementWebhookSecurityTests
         var result = await handler.ProcessAsync(
             bankId, "key-002", "anysignature", BuildPayload(Guid.NewGuid()), CancellationToken.None);
 
-        result.Status.Should().Be(WebhookProcessingStatus.Rejected);
+        // DG-LOAN-02: empty secret → SignatureMismatch (401)
+        result.Status.Should().Be(WebhookProcessingStatus.SignatureMismatch);
         result.Reason.Should().Contain("webhook secret is not configured");
         Mock.Get(publisher).Verify(
             p => p.PublishAsync(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()),
@@ -190,7 +199,8 @@ public sealed class DisbursementWebhookSecurityTests
         var result = await handler.ProcessAsync(
             bankId, "key-003", "anysignature", BuildPayload(Guid.NewGuid()), CancellationToken.None);
 
-        result.Status.Should().Be(WebhookProcessingStatus.Rejected);
+        // DG-LOAN-02: whitespace secret → SignatureMismatch (401)
+        result.Status.Should().Be(WebhookProcessingStatus.SignatureMismatch);
         result.Reason.Should().Contain("webhook secret is not configured");
     }
 
@@ -207,7 +217,8 @@ public sealed class DisbursementWebhookSecurityTests
         var result = await handler.ProcessAsync(
             Guid.NewGuid(), "key-004", "anysignature", BuildPayload(Guid.NewGuid()), CancellationToken.None);
 
-        result.Status.Should().Be(WebhookProcessingStatus.Rejected);
+        // DG-LOAN-02: unknown bank → NotFound (404)
+        result.Status.Should().Be(WebhookProcessingStatus.NotFound);
     }
 
     // ── Happy path: configured bank + correct HMAC → accepted ─────────────────
@@ -262,7 +273,8 @@ public sealed class DisbursementWebhookSecurityTests
         var result = await handler.ProcessAsync(
             bankId, "key-005", "wrong-signature-value", body, CancellationToken.None);
 
-        result.Status.Should().Be(WebhookProcessingStatus.Rejected);
+        // DG-LOAN-02: bad signature → SignatureMismatch (401)
+        result.Status.Should().Be(WebhookProcessingStatus.SignatureMismatch);
         result.Reason.Should().Contain("Invalid signature");
     }
 

@@ -1,5 +1,6 @@
 using FluentValidation;
 using LoanService.Application.Common.Interfaces;
+using LoanService.Application.Services;
 using LoanService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
@@ -27,10 +28,11 @@ public sealed class SubmitApplicationCommandValidator : AbstractValidator<Submit
     }
 }
 
-/// <summary>Handler: validates consents, submits application, logs status transition.</summary>
+/// <summary>Handler: validates consents and the fraud pre-check gate, submits application, logs status transition.</summary>
 public sealed class SubmitApplicationCommandHandler(
     ILoanServiceDbContext db,
-    ICurrentUser currentUser) : ICommandHandler<SubmitApplicationCommand, SubmitApplicationResponse>
+    ICurrentUser currentUser,
+    IFraudCheckConfig fraudConfig) : ICommandHandler<SubmitApplicationCommand, SubmitApplicationResponse>
 {
     private static readonly ConsentType[] RequiredConsents =
     [
@@ -65,6 +67,35 @@ public sealed class SubmitApplicationCommandHandler(
             return Result<SubmitApplicationResponse>.Failure(
                 Error.Validation("LoanApplication.MissingConsents",
                     $"Missing required consents: {string.Join(", ", missingConsents)}"));
+
+        // ── GAP-110: Fraud pre-submission gate ────────────────────────────────
+        // The fraud pre-check (POST /loans/applications/{id}/fraud-check) persists one
+        // FraudCheck row per check type. We evaluate the LATEST verdict per check type so a
+        // re-run that now passes supersedes an earlier Fail (legitimate resubmission).
+        //   • A latest-verdict Fail on any check ALWAYS blocks submission — defence in depth,
+        //     independent of the soft-launch flag.
+        //   • When FraudCheck:EnforceOnSubmit is true, submission additionally requires that the
+        //     pre-check has been run at all (≥1 row); otherwise it is blocked.
+        var fraudChecks = await db.FraudChecks
+            .Where(fc => fc.ApplicationId == request.ApplicationId)
+            .ToListAsync(cancellationToken);
+
+        if (fraudConfig.EnforceOnSubmit && fraudChecks.Count == 0)
+            return Result<SubmitApplicationResponse>.Failure(
+                Error.Validation("LoanApplication.FraudCheckRequired",
+                    "Run the fraud pre-check (POST /loans/applications/{id}/fraud-check) before submitting this application."));
+
+        var latestFailedChecks = fraudChecks
+            .GroupBy(fc => fc.CheckType)
+            .Select(g => g.OrderByDescending(fc => fc.CheckedAt).First())
+            .Where(fc => fc.Verdict == FraudVerdict.Fail)
+            .ToList();
+
+        if (latestFailedChecks.Count > 0)
+            return Result<SubmitApplicationResponse>.Failure(
+                Error.Validation("LoanApplication.FraudCheckFailed",
+                    "Submission blocked by fraud pre-check: " +
+                    string.Join("; ", latestFailedChecks.Select(fc => fc.DecisionNote))));
 
         var fromStatus = application.Status.ToString();
         var transitionResult = application.Submit();

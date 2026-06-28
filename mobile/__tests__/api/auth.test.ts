@@ -21,6 +21,7 @@ import {
   updatePreferences,
   getDevices,
   revokeDevice,
+  addDevice,
   getMyApprovalStatus,
   verifyPan,
   sendAadhaarOtp,
@@ -73,6 +74,28 @@ describe('devices', () => {
     mockDelete.mockResolvedValue({ data: undefined });
     await revokeDevice('dev-123');
     expect(mockDelete).toHaveBeenCalledWith('/auth/devices/dev-123');
+  });
+
+  // DG-AUTH-01 — B1.3 device binding
+  it('POST /auth/devices sends the AddDeviceCommand body and returns the entity id', async () => {
+    mockPost.mockResolvedValue({ data: { deviceEntityId: 'entity-1' } });
+    const res = await addDevice({
+      deviceId: 'iPhone16,1',
+      deviceName: 'My iPhone',
+      platform: 'IOS',
+      osVersion: '17.0',
+      appVersion: '1.0.0',
+      fcmToken: 'fcm-token-abc',
+    });
+    expect(mockPost).toHaveBeenCalledWith('/auth/devices', {
+      deviceId: 'iPhone16,1',
+      deviceName: 'My iPhone',
+      platform: 'IOS',
+      osVersion: '17.0',
+      appVersion: '1.0.0',
+      fcmToken: 'fcm-token-abc',
+    });
+    expect(res.deviceEntityId).toBe('entity-1');
   });
 
   // Wave 7 recon: NEW-device waiting screen polls a real verdict endpoint.

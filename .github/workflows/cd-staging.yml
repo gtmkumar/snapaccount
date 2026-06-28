@@ -108,6 +108,47 @@ jobs:
             build.environment=staging
             build.timestamp=${{ github.event.head_commit.timestamp }}
 
+  # ── DG-INFRA-01: API Gateway build + push (staging) ────────────────────────
+  build-push-gateway:
+    name: Build & Push — API Gateway
+    runs-on: ubuntu-latest
+    needs: prepare
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.gateway
+          push: true
+          tags: |
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/api-gateway:${{ needs.prepare.outputs.image_tag }}
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/api-gateway:staging-latest
+          cache-from: type=gha,scope=api-gateway-staging
+          cache-to: type=gha,mode=max,scope=api-gateway-staging
+          labels: |
+            git.sha=${{ github.sha }}
+            git.ref=${{ github.ref }}
+            build.environment=staging
+
   # ─────────────────────────────────────────────
   # Job 3: Build & push React Admin
   # ─────────────────────────────────────────────
@@ -244,6 +285,42 @@ jobs:
             --set-secrets=ASPNETCORE_DB_CONNECTION=db-connection-string-staging:latest,ASPNETCORE_REDIS_CONNECTION=redis-connection-string-staging:latest
             --update-labels=environment=staging,git-sha=${{ needs.prepare.outputs.short_sha }}
 
+  # ── DG-INFRA-01: Deploy API Gateway (staging) ──────────────────────────────
+  deploy-gateway-staging:
+    name: Deploy API Gateway (staging)
+    runs-on: ubuntu-latest
+    needs: [prepare, build-push-gateway, build-push]
+
+    steps:
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy API Gateway to Cloud Run (staging)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: api-gateway-staging
+          image: ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/api-gateway:${{ needs.prepare.outputs.image_tag }}
+          region: ${{ env.GCP_REGION }}
+          flags: >-
+            --port=8080
+            --min-instances=0
+            --max-instances=2
+            --concurrency=200
+            --cpu=1
+            --memory=256Mi
+            --vpc-connector=snapaccount-vpc-connector
+            --vpc-egress=private-ranges-only
+            --ingress=all
+            --no-allow-unauthenticated
+            --set-env-vars=ASPNETCORE_ENVIRONMENT=Staging,ReverseProxy__Clusters__platform__Destinations__platform__Address=https://platform-service-staging,ReverseProxy__Clusters__finance__Destinations__finance__Address=https://finance-service-staging,ReverseProxy__Clusters__assist__Destinations__assist__Address=https://assist-service-staging
+            --update-labels=environment=staging,git-sha=${{ needs.prepare.outputs.short_sha }},role=gateway
+
   deploy-admin-staging:
     name: Deploy Admin Panel to Cloud Run (staging)
     runs-on: ubuntu-latest
@@ -279,7 +356,7 @@ jobs:
   notify-staging:
     name: Notify Staging Deployment
     runs-on: ubuntu-latest
-    needs: [deploy-staging, deploy-admin-staging]
+    needs: [deploy-staging, deploy-gateway-staging, deploy-admin-staging]
     if: always()
 
     steps:

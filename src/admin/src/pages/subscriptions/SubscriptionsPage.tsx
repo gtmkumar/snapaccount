@@ -1,6 +1,8 @@
 /**
  * SubscriptionsPage — Phase 6F Track F3 + GAP-035 admin upgrade CTA
  * Plans CRUD (admin), MRR dashboard, active subs DataGrid, upgrade/downgrade flow.
+ * DG-SUB-09: fix currentPlan lookup (plan.planId vs sub.planId, not subscriptionId).
+ * DG-SUB-10: MRR trend chart, plan-distribution bar, recent-events feed.
  * Role: ADMIN only (gated at route level).
  */
 import { useState, useEffect } from 'react'
@@ -10,8 +12,12 @@ import { t } from '@/i18n'
 import {
   Plus, TrendingUp, Users, AlertCircle, XCircle,
   Edit, Trash2, Activity, RefreshCw, ArrowUpCircle, Receipt,
-  CreditCard, ChevronRight,
+  CreditCard, ChevronRight, Calendar,
 } from 'lucide-react'
+import {
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Cell, Legend,
+} from 'recharts'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -24,7 +30,7 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import {
   getMrrDashboard, listPlans, createPlan, updatePlan,
-  getMySubscription, upgradeSubscription,
+  getMySubscription, upgradeSubscription, getMrrHistory, listSubscriptionEvents,
   type Plan, type PlanTier, type SubscriptionStatus,
 } from '@/lib/subscriptionApi'
 import { cn } from '@/lib/utils'
@@ -63,7 +69,9 @@ function CurrentPlanCard({ plans }: { plans: Plan[] | undefined }) {
     retry: false,
   })
 
-  const currentPlan = plans?.find(p => p.planId === sub?.subscriptionId) ??
+  // DG-SUB-09: must compare Plan.planId against Subscription.planId (not subscriptionId).
+  // Previously `sub?.subscriptionId` never matched, so currentPlan always fell back to Free.
+  const currentPlan = plans?.find(p => p.planId === sub?.planId) ??
     plans?.find(p => p.isActive && p.tier === 'Free')
 
   const nextTierPlans = plans?.filter(p => {
@@ -222,6 +230,261 @@ function MrrKpiCard({ label, value, sub, icon: Icon, color }: { label: string; v
   )
 }
 
+// ── Chart color palette keyed by tier ──────────────────────────────────────────
+const TIER_CHART_COLORS: Record<string, string> = {
+  Free: '#94a3b8',
+  Starter: '#38bdf8',
+  Growth: '#34d399',
+  Enterprise: '#a78bfa',
+  Default: '#6366f1',
+}
+
+// ── DG-SUB-10: Plan distribution bar chart ─────────────────────────────────────
+interface PlanDistributionBarProps {
+  data: Array<{ planName: string; tier: string; subscriberCount: number; mrr: number }>
+  onClickPlan?: (tier: string) => void
+}
+
+function PlanDistributionBar({ data, onClickPlan }: PlanDistributionBarProps) {
+  if (!data.length) {
+    return (
+      <p className="text-sm text-center text-[var(--text-tertiary)] py-8">
+        {t('subscriptions.byPlan.empty')}
+      </p>
+    )
+  }
+
+  const chartData = data.map(d => ({
+    name: d.planName,
+    tier: d.tier,
+    subscribers: d.subscriberCount,
+    mrr: Number(d.mrr),
+  }))
+
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={180}>
+        <BarChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+          <XAxis
+            dataKey="name"
+            tick={{ fontSize: 11, fill: 'var(--text-secondary)' }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis
+            yAxisId="subs"
+            tick={{ fontSize: 11, fill: 'var(--text-secondary)' }}
+            axisLine={false}
+            tickLine={false}
+            width={36}
+          />
+          <Tooltip
+            contentStyle={{
+              background: 'var(--surface-raised)',
+              border: '1px solid var(--border-default)',
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+            formatter={(value: number, name: string) =>
+              name === 'subscribers'
+                ? [value, t('subscriptions.byPlan.subs')]
+                : [`₹${formatIndianAmount(value)}${t('subscriptions.byPlan.perMonth')}`, 'MRR']
+            }
+          />
+          <Bar
+            yAxisId="subs"
+            dataKey="subscribers"
+            radius={[4, 4, 0, 0]}
+            cursor={onClickPlan ? 'pointer' : 'default'}
+            onClick={(entry: { tier?: string }) => {
+              if (onClickPlan && entry.tier) onClickPlan(entry.tier)
+            }}
+          >
+            {chartData.map((entry, idx) => (
+              <Cell
+                key={idx}
+                fill={TIER_CHART_COLORS[entry.tier] ?? TIER_CHART_COLORS.Default}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 mt-2 justify-center">
+        {chartData.map(d => (
+          <button
+            key={d.name}
+            type="button"
+            className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            onClick={() => onClickPlan?.(d.tier)}
+          >
+            <span
+              className="inline-block h-2 w-2 rounded-full shrink-0"
+              style={{ background: TIER_CHART_COLORS[d.tier] ?? TIER_CHART_COLORS.Default }}
+            />
+            {d.name}
+            <span className="tabular-nums text-[var(--text-tertiary)]">
+              ({d.subscribers} {t('subscriptions.byPlan.subs')})
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── DG-SUB-10: MRR trend line chart ──────────────────────────────────────────
+function MrrTrendChart() {
+  // DG-SUB-10: Wired to GET /subscriptions/mrr/history (GetMrrHistoryQuery, Platform :5201).
+  // Renders graceful empty state when no subscription data exists; full line chart when data is present.
+  const { data: history, isLoading } = useQuery({
+    queryKey: ['subscriptions', 'mrr', 'history'],
+    queryFn: () => getMrrHistory(12),
+    staleTime: 5 * 60_000,
+    retry: false,
+    throwOnError: false,
+  })
+
+  if (isLoading) return <Skeleton variant="chart" className="h-44" />
+
+  const hasData = Array.isArray(history) && history.length > 0
+
+  if (!hasData) {
+    return (
+      <div className="flex flex-col items-center justify-center h-44 gap-2">
+        <TrendingUp className="h-8 w-8 text-[var(--text-tertiary)]" aria-hidden="true" />
+        <p className="text-sm text-[var(--text-tertiary)]">{t('subscriptions.mrrTrend.empty')}</p>
+        <p className="text-xs text-[var(--text-tertiary)]">{t('subscriptions.mrrTrend.emptyHint')}</p>
+      </div>
+    )
+  }
+
+  const chartData = history.map(p => ({
+    month: p.month,
+    mrr: Number(p.totalMrr),
+    active: p.activeCount,
+  }))
+
+  return (
+    <ResponsiveContainer width="100%" height={176}>
+      <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+        <XAxis
+          dataKey="month"
+          tick={{ fontSize: 11, fill: 'var(--text-secondary)' }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis
+          tick={{ fontSize: 11, fill: 'var(--text-secondary)' }}
+          axisLine={false}
+          tickLine={false}
+          width={52}
+          tickFormatter={(v: number) => `₹${formatIndianAmount(v)}`}
+        />
+        <Tooltip
+          contentStyle={{
+            background: 'var(--surface-raised)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 8,
+            fontSize: 12,
+          }}
+          formatter={(value: number) => [`₹${formatIndianAmount(value)}`, 'MRR']}
+        />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Line
+          type="monotone"
+          dataKey="mrr"
+          stroke="var(--color-brand-500, #6366f1)"
+          strokeWidth={2}
+          dot={{ r: 3, fill: 'var(--color-brand-500, #6366f1)' }}
+          activeDot={{ r: 5 }}
+          name="MRR"
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ── DG-SUB-10: Event type badge colours ──────────────────────────────────────
+const EVENT_TYPE_COLORS: Record<string, string> = {
+  Subscribed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  Upgraded: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300',
+  Downgraded: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  Cancelled: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300',
+  PastDue: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  Paused: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300',
+  Resumed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+}
+
+// ── DG-SUB-10: Recent subscription events feed ────────────────────────────────
+function RecentEventsPanel() {
+  // DG-SUB-10: Wired to GET /subscriptions/events (ListSubscriptionEventsQuery, Platform :5201).
+  // Renders a timeline of lifecycle events (Subscribed, Cancelled, Paid, etc.).
+  // Graceful empty state when no subscription activity exists.
+  const { data: events, isLoading } = useQuery({
+    queryKey: ['subscriptions', 'events'],
+    queryFn: () => listSubscriptionEvents(20),
+    staleTime: 2 * 60_000,
+    retry: false,
+    throwOnError: false,
+  })
+
+  if (isLoading) return <Skeleton variant="list" className="max-h-64" />
+
+  const hasEvents = Array.isArray(events) && events.length > 0
+
+  if (!hasEvents) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 gap-2">
+        <Activity className="h-8 w-8 text-[var(--text-tertiary)]" aria-hidden="true" />
+        <p className="text-sm text-[var(--text-tertiary)]">{t('subscriptions.events.empty')}</p>
+      </div>
+    )
+  }
+
+  return (
+    <ul className="divide-y divide-[var(--border-subtle)]">
+      {events.map(ev => (
+        <li key={ev.eventId} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+          <div className="shrink-0 mt-0.5">
+            <span
+              className={cn(
+                'inline-block px-2 py-0.5 text-xs font-medium rounded-full',
+                EVENT_TYPE_COLORS[ev.eventType] ?? 'bg-neutral-100 text-neutral-600'
+              )}
+            >
+              {ev.eventType}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-[var(--text-primary)] truncate">
+              {ev.organizationName ?? ev.organizationId}
+            </p>
+            {ev.planName && (
+              <p className="text-xs text-[var(--text-secondary)] truncate">{ev.planName}</p>
+            )}
+          </div>
+          <div className="shrink-0 flex flex-col items-end gap-0.5">
+            {ev.mrr !== undefined && (
+              <span className="text-xs font-medium tabular-nums text-[var(--text-primary)]">
+                ₹{formatIndianAmount(ev.mrr)}{t('subscriptions.byPlan.perMonth')}
+              </span>
+            )}
+            <span className="text-xs text-[var(--text-tertiary)] flex items-center gap-1">
+              <Calendar className="h-3 w-3" aria-hidden="true" />
+              {new Date(ev.occurredAt).toLocaleDateString('en-IN', {
+                day: '2-digit', month: 'short', year: 'numeric',
+              })}
+            </span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export default function SubscriptionsPage() {
   const queryClient = useQueryClient()
   const [showCreatePlan, setShowCreatePlan] = useState(false)
@@ -355,25 +618,26 @@ export default function SubscriptionsPage() {
                   />
                   <MrrKpiCard
                     label={t('subscriptions.active')}
-                    value={String(mrr?.activeCount ?? 0)}
+                    value={String(mrr?.activeSubscriptions ?? 0)}
                     icon={Users}
                     color="bg-sky-100 text-sky-600 dark:bg-sky-950 dark:text-sky-400"
                   />
                   <MrrKpiCard
                     label={t('subscriptions.pastDue')}
-                    value={String(mrr?.pastDueCount ?? 0)}
+                    value={String(mrr?.pastDueSubscriptions ?? 0)}
                     icon={AlertCircle}
                     color="bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400"
                   />
                   <MrrKpiCard
                     label={t('subscriptions.cancelled')}
-                    value={String(mrr?.cancelledCount ?? 0)}
+                    value={String(mrr?.cancelledThisMonth ?? 0)}
                     icon={XCircle}
                     color="bg-rose-100 text-rose-600 dark:bg-rose-950 dark:text-rose-400"
                   />
                 </div>
               )}
 
+              {/* DG-SUB-10: MRR trend line chart (12-month) */}
               <Card>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-semibold text-[var(--text-primary)]">
@@ -381,10 +645,32 @@ export default function SubscriptionsPage() {
                   </h3>
                 </div>
                 <ErrorBoundary scope="pane">
-                  <Skeleton variant="chart" className="h-40" />
-                  <p className="text-xs text-center text-[var(--text-tertiary)] mt-2">Chart data available when subscriptions are active</p>
+                  <MrrTrendChart />
                 </ErrorBoundary>
               </Card>
+
+              {/* DG-SUB-10: Plan distribution bar + recent-events feed (side by side on lg+) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Plan distribution bar — uses byPlan already in MRR response */}
+                <Card>
+                  <CardHeader title={t('subscriptions.byPlan.title')} />
+                  <ErrorBoundary scope="pane">
+                    {mrrLoading ? (
+                      <Skeleton variant="chart" className="h-44" />
+                    ) : (
+                      <PlanDistributionBar data={mrr?.byPlan ?? []} />
+                    )}
+                  </ErrorBoundary>
+                </Card>
+
+                {/* Recent subscription events */}
+                <Card>
+                  <CardHeader title={t('subscriptions.events.title')} />
+                  <ErrorBoundary scope="pane">
+                    <RecentEventsPanel />
+                  </ErrorBoundary>
+                </Card>
+              </div>
             </div>
           </TabPanel>
 
@@ -404,6 +690,8 @@ export default function SubscriptionsPage() {
                   data={plans}
                   columns={planColumns}
                   pageSize={25}
+                  tableId="subscription-plans"
+                  density="roomy"
                 />
               )}
             </ErrorBoundary>

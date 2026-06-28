@@ -1,23 +1,27 @@
 using DocumentService.Application.Admin.Queries.GetAdminDocumentQueue;
 using DocumentService.Application.Admin.Queries.GetUserDocuments;
+using DocumentService.Application.Common.Interfaces;
 using DocumentService.Application.Dashboard.Queries.GetActivity;
 using DocumentService.Application.Dashboard.Queries.GetDashboardStats;
 using DocumentService.Application.Documents.Commands.AddDocumentTag;
 using DocumentService.Application.Documents.Commands.ApproveDocument;
 using DocumentService.Application.Documents.Commands.ArchiveDocument;
 using DocumentService.Application.Documents.Commands.CategorizeDocument;
+using DocumentService.Application.Documents.Commands.DeleteDocument;
 using DocumentService.Application.Documents.Commands.RejectDocument;
 using DocumentService.Application.Documents.Commands.RemoveDocumentTag;
 using DocumentService.Application.Documents.Commands.RequestClarification;
 using DocumentService.Application.Documents.Commands.RequestOcr;
 using DocumentService.Application.Documents.Commands.ShareDocument;
 using DocumentService.Application.Documents.Commands.SubmitOcrFeedback;
+using DocumentService.Application.Documents.Commands.UpdateOcrFields;
 using DocumentService.Application.Documents.Commands.UploadDocument;
 using DocumentService.Application.Documents.Queries.GetDocument;
 using DocumentService.Application.Documents.Queries.GetDocuments;
 using DocumentService.Application.Documents.Queries.GetDocumentTags;
 using DocumentService.Application.Documents.Queries.GetOcrAccuracyReport;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Domain;
 
@@ -37,6 +41,8 @@ public sealed class Documents : EndpointGroupBase
     public override void Map(RouteGroupBuilder groupBuilder)
     {
         // POST /documents/upload — SEC-004: Authorized; rate-limited to 100/min
+        // DG-DOC-02: Accepts both 'categoryId' (Guid) and 'category' (slug string).
+        // The slug is resolved server-side via document.document_categories.code lookup.
         groupBuilder.MapPost("/upload", UploadDocument)
             .RequireAuthorization().RequireRateLimiting("standard").WithName("UploadDocument");
 
@@ -134,6 +140,39 @@ public sealed class Documents : EndpointGroupBase
             .WithSummary("GAP-013: Admin document queue with server-computed SLA / overdue fields. " +
                          "sortBy: sla_asc | uploaded_desc. overdueOnly=true filters to overdue only.");
 
+        // ── DG-DOC-01: Soft-delete a document (mobile DocumentDetailScreen DELETE) ─
+        // DELETE /documents/{id}
+        // SEC-012: Requires document.delete permission.
+        groupBuilder.MapDelete("/{id:guid}", static async (Guid id, ISender sender, CancellationToken ct) =>
+        {
+            var result = await sender.Send(new DeleteDocumentCommand(id), ct);
+            return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("DeleteDocument")
+            .WithSummary("DG-DOC-01: Soft-delete a document. Returns 204 No Content. " +
+                         "IDOR-guarded: document must belong to the caller's organisation.");
+
+        // ── DG-DOC-03: Persist OCR field overrides (admin Save Draft) ─────────
+        // PATCH /documents/{id}/fields
+        // Body: { overrides: [{ fieldId, newValue }] }
+        // SEC-012: Requires document.review permission.
+        groupBuilder.MapPatch("/{id:guid}/fields", static async (
+            Guid id, UpdateOcrFieldsRequest req, ISender sender, CancellationToken ct) =>
+        {
+            var overrides = req.Overrides
+                .Select(o => new OcrFieldOverrideItem(o.FieldId, o.NewValue))
+                .ToList();
+            var result = await sender.Send(new UpdateOcrFieldsCommand(id, overrides), ct);
+            return result.IsSuccess
+                ? Results.Ok(new { message = "OCR field overrides saved." })
+                : MapError(result.Error);
+        })
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("UpdateOcrFields")
+            .WithSummary("DG-DOC-03: Persist manual OCR field overrides for admin review (Save Draft). " +
+                         "Calls OcrField.Override() — subsequent GET /documents/{id} returns corrected values.");
+
         // ── GAP-015: Document tag CRUD ───────────────────────────────────────
 
         // GET /documents/{id}/tags
@@ -202,18 +241,75 @@ public sealed class Documents : EndpointGroupBase
                          "Default window: last 30 days.");
     }
 
-    private static async Task<IResult> UploadDocument(HttpRequest httpRequest, ISender sender)
+    /// <summary>
+    /// DG-DOC-02: Accepts both 'categoryId' (Guid) and 'category' (slug string).
+    /// Priority: categoryId (Guid) > category (slug resolved via DB lookup) > null.
+    /// The slug lookup is case-insensitive against document.document_category.code.
+    ///
+    /// DG-DOC-08: Reads the <c>Idempotency-Key</c> request header (or the 'idempotencyKey'
+    /// form field as fallback). When the key matches an existing document for this org,
+    /// returns the existing document with 200 OK instead of creating a duplicate and
+    /// returning 201 Created.
+    /// </summary>
+    private static async Task<IResult> UploadDocument(
+        HttpRequest httpRequest,
+        ISender sender,
+        IDocumentDbContext db,
+        CancellationToken cancellationToken)
     {
         if (!httpRequest.HasFormContentType)
             return Results.BadRequest(new { error = "Expected multipart/form-data." });
 
-        var form = await httpRequest.ReadFormAsync();
+        var form = await httpRequest.ReadFormAsync(cancellationToken);
         var file = form.Files.GetFile("file");
         if (file is null)
             return Results.BadRequest(new { error = "Field 'file' is required." });
 
         var orgIdStr = form["organizationId"].FirstOrDefault();
+
+        // DG-DOC-02: resolve 'categoryId' (Guid) OR 'category' (slug) — whichever is provided.
+        Guid? resolvedCategoryId = null;
+
         var categoryIdStr = form["categoryId"].FirstOrDefault();
+        if (Guid.TryParse(categoryIdStr, out var catId))
+        {
+            // Caller provided a real Guid — use it directly.
+            resolvedCategoryId = catId;
+        }
+        else
+        {
+            // Mobile sends field name 'category' with a slug value (e.g. 'sales_bill').
+            var categorySlug = form["category"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(categorySlug))
+            {
+                // Resolve slug -> Guid via document.document_category.code (case-insensitive).
+                var category = await db.DocumentCategories
+                    .Where(c => c.Code == categorySlug && c.DeletedAt == null)
+                    .Select(c => new { c.Id })
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                resolvedCategoryId = category?.Id;
+                // If slug not found, upload continues without a category (not a hard error).
+            }
+        }
+
+        // DG-DOC-08: Idempotency key — prefer the Idempotency-Key request header;
+        // fall back to the 'idempotencyKey' form field (for multipart-only clients).
+        var idempotencyKey =
+            httpRequest.Headers.TryGetValue("Idempotency-Key", out var keyHeader)
+                ? keyHeader.FirstOrDefault()
+                : form["idempotencyKey"].FirstOrDefault();
+
+        // Sanitise: reject non-UUID idempotency keys to prevent injection / key-space abuse.
+        if (!string.IsNullOrWhiteSpace(idempotencyKey)
+            && !Guid.TryParse(idempotencyKey, out _))
+        {
+            return Results.BadRequest(new
+            {
+                error = "Idempotency-Key must be a valid UUID v4 (e.g. xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx).",
+                code = "Document.InvalidIdempotencyKey"
+            });
+        }
 
         var result = await sender.Send(new UploadDocumentCommand(
             file.OpenReadStream(),
@@ -221,11 +317,16 @@ public sealed class Documents : EndpointGroupBase
             file.ContentType,
             file.Length,
             Guid.TryParse(orgIdStr, out var orgId) ? orgId : null,
-            Guid.TryParse(categoryIdStr, out var catId) ? catId : null));
+            resolvedCategoryId,
+            string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey));
 
-        return result.IsSuccess
-            ? Results.Created($"/documents/{result.Value.DocumentId}", result.Value)
-            : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
+        if (!result.IsSuccess)
+            return Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
+
+        // DG-DOC-08: Return 200 (not 201) when the response is served from a deduplicated existing row.
+        return result.Value.IsExisting
+            ? Results.Ok(result.Value)
+            : Results.Created($"/documents/{result.Value.DocumentId}", result.Value);
     }
 
     private static async Task<IResult> GetDocuments(
@@ -324,3 +425,9 @@ internal record RejectRequest(string Reason);
 internal record ClarificationRequest(string Message);
 internal record AddTagRequest(string TagName);
 internal record OcrFeedbackRequest(Guid OcrFieldId, string IssueType, string? Notes = null);
+
+// DG-DOC-03: Request DTOs for PATCH /documents/{id}/fields
+/// <summary>Single field override entry in the Save Draft request body.</summary>
+internal record OcrFieldOverrideRequest(Guid FieldId, string NewValue);
+/// <summary>Body for PATCH /documents/{id}/fields — admin Save Draft.</summary>
+internal record UpdateOcrFieldsRequest(IReadOnlyList<OcrFieldOverrideRequest> Overrides);

@@ -15,12 +15,23 @@ namespace ItrService.Application.Filings.Queries.GetFiling;
 /// </summary>
 public record GetFilingQuery(Guid FilingId) : IQuery<FilingDetailDto>;
 
+/// <summary>
+/// Detailed filing DTO returned by GET /itr/filings/{id}.
+/// DG-ITR-03: createdAt + updatedAt are REQUIRED by admin FilingSchema (Zod parse fails without them).
+/// DG-ITR-04: caNotes is separate from caRejectionReason.
+/// </summary>
 public record FilingDetailDto(
     Guid Id, Guid AssesseeId, string AssessmentYear, string ItrFormType, string Regime,
     string Status, Guid? TaxSlabVersionId, string? ComputationHash, decimal SalaryIncome,
     decimal HousePropertyIncome, decimal BusinessIncome, decimal CapitalGains, decimal OtherIncome,
     decimal TotalDeductions, string? AcknowledgementNumber, DateTime? FiledAt, DateTime? EVerifiedAt,
-    Guid? ReviewedByCaId, string? CaRejectionReason);
+    Guid? ReviewedByCaId, string? CaRejectionReason,
+    // DG-ITR-03: timestamps required by admin FilingSchema
+    DateTime CreatedAt, DateTime UpdatedAt,
+    // DG-ITR-03: optional assessee name + masked PAN for admin header display
+    string? AssesseeName, string? PanLast4,
+    // DG-ITR-04: dedicated CA notes (not the rejection reason)
+    string? CaNotes);
 
 public sealed class GetFilingQueryValidator : AbstractValidator<GetFilingQuery>
 {
@@ -55,6 +66,12 @@ public sealed class GetFilingQueryHandler(IItrDbContext dbContext, ICurrentUser 
             f.TaxSlabVersionId, f.ComputationHash, f.SalaryIncome, f.HousePropertyIncome,
             f.BusinessIncome, f.CapitalGains, f.OtherIncome, f.TotalDeductions,
             f.AcknowledgementNumber, f.FiledAt, f.EVerifiedAt,
-            f.ReviewedByCaId, f.CaRejectionReason);
+            f.ReviewedByCaId, f.CaRejectionReason,
+            // DG-ITR-03: required timestamps
+            f.CreatedAt, f.UpdatedAt,
+            // DG-ITR-03: assessee name + masked PAN
+            assessee.FullName, assessee.PanLast4,
+            // DG-ITR-04: dedicated CA notes
+            f.CaNotes);
     }
 }

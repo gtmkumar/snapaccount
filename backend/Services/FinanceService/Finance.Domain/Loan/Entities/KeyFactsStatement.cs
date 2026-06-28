@@ -50,10 +50,55 @@ public class KeyFactsStatement : BaseAuditableEntity
     public string GrievanceOfficerContact { get; private set; } = string.Empty;
 
     /// <summary>
+    /// DG-LOAN-05: Structured grievance officer object (JSON).
+    /// Schema: { name, phone, email, address, hours, escalation }
+    /// Supercedes the flat <see cref="GrievanceOfficerContact"/> for new KFS records;
+    /// old records retain the flat string. Immutable once signed.
+    /// </summary>
+    public string? GrievanceOfficerJson { get; private set; }
+
+    /// <summary>
     /// Cooling-off period in calendar days (RBI minimum = 3).
     /// The borrower may cancel within this window after disbursement.
     /// </summary>
     public int CoolingOffDays { get; private set; }
+
+    // ── DG-LOAN-05: Extended RBI KFS disclosure fields ─────────────────────────
+
+    /// <summary>
+    /// Nominal annual interest rate (% p.a.) before fees.
+    /// Displayed alongside APR in the <c>AprHeroBlock</c> caption.
+    /// </summary>
+    public decimal? NominalInterestRate { get; private set; }
+
+    /// <summary>Interest calculation type (e.g. REDUCING_BALANCE, FLAT_RATE).</summary>
+    public string? InterestType { get; private set; }
+
+    /// <summary>
+    /// Sum of all fee amounts from <see cref="FeesJson"/> (INR).
+    /// Pre-computed at generation time for display in <c>FeeItemizationTable</c>.
+    /// </summary>
+    public decimal? TotalFees { get; private set; }
+
+    /// <summary>
+    /// Net amount credited to the borrower's account = <see cref="LoanAmount"/> − <see cref="TotalFees"/>.
+    /// RBI mandatory disclosure in <c>NetDisbursalBlock</c>.
+    /// </summary>
+    public decimal? NetDisbursalAmount { get; private set; }
+
+    /// <summary>
+    /// Total outflow over the loan life = <see cref="MonthlyEmi"/> × <see cref="TenureMonths"/>.
+    /// RBI mandatory disclosure in <c>LoanSnapshotGrid</c>.
+    /// </summary>
+    public decimal? TotalAmountPayable { get; private set; }
+
+    /// <summary>
+    /// Locale-specific plain-language cooling-off explanation text.
+    /// e.g. "You may exit this loan within 3 days of disbursal by repaying the principal
+    /// + proportionate APR, with no prepayment penalty."
+    /// Versioned and immutable once signed.
+    /// </summary>
+    public string? CoolingOffTerms { get; private set; }
 
     // ── Integrity ──────────────────────────────────────────────────────────────
 
@@ -88,7 +133,15 @@ public class KeyFactsStatement : BaseAuditableEntity
         string grievanceOfficerContact,
         int coolingOffDays,
         string hmacSignature,
-        string locale = "en")
+        string locale = "en",
+        // DG-LOAN-05: extended RBI KFS disclosure fields
+        decimal? nominalInterestRate = null,
+        string? interestType = null,
+        decimal? totalFees = null,
+        decimal? netDisbursalAmount = null,
+        decimal? totalAmountPayable = null,
+        string? coolingOffTerms = null,
+        string? grievanceOfficerJson = null)
         => new()
         {
             ApplicationId = applicationId,
@@ -104,6 +157,14 @@ public class KeyFactsStatement : BaseAuditableEntity
             HmacSignature = hmacSignature,
             Locale = string.IsNullOrWhiteSpace(locale) ? "en" : locale.Trim().ToLowerInvariant(),
             GeneratedAt = DateTime.UtcNow,
+            // DG-LOAN-05
+            NominalInterestRate = nominalInterestRate,
+            InterestType = interestType,
+            TotalFees = totalFees,
+            NetDisbursalAmount = netDisbursalAmount,
+            TotalAmountPayable = totalAmountPayable,
+            CoolingOffTerms = coolingOffTerms,
+            GrievanceOfficerJson = grievanceOfficerJson,
         };
 
     /// <summary>

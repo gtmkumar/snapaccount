@@ -2,7 +2,7 @@
 
 **Phase:** 6F  
 **Owner:** devops-engineer (infra steps), team lead (final approval gate)  
-**Last updated:** 2026-04-25
+**Last updated:** 2026-06-28 (updated for 3-composite + YARP gateway topology)
 
 ---
 
@@ -26,7 +26,7 @@ Work through these gates in order. Do not proceed past a failed gate.
 
 ### Gate 1: QA sign-off
 
-- [ ] All automated CI tests pass on the release branch (GitHub Actions `ci.yml` — green)
+- [ ] All automated CI tests pass on the release branch (GitHub Actions `ci.yml` — green; see `.github/workflows/ci.yml`)
 - [ ] QA team has run the full E2E test suite on staging and signed off
 - [ ] All P0 and P1 bugs are resolved or deferred with team lead approval
 - [ ] Mobile app (if releasing): QA-mobile has run Expo staging build on physical devices
@@ -76,7 +76,8 @@ To mark a flag as deferred: create a GitHub issue with label `prod-blocker`, ass
 - [ ] All `REPLACE_ME` secrets in Secret Manager have been replaced with real values
 - [ ] GitHub Actions variables (`GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_CI_SERVICE_ACCOUNT`) are set for production
 - [ ] VPC connector `snapaccount-vpc-connector` is running (`gcloud compute networks vpc-access connectors describe`)
-- [ ] Artifact Registry images for all services are tagged and available
+- [ ] Artifact Registry images for all 5 deployable targets are tagged and available:
+  `platform-service`, `finance-service`, `assist-service`, `api-gateway`, `admin-panel`
 
 Verify infrastructure readiness:
 
@@ -111,15 +112,17 @@ gcloud redis instances describe snapaccount-redis \
 
 ### Step 1: Tag the release image
 
+The repository now builds **5 Docker images** from 3 composite .NET services, the YARP
+API gateway, and the React admin panel. Image names match Cloud Run service names exactly.
+
 ```bash
 export GCP_PROJECT_ID=snapaccount-prod
 export STAGING_TAG=<staging-image-tag>    # e.g. git SHA from staging deploy
-export RELEASE_TAG=v$(date +%Y.%m.%d)-1  # e.g. v2026.04.25-1
+export RELEASE_TAG=v$(date +%Y.%m.%d)-1  # e.g. v2026.06.28-1
 REGISTRY="asia-south1-docker.pkg.dev/${GCP_PROJECT_ID}/snapaccount/services"
 
-SERVICES=(auth-service document-service accounting-service gst-service loan-service \
-          itr-service chat-service notification-service report-service \
-          subscription-service ai-service callback-service admin-panel)
+# 3 composite services + YARP gateway + admin panel
+SERVICES=(platform-service finance-service assist-service api-gateway admin-panel)
 
 for SVC in "${SERVICES[@]}"; do
     # Re-tag the staging image as the release version
@@ -139,6 +142,7 @@ Database migrations run before the Cloud Run services are updated to ensure sche
 
 ```bash
 # Trigger the db-migrate workflow (GitHub Actions)
+# (workflow is .github/workflows/db-migrate.yml — separate from cd-production.yml)
 gh workflow run db-migrate.yml \
     --field environment=production \
     --field image_tag="${RELEASE_TAG}" \
@@ -176,9 +180,8 @@ bash infra/cloud-run-services.sh
 Wait for all services to report `READY` before shifting traffic:
 
 ```bash
-for SVC in auth-service document-service accounting-service gst-service loan-service \
-           itr-service chat-service notification-service report-service \
-           subscription-service ai-service callback-service admin-panel; do
+# 3 composites + gateway + admin panel
+for SVC in platform-service finance-service assist-service api-gateway admin-panel; do
     STATUS=$(gcloud run services describe "${SVC}" \
         --region=asia-south1 \
         --project="${GCP_PROJECT_ID}" \
@@ -194,9 +197,8 @@ done
 After all services are deployed and traffic is shifted:
 
 ```bash
-for SVC in auth-service document-service accounting-service gst-service loan-service \
-           itr-service chat-service notification-service report-service \
-           subscription-service ai-service callback-service; do
+# Admin panel included here — its revision also needs an audit label
+for SVC in platform-service finance-service assist-service api-gateway admin-panel; do
     # Get the latest revision name
     REVISION=$(gcloud run services describe "${SVC}" \
         --region=asia-south1 \
@@ -221,16 +223,25 @@ Run these checks within 15 minutes of deployment:
 
 ```bash
 # 1. All services report Ready
-for SVC in auth-service document-service accounting-service gst-service loan-service \
-           itr-service chat-service notification-service report-service \
-           subscription-service ai-service callback-service admin-panel; do
+# NOTE on health endpoints:
+#   - 3 composite services (Platform/Finance/Assist): MapHealthChecks("/healthz") → GET /healthz
+#   - API Gateway (YARP): MapGet("/healthz", ...) → GET /healthz
+#   - Admin panel (nginx/React SPA): no dedicated health path; curl root "/" → 200
+declare -A HEALTH_PATH
+HEALTH_PATH["platform-service"]="/healthz"
+HEALTH_PATH["finance-service"]="/healthz"
+HEALTH_PATH["assist-service"]="/healthz"
+HEALTH_PATH["api-gateway"]="/healthz"
+HEALTH_PATH["admin-panel"]="/"
+
+for SVC in platform-service finance-service assist-service api-gateway admin-panel; do
     URL=$(gcloud run services describe "${SVC}" \
         --region=asia-south1 \
         --project="${GCP_PROJECT_ID}" \
         --format="value(status.url)" 2>/dev/null || echo "N/A")
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${URL}/health" \
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${URL}${HEALTH_PATH[${SVC}]}" \
         -H "Authorization: Bearer $(gcloud auth print-identity-token)" 2>/dev/null || echo "ERR")
-    echo "${SVC}: ${HTTP_CODE}  (${URL})"
+    echo "${SVC}: ${HTTP_CODE}  (${URL}${HEALTH_PATH[${SVC}]})"
 done
 # Expected: all 200 or 204
 
@@ -249,13 +260,13 @@ for DL_TOPIC in $(gcloud pubsub topics list \
     echo "${DL_TOPIC}: ${MSG_COUNT}"
 done
 
-# 4. ChatService SignalR check
-# Verify a WebSocket connection can be established to the chat-service URL
+# 4. Assist service SignalR check (Chat module)
+# Verify a WebSocket connection can be established to the assist-service URL
 # (requires a test token — run from the admin panel or mobile app in staging)
 ```
 
 **Pass criteria:**
-- All `/health` endpoints return 2xx.
+- All `/healthz` endpoints (composites + gateway) and admin-panel `/` return 2xx.
 - No error spikes in Cloud Monitoring for 10 minutes post-deploy.
 - Pub/Sub dead-letter queues empty or no new messages since deploy.
 
@@ -268,10 +279,10 @@ Initiate rollback immediately if any of the following occur within 30 minutes of
 | Trigger | Threshold | Action |
 |---|---|---|
 | Error rate spike | > 1% 5xx for 5 consecutive minutes on any service | Rollback immediately |
-| p95 latency regression | > 3x pre-deploy baseline on auth/chat/notification | Rollback immediately |
-| Health check failure | Any service `/health` returns non-2xx | Rollback immediately |
+| p95 latency regression | > 3x pre-deploy baseline on platform-service/assist-service | Rollback immediately |
+| Health check failure | Any service `/healthz` (or `admin-panel /`) returns non-2xx | Rollback immediately |
 | Database migration failure | Migration job exits non-zero | Stop deploy; rollback DB (see below) |
-| SignalR connection failure | ChatService WebSocket handshake fails | Rollback chat-service only |
+| SignalR connection failure | Assist service WebSocket handshake fails | Rollback assist-service only |
 | Pub/Sub message accumulation | Dead-letter queue grows > 100 messages/5 min | Rollback affected service |
 
 ### Rollback procedure
@@ -300,9 +311,8 @@ rollback_service() {
 }
 
 # Rollback all services (production emergency)
-for SVC in auth-service document-service accounting-service gst-service loan-service \
-           itr-service chat-service notification-service report-service \
-           subscription-service ai-service callback-service admin-panel; do
+# Gateway rolls back first so clients stop reaching the broken revision
+for SVC in api-gateway platform-service finance-service assist-service admin-panel; do
     rollback_service "${SVC}"
 done
 ```
@@ -340,4 +350,5 @@ After rollback:
 - `infra/cloud-monitoring-dashboards.sh` — dashboard provisioning
 - `docs/devops/backup-restore-runbook.md` — backup verification and PITR procedures
 - `docs/devops/observability-slos.md` — SLO targets and alerting
-- `.github/workflows/cd.yml` — automated production deployment workflow
+- `.github/workflows/cd-production.yml` — automated production deployment workflow (builds 5 images, manual approval gate, deploys 3 composites + gateway + admin-panel)
+- `.github/workflows/cd-staging.yml` — automated staging deployment workflow

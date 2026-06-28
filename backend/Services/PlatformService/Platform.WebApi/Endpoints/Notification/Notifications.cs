@@ -1,5 +1,6 @@
 using MediatR;
 using NotificationService.Application.Notifications.Commands.FireCelebration;
+using NotificationService.Application.Notifications.Commands.MarkAllRead;
 using NotificationService.Application.Notifications.Commands.MarkRead;
 using NotificationService.Application.Notifications.Commands.RegisterPushToken;
 using NotificationService.Application.Notifications.Commands.RetryDlqItem;
@@ -32,18 +33,30 @@ public sealed class Notifications : EndpointGroupBase
             .WithSummary("Fan-out: dispatch a notification to a user across eligible channels.");
 
         // GET /notifications/inbox — paginated in-app inbox for the calling user
+        // DG-NOTIF-04: accepts category (GST|ITR|DOCS|LOAN|CALLBACK|BILLING|SYSTEM) and unreadOnly
         g.MapGet("/inbox", GetInbox)
             .RequireAuthorization()
             .RequireRateLimiting("standard")
             .WithName("GetInbox")
-            .WithSummary("Returns paginated in-app notification inbox for the authenticated user.");
+            .WithSummary("Returns paginated in-app notification inbox for the authenticated user.")
+            .WithDescription(
+                "Accepts optional query params: page, pageSize, category (GST|ITR|DOCS|LOAN|CALLBACK|BILLING|SYSTEM), unreadOnly. " +
+                "Returns items with status READ|UNREAD, title, category, deepLinkUrl, and linkedEntity* fields.");
 
-        // POST /notifications/{id}/read — mark an in-app notification as read
+        // POST /notifications/{id}/read — mark a single in-app notification as read
         g.MapPost("/{id:guid}/read", MarkRead)
             .RequireAuthorization()
             .RequireRateLimiting("standard")
             .WithName("MarkNotificationRead")
-            .WithSummary("Marks an in-app notification log entry as read.");
+            .WithSummary("Marks a single in-app inbox notification as read.");
+
+        // POST /notifications/read-all — mark all unread inbox notifications as read
+        // DG-NOTIF-04: new endpoint consumed by admin notification center markAllNotificationsRead()
+        g.MapPost("/read-all", MarkAllRead)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("MarkAllNotificationsRead")
+            .WithSummary("Marks all unread in-app notifications as read for the authenticated user.");
 
         // GET /notifications/preferences — get all channel preferences for the calling user
         g.MapGet("/preferences", GetPreferences)
@@ -122,16 +135,25 @@ public sealed class Notifications : EndpointGroupBase
             : Results.BadRequest(new { error = result.Error.Message });
     }
 
+    /// <summary>
+    /// GET /notifications/inbox
+    /// DG-NOTIF-04: accepts category + unreadOnly query params.
+    /// </summary>
     private static async Task<IResult> GetInbox(
         ICurrentUser currentUser,
         ISender sender,
         int page = 1,
         int pageSize = 20,
+        string? category = null,
+        bool? unreadOnly = null,
         CancellationToken ct = default)
     {
         if (!currentUser.IsAuthenticated) return Results.Unauthorized();
-        var result = await sender.Send(new GetInboxQuery(currentUser.UserId, page, pageSize), ct);
-        return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+        var result = await sender.Send(
+            new GetInboxQuery(currentUser.UserId, page, pageSize, category, unreadOnly), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.BadRequest(new { error = result.Error.Message });
     }
 
     private static async Task<IResult> MarkRead(
@@ -142,7 +164,27 @@ public sealed class Notifications : EndpointGroupBase
     {
         if (!currentUser.IsAuthenticated) return Results.Unauthorized();
         var result = await sender.Send(new MarkReadCommand(id, currentUser.UserId), ct);
-        return result.IsSuccess ? Results.NoContent() : Results.NotFound(new { error = result.Error.Message });
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error.Code.Contains("NotFound")
+                ? Results.NotFound(new { error = result.Error.Message })
+                : Results.BadRequest(new { error = result.Error.Message });
+    }
+
+    /// <summary>
+    /// POST /notifications/read-all
+    /// DG-NOTIF-04: marks all unread inbox notifications as read for the calling user.
+    /// </summary>
+    private static async Task<IResult> MarkAllRead(
+        ICurrentUser currentUser,
+        ISender sender,
+        CancellationToken ct)
+    {
+        if (!currentUser.IsAuthenticated) return Results.Unauthorized();
+        var result = await sender.Send(new MarkAllReadCommand(currentUser.UserId), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.BadRequest(new { error = result.Error.Message });
     }
 
     private static async Task<IResult> GetPreferences(

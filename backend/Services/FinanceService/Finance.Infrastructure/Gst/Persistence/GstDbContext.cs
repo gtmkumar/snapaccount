@@ -73,6 +73,24 @@ public class GstDbContext(DbContextOptions<GstDbContext> options)
     /// <inheritdoc />
     public DbSet<GstNoticeDeadlineRule> GstNoticeDeadlineRules => Set<GstNoticeDeadlineRule>();
 
+    // ── DG-GST-02: ARN capture + audit trail (migration 096) ─────────────────
+
+    /// <inheritdoc />
+    public DbSet<GstReturnAudit> GstReturnAudits => Set<GstReturnAudit>();
+
+    // ── DG-GST-04: Late fee + interest rate tables (migration 101) ───────────
+
+    /// <inheritdoc />
+    public DbSet<GstLateFeeRate> GstLateFeeRates => Set<GstLateFeeRate>();
+
+    /// <inheritdoc />
+    public DbSet<GstInterestRate> GstInterestRates => Set<GstInterestRate>();
+
+    // ── DG-GST-05: Org profile for e-invoice threshold (migration 102) ────────
+
+    /// <inheritdoc />
+    public DbSet<GstOrgProfile> GstOrgProfiles => Set<GstOrgProfile>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

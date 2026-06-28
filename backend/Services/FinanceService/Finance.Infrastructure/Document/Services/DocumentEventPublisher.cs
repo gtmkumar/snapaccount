@@ -13,6 +13,7 @@ namespace DocumentService.Infrastructure.Services;
 /// Infrastructure implementation of <see cref="IDocumentEventPublisher"/>.
 /// Publishes to <c>snapaccount.document.ocr.completed</c> using the exact payload shape
 /// consumed by AccountingService's <c>OcrResultSubscriber</c>/<c>PostFromOcrCommand</c>.
+/// Also publishes to <c>snapaccount.document.events</c> for NotificationService fan-out.
 /// </summary>
 public sealed class DocumentEventPublisher(
     IPubSubPublisher publisher,
@@ -20,6 +21,9 @@ public sealed class DocumentEventPublisher(
 {
     /// <summary>Pub/Sub topic that AccountingService subscribes to (accounting-service-ocr-sub).</summary>
     private const string OcrCompletedTopic = "snapaccount.document.ocr.completed";
+
+    /// <summary>Pub/Sub topic for general document lifecycle events (notification fan-out).</summary>
+    private const string DocumentEventsTopic = "snapaccount.document.events";
 
     /// <inheritdoc />
     public async Task PublishOcrCompletedAsync(Document document, string? ocrText = null, CancellationToken ct = default)
@@ -56,6 +60,36 @@ public sealed class DocumentEventPublisher(
                 "Failed to publish OcrCompleted event for document {DocumentId} to topic {Topic}. " +
                 "Accounting pipeline may need manual re-trigger.",
                 document.Id, OcrCompletedTopic);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task PublishClarificationRequestedAsync(
+        Document document,
+        string message,
+        CancellationToken ct = default)
+    {
+        var payload = new DocumentClarificationRequestedPayload(
+            EventType: "ClarificationRequested",
+            OrgId: document.OrganizationId ?? Guid.Empty,
+            DocumentId: document.Id,
+            UserId: document.UserId ?? Guid.Empty,
+            Message: message);
+
+        try
+        {
+            await publisher.PublishAsync(DocumentEventsTopic, payload, ct);
+            logger.LogInformation(
+                "Published ClarificationRequested event for document {DocumentId} (user {UserId})",
+                document.Id, document.UserId);
+        }
+        catch (Exception ex)
+        {
+            // Log but do not rethrow — the clarification was saved; only the push notification fails.
+            logger.LogError(ex,
+                "Failed to publish ClarificationRequested event for document {DocumentId}. " +
+                "Push notification to user will not be delivered.",
+                document.Id);
         }
     }
 
@@ -98,3 +132,14 @@ internal sealed record OcrCompletedAccountingPayload(
     Guid? SuggestedDebitAccountId,
     Guid? SuggestedCreditAccountId,
     string? OcrText = null) : DomainEvent;
+
+/// <summary>
+/// DG-NOTIF-01: Payload for document lifecycle events (clarification, etc.)
+/// published to <c>snapaccount.document.events</c>.
+/// </summary>
+internal sealed record DocumentClarificationRequestedPayload(
+    string EventType,
+    Guid OrgId,
+    Guid DocumentId,
+    Guid UserId,
+    string Message) : DomainEvent;

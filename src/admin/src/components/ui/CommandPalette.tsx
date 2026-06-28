@@ -1,7 +1,9 @@
 /**
  * CommandPalette — Phase 6F Track F1
  * cmd+k global search modal. Calls GET /search?q=&types=...
- * Keyboard nav: Up/Down/Enter/Esc, Tab for filters.
+ * Keyboard nav: Up/Down/Enter/Esc, Tab/Shift+Tab (filter cycle), cmd+Enter (new tab), cmd+. (copy ID)
+ * DG-ADMIN-07: cmd+Enter open-in-new-tab, cmd+. copy-ID, Tab/Shift+Tab filter cycling, wrapping arrow nav
+ * DG-ADMIN-08: polite live region announcing results count
  */
 import {
   useEffect,
@@ -13,10 +15,12 @@ import {
 import { useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Clock, Zap } from 'lucide-react'
+import { toast } from 'sonner'
 import { t } from '@/i18n'
 import { useCommandPalette } from '@/contexts/CommandPaletteContext'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 import api from '@/lib/api'
 import { z } from 'zod'
 
@@ -77,13 +81,17 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Reset state on open
+  // DG-ADMIN-04: focus trap — cycles Tab within the panel, restores focus on close
+  const panelRef = useFocusTrap<HTMLDivElement>(isOpen)
+
+  // Reset state on open and auto-focus the search input
   useEffect(() => {
     if (isOpen) {
       setQuery('')
       setActiveFilter('all')
       setSelectedIndex(0)
-      setTimeout(() => inputRef.current?.focus(), 10)
+      // Defer so the panel is mounted before we try to focus
+      requestAnimationFrame(() => inputRef.current?.focus())
     }
   }, [isOpen])
 
@@ -124,12 +132,49 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
   }, [navigate, onClose, addRecent])
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    const isMod = e.metaKey || e.ctrlKey
+
+    // DG-ADMIN-07: cmd/ctrl+Enter → open in new tab
+    if (isMod && e.key === 'Enter' && displayItems[selectedIndex]) {
+      e.preventDefault()
+      const item = displayItems[selectedIndex]
+      window.open(item.url, '_blank', 'noopener,noreferrer')
+      onClose()
+      return
+    }
+
+    // DG-ADMIN-07: cmd/ctrl+. → copy ID to clipboard
+    if (isMod && e.key === '.') {
+      e.preventDefault()
+      const item = displayItems[selectedIndex]
+      if (item) {
+        void navigator.clipboard.writeText(item.id).then(() => {
+          toast.success(t('palette.copyId.success', { id: item.id }))
+        })
+      }
+      return
+    }
+
+    // DG-ADMIN-07: Tab/Shift+Tab → cycle filter chips
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      const currentIdx = FILTER_OPTIONS.indexOf(activeFilter)
+      const nextIdx = e.shiftKey
+        ? (currentIdx - 1 + FILTER_OPTIONS.length) % FILTER_OPTIONS.length
+        : (currentIdx + 1) % FILTER_OPTIONS.length
+      setActiveFilter(FILTER_OPTIONS[nextIdx])
+      setSelectedIndex(0)
+      return
+    }
+
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setSelectedIndex(i => Math.min(i + 1, displayItems.length - 1))
+      // DG-ADMIN-07: wrap at bottom
+      setSelectedIndex(i => (i + 1) % (displayItems.length || 1))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setSelectedIndex(i => Math.max(i - 1, 0))
+      // DG-ADMIN-07: wrap at top
+      setSelectedIndex(i => (i - 1 + (displayItems.length || 1)) % (displayItems.length || 1))
     } else if (e.key === 'Enter' && displayItems[selectedIndex]) {
       e.preventDefault()
       handleSelect(displayItems[selectedIndex])
@@ -156,8 +201,9 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
         aria-hidden="true"
       />
 
-      {/* Palette panel */}
+      {/* Palette panel — focus trap container (DG-ADMIN-04) */}
       <div
+        ref={panelRef}
         className={cn(
           'relative w-full max-w-xl mx-4 rounded-2xl shadow-[var(--shadow-lg)]',
           'bg-[var(--surface-raised)] border border-[var(--border-subtle)]',
@@ -292,6 +338,17 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
           )}
         </div>
 
+        {/* DG-ADMIN-08: polite live region — announces result count to screen readers after query settles */}
+        <span
+          aria-live="polite"
+          role="status"
+          className="sr-only"
+        >
+          {!isLoading && query.trim().length >= 2
+            ? t('palette.results.count', { count: displayItems.length })
+            : undefined}
+        </span>
+
         {/* Footer hints */}
         <div className="flex items-center gap-4 px-4 py-2 border-t border-[var(--border-subtle)] text-xs text-[var(--text-tertiary)]">
           <span>
@@ -301,6 +358,10 @@ export function CommandPalette({ _isOpen, _onClose }: CommandPaletteProps = {}) 
           <span>
             <kbd className="px-1 py-0.5 rounded bg-[var(--surface-sunken)] border border-[var(--border-default)] font-mono mr-1">↵</kbd>
             {t('palette.hint.open')}
+          </span>
+          <span>
+            <kbd className="px-1 py-0.5 rounded bg-[var(--surface-sunken)] border border-[var(--border-default)] font-mono mr-1">⌘↵</kbd>
+            {t('palette.hint.newTab')}
           </span>
           <span>
             <kbd className="px-1 py-0.5 rounded bg-[var(--surface-sunken)] border border-[var(--border-default)] font-mono mr-1">esc</kbd>

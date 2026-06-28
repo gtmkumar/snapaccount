@@ -26,4 +26,17 @@ public interface IDocumentEventPublisher
     /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task PublishOcrCompletedAsync(Document document, string? ocrText = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// DG-NOTIF-01: Publishes <c>snapaccount.document.events</c> with event type
+    /// <c>ClarificationRequested</c> so NotificationService can dispatch
+    /// DOC_CLARIFICATION_REQUESTED (Push, InApp) to the document owner.
+    /// </summary>
+    /// <param name="document">The document for which clarification is requested.</param>
+    /// <param name="message">The clarification message from the reviewer.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task PublishClarificationRequestedAsync(
+        Document document,
+        string message,
+        CancellationToken ct = default);
 }

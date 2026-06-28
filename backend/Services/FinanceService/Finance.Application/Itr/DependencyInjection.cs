@@ -1,4 +1,5 @@
 using ItrService.Application.Behaviors;
+using ItrService.Application.Common.Interfaces;
 using ItrService.Application.Services;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,7 +9,7 @@ namespace ItrService.Application;
 
 /// <summary>
 /// Registers ItrService Application layer services.
-/// Adds PermissionBehavior (SEC-026 RBAC) and TaxComputationEngine.
+/// Adds PermissionBehavior (SEC-026 RBAC), TaxComputationEngine, and ItrFormResolverService.
 /// </summary>
 public static class DependencyInjection
 {
@@ -22,6 +23,11 @@ public static class DependencyInjection
 
         // Pure tax engine — no DB writes
         services.AddScoped<ITaxComputationEngine, TaxComputationEngine>();
+
+        // DG-ITR-10: ITR form auto-determination from income heads + assessee type.
+        // Registered as Singleton — pure logic with no DB/IO dependencies; config values
+        // are read from IConfiguration on each call so AY rule changes take effect on re-deploy.
+        services.AddSingleton<IItrFormResolver, ItrFormResolverService>();
 
         return services;
     }

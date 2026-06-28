@@ -29,6 +29,19 @@ using LoanService.Application.PartnerBanks.Queries.GetPartnerBanks;
 using LoanService.Infrastructure.Webhooks;
 using MediatR;
 using SnapAccount.Shared.Api;
+// DG-LOAN-01: admin loan-operations endpoints
+using LoanService.Application.LoanApplications.Commands.BeginReview;
+using LoanService.Application.LoanApplications.Commands.ApproveApplication;
+using LoanService.Application.LoanApplications.Commands.RejectApplication;
+using LoanService.Application.LoanApplications.Commands.RequestDocuments;
+using LoanService.Application.LoanApplications.Commands.RevokeConsent;
+using LoanService.Application.LoanApplications.Queries.ListConsents;
+using LoanService.Application.LoanApplications.Queries.ListStatusLog;
+using LoanService.Application.BankCommunications.Queries.ListBankCommunications;
+using LoanService.Application.BankCommunications.Queries.GetBankCommKpi;
+using LoanService.Application.BankCommunications.Commands.ResendBankMessage;
+using LoanService.Application.PartnerBanks.Queries.ListPartnerBanks;
+using LoanService.Application.KeyFacts.Commands.AcknowledgeKfs;
 
 namespace LoanService.Api.Endpoints;
 
@@ -120,7 +133,27 @@ public sealed class Loans : EndpointGroupBase
                 "NEW-D10: Optional ?locale=hi query param prefers a locale variant. " +
                 "Falls back to any locale (typically 'en') if the requested locale is not found. " +
                 "Never fails because of locale — RBI KFS retrieval is statutory. " +
-                "Optional ?kfsId=<guid> pins to a specific KFS row (audit path).");
+                "Optional ?kfsId=<guid> pins to a specific KFS row (audit path). " +
+                "DG-LOAN-05: Response includes verified, signatureLast8, nominalInterestRate, " +
+                "totalFees, netDisbursalAmount, totalAmountPayable, coolingOffTerms, grievanceOfficerJson.");
+
+        /// <summary>
+        /// POST /loans/applications/{id}/kfs/{kfsId}/acknowledge — Record KFS read-receipt.
+        /// DG-LOAN-05: Borrower must call this BEFORE submitting consents (RBI informed-consent chain).
+        /// The returned acknowledgementId must be forwarded to LoanConsentScreen and included in consent submissions.
+        /// Body: { kfsVersion?: int, deviceId?: string }
+        /// Response: { acknowledgementId: Guid, acknowledgedAt: DateTime }
+        /// Permission: loan.application.consent.
+        /// Rate limit: standard.
+        /// </summary>
+        groupBuilder.MapPost("/applications/{id:guid}/kfs/{kfsId:guid}/acknowledge", AcknowledgeKfs)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("AcknowledgeKfs")
+            .WithSummary("Record that the borrower has read and understood the KFS (RBI read-receipt, DG-LOAN-05)")
+            .WithDescription(
+                "Standalone KFS acknowledgement step — call BEFORE submitting consents. " +
+                "Idempotent: returns existing acknowledgement if the KFS was already acknowledged. " +
+                "The acknowledgementId is echoed so the mobile client can pass it to LoanConsentScreen.");
 
         /// <summary>POST /loans/applications/{id}/consents — Record a consent.</summary>
         groupBuilder.MapPost("/applications/{id:guid}/consents", RecordConsent)
@@ -155,6 +188,153 @@ public sealed class Loans : EndpointGroupBase
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetLoanFraudSummary")
             .WithSummary("Retrieve fraud check decision log for an application (operator tier, GAP-110)");
+
+        // ── DG-LOAN-01: Admin loan-operations actions ─────────────────────────────
+
+        /// <summary>
+        /// POST /loans/applications/{id}/begin-review — Transition SUBMITTED → UNDER_REVIEW.
+        /// Admin: called when an officer starts reviewing a submitted application.
+        /// Permission: loan.bank.decision.
+        /// </summary>
+        groupBuilder.MapPost("/applications/{id:guid}/begin-review", BeginReview)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("BeginLoanReview")
+            .WithSummary("Transition loan application from SUBMITTED to UNDER_REVIEW (admin, DG-LOAN-01)");
+
+        /// <summary>
+        /// POST /loans/applications/{id}/approve — Approve application (UNDER_REVIEW → APPROVED).
+        /// Body: { bankReferenceNo: string }
+        /// Permission: loan.bank.decision.
+        /// </summary>
+        groupBuilder.MapPost("/applications/{id:guid}/approve", ApproveApplication)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("ApproveLoanApplication")
+            .WithSummary("Approve a loan application (admin, DG-LOAN-01)");
+
+        /// <summary>
+        /// POST /loans/applications/{id}/reject — Reject application.
+        /// Body: { reason: string }
+        /// Permission: loan.bank.decision.
+        /// </summary>
+        groupBuilder.MapPost("/applications/{id:guid}/reject", RejectApplication)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("RejectLoanApplication")
+            .WithSummary("Reject a loan application (admin, DG-LOAN-01)");
+
+        /// <summary>
+        /// POST /loans/applications/{id}/request-documents — Move to DOCS_REQUESTED.
+        /// Permission: loan.bank.decision.
+        /// </summary>
+        groupBuilder.MapPost("/applications/{id:guid}/request-documents", RequestDocuments)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("RequestLoanDocuments")
+            .WithSummary("Request additional documents from applicant (admin, DG-LOAN-01)");
+
+        /// <summary>
+        /// POST /loans/applications/{id}/disburse — Admin-initiated disbursement record.
+        /// Body: { disbursedAmount: decimal, bankReferenceNo: string }
+        /// Alias for /disbursement that matches loanApi.ts:recordDisbursement signature.
+        /// Permission: loan.disbursement.record.
+        /// </summary>
+        groupBuilder.MapPost("/applications/{id:guid}/disburse", DisburseApplication)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("DisburseApplication")
+            .WithSummary("Record loan disbursement (admin alias for /disbursement, DG-LOAN-01)");
+
+        /// <summary>
+        /// GET /loans/applications/{id}/consents — List consents for an application.
+        /// Response: { items: ConsentRecordDto[] }
+        /// Permission: loan.bank.decision.
+        /// </summary>
+        groupBuilder.MapGet("/applications/{id:guid}/consents", ListConsents)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("ListLoanConsents")
+            .WithSummary("List consent records for a loan application (admin, DG-LOAN-01)");
+
+        /// <summary>
+        /// POST /loans/applications/{id}/consents/{consentId}/revoke — Revoke a consent.
+        /// DG-LOAN-04 / DPDP Act 2023 s.6: data principal right to withdraw consent.
+        /// Body: { reason?: string }
+        /// Response: { consentId, consentType, revokedAt, reason }
+        /// Idempotent: returns existing revocation details if already revoked.
+        /// A revoked DATA_SHARE_WITH_BANK or DISBURSEMENT_MANDATE consent blocks bank
+        /// data-sharing and disbursement (enforced in downstream handlers).
+        /// Permission: loan.application.consent.
+        /// Rate limit: standard.
+        /// </summary>
+        groupBuilder.MapPost("/applications/{id:guid}/consents/{consentId:guid}/revoke", RevokeConsent)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("RevokeLoanConsent")
+            .WithSummary("Revoke a loan consent per DPDP Act 2023 s.6 (DG-LOAN-04)")
+            .WithDescription(
+                "DPDP compliant: revocation is append-only — the original signed record is never deleted. " +
+                "A revoked DATA_SHARE_WITH_BANK or DISBURSEMENT_MANDATE consent blocks further bank data-sharing and disbursement.");
+
+        /// <summary>
+        /// GET /loans/applications/{id}/status-log — Status transition timeline.
+        /// Response: { items: StatusLogEntryDto[] }
+        /// Permission: loan.bank.decision.
+        /// </summary>
+        groupBuilder.MapGet("/applications/{id:guid}/status-log", ListStatusLog)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("ListLoanStatusLog")
+            .WithSummary("Status transition timeline for a loan application (admin, DG-LOAN-01)");
+
+        // ── DG-LOAN-01: Org-wide bank communications ──────────────────────────
+
+        /// <summary>
+        /// GET /loans/bank-communications — Org-wide bank communication log.
+        /// Query params: bankId?, channel?, status?, direction?, from?, to?, search?, applicationId?, page?, pageSize?
+        /// Response: { items, totalCount }
+        /// Permission: loan.bank.decision.
+        /// </summary>
+        groupBuilder.MapGet("/bank-communications", ListBankCommunications)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("ListBankCommunications")
+            .WithSummary("Org-wide bank communication log (admin, DG-LOAN-01)");
+
+        /// <summary>
+        /// GET /loans/bank-communications/kpi — KPI metrics for bank comms dashboard.
+        /// Response: { sentToday, pending, failed, avgResponseMinutes?, bounceRate? }
+        /// Permission: loan.bank.decision.
+        /// </summary>
+        groupBuilder.MapGet("/bank-communications/kpi", GetBankCommKpi)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetBankCommKpi")
+            .WithSummary("Bank communications KPI for admin dashboard (DG-LOAN-01)");
+
+        /// <summary>
+        /// POST /loans/bank-communications/{id}/resend — Re-queue a bank message.
+        /// Body: { reason?: string }
+        /// Permission: loan.bank.decision.
+        /// </summary>
+        groupBuilder.MapPost("/bank-communications/{id:guid}/resend", ResendBankMessage)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("ResendBankMessage")
+            .WithSummary("Re-queue a bank communication message (admin, DG-LOAN-01)");
+
+        // ── DG-LOAN-01: /loans/banks alias for partner banks ─────────────────
+
+        /// <summary>
+        /// GET /loans/banks — Paginated partner banks list.
+        /// Response: { items: PartnerBankListDto[], totalCount }
+        /// Matches admin loanApi.ts:listPartnerBanks → GET /loans/banks.
+        /// Permission: loan.bank.decision.
+        /// </summary>
+        groupBuilder.MapGet("/banks", ListBanks)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("ListBanks")
+            .WithSummary("Paginated partner banks list (admin alias /loans/banks, DG-LOAN-01)");
+
+        /// <summary>
+        /// POST /loans/banks — Register a new partner bank.
+        /// Alias for POST /partner-banks that matches admin loanApi.ts:registerPartnerBank → POST /loans/banks.
+        /// Permission: loan.bank.create.
+        /// </summary>
+        groupBuilder.MapPost("/banks", CreateBankAlias)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("CreateBankAlias")
+            .WithSummary("Register partner bank via /loans/banks alias (admin, DG-LOAN-01)");
 
         /// <summary>POST /loans/applications/{id}/submit — Submit for bank review.</summary>
         groupBuilder.MapPost("/applications/{id:guid}/submit", SubmitApplication)
@@ -348,8 +528,12 @@ public sealed class Loans : EndpointGroupBase
     {
         var ip = http.Connection.RemoteIpAddress?.ToString();
         var ua = http.Request.Headers.UserAgent.ToString();
+        // DG-LOAN-06: thread DeviceId and SharedWithBankIds through to the command.
+        // DeviceId defaults to null (backward-compatible); clients SHOULD supply it.
         var result = await sender.Send(
-            new RecordConsentCommand(id, req.ConsentType, req.ConsentTextVersion, ip, ua, req.KfsId, req.ConsentLocale), ct);
+            new RecordConsentCommand(
+                id, req.ConsentType, req.ConsentTextVersion, ip, ua, req.KfsId,
+                req.ConsentLocale, req.DeviceId, req.SharedWithBankIds), ct);
         return result.IsSuccess
             ? Results.Created($"/loans/applications/{id}/consents/{result.Value.ConsentId}", result.Value)
             : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
@@ -465,20 +649,30 @@ public sealed class Loans : EndpointGroupBase
         var rawBody = ms.ToArray();
 
         var idempotencyKey = http.Request.Headers["X-Idempotency-Key"].FirstOrDefault() ?? string.Empty;
-        var signature = http.Request.Headers["X-Signature"].FirstOrDefault() ?? string.Empty;
+
+        // DG-LOAN-02: header is X-Bank-Signature (not X-Signature) per contract
+        var bankSignature = http.Request.Headers["X-Bank-Signature"].FirstOrDefault() ?? string.Empty;
 
         if (string.IsNullOrEmpty(idempotencyKey))
-            return Results.BadRequest("X-Idempotency-Key header is required.");
+            return Results.BadRequest(new { error = "X-Idempotency-Key header is required." });
 
-        var processingResult = await webhookHandler.ProcessAsync(bankId, idempotencyKey, signature, rawBody, ct);
+        if (string.IsNullOrEmpty(bankSignature))
+            return Results.BadRequest(new { error = "X-Bank-Signature header is required." });
 
+        var processingResult = await webhookHandler.ProcessAsync(bankId, idempotencyKey, bankSignature, rawBody, ct);
+
+        // DG-LOAN-02: map handler result to HTTP status codes per documented contract
         return processingResult.Status switch
         {
-            WebhookProcessingStatus.Accepted => Results.Ok(new { status = "accepted" }),
-            WebhookProcessingStatus.AlreadyProcessed => Results.Ok(new { status = "already_processed" }),
-            WebhookProcessingStatus.Rejected => Results.Problem(
-                processingResult.Reason ?? "Rejected", statusCode: StatusCodes.Status400BadRequest),
-            _ => Results.Problem("Unknown webhook status.", statusCode: 500)
+            WebhookProcessingStatus.Accepted        => Results.Ok(new { status = "accepted" }),
+            WebhookProcessingStatus.NotFound        => Results.NotFound(new { error = processingResult.Reason }),
+            WebhookProcessingStatus.SignatureMismatch => Results.Json(
+                new { error = processingResult.Reason },
+                statusCode: StatusCodes.Status401Unauthorized),
+            WebhookProcessingStatus.DuplicateKey    => Results.Conflict(
+                new { code = "DUPLICATE_EVENT", key = processingResult.ConflictKey }),
+            WebhookProcessingStatus.BadRequest      => Results.BadRequest(new { error = processingResult.Reason }),
+            _                                       => Results.Problem("Unknown webhook status.", statusCode: 500)
         };
     }
 
@@ -543,6 +737,161 @@ public sealed class Loans : EndpointGroupBase
         return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
     }
 
+    // ── DG-LOAN-01: Admin loan-operations handler delegates ───────────────────
+
+    /// <summary>POST /loans/applications/{id}/begin-review</summary>
+    private static async Task<IResult> BeginReview(
+        Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new BeginReviewCommand(id), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
+    /// <summary>POST /loans/applications/{id}/approve</summary>
+    private static async Task<IResult> ApproveApplication(
+        Guid id, ApproveApplicationRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new ApproveApplicationCommand(id, req.BankReferenceNo), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
+    /// <summary>POST /loans/applications/{id}/reject</summary>
+    private static async Task<IResult> RejectApplication(
+        Guid id, RejectApplicationRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new RejectApplicationCommand(id, req.Reason), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
+    /// <summary>POST /loans/applications/{id}/request-documents</summary>
+    private static async Task<IResult> RequestDocuments(
+        Guid id, RequestDocumentsRequest? req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new RequestDocumentsCommand(id, req?.Note), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
+    /// <summary>
+    /// POST /loans/applications/{id}/disburse
+    /// Admin alias for /disbursement — body matches loanApi.ts:RecordDisbursementRequest.
+    /// </summary>
+    private static async Task<IResult> DisburseApplication(
+        Guid id, DisburseApplicationRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(
+            new RecordDisbursementCommand(id, req.DisbursedAmount, req.BankReferenceNo), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
+    /// <summary>GET /loans/applications/{id}/consents</summary>
+    private static async Task<IResult> ListConsents(
+        Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new ListConsentsQuery(id), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    /// <summary>
+    /// POST /loans/applications/{id}/consents/{consentId}/revoke
+    /// DG-LOAN-04: DPDP Act 2023 s.6 — revoke a previously recorded consent.
+    /// </summary>
+    private static async Task<IResult> RevokeConsent(
+        Guid id, Guid consentId, RevokeConsentRequest? req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new RevokeConsentCommand(id, consentId, req?.Reason), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    /// <summary>
+    /// POST /loans/applications/{id}/kfs/{kfsId}/acknowledge
+    /// DG-LOAN-05: Records that the borrower has read and understood the KFS
+    /// (standalone read-receipt before LoanConsentScreen).
+    /// </summary>
+    private static async Task<IResult> AcknowledgeKfs(
+        Guid id, Guid kfsId, AcknowledgeKfsRequest? req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new AcknowledgeKfsCommand(id, kfsId, req?.DeviceId), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : result.Error.ToHttpResult();
+    }
+
+    /// <summary>GET /loans/applications/{id}/status-log</summary>
+    private static async Task<IResult> ListStatusLog(
+        Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new ListStatusLogQuery(id), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    /// <summary>GET /loans/bank-communications</summary>
+    private static async Task<IResult> ListBankCommunications(
+        [AsParameters] BankCommListParams p, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new ListBankCommunicationsQuery(
+            p.ApplicationId,
+            p.BankId,
+            p.Direction,
+            p.Channel,
+            p.Status,
+            p.From,
+            p.To,
+            p.Search,
+            p.Page,
+            p.PageSize), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    /// <summary>GET /loans/bank-communications/kpi</summary>
+    private static async Task<IResult> GetBankCommKpi(
+        ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetBankCommKpiQuery(), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    /// <summary>POST /loans/bank-communications/{id}/resend</summary>
+    private static async Task<IResult> ResendBankMessage(
+        Guid id, ResendMessageRequest? req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new ResendBankMessageCommand(id, req?.Reason), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    /// <summary>GET /loans/banks — paginated partner banks list</summary>
+    private static async Task<IResult> ListBanks(
+        [AsParameters] BanksListParams p, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new ListPartnerBanksQuery(p.Page, p.PageSize), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    /// <summary>POST /loans/banks — register partner bank (alias for /partner-banks)</summary>
+    private static async Task<IResult> CreateBankAlias(
+        RegisterPartnerBankRequest req, ISender sender, CancellationToken ct)
+    {
+        if (!Enum.TryParse<LoanService.Domain.Entities.BankAdapterType>(
+                req.AdapterType, ignoreCase: true, out var adapterType))
+        {
+            return Results.BadRequest(new { error = $"Invalid adapterType '{req.AdapterType}'. Expected EMAIL, REST, or OAUTH." });
+        }
+
+        var result = await sender.Send(
+            new CreatePartnerBankCommand(
+                req.Name,
+                req.LogoUrl,
+                adapterType,
+                req.ContactEmail,
+                req.ConfigJson,
+                null,  // ApiConfigKeyRef — provided via Secret Manager in prod; null in dev
+                null), // WebhookSecretRef — TL-gated; not required via this alias endpoint
+            ct);
+
+        return result.IsSuccess
+            ? Results.Created($"/loans/banks/{result.Value.BankId}", new { bankId = result.Value.BankId })
+            : Results.Problem(result.Error.Message, statusCode: MapError(result.Error));
+    }
+
     private static int MapError(SnapAccount.Shared.Domain.Error error)
         => error.Type switch
         {
@@ -581,11 +930,17 @@ internal record AttachDocumentRequest(Guid DocumentId, LoanService.Domain.Entiti
 /// Request body for recording consent.
 /// GAP-021: <see cref="KfsId"/> is required — the borrower must acknowledge a KFS before consent.
 /// </summary>
+/// <summary>
+/// DG-LOAN-06: Optional device id from the mobile client for F4.2 DPDP audit trail.
+/// The backend masks it (first-8...last-4) before persisting.
+/// </summary>
 internal record RecordConsentRequest(
     LoanService.Domain.Entities.ConsentType ConsentType,
     string ConsentTextVersion,
     Guid KfsId,
-    string ConsentLocale = "en");
+    string ConsentLocale = "en",
+    string? DeviceId = null,
+    Guid[]? SharedWithBankIds = null);
 
 /// <summary>Request body for assigning to bank.</summary>
 internal record AssignToBankRequest(Guid BankId, Guid PackageId);
@@ -615,3 +970,65 @@ internal record UpdatePartnerBankRequest(
     string? ContactEmail = null,
     string? ApiConfigJson = null,
     bool? IsActive = null);
+
+// ── DG-LOAN-01: Additional request/param types ────────────────────────────────
+
+/// <summary>Request body for approving a loan application. Matches admin ApproveApplicationRequest.</summary>
+internal record ApproveApplicationRequest(string BankReferenceNo);
+
+/// <summary>Request body for rejecting a loan application. Matches admin RejectApplicationRequest.</summary>
+internal record RejectApplicationRequest(string Reason);
+
+/// <summary>Request body for requesting documents. Note is optional.</summary>
+internal record RequestDocumentsRequest(string? Note = null);
+
+/// <summary>
+/// Request body for admin-initiated disbursement.
+/// Matches admin RecordDisbursementRequest { disbursedAmount, bankReferenceNo }.
+/// </summary>
+internal record DisburseApplicationRequest(decimal DisbursedAmount, string BankReferenceNo);
+
+/// <summary>Request body for resending a bank message.</summary>
+internal record ResendMessageRequest(string? Reason = null);
+
+/// <summary>Query parameters for listing bank communications.</summary>
+internal record BankCommListParams(
+    Guid? ApplicationId = null,
+    string? BankId = null,
+    string? Direction = null,
+    string? Channel = null,
+    string? Status = null,
+    DateTime? From = null,
+    DateTime? To = null,
+    string? Search = null,
+    int Page = 1,
+    int PageSize = 20);
+
+/// <summary>Query parameters for listing banks (/loans/banks).</summary>
+internal record BanksListParams(int Page = 1, int PageSize = 20);
+
+/// <summary>
+/// Request body for registering a partner bank via /loans/banks alias.
+/// Matches admin RegisterPartnerBankRequest { name, gstin?, adapterType, configJson?, contactEmail?, logoUrl? }.
+/// </summary>
+internal record RegisterPartnerBankRequest(
+    string Name,
+    string AdapterType,
+    string? Gstin = null,
+    string? ConfigJson = null,
+    string? ContactEmail = null,
+    string? LogoUrl = null);
+
+/// <summary>
+/// DG-LOAN-04: Request body for revoking a consent.
+/// DPDP Act 2023 s.6 — data principal may provide an optional reason.
+/// </summary>
+internal record RevokeConsentRequest(string? Reason = null);
+
+/// <summary>
+/// DG-LOAN-05: Request body for KFS acknowledgement.
+/// Body is optional; <c>DeviceId</c> is recommended for DPDP audit trail.
+/// </summary>
+internal record AcknowledgeKfsRequest(
+    /// <summary>Optional masked device id for DPDP audit.</summary>
+    string? DeviceId = null);

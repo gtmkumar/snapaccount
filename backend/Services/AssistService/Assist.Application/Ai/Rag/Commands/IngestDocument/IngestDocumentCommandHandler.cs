@@ -3,6 +3,7 @@ using AiService.Application.Common.Interfaces;
 using AiService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Pgvector;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Domain;
 

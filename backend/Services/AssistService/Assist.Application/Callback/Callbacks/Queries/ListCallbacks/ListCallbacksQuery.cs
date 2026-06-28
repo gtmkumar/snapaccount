@@ -15,7 +15,9 @@ public record ListCallbacksQuery(
     Guid? UserId = null,
     Guid? OrganizationId = null,
     Guid? AgentId = null,
-    CallbackStatus? Status = null,
+    // Multiple statuses supported — the admin "All Open" filter passes several
+    // (PENDING/SCHEDULED/IN_PROGRESS) in one request.
+    IReadOnlyList<CallbackStatus>? Statuses = null,
     CallbackCategory? Category = null,
     int Page = 1,
     int PageSize = 20) : IQuery<ListCallbacksDto>;
@@ -62,8 +64,8 @@ public sealed class ListCallbacksQueryHandler(ICallbackDbContext dbContext)
             query = query.Where(c => c.OrganizationId == request.OrganizationId.Value);
         if (request.AgentId.HasValue)
             query = query.Where(c => c.AssignedAgentId == request.AgentId.Value);
-        if (request.Status.HasValue)
-            query = query.Where(c => c.Status == request.Status.Value);
+        if (request.Statuses is { Count: > 0 })
+            query = query.Where(c => request.Statuses.Contains(c.Status));
         if (request.Category.HasValue)
             query = query.Where(c => c.Category == request.Category.Value);
 

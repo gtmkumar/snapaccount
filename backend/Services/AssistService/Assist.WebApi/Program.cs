@@ -9,6 +9,8 @@ using Google.Apis.Auth.OAuth2;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.RateLimiting;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 using Serilog;
 using SnapAccount.Shared.Api;
@@ -41,6 +43,37 @@ try
     builder.Services.AddChatInfrastructure(builder.Configuration);
     builder.Services.AddAiInfrastructure(builder.Configuration);
     builder.Services.AddCallbackInfrastructure(builder.Configuration);
+
+    // ── DG-INFRA-06: OpenTelemetry metrics + tracing pipeline ────────────
+    // Adds the SnapAccount.Chat meter so signalr.connections.active and
+    // signalr.fanout.failures flow through the OTLP exporter (→ Cloud Monitoring).
+    // Export to OTLP when the endpoint is configured (Cloud Run injects OTEL_EXPORTER_OTLP_ENDPOINT).
+    var otlpEndpoint = builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
+    var useOtlpExporter = !string.IsNullOrWhiteSpace(otlpEndpoint);
+
+    builder.Services.AddOpenTelemetry()
+        .WithMetrics(metrics =>
+        {
+            metrics
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddRuntimeInstrumentation()
+                // DG-INFRA-06: custom SignalR / Chat meter (signalr.connections.active + signalr.fanout.failures)
+                .AddMeter(SignalRMetrics.MeterName);
+
+            if (useOtlpExporter)
+                metrics.AddOtlpExporter();
+        })
+        .WithTracing(tracing =>
+        {
+            tracing
+                .AddSource(builder.Environment.ApplicationName)
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation();
+
+            if (useOtlpExporter)
+                tracing.AddOtlpExporter();
+        });
 
     // ── Hangfire (Chat module only — single server for this composite host) ──
     var dbPassword = builder.Configuration["DB_PASSWORD"] ?? "postgresql";
@@ -136,16 +169,26 @@ try
     var routingEngine = app.Services.GetRequiredService<RoutingRuleEngine>();
     await routingEngine.RefreshAsync();
 
-    // Chat Hangfire recurring job — register after ApplicationStarted (JobStorage must be ready).
+    // Chat Hangfire recurring jobs — register after ApplicationStarted (JobStorage must be ready).
     app.Lifetime.ApplicationStarted.Register(() =>
     {
         var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
+
+        // Wave 7A addendum: Weekly slot generation (every Sunday at 01:00 IST = Saturday 19:30 UTC).
         recurringJobs.AddOrUpdate<GenerateSlotsFromRulesJob>(
             recurringJobId: "generate-slots-from-rules-weekly",
             methodCall: job => job.RunAsync(),
             cronExpression: "30 19 * * 6",
             options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
         Log.Information("AssistService: Hangfire recurring job 'generate-slots-from-rules-weekly' registered.");
+
+        // DG-CHAT-02: Auto-complete CONFIRMED appointments past their slot end (every 5 minutes).
+        recurringJobs.AddOrUpdate<AutoCompleteAppointmentsJob>(
+            recurringJobId: "auto-complete-appointments",
+            methodCall: job => job.RunAsync(),
+            cronExpression: "*/5 * * * *",
+            options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+        Log.Information("AssistService: Hangfire recurring job 'auto-complete-appointments' registered.");
     });
 
     SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);

@@ -27,6 +27,8 @@ public class PlanConfiguration : IEntityTypeConfiguration<Plan>
         builder.Property(p => p.TrialDays).HasColumnName("trial_days").IsRequired();
         builder.Property(p => p.IsActive).HasColumnName("is_active").IsRequired();
         builder.Property(p => p.Description).HasColumnName("description");
+        // DG-SUB-02: razorpay_plan_id already exists in the DB schema (010_subscription_schema.sql:39)
+        builder.Property(p => p.RazorpayPlanId).HasColumnName("razorpay_plan_id").HasMaxLength(100);
         builder.HasQueryFilter(p => p.DeletedAt == null);
     }
 }

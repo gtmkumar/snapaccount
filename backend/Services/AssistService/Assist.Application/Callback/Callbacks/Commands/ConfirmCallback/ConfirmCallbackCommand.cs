@@ -3,6 +3,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Domain;
+using Microsoft.Extensions.Logging;
 
 namespace CallbackService.Application.Callbacks.Commands.ConfirmCallback;
 
@@ -23,8 +24,13 @@ public sealed class ConfirmCallbackCommandValidator : AbstractValidator<ConfirmC
 /// <summary>
 /// Handles <see cref="ConfirmCallbackCommand"/>.
 /// SEC-029: verifies the callback belongs to the caller's organization before mutating.
+/// DG-NOTIF-01: publishes a CB_SCHEDULED notification to the customer on confirmation.
 /// </summary>
-public sealed class ConfirmCallbackCommandHandler(ICallbackDbContext dbContext, ICurrentUser currentUser)
+public sealed class ConfirmCallbackCommandHandler(
+    ICallbackDbContext dbContext,
+    ICurrentUser currentUser,
+    ILogger<ConfirmCallbackCommandHandler> logger,
+    ICallbackEventPublisher? callbackEventPublisher = null)
     : ICommandHandler<ConfirmCallbackCommand>
 {
     /// <inheritdoc />
@@ -45,6 +51,28 @@ public sealed class ConfirmCallbackCommandHandler(ICallbackDbContext dbContext, 
         { return Result.Failure(Error.Validation("Callback.InvalidTransition", ex.Message)); }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // DG-NOTIF-01: publish CB_SCHEDULED notification to the customer.
+        // Optional publisher — null in tests or local dev without GCP credentials.
+        if (callbackEventPublisher is not null && callback.UserId.HasValue)
+        {
+            try
+            {
+                await callbackEventPublisher.PublishCallbackScheduledAsync(
+                    callbackId: callback.Id,
+                    userId: callback.UserId.Value,
+                    scheduledAt: request.ScheduledAt,
+                    ct: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Fire-and-forget: notification failure must not fail the confirmation.
+                logger.LogWarning(ex,
+                    "ConfirmCallbackCommandHandler: notification publish failed for callback {CallbackId}",
+                    callback.Id);
+            }
+        }
+
         return Result.Success();
     }
 }

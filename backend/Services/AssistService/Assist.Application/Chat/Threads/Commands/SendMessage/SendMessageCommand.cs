@@ -46,7 +46,8 @@ public sealed class SendMessageCommandValidator : AbstractValidator<SendMessageC
 public sealed class SendMessageCommandHandler(
     IChatServiceDbContext db,
     ICurrentUser currentUser,
-    IChatHubNotifier hubNotifier) : ICommandHandler<SendMessageCommand, SendMessageResponse>
+    IChatHubNotifier hubNotifier,
+    IChatEventPublisher? chatEventPublisher = null) : ICommandHandler<SendMessageCommand, SendMessageResponse>
 {
     /// <inheritdoc />
     public async Task<Result<SendMessageResponse>> Handle(
@@ -113,8 +114,41 @@ public sealed class SendMessageCommandHandler(
         db.Messages.Add(message);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Notify SignalR group
+        // Notify SignalR group (online participants)
         await hubNotifier.NotifyMessageAsync(request.ThreadId, ToResponse(message), cancellationToken);
+
+        // DG-NOTIF-01: fan-out to offline participants via push/in-app notification.
+        // The event publisher is optional (null in tests or when GCP is not configured).
+        if (chatEventPublisher is not null)
+        {
+            var otherParticipants = thread.Participants
+                .Where(p => p.UserId != currentUser.UserId)
+                .Select(p => p.UserId)
+                .ToList();
+
+            if (otherParticipants.Count > 0)
+            {
+                var snippet = request.Body.Length <= 200
+                    ? request.Body
+                    : request.Body[..200];
+
+                try
+                {
+                    await chatEventPublisher.PublishNewMessageAsync(
+                        threadId: request.ThreadId,
+                        messageId: message.Id,
+                        senderUserId: currentUser.UserId,
+                        orgId: orgId.Value,
+                        bodySnippet: snippet,
+                        recipientUserIds: otherParticipants,
+                        ct: cancellationToken);
+                }
+                catch
+                {
+                    // Fire-and-forget: a publish failure must not fail the send operation.
+                }
+            }
+        }
 
         return ToResponse(message);
     }

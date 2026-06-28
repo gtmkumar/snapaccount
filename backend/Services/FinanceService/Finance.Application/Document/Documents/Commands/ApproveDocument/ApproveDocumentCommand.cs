@@ -29,12 +29,14 @@ public sealed class ApproveDocumentCommandValidator : AbstractValidator<ApproveD
 /// <summary>
 /// Handles <see cref="ApproveDocumentCommand"/>.
 /// Org-scopes the document lookup (IDOR guard), enforces state transition rules,
-/// and publishes the accounting event on a successful approval.
+/// publishes the accounting event, and pushes a SignalR DocumentStatusChanged event
+/// (DG-DOC-07) to the document owner's client so mobile can stop polling.
 /// </summary>
 public sealed class ApproveDocumentCommandHandler(
     IDocumentDbContext db,
     ICurrentUser currentUser,
-    IDocumentEventPublisher eventPublisher) : ICommandHandler<ApproveDocumentCommand>
+    IDocumentEventPublisher eventPublisher,
+    IDocumentHubNotifier? hubNotifier = null) : ICommandHandler<ApproveDocumentCommand>
 {
     /// <summary>Valid inbound statuses for the approve transition.</summary>
     private static readonly IReadOnlySet<string> ApprovableStatuses =
@@ -139,6 +141,13 @@ public sealed class ApproveDocumentCommandHandler(
 
         // Publish accounting event — best-effort (failure is logged, not rethrown).
         await eventPublisher.PublishOcrCompletedAsync(doc, ocrText, cancellationToken);
+
+        // DG-DOC-07: Push real-time status change to the document owner's mobile client.
+        // Best-effort: if hubNotifier is null (e.g., tests) or push fails, polling is the fallback.
+        if (hubNotifier is not null && doc.UserId.HasValue)
+        {
+            await hubNotifier.NotifyStatusChangedAsync(doc.Id, doc.UserId.Value, doc.Status, cancellationToken);
+        }
 
         return Result.Success();
     }

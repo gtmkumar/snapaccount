@@ -39,6 +39,12 @@ public interface IItrDbContext
     /// <summary>Assessee-raised grievances in <c>itr.grievances</c> (P6-HANDOFF-23).</summary>
     DbSet<Grievance> Grievances { get; }
 
+    /// <summary>
+    /// Versioned computation history per filing in <c>itr.computation_versions</c>.
+    /// DG-ITR-07: append-only; one row per ComputeTax call.
+    /// </summary>
+    DbSet<ComputationVersionEntry> ComputationVersions { get; }
+
     // ── Phase 5 legacy entities ─────────────────────────────────────────────
 
     /// <summary>Tax computation records in <c>itr.tax_computations</c>.</summary>

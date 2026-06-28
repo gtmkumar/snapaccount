@@ -3,6 +3,7 @@ using NotificationService.Application.Notifications.Commands.CreateTemplate;
 using NotificationService.Application.Notifications.Commands.DeleteTemplate;
 using NotificationService.Application.Notifications.Commands.TestSendTemplate;
 using NotificationService.Application.Notifications.Commands.UpdateTemplate;
+using NotificationService.Application.Notifications.Queries.GetDltStatus;
 using NotificationService.Application.Notifications.Queries.GetTemplate;
 using NotificationService.Application.Notifications.Queries.ListTemplates;
 using NotificationService.Domain.Entities;
@@ -72,6 +73,23 @@ public sealed class Templates : EndpointGroupBase
             .RequireRateLimiting("standard")
             .WithName("TestSendNotificationTemplate")
             .WithSummary("GAP-037: Test-send a template to the calling admin. Returns rendered body + missing variable warnings.");
+
+        /// <summary>
+        /// GET /notifications/templates/dlt-status — DG-NOTIF-07: DLT registration coverage report.
+        /// Returns all SMS templates showing which are registered vs missing a TRAI DLT template ID.
+        /// Dev-placeholder IDs (seeded by NotificationSeeder in non-production) are flagged separately
+        /// so operators can distinguish dev scaffolding from real registrations.
+        /// </summary>
+        g.MapGet("/dlt-status", GetDltStatus)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GetNotificationDltStatus")
+            .WithSummary("DG-NOTIF-07: DLT registration coverage for SMS templates. Shows which event×locale combos are missing TRAI DLT IDs.")
+            .WithDescription(
+                "Returns all SMS-channel templates with their DLT registration status. " +
+                "UnregisteredCount templates will have SMS suppressed in production. " +
+                "DevPlaceholderCount templates carry a dev placeholder — real registration required before go-live. " +
+                "HasUnregisteredCurrentTemplates=true means at least one current SMS template will suppress in prod.");
     }
 
     // ── Delegates ──────────────────────────────────────────────────────────────
@@ -121,6 +139,16 @@ public sealed class Templates : EndpointGroupBase
         var result = await sender.Send(
             new TestSendTemplateCommand(id, req.Variables ?? new Dictionary<string, string>(), req.RecipientEmail, req.RecipientPhone),
             ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToHttpResult();
+    }
+
+    /// <summary>
+    /// GET /notifications/templates/dlt-status
+    /// DG-NOTIF-07: Returns DLT registration coverage for all SMS templates.
+    /// </summary>
+    private static async Task<IResult> GetDltStatus(ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetDltStatusQuery(), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToHttpResult();
     }
 }

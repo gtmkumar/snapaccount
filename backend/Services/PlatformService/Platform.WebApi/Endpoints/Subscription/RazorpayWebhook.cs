@@ -1,7 +1,10 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Logging;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Domain;
+using SubscriptionService.Application.Common.Interfaces;
 using SubscriptionService.Application.Webhooks.Commands.HandleRazorpayWebhook;
 using System.Security.Cryptography;
 using System.Text;
@@ -11,9 +14,11 @@ namespace SubscriptionService.Api.Endpoints;
 /// <summary>
 /// POST /subscriptions/webhooks/razorpay
 /// SEC-051: Razorpay webhook receiver with HMAC-SHA256 signature verification.
+/// DG-SUB-03: Secret resolution order:
+///   1. RazorpayConfig.EncryptedWebhookSecret (DB row, decrypted via ICredentialEncryptionService)
+///   2. RAZORPAY_WEBHOOK_SECRET environment / config value (fallback)
 /// - Reads raw body BEFORE any model-binding to compute HMAC.
 /// - Uses CryptographicOperations.FixedTimeEquals to prevent timing attacks.
-/// - Reads shared secret from config key "RAZORPAY_WEBHOOK_SECRET".
 /// - Idempotency via distributed cache keyed on X-Razorpay-Event-Id (TTL 24h).
 /// - NOT behind FirebaseAuthMiddleware — webhook is server-to-server (no user JWT).
 /// - Processes: subscription.charged, subscription.cancelled.
@@ -30,15 +35,19 @@ public sealed class RazorpayWebhook : EndpointGroupBase
         // No .RequireAuthorization() — webhook uses HMAC, not Firebase JWT.
         g.MapPost("/razorpay", HandleWebhook)
             .WithName("RazorpayWebhook")
-            .WithSummary("SEC-051: Razorpay webhook endpoint. HMAC-SHA256 verified. No Firebase JWT required.")
+            .WithSummary("SEC-051/DG-SUB-03: Razorpay webhook. HMAC-SHA256 verified. " +
+                         "Secret resolved from DB (EncryptedWebhookSecret) with env fallback.")
             .AllowAnonymous();
     }
 
     private static async Task<IResult> HandleWebhook(
         HttpContext httpContext,
         IConfiguration configuration,
+        ISubscriptionServiceDbContext db,
+        ICredentialEncryptionService encryption,
         ISender sender,
         IDistributedCache cache,
+        ILogger<RazorpayWebhook> logger,
         CancellationToken ct)
     {
         // ── 1. Read raw body ─────────────────────────────────────────────────
@@ -57,10 +66,14 @@ public sealed class RazorpayWebhook : EndpointGroupBase
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
-        var secret = configuration["RAZORPAY_WEBHOOK_SECRET"];
+        // DG-SUB-03: Resolve webhook secret with DB-first, env fallback.
+        var secret = await ResolveWebhookSecretAsync(db, encryption, configuration, logger, ct);
         if (string.IsNullOrEmpty(secret))
         {
             // Misconfigured — fail closed, log but don't leak the reason externally
+            logger.LogError(
+                "Razorpay webhook misconfigured: no EncryptedWebhookSecret in DB " +
+                "and RAZORPAY_WEBHOOK_SECRET env var is not set. Returning 503.");
             return Results.Problem(
                 "Webhook not configured.",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
@@ -107,6 +120,45 @@ public sealed class RazorpayWebhook : EndpointGroupBase
         }
 
         return Results.Ok(new { status = "processed" });
+    }
+
+    /// <summary>
+    /// DG-SUB-03: Resolve the webhook secret with DB-first, env fallback.
+    /// Priority:
+    ///   1. <c>RazorpayConfig.EncryptedWebhookSecret</c> — decrypted via AES-256-GCM.
+    ///   2. <c>RAZORPAY_WEBHOOK_SECRET</c> env var / app config (backwards-compat fallback).
+    /// If neither is present, returns null and the caller returns 503.
+    /// </summary>
+    private static async Task<string?> ResolveWebhookSecretAsync(
+        ISubscriptionServiceDbContext db,
+        ICredentialEncryptionService encryption,
+        IConfiguration configuration,
+        ILogger<RazorpayWebhook> logger,
+        CancellationToken ct)
+    {
+        // 1. Try DB row first.
+        var config = await db.RazorpayConfigs
+            .Where(c => c.DeletedAt == null && c.IsEnabled)
+            .OrderByDescending(c => c.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (config?.EncryptedWebhookSecret is not null)
+        {
+            try
+            {
+                return encryption.Decrypt(config.EncryptedWebhookSecret);
+            }
+            catch (Exception ex)
+            {
+                // Decrypt failure (e.g. key rotation) — fall through to env var.
+                logger.LogWarning(ex,
+                    "Failed to decrypt RazorpayConfig.EncryptedWebhookSecret — " +
+                    "falling back to RAZORPAY_WEBHOOK_SECRET env var.");
+            }
+        }
+
+        // 2. Fallback to env var / appsettings.
+        return configuration["RAZORPAY_WEBHOOK_SECRET"];
     }
 
     /// <summary>

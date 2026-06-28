@@ -17,6 +17,8 @@ public class OtpRequestConfiguration : IEntityTypeConfiguration<OtpRequest>
         builder.Property(o => o.OtpHash).HasColumnName("otp_hash").HasMaxLength(256);
         builder.Property(o => o.Attempts).HasColumnName("attempts");
         builder.Property(o => o.MaxAttempts).HasColumnName("max_attempts");
+        // DG-AUTH-07: config-driven cooldown duration (minutes) stored per row.
+        builder.Property(o => o.CooldownMinutes).HasColumnName("cooldown_minutes");
         builder.Property(o => o.IsUsed).HasColumnName("is_used");
         builder.Property(o => o.ExpiresAt).HasColumnName("expires_at");
         builder.Property(o => o.CooldownUntil).HasColumnName("cooldown_until");

@@ -1,6 +1,7 @@
 using AuthService.Application.Interfaces;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Domain;
+using AuthService.Application.Common.Interfaces;
 
 namespace AuthService.Application.Organizations.Queries.GetOrganizations;
 
@@ -22,10 +23,12 @@ public record OrganizationDto(
 /// <summary>
 /// Returns all active organizations for the current user via the repository.
 /// Filters out soft-deleted organizations; ordering is alphabetical by business name.
+/// SEC-013 / DG-SEC-02: decrypts organisation PAN before returning to caller.
 /// </summary>
 public sealed class GetOrganizationsQueryHandler(
     IUserRepository userRepository,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    IPanEncryptionService panEncryptionService)
     : IQueryHandler<GetOrganizationsQuery, IReadOnlyList<OrganizationDto>>
 {
     /// <inheritdoc />
@@ -38,12 +41,26 @@ public sealed class GetOrganizationsQueryHandler(
         var dtos = orgs
             .Where(o => o.DeletedAt == null)
             .Select(o => new OrganizationDto(
-                o.Id, o.BusinessName, o.Gstin, o.PanNumber,
+                o.Id, o.BusinessName, o.Gstin,
+                DecryptPan(o.PanNumber),
                 o.BusinessType, o.IsGstRegistered, o.IsMsmeRegistered, o.IsActive,
                 o.GovernmentVerificationEnabled))
             .ToList()
             .AsReadOnly();
 
         return Result<IReadOnlyList<OrganizationDto>>.Success(dtos);
+    }
+
+    /// <summary>
+    /// SEC-013 / DG-SEC-02: safely decrypts an organisation PAN ciphertext.
+    /// Returns null on failure rather than throwing — the encrypted value may have been
+    /// stored before DG-SEC-02 was applied (plaintext legacy rows).
+    /// </summary>
+    private string? DecryptPan(string? panValue)
+    {
+        if (string.IsNullOrEmpty(panValue))
+            return panValue;
+        try { return panEncryptionService.Decrypt(panValue); }
+        catch { return panValue; /* legacy plaintext row — return as-is */ }
     }
 }

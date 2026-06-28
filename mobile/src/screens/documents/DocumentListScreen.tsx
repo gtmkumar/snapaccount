@@ -30,6 +30,7 @@ import { useHaptics } from '../../hooks/useHaptics';
 import apiClient from '../../lib/api';
 import type { DocumentStackParamList } from '../../navigation/DocumentStack';
 import { useDocumentQueue, type QueueItem } from '../../hooks/useDocumentQueue';
+import { QueueChip } from '../../components/shared/QueueChip';
 
 type NavProp = NativeStackNavigationProp<DocumentStackParamList, 'DocumentList'>;
 interface Props { navigation: NavProp }
@@ -226,12 +227,29 @@ export function DocumentListScreen({ navigation }: Props) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showSearch, setShowSearch] = useState(false);
 
-  const { queue, retry, remove, markReady, enqueue } = useDocumentQueue();
+  const {
+    queue,
+    retry,
+    remove,
+    markReady,
+    enqueue,
+    retryAllFailed,
+    removeAllFailed,
+  } = useDocumentQueue();
 
   // Show queue items that are still in-flight (not READY — those appear as server docs)
   const activeQueueItems = queue.filter(
     (i) => i.status !== 'READY' || !i.serverId,
   );
+
+  // DG-MOBUX-09: bulk actions for the header QueueChip. The hook exposes
+  // retryAllFailed/removeAllFailed; fall back to per-item retry/remove so the
+  // chip still works even if an older hook shape is injected (e.g. in tests).
+  const handleRetryAll = retryAllFailed
+    ?? (() => queue.filter((i) => i.status === 'FAILED' && i.failReason !== 'UPLOAD_REJECTED')
+      .forEach((i) => retry(i.localId)));
+  const handleDeleteAllFailed = removeAllFailed
+    ?? (() => queue.filter((i) => i.status === 'FAILED').forEach((i) => remove(i.localId)));
 
   const { data: documents = [], isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ['documents', selectedCategory, searchQuery],
@@ -353,6 +371,15 @@ export function DocumentListScreen({ navigation }: Props) {
         ) : (
           <>
             <Text style={styles.headerTitle}>{t('mobile.docs.title')}</Text>
+            {/* DG-MOBUX-09: live upload-queue summary pill (all synced / syncing /
+                offline waiting / failed) — opens the QueueDetailSheet on tap. */}
+            <View style={styles.headerChipWrap}>
+              <QueueChip
+                queue={activeQueueItems}
+                onRetryAll={handleRetryAll}
+                onDeleteAllFailed={handleDeleteAllFailed}
+              />
+            </View>
             <View style={styles.headerActions}>
               <Pressable
                 onPress={() => setShowSearch(true)}
@@ -490,6 +517,7 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     borderBottomWidth: 1, borderBottomColor: tk.border,
   },
   headerTitle: { flex: 1, fontSize: 22, fontWeight: '800', color: tk.textPrimary, letterSpacing: -0.3 },
+  headerChipWrap: { marginRight: 8 },
   headerActions: { flexDirection: 'row', gap: 6 },
   headerBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: tk.sunken, alignItems: 'center', justifyContent: 'center' },
   searchBar: {

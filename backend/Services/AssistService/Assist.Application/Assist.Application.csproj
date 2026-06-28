@@ -13,6 +13,8 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.*" />
+    <PackageReference Include="Pgvector" Version="0.3.2" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Assist.Domain/Assist.Domain.csproj" />

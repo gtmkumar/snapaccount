@@ -23,8 +23,12 @@ public sealed class InboxNotificationConfiguration : IEntityTypeConfiguration<In
         builder.Property(n => n.Title).HasColumnName("title");
         builder.Property(n => n.Body).HasColumnName("body");
         builder.Property(n => n.IsRead).HasColumnName("is_read");
+        builder.Property(n => n.ReadAt).HasColumnName("read_at");
         builder.Property(n => n.Status).HasColumnName("status");
         builder.Property(n => n.CreatedAt).HasColumnName("created_at");
         builder.Property(n => n.DeletedAt).HasColumnName("deleted_at");
+        builder.Property(n => n.ReferenceType).HasColumnName("reference_type");
+        builder.Property(n => n.ReferenceId).HasColumnName("reference_id");
+        builder.Property(n => n.DataPayload).HasColumnName("data_payload");
     }
 }

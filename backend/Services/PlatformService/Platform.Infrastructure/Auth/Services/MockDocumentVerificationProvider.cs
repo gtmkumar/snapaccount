@@ -66,6 +66,20 @@ public sealed class MockDocumentVerificationProvider(ILogger<MockDocumentVerific
     public Task<KycVerifyResult> VerifyAadhaarOtpAsync(string transactionId, string otp, CancellationToken ct = default)
         => VerifyOtpAsync(KycKind.Aadhaar, transactionId, otp, ct);
 
+    /// <summary>
+    /// Mock GSTIN verification — returns verified with placeholder business-profile fields (DG-AUTH-04).
+    /// </summary>
+    public Task<GstinVerifyResult> VerifyGstinAsync(string gstin, CancellationToken ct = default)
+    {
+        logger.LogInformation("[DEV-MOCK] GSTIN verify: gstin={Gstin} → VERIFIED", gstin);
+        return Task.FromResult(new GstinVerifyResult(
+            Verified: true,
+            LegalName: $"Mock Business Pvt Ltd ({gstin[..2]})",
+            TradeName: $"Mock Trade ({gstin[..2]})",
+            PrincipalPlaceOfBusiness: "123, Mock Street, Mock City, India",
+            ProviderRef: $"MOCK-GSTIN-{gstin}"));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>Generates a stable 6-digit dev OTP seeded from the document number.</summary>

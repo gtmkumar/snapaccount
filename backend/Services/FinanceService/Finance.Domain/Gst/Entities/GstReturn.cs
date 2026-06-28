@@ -124,8 +124,49 @@ public class GstReturn : BaseAuditableEntity
     }
 
     /// <summary>
+    /// Sets the computed late fee and interest amounts before or during filing.
+    /// DG-GST-04: called by <c>FileReturnCommandHandler</c> after penalty calculation.
+    /// Amounts are always non-negative; call with zero when filing on time.
+    /// </summary>
+    /// <param name="lateFeeAmount">Total late fee in INR (per-day * days-late, capped).</param>
+    /// <param name="interestAmount">Interest on net tax payable in INR (Section 50, 18% p.a.).</param>
+    public Result SetPenalties(decimal lateFeeAmount, decimal interestAmount)
+    {
+        if (lateFeeAmount < 0)
+            return Result.Failure(Error.Validation("GstReturn.InvalidLateFee",
+                "Late fee amount cannot be negative."));
+        if (interestAmount < 0)
+            return Result.Failure(Error.Validation("GstReturn.InvalidInterest",
+                "Interest amount cannot be negative."));
+
+        LateFeeAmount = lateFeeAmount;
+        InterestAmount = interestAmount;
+        return Result.Success();
+    }
+
+    /// <summary>
     /// Assigns a CA user to handle this return in the filing queue.
     /// </summary>
     /// <param name="caUserId">The user ID of the CA being assigned.</param>
     public void AssignCa(Guid caUserId) => AssignedCaUserId = caUserId;
+
+    /// <summary>
+    /// Updates the ARN after the return has already been filed.
+    /// Used when the ARN is received from the portal after an async filing,
+    /// or when an admin corrects a typo in the ARN.
+    /// DG-GST-02: ARN capture — PATCH /gst/returns/{id}/arn.
+    /// </summary>
+    /// <param name="arnNumber">The new Application Reference Number from the GST portal.</param>
+    public Result UpdateArn(string arnNumber)
+    {
+        if (string.IsNullOrWhiteSpace(arnNumber))
+            return Result.Failure(Error.Validation("GstReturn.ArnRequired", "ARN cannot be empty."));
+
+        if (Status != "FILED")
+            return Result.Failure(Error.Conflict("GstReturn.InvalidState",
+                $"Cannot update ARN when return status is '{Status}'. Return must be in FILED state."));
+
+        ArnNumber = arnNumber;
+        return Result.Success();
+    }
 }

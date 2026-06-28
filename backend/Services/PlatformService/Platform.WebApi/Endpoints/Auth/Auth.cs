@@ -245,9 +245,20 @@ public sealed class Auth : EndpointGroupBase
     }
 
     // POST /auth/otp/verify — SEC-011: rate limited to 5 req/10 min per client
+    // POST /auth/otp/verify — SEC-011: rate limited to 5 req/10 min per client
+    // DG-AUTH-02: forwards optional device metadata; handler registers the device inline
+    // and returns DeviceApproval when a new DeviceApprovalRequest was created (GAP-047).
     private static async Task<IResult> VerifyOtp(VerifyOtpRequest req, ISender sender)
     {
-        var result = await sender.Send(new VerifyOtpCommand(req.PhoneNumber, req.Otp, req.DeviceId));
+        var result = await sender.Send(new VerifyOtpCommand(
+            req.PhoneNumber,
+            req.Otp,
+            req.DeviceId,
+            req.DeviceName,
+            req.Platform,
+            req.OsVersion,
+            req.AppVersion,
+            req.FcmToken));
         return result.IsSuccess
             ? Results.Ok(result.Value)
             : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
@@ -499,7 +510,21 @@ internal record SocialFirebaseAuthRequest(
 
 internal record LocalLoginRequest(string Email, string Password);
 internal record SendOtpRequest(string PhoneNumber);
-internal record VerifyOtpRequest(string PhoneNumber, string Otp, string? DeviceId = null);
+/// <summary>
+/// POST /auth/otp/verify request body.
+/// DG-AUTH-02: Device metadata fields are optional. When <c>DeviceId</c> and <c>Platform</c>
+/// are provided, the handler registers the device and returns a <c>deviceApproval</c> payload
+/// in the response when the user already has ≥1 existing device (GAP-047).
+/// </summary>
+internal record VerifyOtpRequest(
+    string PhoneNumber,
+    string Otp,
+    string? DeviceId = null,
+    string? DeviceName = null,
+    string? Platform = null,
+    string? OsVersion = null,
+    string? AppVersion = null,
+    string? FcmToken = null);
 internal record RegisterWithPasswordRequest(string PhoneNumber, string Password, string? FullName = null);
 internal record LoginWithPasswordRequest(string PhoneNumber, string Password);
 /// <summary>Enabled login methods the mobile/admin clients should surface.</summary>

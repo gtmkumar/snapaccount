@@ -40,10 +40,15 @@ public static class DependencyInjection
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
         services.AddSingleton(TimeProvider.System);
 
+        // DG-SEC-01: RLS session-var interceptor for gst.* tenant isolation
+        services.AddScoped<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>();
+
         // EF Core — schema isolated to 'gst.*'
         services.AddDbContext<GstDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
+            // DG-SEC-01: RLS connection interceptor
+            options.AddInterceptors(sp.GetRequiredService<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>());
             options.UseNpgsql(
                 connectionString,
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", "gst"));
@@ -73,7 +78,11 @@ public static class DependencyInjection
         // GAP-108: Config-driven statutory deadline service for GST notices
         services.AddScoped<IGstNoticeDeadlineService, GstNoticeDeadlineService>();
         // GAP-108: Config options abstraction (keeps IConfiguration out of Application layer)
+        // DG-GST-05: also provides EInvoiceThresholdCrore
         services.AddSingleton<IGstServiceOptions, GstServiceOptions>();
+
+        // DG-GST-04: Config-driven late fee + interest calculation
+        services.AddScoped<IGstLateFeeService, GstLateFeeService>();
 
         // Phase 6B: GSTN/IRP/EWB adapter selection — config-driven, never hardcoded
         var productionApisEnabled = string.Equals(

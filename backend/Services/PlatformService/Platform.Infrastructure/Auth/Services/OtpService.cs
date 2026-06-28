@@ -16,6 +16,13 @@ public sealed class OtpService(
     IOtpSmsSender smsSender,
     ILogger<OtpService> logger) : IOtpService
 {
+    // DG-AUTH-07: OTP limits read from config (Auth:Otp section); hardcoded literals removed.
+    // Defaults match the previously hardcoded values so existing behaviour is preserved when
+    // the config section is absent (backwards-compatible).
+    private int OtpValidityMinutes  => configuration.GetValue<int?>("Auth:Otp:ValidityMinutes")  ?? 5;
+    private int OtpMaxAttempts      => configuration.GetValue<int?>("Auth:Otp:MaxAttempts")      ?? 3;
+    private int OtpCooldownMinutes  => configuration.GetValue<int?>("Auth:Otp:CooldownMinutes")  ?? 30;
+
     public async Task<Result<Guid>> SendOtpAsync(
         string phoneNumber,
         string otpType = "AUTH",
@@ -43,15 +50,17 @@ public sealed class OtpService(
         var otp = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
         var otpHash = ComputeSha256Hash($"{phoneNumber}:{otp}");
 
+        // DG-AUTH-07: validity, maxAttempts, and cooldown are now config-driven.
         var otpRequest = new OtpRequest
         {
             PhoneNumber = phoneNumber,
-            OtpHash = otpHash,
-            OtpType = otpType,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(5),
-            IpAddress = ipAddress,
-            UserAgent = userAgent
+            OtpHash     = otpHash,
+            OtpType     = otpType,
+            ExpiresAt   = DateTime.UtcNow.AddMinutes(OtpValidityMinutes),
+            IpAddress   = ipAddress,
+            UserAgent   = userAgent
         };
+        otpRequest.SetLimits(OtpMaxAttempts, OtpCooldownMinutes);
         dbContext.OtpRequests.Add(otpRequest);
         await dbContext.SaveChangesAsync(ct);
 

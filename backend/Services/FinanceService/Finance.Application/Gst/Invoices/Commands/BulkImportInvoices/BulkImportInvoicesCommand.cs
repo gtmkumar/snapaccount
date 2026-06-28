@@ -1,6 +1,7 @@
 using FluentValidation;
 using GstService.Application.Common.Interfaces;
 using GstService.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Application.Behaviors;
 using SnapAccount.Shared.Domain;
@@ -107,7 +108,50 @@ public sealed class BulkImportInvoicesCommandHandler(IGstDbContext dbContext)
         }
 
         if (imported > 0)
+        {
             await dbContext.SaveChangesAsync(cancellationToken);
+
+            // DG-GST-01: Recalculate return totals when invoices are assigned to a return.
+            // Ensures TotalTaxableValue/TotalIgst/TotalCgst/TotalSgst/TotalCess/NetTaxPayable
+            // reflect the actual invoice data, never left at the zero default.
+            if (request.GstReturnId.HasValue)
+            {
+                var gstReturn = await dbContext.GstReturns
+                    .FirstOrDefaultAsync(r => r.Id == request.GstReturnId.Value, cancellationToken);
+
+                if (gstReturn is not null && gstReturn.Status is not "FILED")
+                {
+                    var invoiceTotals = await dbContext.GstInvoices
+                        .Where(i => i.GstReturnId == gstReturn.Id)
+                        .GroupBy(_ => 1)
+                        .Select(g => new
+                        {
+                            TaxableValue = g.Sum(i => i.TaxableValue),
+                            Igst         = g.Sum(i => i.IgstAmount),
+                            Cgst         = g.Sum(i => i.CgstAmount),
+                            Sgst         = g.Sum(i => i.SgstAmount),
+                            Cess         = g.Sum(i => i.CessAmount),
+                        })
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    var totalTaxableValue = invoiceTotals?.TaxableValue ?? 0m;
+                    var totalIgst         = invoiceTotals?.Igst         ?? 0m;
+                    var totalCgst         = invoiceTotals?.Cgst         ?? 0m;
+                    var totalSgst         = invoiceTotals?.Sgst         ?? 0m;
+                    var totalCess         = invoiceTotals?.Cess         ?? 0m;
+
+                    var itcAvailable = await dbContext.ItcRecords
+                        .Where(r => r.GstReturnId == gstReturn.Id && r.IsEligible)
+                        .SumAsync(r => r.IgstCredit + r.CgstCredit + r.SgstCredit + r.CessCredit, cancellationToken);
+
+                    var outputTax     = totalIgst + totalCgst + totalSgst + totalCess;
+                    var netTaxPayable = Math.Max(0m, outputTax - itcAvailable);
+
+                    gstReturn.UpdateTotals(totalTaxableValue, totalIgst, totalCgst, totalSgst, totalCess, itcAvailable, netTaxPayable);
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
+            }
+        }
 
         return new BulkImportResponse(imported, skipped, errors);
     }

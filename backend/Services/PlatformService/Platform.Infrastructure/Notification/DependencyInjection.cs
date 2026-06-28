@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using NotificationService.Application;
 using NotificationService.Application.Interfaces;
 using NotificationService.Infrastructure.Adapters;
@@ -9,6 +10,7 @@ using NotificationService.Infrastructure.Persistence;
 using NotificationService.Infrastructure.Seeding;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Infrastructure.Auth;
+using SnapAccount.Shared.Infrastructure.Messaging;
 
 namespace NotificationService.Infrastructure;
 
@@ -58,7 +60,7 @@ public static class DependencyInjection
         // HTTP client for WhatsApp Business Cloud API (GAP-045)
         services.AddHttpClient("WhatsApp");
 
-        // Channel adapters (Push / SMS / Email / WhatsApp)
+        // Channel adapters (Push / SMS / Email / WhatsApp / InApp)
         services.AddScoped<IChannelAdapter, FcmPushAdapter>();
         services.AddScoped<IChannelAdapter, Msg91SmsAdapter>();
         services.AddScoped<IChannelAdapter, SendGridEmailAdapter>();
@@ -66,9 +68,34 @@ public static class DependencyInjection
         // checks WhatsApp:Enabled at dispatch time and returns WHATSAPP_DISABLED when off.
         // This matches Decision #2: "full implementation, flagged off by default."
         services.AddScoped<IChannelAdapter, WhatsAppBusinessAdapter>();
+        // DG-NOTIF-02: InApp adapter writes rows to notification.notification so the
+        // message-center inbox is populated.  Previously null → silently suppressed.
+        services.AddScoped<IChannelAdapter, InAppChannelAdapter>();
 
         // Hosted services
         if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<RecurringJobsSubscriber>();
+
+        // DG-NOTIF-01: module-event → notification fan-out subscribers
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration))
+        {
+            services.AddHostedService<GstDeadlineEventsSubscriber>();
+            services.AddHostedService<ItrDeadlineEventsSubscriber>();
+            services.AddHostedService<DocumentEventsSubscriber>();
+            services.AddHostedService<DocumentLifecycleEventsSubscriber>();
+            services.AddHostedService<ChatEventsSubscriber>();
+            services.AddHostedService<CallbackEventsSubscriber>();
+        }
+
+        // GAP-113: monthly partition maintenance for notification.notification (Platform-owned).
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration))
+        {
+            services.AddScoped<IPartitionMaintenanceHandler, NotificationPartitionMaintenanceHandler>();
+            services.AddHostedService(sp => new PartitionMaintenanceSubscriber(
+                sp,
+                sp.GetRequiredService<IConfiguration>(),
+                sp.GetRequiredService<ILogger<PartitionMaintenanceSubscriber>>(),
+                defaultSubscriptionId: "platform-partition-maintenance-sub"));
+        }
         if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<NotificationSeeder>();
 
         // SEC-027: DPDP Right-to-Erasure — subscribe to account-deletion-events topic

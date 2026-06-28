@@ -227,106 +227,23 @@ ON CONFLICT (code) DO NOTHING;
 -- =============================================================================
 -- 8. Default Notification Templates
 -- =============================================================================
-INSERT INTO notification.notification_template (id, code, name, event_type, channel, language, subject, body_template, push_title_template, push_body_template, variables, is_active)
-VALUES
-
--- Welcome notification (multi-channel)
-(gen_random_uuid(), 'WELCOME_USER_PUSH', 'Welcome User — Push', 'USER_REGISTERED', 'PUSH', 'en',
- NULL, 'Welcome to SnapAccount, {{user_name}}! Your financial journey starts here.', 'Welcome to SnapAccount!',
- 'Hi {{user_name}}, we''re glad to have you. Start by uploading your first document.',
- '["user_name"]', TRUE),
-
-(gen_random_uuid(), 'WELCOME_USER_SMS', 'Welcome User — SMS', 'USER_REGISTERED', 'SMS', 'en',
- NULL, 'Welcome to SnapAccount, {{user_name}}! Download our app and snap your first bill today. -SnapAccount',
- NULL, NULL, '["user_name"]', TRUE),
-
-(gen_random_uuid(), 'WELCOME_USER_EMAIL', 'Welcome User — Email', 'USER_REGISTERED', 'EMAIL', 'en',
- 'Welcome to SnapAccount — Your Smart Financial Assistant',
- 'Dear {{user_name}},\n\nWelcome to SnapAccount! We are delighted to have you on board.\n\nGet started by uploading your first document using the mobile app.\n\nBest regards,\nTeam SnapAccount',
- NULL, NULL, '["user_name"]', TRUE),
-
--- OTP notification
-(gen_random_uuid(), 'OTP_AUTH_SMS', 'OTP Authentication — SMS', 'OTP_REQUESTED', 'SMS', 'en',
- NULL, '{{otp}} is your SnapAccount OTP. Valid for 5 minutes. Do not share this OTP with anyone. -SnapAccount',
- NULL, NULL, '["otp"]', TRUE),
-
--- Document processed
-(gen_random_uuid(), 'DOCUMENT_PROCESSED_PUSH', 'Document Processed — Push', 'DOCUMENT_PROCESSED', 'PUSH', 'en',
- NULL, 'Your document "{{document_name}}" has been processed successfully.', 'Document Processed',
- '"{{document_name}}" is ready for review.',
- '["document_name"]', TRUE),
-
--- GST return filed
-(gen_random_uuid(), 'GST_RETURN_FILED_PUSH', 'GST Return Filed — Push', 'GST_RETURN_FILED', 'PUSH', 'en',
- NULL, 'Your {{return_type}} for {{period}} has been successfully filed. ARN: {{arn_number}}', 'GST Return Filed',
- '{{return_type}} filed for {{period}}. ARN: {{arn_number}}',
- '["return_type", "period", "arn_number"]', TRUE),
-
-(gen_random_uuid(), 'GST_RETURN_FILED_SMS', 'GST Return Filed — SMS', 'GST_RETURN_FILED', 'SMS', 'en',
- NULL, 'SnapAccount: Your {{return_type}} for {{period}} is filed. ARN: {{arn_number}}. -SnapAccount',
- NULL, NULL, '["return_type", "period", "arn_number"]', TRUE),
-
--- GST filing reminder (7 days)
-(gen_random_uuid(), 'GST_FILING_REMINDER_7D_PUSH', 'GST Filing Reminder 7 Days — Push', 'GST_FILING_REMINDER', 'PUSH', 'en',
- NULL, 'Reminder: Your {{return_type}} for {{period}} is due on {{due_date}}. 7 days remaining.', 'GST Filing Reminder',
- '{{return_type}} due on {{due_date}}. File now to avoid late fees.',
- '["return_type", "period", "due_date"]', TRUE),
-
--- GST filing reminder (3 days)
-(gen_random_uuid(), 'GST_FILING_REMINDER_3D_PUSH', 'GST Filing Reminder 3 Days — Push', 'GST_FILING_REMINDER_3D', 'PUSH', 'en',
- NULL, 'Urgent: Your {{return_type}} for {{period}} is due in 3 days on {{due_date}}.', 'GST Filing Due Soon',
- '3 days left to file {{return_type}}. Tap to review and file now.',
- '["return_type", "period", "due_date"]', TRUE),
-
--- ITR filed
-(gen_random_uuid(), 'ITR_FILED_PUSH', 'ITR Filed — Push', 'ITR_FILED', 'PUSH', 'en',
- NULL, 'Your ITR for FY {{financial_year}} has been filed. Acknowledgement: {{ack_number}}', 'ITR Filed Successfully',
- 'ITR FY {{financial_year}} filed. Ack: {{ack_number}}. Please e-verify within 30 days.',
- '["financial_year", "ack_number"]', TRUE),
-
--- E-verification reminder
-(gen_random_uuid(), 'ITR_EVERIFY_REMINDER_PUSH', 'ITR E-Verify Reminder — Push', 'ITR_EVERIFY_REMINDER', 'PUSH', 'en',
- NULL, 'Please e-verify your ITR for FY {{financial_year}}. {{days_remaining}} days remaining.', 'E-Verify Your ITR',
- 'E-verify ITR FY {{financial_year}} — {{days_remaining}} days left.',
- '["financial_year", "days_remaining"]', TRUE),
-
--- Loan status update
-(gen_random_uuid(), 'LOAN_STATUS_PUSH', 'Loan Status Update — Push', 'LOAN_STATUS_CHANGED', 'PUSH', 'en',
- NULL, 'Your loan application {{application_number}} status has been updated to {{status}}.', 'Loan Update',
- 'Application {{application_number}}: {{status}}',
- '["application_number", "status"]', TRUE),
-
--- Subscription renewal reminder
-(gen_random_uuid(), 'SUBSCRIPTION_RENEWAL_PUSH', 'Subscription Renewal Reminder — Push', 'SUBSCRIPTION_EXPIRING', 'PUSH', 'en',
- NULL, 'Your {{plan_name}} subscription expires on {{expiry_date}}. Renew now to continue using all features.', 'Subscription Expiring',
- '{{plan_name}} plan expires on {{expiry_date}}.',
- '["plan_name", "expiry_date"]', TRUE),
-
--- New chat message
-(gen_random_uuid(), 'CHAT_MESSAGE_PUSH', 'New Chat Message — Push', 'CHAT_MESSAGE_RECEIVED', 'PUSH', 'en',
- NULL, 'New message from {{sender_name}}: {{message_preview}}', 'New Message',
- '{{sender_name}}: {{message_preview}}',
- '["sender_name", "message_preview"]', TRUE),
-
--- ITC mismatch alert
-(gen_random_uuid(), 'ITC_MISMATCH_PUSH', 'ITC Mismatch Alert — Push', 'ITC_MISMATCH_DETECTED', 'PUSH', 'en',
- NULL, 'ITC mismatch detected in {{period}}. Claimed: ₹{{claimed_amount}}, Available: ₹{{available_amount}}. Please review.', 'ITC Mismatch Detected',
- 'ITC mismatch in {{period}}. Tap to resolve.',
- '["period", "claimed_amount", "available_amount"]', TRUE),
-
--- Appointment confirmed
-(gen_random_uuid(), 'APPOINTMENT_CONFIRMED_PUSH', 'Appointment Confirmed — Push', 'APPOINTMENT_CONFIRMED', 'PUSH', 'en',
- NULL, 'Your consultation with {{ca_name}} is confirmed for {{appointment_date}} at {{appointment_time}}.', 'Appointment Confirmed',
- 'Meeting with {{ca_name}} on {{appointment_date}} at {{appointment_time}}.',
- '["ca_name", "appointment_date", "appointment_time"]', TRUE),
-
--- Password reset (web admin)
-(gen_random_uuid(), 'PASSWORD_RESET_EMAIL', 'Password Reset — Email', 'PASSWORD_RESET_REQUESTED', 'EMAIL', 'en',
- 'Reset your SnapAccount password',
- 'Dear {{user_name}},\n\nClick the link below to reset your password. This link is valid for 1 hour.\n\n{{reset_link}}\n\nIf you did not request this, ignore this email.\n\nRegards,\nTeam SnapAccount',
- NULL, NULL, '["user_name", "reset_link"]', TRUE)
-
-ON CONFLICT (code) DO NOTHING;
+-- DG-NOTIF-06 (2026-06-28): This section previously inserted notification_template rows
+-- using a divergent event taxonomy (USER_REGISTERED, OTP_REQUESTED, DOCUMENT_PROCESSED,
+-- GST_FILING_REMINDER, LOAN_STATUS_CHANGED, SUBSCRIPTION_EXPIRING, CHAT_MESSAGE_RECEIVED,
+-- ITC_MISMATCH_DETECTED, APPOINTMENT_CONFIRMED, PASSWORD_RESET_REQUESTED, ITR_FILED,
+-- ITR_EVERIFY_REMINDER) that did not match the canonical NotificationEventCatalog codes.
+--
+-- Those inserts are REMOVED here. Notification templates are now seeded exclusively by
+-- the C# NotificationSeeder hosted service at application startup, using the event codes
+-- defined in NotificationEventCatalog (DOC_OCR_COMPLETED, GST_DEADLINE_7_DAYS,
+-- CHAT_NEW_MESSAGE, LOAN_APPLICATION_STATUS, SUB_RENEWAL_7_DAYS, APPT_BOOKED,
+-- USER_REGISTERED, ACCT_OTP_REQUESTED, ACCT_PASSWORD_RESET, …).
+--
+-- The previously orphaned rows are cleaned up by migration
+-- 099_notification_template_seed_reconcile.sql (soft-delete via deleted_at + is_current=FALSE).
+--
+-- DO NOT add notification_template INSERT statements to this file. Always extend
+-- NotificationEventCatalog.cs and let NotificationSeeder handle the DB rows.
 
 -- =============================================================================
 -- 9. Feature Flags (default state)

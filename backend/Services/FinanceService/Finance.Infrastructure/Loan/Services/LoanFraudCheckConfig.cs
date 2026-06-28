@@ -45,4 +45,8 @@ public sealed class LoanFraudCheckConfig(IConfiguration configuration) : IFraudC
     /// <inheritdoc />
     public bool SuppressFlagInPackage
         => configuration.GetValue<bool?>("FraudCheck:SuppressFlagInPackage") ?? false;
+
+    /// <inheritdoc />
+    public bool EnforceOnSubmit
+        => configuration.GetValue<bool?>("FraudCheck:EnforceOnSubmit") ?? false;
 }

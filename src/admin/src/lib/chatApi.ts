@@ -150,3 +150,50 @@ export async function searchMessages(q: string, page = 1, pageSize = 20) {
   const res = await api.get('/chat/threads/search', { params: { q, page, pageSize } })
   return res.data as { items: unknown[]; totalCount: number }
 }
+
+// ── Admin Analytics ───────────────────────────────────────────────────────────
+
+/**
+ * QueueItem from GET /chat/admin/queue-snapshot
+ * Backend: GetQueueSnapshotQuery.QueueItem
+ */
+export const QueueItemSchema = z.object({
+  threadId: z.string(),
+  category: z.string(),
+  subject: z.string().nullable().optional(),
+  initiatedByUserId: z.string(),
+  createdAt: z.string(),
+  waitMins: z.number().int(),
+})
+export type QueueItem = z.infer<typeof QueueItemSchema>
+
+/**
+ * UserWorkloadDto from GET /chat/admin/workload-by-user
+ * Backend: GetWorkloadByUserQuery.UserWorkloadDto
+ */
+export const UserWorkloadSchema = z.object({
+  userId: z.string(),
+  assigned: z.number().int(),
+  completed: z.number().int(),
+})
+export type UserWorkload = z.infer<typeof UserWorkloadSchema>
+
+/**
+ * GET /chat/admin/queue-snapshot?limit=N
+ * Top-N oldest open unassigned threads — admin dashboard widget.
+ * perm: admin.dashboard.read
+ */
+export async function getChatQueueSnapshot(limit = 20): Promise<QueueItem[]> {
+  const res = await api.get('/chat/admin/queue-snapshot', { params: { limit } })
+  return z.array(QueueItemSchema).parse(res.data)
+}
+
+/**
+ * GET /chat/admin/workload-by-user
+ * Per-assignee chat workload counts.
+ * perm: admin.dashboard.read
+ */
+export async function getChatWorkloadByUser(): Promise<UserWorkload[]> {
+  const res = await api.get('/chat/admin/workload-by-user')
+  return z.array(UserWorkloadSchema).parse(res.data)
+}

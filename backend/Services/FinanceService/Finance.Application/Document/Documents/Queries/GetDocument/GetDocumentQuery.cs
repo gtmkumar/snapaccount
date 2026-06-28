@@ -11,7 +11,7 @@ public record GetDocumentQuery(Guid DocumentId) : IQuery<DocumentDto>;
 
 public record DocumentDto(
     Guid Id,
-    Guid UserId,
+    Guid? UserId,   // Nullable: Guid.Empty/null for DPDP-erased documents (DG-SEC-03)
     string FileName,
     string MimeType,
     long? FileSizeBytes,

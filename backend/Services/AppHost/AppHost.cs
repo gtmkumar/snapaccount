@@ -76,9 +76,10 @@ var assistService = WithDevLoopDefaults(builder.AddProject<Projects.Assist_WebAp
     .WithEnvironment("GCP_PROJECT_ID", gcpProjectId)
     .WithEnvironment("PUBSUB_SUBSCRIPTION_ACCOUNT_DELETION", "chat-service-account-deletion-sub");
 
-// API Gateway (YARP) — single entry point; routes to all 3 composites
+// API Gateway (YARP) — single entry point; routes to all 3 composites.
+// Local override :6060 — macOS AirPlay Receiver squats on :5000. Admin proxy targets this.
 var apiGateway = builder.AddProject<Projects.Gateway>("api-gateway")
-    .WithEndpoint("http", e => { e.Port = 5000; e.IsProxied = false; }, createIfNotExists: false)
+    .WithEndpoint("http", e => { e.Port = 6060; e.IsProxied = false; }, createIfNotExists: false)
     .WithReference(platformService)
     .WithReference(financeService)
     .WithReference(assistService)

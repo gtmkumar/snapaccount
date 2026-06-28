@@ -35,6 +35,23 @@ public class KeyFactsStatementConfiguration : IEntityTypeConfiguration<KeyFactsS
         builder.Property(k => k.AcknowledgedAt).HasColumnName("acknowledged_at");
         // NEW-D10: locale column added by migration 079. VARCHAR(10) NOT NULL DEFAULT 'en'.
         builder.Property(k => k.Locale).HasColumnName("locale").HasMaxLength(10).HasDefaultValue("en");
+
+        // DG-LOAN-05: extended RBI KFS disclosure fields (migration 103)
+        builder.Property(k => k.NominalInterestRate)
+            .HasColumnName("nominal_interest_rate").HasPrecision(10, 4);
+        builder.Property(k => k.InterestType)
+            .HasColumnName("interest_type").HasMaxLength(30);
+        builder.Property(k => k.TotalFees)
+            .HasColumnName("total_fees").HasPrecision(18, 2);
+        builder.Property(k => k.NetDisbursalAmount)
+            .HasColumnName("net_disbursal_amount").HasPrecision(18, 2);
+        builder.Property(k => k.TotalAmountPayable)
+            .HasColumnName("total_amount_payable").HasPrecision(18, 2);
+        builder.Property(k => k.CoolingOffTerms)
+            .HasColumnName("cooling_off_terms");
+        builder.Property(k => k.GrievanceOfficerJson)
+            .HasColumnName("grievance_officer_json").HasColumnType("jsonb");
+
         builder.Property(k => k.CreatedAt).HasColumnName("created_at");
         builder.Property(k => k.UpdatedAt).HasColumnName("updated_at");
         builder.Property(k => k.DeletedAt).HasColumnName("deleted_at");

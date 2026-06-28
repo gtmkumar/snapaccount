@@ -1,5 +1,6 @@
 using AuthService.Application.Kyc.Commands.SendAadhaarOtp;
 using AuthService.Application.Kyc.Commands.VerifyAadhaarOtp;
+using AuthService.Application.Kyc.Commands.VerifyGstin;
 using AuthService.Application.Kyc.Commands.VerifyPan;
 using MediatR;
 using SnapAccount.Shared.Api;
@@ -28,6 +29,21 @@ public sealed class Kyc : EndpointGroupBase
 
         // POST /auth/me/kyc/aadhaar/otp/verify { transactionId, otp }
         groupBuilder.MapPost("/me/kyc/aadhaar/otp/verify", VerifyAadhaarOtp).RequireAuthorization();
+
+        // DG-AUTH-04: POST /auth/gstin/verify { gstin }
+        // Verifies GSTIN format + active status via KYC provider and returns business-profile fields
+        // (legalName, tradeName, principalPlaceOfBusiness) for onboarding auto-fill.
+        // Provider controlled by KYC_PROVIDER env var (default: "mock").
+        groupBuilder.MapPost("/gstin/verify", VerifyGstin)
+            .RequireAuthorization()
+            .RequireRateLimiting("otp")
+            .WithName("VerifyGstin")
+            .WithSummary("Verify GSTIN and retrieve business-profile fields for onboarding auto-fill (DG-AUTH-04).")
+            .WithDescription(
+                "Validates the 15-character GSTIN format, calls the KYC provider (mock or Sandbox/Quicko), " +
+                "persists a kyc_verification record, and returns legalName / tradeName / principalPlaceOfBusiness " +
+                "for use in BusinessProfileWizardScreen step 2 auto-fill. " +
+                "Returns 400 on format error, 200 with status=FAILED when the GSTIN is inactive.");
     }
 
     // POST /auth/me/kyc/pan/verify [Authorize]
@@ -57,6 +73,15 @@ public sealed class Kyc : EndpointGroupBase
             : MapError(result.Error);
     }
 
+    // DG-AUTH-04: POST /auth/gstin/verify [Authorize]
+    private static async Task<IResult> VerifyGstin(KycVerifyGstinRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new VerifyGstinCommand(req.Gstin), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : MapError(result.Error);
+    }
+
     private static IResult MapError(Error error) =>
         error.Type switch
         {
@@ -70,3 +95,9 @@ public sealed class Kyc : EndpointGroupBase
 internal record KycVerifyPanRequest(string Pan, string? Name = null);
 internal record KycSendAadhaarOtpRequest(string Aadhaar);
 internal record KycVerifyAadhaarOtpRequest(string TransactionId, string Otp);
+
+/// <summary>
+/// DG-AUTH-04: POST /auth/gstin/verify request body.
+/// </summary>
+/// <param name="Gstin">15-character GSTIN to verify (e.g. 22AAAAA0000A1Z5).</param>
+internal record KycVerifyGstinRequest(string Gstin);

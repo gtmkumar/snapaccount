@@ -41,6 +41,9 @@ public class ItrServiceDbContext(DbContextOptions<ItrServiceDbContext> options)
     /// <inheritdoc />
     public DbSet<Grievance> Grievances => Set<Grievance>();
 
+    /// <inheritdoc />
+    public DbSet<ComputationVersionEntry> ComputationVersions => Set<ComputationVersionEntry>();
+
     // ── Phase 5 legacy entities ────────────────────────────────────────────────
 
     /// <inheritdoc />

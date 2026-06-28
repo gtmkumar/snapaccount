@@ -1,6 +1,7 @@
 using LoanService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using System.Text.Json;
 
 namespace LoanService.Infrastructure.Persistence.Configurations;
 
@@ -31,6 +32,24 @@ public sealed class ConsentConfiguration : IEntityTypeConfiguration<Consent>
         builder.Property(x => x.SignatureHash)
             .HasColumnType("bytea")
             .IsRequired();
+
+        // DG-LOAN-04: DPDP revocation columns (migration 103)
+        builder.Property(x => x.RevokedAt).HasColumnName("revoked_at");
+        builder.Property(x => x.RevocationReason).HasColumnName("revocation_reason").HasMaxLength(500);
+
+        // DG-LOAN-06: F4.2 audit fields (migration 109)
+        // device_id — masked device identifier; VARCHAR(128) to accommodate masked form.
+        builder.Property(x => x.DeviceId)
+            .HasColumnName("device_id")
+            .HasMaxLength(128);
+
+        // shared_with_bank_ids — JSONB array of partner-bank UUIDs for DataShareWithBank consents.
+        builder.Property(x => x.SharedWithBankIds)
+            .HasColumnName("shared_with_bank_ids")
+            .HasColumnType("jsonb")
+            .HasConversion(
+                v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => v == null ? null : JsonSerializer.Deserialize<Guid[]>(v, (JsonSerializerOptions?)null));
 
         builder.HasIndex(x => x.ApplicationId);
         builder.HasIndex(x => new { x.ApplicationId, x.ConsentType }).IsUnique();

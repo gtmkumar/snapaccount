@@ -7,7 +7,8 @@ using SnapAccount.Shared.Domain;
 namespace GstService.Application.Dashboard.Queries.GetNoticesDueSummary;
 
 /// <summary>
-/// Cross-organisation GST-notice "due" buckets for the admin dashboard NoticesDueWidget.
+/// GST-notice "due" buckets for the admin dashboard NoticesDueWidget and the GST Notices
+/// list-page KPI strip.
 ///
 /// "Open" = a notice still awaiting a response: Status NOT IN (RESPONDED, CLOSED).
 /// Buckets count open notices that carry a <see cref="Domain.Entities.GstNotice.DueDate"/>,
@@ -16,14 +17,19 @@ namespace GstService.Application.Dashboard.Queries.GetNoticesDueSummary;
 ///   dueIn2Days  — today &lt;= DueDate &lt;= today + 2 days
 ///   dueThisWeek — today &lt;= DueDate &lt;= today + 7 days  (superset of dueIn2Days)
 ///   total       — all open notices (regardless of DueDate)
-/// SUPER_ADMIN only — no org scoping (platform-wide admin dashboard).
+///
+/// Org-scoped to the caller's organisation (<see cref="ICurrentUser.OrganizationId"/>), exactly
+/// like GET /gst/notices (<c>ListNoticesQuery</c>). This keeps the widget/KPI counts consistent
+/// with the org-scoped list — previously this was cross-org and counted notices from every org
+/// (including orphaned org_id=Guid.Empty rows), so it reported "2 overdue" while the org's own
+/// list showed 1. If no org is in the session it falls back to a platform-wide count.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetNoticesDueSummaryQuery : IQuery<NoticesDueSummaryDto>;
 
 public record NoticesDueSummaryDto(int Overdue, int DueIn2Days, int DueThisWeek, int Total);
 
-public sealed class GetNoticesDueSummaryQueryHandler(IGstDbContext db)
+public sealed class GetNoticesDueSummaryQueryHandler(IGstDbContext db, ICurrentUser currentUser)
     : IQueryHandler<GetNoticesDueSummaryQuery, NoticesDueSummaryDto>
 {
     // A notice is no longer "due" once it has been responded to or closed.
@@ -40,6 +46,11 @@ public sealed class GetNoticesDueSummaryQueryHandler(IGstDbContext db)
             n.DeletedAt == null &&
             n.Status != "RESPONDED" &&
             n.Status != "CLOSED");
+
+        // Scope to the caller's org so these counts match the org-scoped notices list.
+        var orgId = currentUser.OrganizationId;
+        if (orgId is not null && orgId != Guid.Empty)
+            open = open.Where(n => n.OrganizationId == orgId.Value);
 
         var overdue = await open.CountAsync(n => n.DueDate != null && n.DueDate < today, ct);
         var dueIn2Days = await open.CountAsync(

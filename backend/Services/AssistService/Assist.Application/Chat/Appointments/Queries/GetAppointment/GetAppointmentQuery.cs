@@ -19,6 +19,7 @@ public record GetAppointmentQuery(Guid AppointmentId) : IQuery<AppointmentDetail
 
 /// <summary>
 /// Full appointment detail DTO — superset of <see cref="AppointmentSummaryDto"/>.
+/// DG-CHAT-05: CaSummaryNote added (migration 105).
 /// </summary>
 public record AppointmentDetailDto(
     Guid AppointmentId,
@@ -35,7 +36,9 @@ public record AppointmentDetailDto(
     string? RatingComment,
     DateTime? RatedAt,
     bool CancelledByCa,
-    string? CaCancellationReason);
+    string? CaCancellationReason,
+    /// <summary>CA post-call summary note (DG-CHAT-05). Null until the CA writes one.</summary>
+    string? CaSummaryNote);
 
 /// <summary>Validates GetAppointmentQuery.</summary>
 public sealed class GetAppointmentQueryValidator : AbstractValidator<GetAppointmentQuery>
@@ -92,7 +95,8 @@ public sealed class GetAppointmentQueryHandler(
                     x.a.RatingComment,
                     x.a.RatedAt,
                     x.a.CancelledByCa,
-                    x.a.CaCancellationReason
+                    x.a.CaCancellationReason,
+                    x.a.CaSummaryNote
                 })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -115,7 +119,8 @@ public sealed class GetAppointmentQueryHandler(
             raw.RatingComment,
             raw.RatedAt,
             raw.CancelledByCa,
-            raw.CaCancellationReason);
+            raw.CaCancellationReason,
+            raw.CaSummaryNote);
 
         return Result<AppointmentDetailDto>.Success(row);
     }

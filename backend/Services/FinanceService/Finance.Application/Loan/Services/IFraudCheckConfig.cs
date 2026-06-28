@@ -53,4 +53,14 @@ public interface IFraudCheckConfig
     /// to the bank package. Default: false (flags ARE included in the package summary).
     /// </summary>
     bool SuppressFlagInPackage { get; }
+
+    /// <summary>
+    /// GAP-110 gate: when true, a loan application can only be submitted after the fraud
+    /// pre-check has actually been run (≥1 <c>loan.fraud_checks</c> row exists). Soft-launch
+    /// flag mirroring <c>DeviceApproval:Enforce</c> / <c>DeviceIntegrity:Enforce</c>: ops flip
+    /// it on once mobile/admin clients call the fraud-check endpoint before submit.
+    /// Independent of this flag, a latest-verdict <c>Fail</c> on any check ALWAYS blocks
+    /// submission (defence in depth). Default: false.
+    /// </summary>
+    bool EnforceOnSubmit { get; }
 }

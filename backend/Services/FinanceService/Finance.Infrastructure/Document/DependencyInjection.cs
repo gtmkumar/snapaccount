@@ -5,12 +5,14 @@ using DocumentService.Infrastructure.Messaging;
 using DocumentService.Infrastructure.Persistence;
 using DocumentService.Infrastructure.Persistence.Repositories;
 using DocumentService.Infrastructure.Services;
+using DocumentService.Infrastructure.SignalR;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Infrastructure.Auth;
 using SnapAccount.Shared.Infrastructure.Messaging;
@@ -40,10 +42,16 @@ public static class DependencyInjection
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
         services.AddSingleton(TimeProvider.System);
 
+        // DG-SEC-01: RLS session-var interceptor — sets app.current_user_id on every connection open
+        // so RLS policies on document.* tables actually fire (previously only auth.* was covered).
+        services.AddScoped<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>();
+
         // EF Core — schema isolated to 'document.*'
         services.AddDbContext<DocumentDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
+            // DG-SEC-01: RLS connection interceptor (must be added AFTER ISaveChangesInterceptors)
+            options.AddInterceptors(sp.GetRequiredService<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>());
             options.UseNpgsql(
                 connectionString,
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", "document"));
@@ -88,6 +96,18 @@ public static class DependencyInjection
 
             // OCR worker — subscribes to snapaccount.document.ocr.requested
             services.AddHostedService<OcrJobSubscriber>();
+
+            // GAP-113: monthly partition maintenance for document.document (Finance-owned).
+            services.AddScoped<IPartitionMaintenanceHandler, DocumentPartitionMaintenanceHandler>();
+            services.AddHostedService(sp => new PartitionMaintenanceSubscriber(
+                sp,
+                sp.GetRequiredService<IConfiguration>(),
+                sp.GetRequiredService<ILogger<PartitionMaintenanceSubscriber>>(),
+                defaultSubscriptionId: "finance-partition-maintenance-sub"));
+
+            // DG-SEC-03 / SEC-027: DPDP Right-to-Erasure — subscribe to account-deletion-events
+            // Nulls user_id and clears original_file_name PII on account deletion.
+            services.AddHostedService<AccountDeletionSubscriber>();
         }
         else
         {
@@ -108,6 +128,11 @@ public static class DependencyInjection
 
         // Cross-service event publisher (approve → accounting pipeline)
         services.AddScoped<IDocumentEventPublisher, DocumentEventPublisher>();
+
+        // DG-DOC-07: SignalR hub notifier — broadcasts document status changes to connected mobile clients.
+        // IHubContext<DocumentHub> is registered automatically by AddSignalR() in Finance.WebApi/Program.cs.
+        // DocumentHubNotifier wraps it so Application-layer handlers can depend on IDocumentHubNotifier.
+        services.AddScoped<IDocumentHubNotifier, DocumentHubNotifier>();
 
         // Current user — reads Firebase JWT claims from HttpContext.Items
         services.AddHttpContextAccessor();

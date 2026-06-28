@@ -21,14 +21,14 @@ namespace DocumentService.Application.Dashboard.Queries.GetDashboardStats;
 /// has been reviewed and the accounting pipeline event has already been emitted. Adding APPROVED
 /// to TerminalStatuses aligns the dashboard count with the queue page view.
 ///
-/// SUPER_ADMIN only — no org scoping.
+/// Org-scoped to the caller's organisation, matching the org-scoped Documents queue.
 /// </summary>
 [RequiresPermission("admin.dashboard.read")]
 public record GetDashboardStatsQuery : IQuery<DocumentDashboardStats>;
 
 public record DocumentDashboardStats(int PendingDocuments);
 
-public sealed class GetDashboardStatsQueryHandler(IDocumentDbContext db)
+public sealed class GetDashboardStatsQueryHandler(IDocumentDbContext db, ICurrentUser currentUser)
     : IQueryHandler<GetDashboardStatsQuery, DocumentDashboardStats>
 {
     /// <summary>
@@ -40,9 +40,17 @@ public sealed class GetDashboardStatsQueryHandler(IDocumentDbContext db)
 
     public async Task<Result<DocumentDashboardStats>> Handle(GetDashboardStatsQuery request, CancellationToken ct)
     {
-        var pending = await db.Documents
-            .Where(d => d.DeletedAt == null && !TerminalStatuses.Contains(d.Status))
-            .CountAsync(ct);
+        var query = db.Documents
+            .Where(d => d.DeletedAt == null && !TerminalStatuses.Contains(d.Status));
+
+        // Scope to the caller's org so this matches the org-scoped Documents queue (GetDocumentsQuery
+        // filters d.OrganizationId == currentUser.OrganizationId). Without this the count was cross-org
+        // and included orphaned org_id=Guid.Empty rows — dashboard showed 4 pending while the queue showed 0.
+        var orgId = currentUser.OrganizationId;
+        if (orgId is not null && orgId != Guid.Empty)
+            query = query.Where(d => d.OrganizationId == orgId.Value);
+
+        var pending = await query.CountAsync(ct);
 
         return new DocumentDashboardStats(pending);
     }

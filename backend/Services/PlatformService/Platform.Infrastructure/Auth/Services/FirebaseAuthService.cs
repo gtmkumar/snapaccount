@@ -26,8 +26,12 @@ public sealed class FirebaseAuthService(
 {
     private const string SuperAdminRole = "SUPER_ADMIN";
 
-    // Session-token lifetime. The opaque refresh token (30 days) is used to obtain a fresh one.
-    private static readonly TimeSpan SessionTokenLifetime = TimeSpan.FromHours(12);
+    // DG-AUTH-07: Session-token lifetime read from config (Auth:Session:TokenLifetimeHours).
+    // Default 12 h preserves existing behaviour when the config section is absent.
+    // The doc says 1 h (B1.4) but was deployed at 12 h — operators can shorten via config
+    // without a code change. The 30-day opaque refresh token rotation remains fixed.
+    private TimeSpan SessionTokenLifetime =>
+        TimeSpan.FromHours(configuration.GetValue<double?>("Auth:Session:TokenLifetimeHours") ?? 12);
 
     private bool DevAuthEnabled =>
         string.Equals(configuration["LOCAL_AUTH"], "true", StringComparison.OrdinalIgnoreCase) ||

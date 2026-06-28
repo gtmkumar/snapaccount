@@ -4,6 +4,7 @@ using AiService.Infrastructure.Persistence;
 using AiService.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Pgvector.EntityFrameworkCore;
 
 namespace AiService.Tests;
 
@@ -199,7 +200,7 @@ public sealed class TokenBudgetConcurrencyEfSmokeTests
     private static AiServiceDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AiServiceDbContext>()
-            .UseNpgsql(LocalConnectionString, o => o.SetPostgresVersion(17, 0))
+            .UseNpgsql(LocalConnectionString, o => o.SetPostgresVersion(17, 0).UseVector())
             .Options;
         return new AiServiceDbContext(options);
     }

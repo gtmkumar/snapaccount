@@ -67,6 +67,13 @@ public sealed class Appointment : BaseAuditableEntity
     /// </summary>
     public bool CancelledByCa { get; private set; }
 
+    /// <summary>
+    /// Post-call summary note written by the CA after the appointment is COMPLETED.
+    /// Visible to the user on the appointment detail screen (Screen 45 / Screen 82).
+    /// Added in migration 105. Max 4000 chars.
+    /// </summary>
+    public string? CaSummaryNote { get; private set; }
+
     private Appointment() { }
 
     /// <summary>Books an appointment in DRAFT state (not yet confirmed / linked).</summary>
@@ -206,6 +213,33 @@ public sealed class Appointment : BaseAuditableEntity
         RatingStars = stars;
         RatingComment = comment;
         RatedAt = DateTime.UtcNow;
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// CA writes (or overwrites) a post-call summary note on a COMPLETED appointment.
+    /// Only allowed when Status == COMPLETED — the summary is written after the meeting ends.
+    /// Max 4000 characters.
+    /// DG-CHAT-05: visible to the user on the appointment detail screen.
+    /// </summary>
+    public Result SetCaSummary(string summaryNote)
+    {
+        if (Status != AppointmentStatus.Completed)
+            return Result.Failure(Error.Validation(
+                "Appointment.NotCompleted",
+                "CA summary notes can only be written on completed appointments."));
+
+        if (string.IsNullOrWhiteSpace(summaryNote))
+            return Result.Failure(Error.Validation(
+                "Appointment.SummaryNoteEmpty",
+                "Summary note must not be empty."));
+
+        if (summaryNote.Length > 4000)
+            return Result.Failure(Error.Validation(
+                "Appointment.SummaryNoteTooLong",
+                "Summary note must not exceed 4000 characters."));
+
+        CaSummaryNote = summaryNote.Trim();
         return Result.Success();
     }
 }

@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces;
 using NotificationService.Domain.Entities;
 using SnapAccount.Shared.Application;
@@ -49,13 +50,26 @@ public sealed class CreateTemplateCommandValidator : AbstractValidator<CreateTem
 
 /// <summary>Handles CreateTemplateCommand — retires existing current template and creates new one.</summary>
 public sealed class CreateTemplateCommandHandler(
-    INotificationDbContext db) : ICommandHandler<CreateTemplateCommand, CreateTemplateResponse>
+    INotificationDbContext db,
+    ILogger<CreateTemplateCommandHandler> logger) : ICommandHandler<CreateTemplateCommand, CreateTemplateResponse>
 {
     /// <inheritdoc />
     public async Task<Result<CreateTemplateResponse>> Handle(
         CreateTemplateCommand request,
         CancellationToken cancellationToken)
     {
+        // DG-NOTIF-07: Warn when creating an SMS template without a TRAI DLT template ID.
+        // SMS dispatch will be suppressed in production until a real DLT ID is set via
+        // PUT /notifications/templates/{id}.  Visible in GET /notifications/templates/dlt-status.
+        if (request.Channel == NotificationChannel.Sms && string.IsNullOrWhiteSpace(request.DltTemplateId))
+        {
+            logger.LogWarning(
+                "DG-NOTIF-07: Creating SMS template for event={EventCode} locale={Locale} without a DLT template ID. " +
+                "SMS dispatch will be suppressed in production. " +
+                "Update the template with a TRAI-registered DLT ID via PUT /notifications/templates/{{id}}.",
+                request.EventCode, request.Locale);
+        }
+
         // Retire any existing current template for (event_code, channel, locale)
         var existing = await db.NotificationTemplates
             .Where(t => t.EventCode == request.EventCode

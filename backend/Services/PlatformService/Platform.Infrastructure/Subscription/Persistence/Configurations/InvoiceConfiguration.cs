@@ -31,6 +31,12 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         // PdfGcsUri maps to storage_path.
         builder.Property(i => i.PdfGcsUri).HasColumnName("storage_path");
         builder.Property(i => i.PaidAt).HasColumnName("paid_at");
+
+        // DG-SUB-11: Refund/void tracking columns (added in migration 100).
+        builder.Property(i => i.RefundedAt).HasColumnName("refunded_at");
+        builder.Property(i => i.RefundReason).HasColumnName("refund_reason").HasMaxLength(500);
+        builder.Property(i => i.VoidedAt).HasColumnName("voided_at");
+
         // DPDP anonymization columns not yet in subscription_invoice schema — ignored.
         builder.Ignore(i => i.AnonymizedAt);
         builder.Ignore(i => i.AnonymizationReason);

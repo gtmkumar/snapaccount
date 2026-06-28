@@ -26,6 +26,7 @@ using DocumentService.Application.Documents.Commands.RequestClarification;
 using DocumentService.Application.Documents.Interfaces;
 using DocumentService.Domain.Entities;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Domain;
@@ -321,7 +322,7 @@ public sealed class RequestClarificationCommandTests
     {
         var (dbMock, doc) = FakeDocumentDb.WithDocument("OCR_COMPLETE", OrgId, UserId);
         var user = FakeCurrentUser.Make(OrgId, UserId);
-        var handler = new RequestClarificationCommandHandler(dbMock.Object, user);
+        var handler = new RequestClarificationCommandHandler(dbMock.Object, user, NullLogger<RequestClarificationCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new RequestClarificationCommand(doc.Id, "Please reupload a clearer image."),
@@ -337,7 +338,7 @@ public sealed class RequestClarificationCommandTests
     {
         var (dbMock, doc) = FakeDocumentDb.WithDocument("OCR_COMPLETE", OrgId, UserId);
         var user = FakeCurrentUser.Make(Guid.NewGuid(), UserId);
-        var handler = new RequestClarificationCommandHandler(dbMock.Object, user);
+        var handler = new RequestClarificationCommandHandler(dbMock.Object, user, NullLogger<RequestClarificationCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new RequestClarificationCommand(doc.Id, "Message"),
@@ -352,7 +353,7 @@ public sealed class RequestClarificationCommandTests
     {
         var (dbMock, doc) = FakeDocumentDb.WithDocument("UPLOADED", OrgId, UserId);
         var user = FakeCurrentUser.Unauthenticated();
-        var handler = new RequestClarificationCommandHandler(dbMock.Object, user);
+        var handler = new RequestClarificationCommandHandler(dbMock.Object, user, NullLogger<RequestClarificationCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new RequestClarificationCommand(doc.Id, "Message"),

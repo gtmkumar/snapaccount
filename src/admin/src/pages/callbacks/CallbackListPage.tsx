@@ -152,7 +152,10 @@ function SlaDot({ slaExpiresAt }: { slaExpiresAt: string | null | undefined }) {
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
-const ALL_OPEN_STATUSES = 'PENDING,SCHEDULED,IN_PROGRESS'
+// "Open" = every non-terminal status (everything except COMPLETED / CANCELLED), matching the
+// dashboard "Open Callbacks" stat. These are sent to the Assist API, so they use the BACKEND
+// status vocabulary (Pending/Assigned/Confirmed/Escalated), not this client's display labels.
+const ALL_OPEN_STATUSES = 'PENDING,ASSIGNED,CONFIRMED,ESCALATED'
 
 export default function CallbackListPage() {
   const navigate = useNavigate()
@@ -165,13 +168,25 @@ export default function CallbackListPage() {
   const [assignedFilter, setAssignedFilter] = useState(searchParams.get('assigned') ?? '')
   const [breachedOnly, setBreachedOnly] = useState(searchParams.get('breached') === '1')
   const [page, setPage] = useState(1)
-  const [density, setDensity] = useState<'roomy' | 'dense'>(() => {
-    try { return (localStorage.getItem('snap_cb_density') as 'roomy' | 'dense') ?? 'roomy' } catch { return 'roomy' }
+  // DG-ADMIN-10: migrated to shared DataTable density vocabulary ('roomy'|'compact')
+  // localStorage key aligned with DataTable pattern: snap_dt_density_{tableId}
+  const [density, setDensity] = useState<'roomy' | 'compact'>(() => {
+    try {
+      // Support legacy 'dense' value from snap_cb_density key
+      const legacy = localStorage.getItem('snap_cb_density')
+      const shared = localStorage.getItem('snap_dt_density_callbacks')
+      const raw = shared ?? legacy
+      if (raw === 'dense' || raw === 'compact') return 'compact'
+      return 'roomy'
+    } catch { return 'roomy' }
   })
 
-  function setDensityPersisted(d: 'roomy' | 'dense') {
+  function setDensityPersisted(d: 'roomy' | 'compact') {
     setDensity(d)
-    try { localStorage.setItem('snap_cb_density', d) } catch { /* noop */ }
+    try {
+      localStorage.setItem('snap_dt_density_callbacks', d)
+      localStorage.removeItem('snap_cb_density') // clean up legacy key
+    } catch { /* noop */ }
   }
 
   const queryParams = useMemo(() => ({
@@ -205,7 +220,7 @@ export default function CallbackListPage() {
 
   const summary = data?.summary
 
-  const rowHeight = density === 'roomy' ? 'py-4' : 'py-2'
+  const rowHeight = density === 'compact' ? 'py-2' : 'py-4'
 
   return (
     <div className="space-y-5">
@@ -227,9 +242,9 @@ export default function CallbackListPage() {
       {summary && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: t('admin.callbacks.stats.open'), value: summary.open, highlight: summary.open > 20 ? 'text-warning-600' : 'text-neutral-900' },
-            { label: t('admin.callbacks.stats.scheduled'), value: summary.scheduled, highlight: 'text-neutral-900' },
-            { label: t('admin.callbacks.stats.breached'), value: summary.breached, highlight: summary.breached > 0 ? 'text-error-600' : 'text-neutral-900' },
+            { label: t('admin.callbacks.stats.open'), value: summary.open, highlight: summary.open > 20 ? 'text-warning-600' : 'text-[var(--text-primary)]' },
+            { label: t('admin.callbacks.stats.scheduled'), value: summary.scheduled, highlight: 'text-[var(--text-primary)]' },
+            { label: t('admin.callbacks.stats.breached'), value: summary.breached, highlight: summary.breached > 0 ? 'text-error-600' : 'text-[var(--text-primary)]' },
             {
               label: t('admin.callbacks.stats.avgTtr'),
               value: (() => {
@@ -237,11 +252,11 @@ export default function CallbackListPage() {
                 if (mins < 60) return `${mins}m`
                 return `${Math.floor(mins / 60)}h ${mins % 60}m`
               })(),
-              highlight: 'text-neutral-900'
+              highlight: 'text-[var(--text-primary)]'
             },
           ].map((s) => (
             <Card key={s.label} padding="sm">
-              <p className="text-xs text-neutral-500">{s.label}</p>
+              <p className="text-xs text-[var(--text-secondary)]">{s.label}</p>
               <p className={cn('text-2xl font-bold mt-1', s.highlight)}>{s.value}</p>
             </Card>
           ))}
@@ -310,7 +325,7 @@ export default function CallbackListPage() {
                 value={f.value}
                 onChange={(e) => f.setter(e.target.value)}
                 aria-label={f.label}
-                className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+                className="h-9 rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] text-[var(--text-primary)] text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
               >
                 {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
@@ -333,18 +348,19 @@ export default function CallbackListPage() {
             </button>
           )}
 
-          {/* Density toggle */}
-          <div className="ml-auto flex gap-1 self-end">
-            {(['roomy', 'dense'] as const).map(d => (
+          {/* Density toggle — DG-ADMIN-10: aligned with shared DataTable 'roomy'|'compact' vocabulary */}
+          <div className="ml-auto flex gap-1 self-end" role="group" aria-label={t('dataTable.density.label')}>
+            {(['roomy', 'compact'] as const).map(d => (
               <button
                 key={d}
                 onClick={() => setDensityPersisted(d)}
+                aria-pressed={density === d}
                 className={cn(
                   'px-2 py-1 rounded text-xs font-medium transition-colors',
                   density === d ? 'bg-neutral-800 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
                 )}
               >
-                {t(d === 'roomy' ? 'admin.callbacks.density.roomy' : 'admin.callbacks.density.dense')}
+                {t(d === 'roomy' ? 'dataTable.density.roomy' : 'dataTable.density.compact')}
               </button>
             ))}
           </div>

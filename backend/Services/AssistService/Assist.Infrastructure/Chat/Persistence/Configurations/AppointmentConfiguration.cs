@@ -76,6 +76,11 @@ public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointm
             .HasDefaultValue(false)
             .IsRequired();
 
+        // Migration 105: CA post-call summary note (DG-CHAT-05)
+        builder.Property(a => a.CaSummaryNote)
+            .HasColumnName("ca_summary_note")
+            .HasMaxLength(4000);
+
         builder.Property(a => a.CreatedAt).HasColumnName("created_at");
         builder.Property(a => a.UpdatedAt).HasColumnName("updated_at");
         builder.Property(a => a.DeletedAt).HasColumnName("deleted_at");

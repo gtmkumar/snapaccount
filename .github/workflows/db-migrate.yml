@@ -73,56 +73,18 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
 
-      - name: Setup .NET ${{ env.DOTNET_VERSION }}
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Install EF Core tools
-        run: dotnet tool install --global dotnet-ef
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json') }}
-          restore-keys: nuget-${{ runner.os }}-
-
-      - name: Restore & build migration project
-        working-directory: backend
-        run: dotnet build --configuration Release
-
-      - name: Generate migration scripts (all services)
-        working-directory: backend
-        run: |
-          mkdir -p /tmp/migrations
-          COMPOSITES=(Platform Finance Assist)
-          for comp in "${COMPOSITES[@]}"; do
-            echo "=== Generating migration for ${comp} composite ==="
-            dotnet ef migrations script \
-              --project "Services/${comp}Service/${comp}.Infrastructure/${comp}.Infrastructure.csproj" \
-              --startup-project "Services/${comp}Service/${comp}.WebApi/${comp}.WebApi.csproj" \
-              --idempotent \
-              --output "/tmp/migrations/${comp}.sql" \
-              2>&1 || echo "No EF migrations for ${comp} — skipping"
-          done
-
-      - name: Upload generated migration scripts
-        uses: actions/upload-artifact@v4
-        with:
-          name: migration-scripts-${{ inputs.environment }}-${{ github.run_id }}
-          path: /tmp/migrations/*.sql
-          retention-days: 30
-
-      - name: Dry run — print migration scripts
+      # Raw SQL is the authoritative migration source (see migration-replay + db-migrate-test
+      # CI jobs). The runner image applies database/migrations/*.sql via
+      # scripts/db/apply-migrations.sh (idempotent via a public.schema_migrations tracking table).
+      - name: Dry run — migration plan (raw SQL)
         if: ${{ inputs.dry_run == true }}
         run: |
-          echo "=== DRY RUN — migration SQL scripts ==="
-          for f in /tmp/migrations/*.sql; do
-            echo "--- ${f} ---"
-            head -50 "${f}"
-            echo "..."
-          done
+          echo "=== DRY RUN — raw SQL migration plan (apply order) ==="
+          echo "The runner applies these via scripts/db/apply-migrations.sh;"
+          echo "only files absent from public.schema_migrations are executed (idempotent)."
+          echo
+          ls database/migrations/*.sql | sort -V | sed 's#^#  - #'
+          echo
           echo "DRY RUN complete. No database changes made."
 
       - name: Build migration runner Docker image
@@ -132,7 +94,7 @@ jobs:
           docker build \
             -f backend/Dockerfile.migrate \
             -t "${IMAGE}" \
-            ./backend
+            .
           docker push "${IMAGE}"
           echo "MIGRATION_IMAGE=${IMAGE}" >> "$GITHUB_ENV"
 

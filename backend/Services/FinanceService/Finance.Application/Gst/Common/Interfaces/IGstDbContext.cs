@@ -82,6 +82,37 @@ public interface IGstDbContext
     /// </summary>
     DbSet<GstNoticeDeadlineRule> GstNoticeDeadlineRules { get; }
 
+    // ── DG-GST-02: ARN capture + audit trail ─────────────────────────────────
+
+    /// <summary>
+    /// Append-only audit log for GST return state transitions and ARN edits.
+    /// Maps to <c>gst.gst_return_audit</c> (migration 096).
+    /// </summary>
+    DbSet<GstReturnAudit> GstReturnAudits { get; }
+
+    // ── DG-GST-04: Late fee + interest rate tables (migration 101) ───────────
+
+    /// <summary>
+    /// Config-driven late-fee rate lookup table.
+    /// Maps to <c>gst.gst_late_fee_rate</c> (migration 101).
+    /// Never hardcode per-day penalty amounts — read from this table.
+    /// </summary>
+    DbSet<GstLateFeeRate> GstLateFeeRates { get; }
+
+    /// <summary>
+    /// Config-driven interest rate (CGST Act Section 50) lookup table.
+    /// Maps to <c>gst.gst_interest_rate</c> (migration 101).
+    /// </summary>
+    DbSet<GstInterestRate> GstInterestRates { get; }
+
+    // ── DG-GST-05: Org profile for e-invoice threshold (migration 102) ────────
+
+    /// <summary>
+    /// Per-org GST profile storing annual turnover for e-invoice mandate checks.
+    /// Maps to <c>gst.gst_org_profile</c> (migration 102).
+    /// </summary>
+    DbSet<GstOrgProfile> GstOrgProfiles { get; }
+
     /// <summary>Persists changes to the gst schema.</summary>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

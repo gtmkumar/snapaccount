@@ -38,6 +38,10 @@ jest.mock('../../src/api/itr', () => ({
 }));
 
 import { UserApprovalScreen } from '../../src/screens/itr/UserApprovalScreen';
+// DG-MOBUX-07: the biometric gate keeps a module-level grace ledger; reset it
+// between tests so a successful unlock in one test doesn't skip the prompt in
+// the next (same flowKey).
+import { __resetBiometricGraceForTests } from '../../src/hooks/useBiometricGate';
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn() } as never;
 const mockRoute = { params: { filingId: 'f1' } } as never;
@@ -65,6 +69,7 @@ describe('UserApprovalScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSubmit.mockResolvedValue(undefined);
+    __resetBiometricGraceForTests();
   });
 
   it('renders header without crashing', () => {

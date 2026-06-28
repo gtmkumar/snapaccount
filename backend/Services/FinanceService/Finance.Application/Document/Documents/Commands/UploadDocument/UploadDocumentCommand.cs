@@ -1,7 +1,9 @@
+using DocumentService.Application.Common.Interfaces;
 using DocumentService.Application.Interfaces;
 using DocumentService.Domain.Entities;
 using DocumentService.Domain.Events;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Domain;
 
@@ -14,16 +16,32 @@ namespace DocumentService.Application.Documents.Commands.UploadDocument;
 /// <param name="FileSizeBytes">File size — validated against 5MB limit before reaching AI services.</param>
 /// <param name="OrganizationId">Optional organization context for the document.</param>
 /// <param name="CategoryId">Optional pre-assigned category.</param>
+/// <param name="IdempotencyKey">
+/// DG-DOC-08: Client-supplied UUID v4 (from <c>Idempotency-Key</c> header or form field).
+/// When present, the handler checks for an existing document with the same
+/// (org, idempotency_key) and returns it with HTTP 200 instead of creating a duplicate.
+/// Null for web / legacy callers that do not send the header.
+/// </param>
 public record UploadDocumentCommand(
     Stream FileContent,
     string FileName,
     string MimeType,
     long FileSizeBytes,
     Guid? OrganizationId,
-    Guid? CategoryId) : ICommand<UploadDocumentResponse>;
+    Guid? CategoryId,
+    string? IdempotencyKey = null) : ICommand<UploadDocumentResponse>;
 
-/// <summary>Response containing the new document ID and its GCS storage path.</summary>
-public record UploadDocumentResponse(Guid DocumentId, string StoragePath, string Status);
+/// <summary>
+/// Response containing the document ID, storage path, and status.
+/// <see cref="IsExisting"/> is true when the response was served from an existing row
+/// due to idempotency-key deduplication (DG-DOC-08) — the HTTP endpoint returns 200
+/// in this case instead of 201 Created.
+/// </summary>
+public record UploadDocumentResponse(
+    Guid DocumentId,
+    string StoragePath,
+    string Status,
+    bool IsExisting = false);
 
 /// <summary>
 /// FluentValidation validator for <see cref="UploadDocumentCommand"/>.
@@ -51,10 +69,17 @@ public sealed class UploadDocumentCommandValidator : AbstractValidator<UploadDoc
 /// <summary>
 /// Uploads the file to GCS via <see cref="IDocumentStorageService"/>, creates
 /// the <see cref="Document"/> aggregate, optionally assigns a category, and persists.
+///
+/// DG-DOC-08: When <see cref="UploadDocumentCommand.IdempotencyKey"/> is set,
+/// checks for an existing document with the same (org, idempotency_key) before
+/// uploading. On a match, returns the existing document with <see cref="UploadDocumentResponse.IsExisting"/>
+/// = true (the endpoint responds with 200 instead of 201). This prevents duplicate
+/// document rows from mobile retries after a lost success-ack.
 /// </summary>
 public sealed class UploadDocumentCommandHandler(
     IDocumentStorageService storageService,
     IDocumentRepository documentRepository,
+    IDocumentDbContext db,
     ICurrentUser currentUser)
     : ICommandHandler<UploadDocumentCommand, UploadDocumentResponse>
 {
@@ -63,7 +88,30 @@ public sealed class UploadDocumentCommandHandler(
         UploadDocumentCommand request,
         CancellationToken cancellationToken)
     {
-        // Upload to GCS first — fail fast if storage is unavailable
+        var orgId = request.OrganizationId ?? currentUser.OrganizationId;
+
+        // DG-DOC-08: Idempotency check — return existing document if key matches.
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey) && orgId.HasValue)
+        {
+            var existing = await db.Documents
+                .Where(d =>
+                    d.OrganizationId == orgId.Value
+                    && d.IdempotencyKey == request.IdempotencyKey
+                    && d.DeletedAt == null)
+                .Select(d => new { d.Id, d.StoragePath, d.Status })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (existing is not null)
+            {
+                return new UploadDocumentResponse(
+                    existing.Id,
+                    existing.StoragePath,
+                    existing.Status,
+                    IsExisting: true);
+            }
+        }
+
+        // Upload to GCS first — fail fast if storage is unavailable.
         var uploadResult = await storageService.UploadAsync(
             request.FileContent,
             request.FileName,
@@ -81,13 +129,17 @@ public sealed class UploadDocumentCommandHandler(
             UserId = currentUser.UserId,
             // Attribute the document to the uploader's active organization when the
             // caller doesn't specify one, so it surfaces in the org-scoped document list.
-            OrganizationId = request.OrganizationId ?? currentUser.OrganizationId,
+            OrganizationId = orgId,
             FileName = request.FileName,
             OriginalFileName = request.FileName,
             MimeType = request.MimeType,
             FileSizeBytes = request.FileSizeBytes,
             StoragePath = storagePath,
-            CategoryId = request.CategoryId
+            CategoryId = request.CategoryId,
+            // DG-DOC-08: Persist the idempotency key so future retries hit the check above.
+            IdempotencyKey = string.IsNullOrWhiteSpace(request.IdempotencyKey)
+                ? null
+                : request.IdempotencyKey
         };
 
         document.AddDomainEvent(new DocumentUploadedEvent(

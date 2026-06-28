@@ -80,6 +80,9 @@ export type ReportDownloadUrl = z.infer<typeof ReportDownloadUrlSchema>
 // Request types
 // ---------------------------------------------------------------------------
 
+export const ReportCurrencyDisplaySchema = z.enum(['exact', 'lakh', 'crore'])
+export type ReportCurrencyDisplay = z.infer<typeof ReportCurrencyDisplaySchema>
+
 export interface GenerateReportRequest {
   reportType: ReportType
   format: ReportFormat
@@ -87,6 +90,10 @@ export interface GenerateReportRequest {
   periodStart?: string
   periodEnd?: string
   loanApplicationId?: string
+  /** DG-DASH-07: Show prior-period comparative column (P&L, BS, CashFlow) */
+  comparative?: boolean
+  /** DG-DASH-07: Currency display scale sent as metadata; backend may use for formatting */
+  currencyDisplay?: ReportCurrencyDisplay
 }
 
 // ---------------------------------------------------------------------------
@@ -137,8 +144,15 @@ export const ShareLinkSchema = z.object({
 })
 export type ShareLink = z.infer<typeof ShareLinkSchema>
 
-export async function generateShareLink(id: string): Promise<ShareLink> {
-  const res = await api.post(`/reports/${id}/share-link`)
+export interface GenerateShareLinkRequest {
+  /** DG-DASH-07: expiry in hours; 0 = no expiry (server may cap at 30d for bank) */
+  expiryHours?: number
+  /** DG-DASH-07: optional message to CA / bank */
+  message?: string
+}
+
+export async function generateShareLink(id: string, req: GenerateShareLinkRequest = {}): Promise<ShareLink> {
+  const res = await api.post(`/reports/${id}/share-link`, req)
   return ShareLinkSchema.parse(res.data)
 }
 

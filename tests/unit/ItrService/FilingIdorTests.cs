@@ -49,7 +49,7 @@ public sealed class FilingIdorTests : IDisposable
         _assesseeId = assessee.Id;
 
         // Seed a filing for that assessee
-        var filing = Filing.Create(_assesseeId, "AY2025-26", "ITR-1", "NEW");
+        var filing = Filing.Create(_assesseeId, "AY2025-26", "ITR-1", "NEW", Guid.NewGuid());
         _db.Filings.Add(filing);
         _db.SaveChanges();
         _filingId = filing.Id;

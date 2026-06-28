@@ -101,6 +101,59 @@ public sealed class SandboxKycProvider(
     public Task<KycVerifyResult> VerifyAadhaarOtpAsync(string transactionId, string otp, CancellationToken ct = default)
         => VerifyAadhaarOtpInternalAsync(transactionId, otp, ct);
 
+    /// <summary>
+    /// Verifies a GSTIN and returns business-profile fields from the GSTN registry (DG-AUTH-04).
+    /// Calls the same Sandbox GSTN endpoint as the IDocumentVerificationProvider path but also
+    /// extracts legalName / tradeName / principalPlaceOfBusiness for onboarding auto-fill.
+    /// </summary>
+    public async Task<GstinVerifyResult> VerifyGstinAsync(string gstin, CancellationToken ct = default)
+    {
+        var body = new Dictionary<string, object?>
+        {
+            ["@entity"] = "in.co.sandbox.kyc.gstin.request",
+            ["gstin"]   = gstin.Trim().ToUpperInvariant(),
+        };
+
+        var (ok, doc, status) = await SendAsync(HttpMethod.Post, options.Endpoints.GstinVerify, body, ct);
+        if (!ok || doc is null)
+        {
+            logger.LogInformation("Sandbox GSTIN verify returned HTTP {Status} -> not verified.", status);
+            return new GstinVerifyResult(Verified: false);
+        }
+
+        using (doc)
+        {
+            // GSTN Sandbox response: data.sts (Active/Cancelled), data.lgnm (legal name),
+            // data.tradeName / data.tradeNam, data.pradr.adr (principal address).
+            if (!doc.RootElement.TryGetProperty("data", out var data))
+                return new GstinVerifyResult(Verified: false);
+
+            var sts = TryReadString(data, "sts");
+            var verified = sts is not null && sts.Equals("Active", StringComparison.OrdinalIgnoreCase);
+
+            var legalName = TryReadString(data, "lgnm");
+            var tradeName = TryReadString(data, "tradeNam") ?? TryReadString(data, "tradeName");
+
+            // Principal address lives under data.pradr (primary address object).
+            string? principalAddress = null;
+            if (data.TryGetProperty("pradr", out var pradr))
+                principalAddress = TryReadString(pradr, "adr");
+
+            var providerRef = ReadTransactionId(doc);
+
+            logger.LogInformation(
+                "Sandbox GSTIN verify gstin={Gstin} → verified={Verified} legalName={LegalName}",
+                MaskForLog(KycKind.Gstin, gstin), verified, legalName);
+
+            return new GstinVerifyResult(
+                Verified: verified,
+                LegalName: legalName,
+                TradeName: tradeName,
+                PrincipalPlaceOfBusiness: principalAddress,
+                ProviderRef: providerRef);
+        }
+    }
+
     // ── Per-kind verification ─────────────────────────────────────────────────
 
     private Task<(bool verified, string? providerRef)> VerifyDirectAsync(

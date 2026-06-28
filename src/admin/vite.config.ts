@@ -3,9 +3,9 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
-// Dev: proxy all /api/* to the YARP API gateway (:5000).
+// Dev: proxy all /api/* to the YARP API gateway (:6060 locally — macOS AirPlay holds :5000).
 // Gateway routes by path prefix → Platform (:5201), Finance (:5202), Assist (:5203).
-const GATEWAY_URL = process.env.VITE_GATEWAY_URL ?? 'http://localhost:5000'
+const GATEWAY_URL = process.env.VITE_GATEWAY_URL ?? 'http://localhost:6060'
 
 export default defineConfig(() => {
   return {

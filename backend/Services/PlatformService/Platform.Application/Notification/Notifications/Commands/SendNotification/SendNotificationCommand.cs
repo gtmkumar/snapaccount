@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NotificationService.Application.Interfaces;
 using NotificationService.Domain.Entities;
@@ -49,6 +50,7 @@ public sealed class SendNotificationCommandValidator : AbstractValidator<SendNot
 public sealed class SendNotificationCommandHandler(
     INotificationDbContext dbContext,
     IEnumerable<IChannelAdapter> adapters,
+    IConfiguration configuration,
     ILogger<SendNotificationCommandHandler> logger)
     : ICommandHandler<SendNotificationCommand, SendNotificationResponse>
 {
@@ -111,14 +113,37 @@ public sealed class SendNotificationCommandHandler(
                 continue;
             }
 
-            // DLT gate for SMS — regulatory requirement (TRAI India)
+            // DLT gate for SMS — regulatory requirement (TRAI India).
+            // DG-NOTIF-07: In non-production environments Notification:SmsDevBypassDlt=true lets
+            // SMS dispatch with a placeholder DLT ID (seeded by NotificationSeeder) so the gate
+            // does not suppress 100% of SMS during development and integration testing.
+            // In production this flag must be false/absent and real DLT IDs must be set via the
+            // admin template manager (PUT /notifications/templates/{id}).
             if (channelEnum == NotificationChannel.Sms && string.IsNullOrEmpty(template.DltTemplateId))
             {
-                logger.LogWarning("SMS dispatch blocked — DLT template ID not registered for event={EventCode}. " +
-                    "Register templates with TRAI DLT portal before enabling SMS.", request.EventCode);
-                results.Add(new ChannelResult(channelEnum, DispatchStatus.Suppressed, null, "DLT template not registered"));
-                suppressed++;
-                continue;
+                var isDevelopment = string.Equals(
+                    configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase);
+                var rawBypass = configuration["Notification:SmsDevBypassDlt"];
+                var devBypassDlt = rawBypass is not null
+                    ? string.Equals(rawBypass, "true", StringComparison.OrdinalIgnoreCase)
+                    : isDevelopment;
+
+                if (devBypassDlt)
+                {
+                    logger.LogWarning(
+                        "DG-NOTIF-07 SMS DLT gate bypassed (Notification:SmsDevBypassDlt=true) for event={EventCode}. " +
+                        "Register a real TRAI DLT template ID before go-live.",
+                        request.EventCode);
+                    // Allow dispatch to continue — fall through to adapter.SendAsync below.
+                }
+                else
+                {
+                    logger.LogWarning("SMS dispatch blocked — DLT template ID not registered for event={EventCode}. " +
+                        "Register templates with TRAI DLT portal before enabling SMS.", request.EventCode);
+                    results.Add(new ChannelResult(channelEnum, DispatchStatus.Suppressed, null, "DLT template not registered"));
+                    suppressed++;
+                    continue;
+                }
             }
 
             var renderedBody = template.Render(request.Variables);

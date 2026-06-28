@@ -1,6 +1,19 @@
-import { getAI, getGenerativeModel, GoogleAIBackend } from 'firebase/ai'
-import { app } from './firebase'
+/**
+ * firebase-ai.ts — REMOVED (DG-CHAT-07)
+ *
+ * Client-side Gemini via Firebase AI was removed because it bypasses the
+ * mandated server-side RAG pipeline (no PII redaction, no per-org token
+ * budget, no RLS-scoped retrieval).
+ *
+ * Architecture decision:
+ *   .claude/orchestrator/ai-service-architecture-decision.md
+ *
+ * All AI calls now route through the backend /ai endpoints via:
+ *   src/admin/src/lib/aiApi.ts
+ *
+ * This file is intentionally empty. It may be deleted once no build tooling
+ * references it by path.
+ */
 
-const ai = getAI(app, { backend: new GoogleAIBackend() })
-
-export const model = getGenerativeModel(ai, { model: 'gemini-2.5-flash-lite' })
+// No exports — do not import from this file.
+export {}

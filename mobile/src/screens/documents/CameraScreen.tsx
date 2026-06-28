@@ -24,6 +24,7 @@ import { Button } from '../../components/ui/Button';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import type { DocumentStackParamList } from '../../navigation/DocumentStack';
 import { useDocumentQueue } from '../../hooks/useDocumentQueue';
+import { useHaptics } from '../../hooks/useHaptics';
 
 type NavProp = NativeStackNavigationProp<DocumentStackParamList, 'Camera'>;
 interface Props { navigation: NavProp }
@@ -32,17 +33,19 @@ export function CameraScreen({ navigation }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
   const { t } = useTranslation();
+  const haptics = useHaptics();
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
   const [flash, setFlash] = useState<FlashMode>('auto');
   const [showPreview, setShowPreview] = useState(false);
   const [previewUri, setPreviewUri] = useState('');
   const [isOffline, setIsOffline] = useState(false);
-  const [toastVisible, setToastVisible] = useState(false);
   const cameraRef = useRef<CameraView>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { enqueue, pendingCount } = useDocumentQueue();
+  // DG-DOC-05: capture/gallery now route through DocumentCategoryScreen, which
+  // owns the enqueue (after the user picks a category). We only read pendingCount
+  // here for the upload chip.
+  const { pendingCount } = useDocumentQueue();
 
   // Check network on mount
   React.useEffect(() => {
@@ -50,12 +53,6 @@ export function CameraScreen({ navigation }: Props) {
     const unsub = NetInfo.addEventListener((s) => setIsOffline(!s.isConnected));
     return () => { unsub(); };
   }, []);
-
-  const showToast = () => {
-    setToastVisible(true);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToastVisible(false), 3000);
-  };
 
   if (!permission) {
     return <View style={styles.container} />;
@@ -73,12 +70,16 @@ export function CameraScreen({ navigation }: Props) {
 
   const handleCapture = async () => {
     if (!cameraRef.current) return;
+    // DG-MOBUX-08 / haptics §3: medium impact the instant the shutter fires.
+    haptics.mediumTap();
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.9,
         base64: false,
       });
       if (photo) {
+        // offline §12: light impact confirming a successful capture.
+        haptics.lightTap();
         setPreviewUri(photo.uri);
         setShowPreview(true);
       }
@@ -87,13 +88,20 @@ export function CameraScreen({ navigation }: Props) {
     }
   };
 
-  const handleEnqueueAndContinue = async () => {
+  // DG-DOC-05: after "Use Photo" we no longer enqueue blindly — we push the
+  // category-selection screen so the user (assisted by the AI suggestion banner)
+  // assigns a category before the document is enqueued/uploaded.
+  const handleContinueToCategory = () => {
     if (!previewUri) return;
+    const uri = previewUri;
     setShowPreview(false);
-    const filename = `document_${Date.now()}.jpg`;
-    await enqueue({ localUri: previewUri, filename });
     setPreviewUri('');
-    showToast();
+    const filename = `document_${Date.now()}.jpg`;
+    navigation.navigate('DocumentCategory', {
+      documentUri: uri,
+      filename,
+      source: 'camera',
+    });
   };
 
   const handlePickFromGallery = async () => {
@@ -112,8 +120,12 @@ export function CameraScreen({ navigation }: Props) {
       const asset = result.assets[0];
       const ext = asset.fileName?.split('.').pop()?.toLowerCase() ?? 'jpg';
       const filename = asset.fileName ?? `gallery_${Date.now()}.${ext}`;
-      await enqueue({ localUri: asset.uri, filename });
-      showToast();
+      // DG-DOC-05: gallery uploads also flow through category selection.
+      navigation.navigate('DocumentCategory', {
+        documentUri: asset.uri,
+        filename,
+        source: 'gallery',
+      });
     } catch {
       Alert.alert('Error', 'Could not pick image from gallery.');
     }
@@ -138,26 +150,9 @@ export function CameraScreen({ navigation }: Props) {
       {/* Overlays are SIBLINGS of CameraView, not children: nesting views inside
           CameraView crashes the Fabric renderer (new architecture) with
           "Attempt to unmount a view which has [the wrong index]" when those
-          children mount/unmount (e.g. the toast appearing as the preview closes).
+          children mount/unmount (e.g. a banner appearing as the preview closes).
           box-none lets touches fall through to the camera between controls. */}
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        {/* Toast */}
-        {toastVisible && (
-          <View style={styles.toast} pointerEvents="none">
-            <Text style={styles.toastText}>
-              {t('mobile.camera.toast.savedToQueue')}
-            </Text>
-            <Pressable
-              onPress={() => {
-                setToastVisible(false);
-                navigation.navigate('DocumentList' as never);
-              }}
-            >
-              <Text style={styles.toastCta}>{t('mobile.camera.toast.savedViewCta')}</Text>
-            </Pressable>
-          </View>
-        )}
-
         {/* Offline banner */}
         {isOffline && (
           <View style={styles.offlineBanner}>
@@ -276,7 +271,7 @@ export function CameraScreen({ navigation }: Props) {
               />
               <Button
                 label="Use Photo"
-                onPress={handleEnqueueAndContinue}
+                onPress={handleContinueToCategory}
               />
             </View>
           </SafeAreaView>
@@ -299,16 +294,6 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     padding: 24, backgroundColor: tk.canvas, gap: 16,
   },
   permText: { fontSize: 16, textAlign: 'center', color: tk.textSecondary, marginBottom: 16 },
-
-  // Toast
-  toast: {
-    position: 'absolute', top: 60, left: 16, right: 16, zIndex: 100,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: tk.textPrimary + 'EE',
-    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12,
-  },
-  toastText: { fontSize: 13, color: tk.textOnBrand, flex: 1 },
-  toastCta: { fontSize: 13, color: tk.brand400, fontWeight: '700', marginLeft: 12 },
 
   // Offline banner
   offlineBanner: {

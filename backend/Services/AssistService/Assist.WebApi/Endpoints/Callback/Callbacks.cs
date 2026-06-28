@@ -1,7 +1,4 @@
 using CallbackService.Application.Callbacks.Commands.AddNote;
-using CallbackService.Application.Dashboard.Queries.GetDashboardStats;
-using CallbackService.Application.Dashboard.Queries.GetKpiSnapshot;
-using CallbackService.Application.Dashboard.Queries.GetWorkloadByUser;
 using CallbackService.Application.Callbacks.Commands.AssignCallback;
 using CallbackService.Application.Callbacks.Commands.CancelCallback;
 using CallbackService.Application.Callbacks.Commands.CompleteCallback;
@@ -11,10 +8,15 @@ using CallbackService.Application.Callbacks.Commands.RequestCallback;
 using CallbackService.Application.Callbacks.Commands.RescheduleCallback;
 using CallbackService.Application.Callbacks.Queries.GetCallbackById;
 using CallbackService.Application.Callbacks.Queries.ListCallbacks;
+using CallbackService.Application.Dashboard.Queries.GetDashboardStats;
+using CallbackService.Application.Dashboard.Queries.GetKpiSnapshot;
+using CallbackService.Application.Dashboard.Queries.GetWorkloadByUser;
+using CallbackService.Application.Internal.Commands.RefreshKpiMv;
 using CallbackService.Domain.Enums;
 using MediatR;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Application;
+using System.Security.Cryptography;
 
 namespace CallbackService.Api.Endpoints;
 
@@ -128,6 +130,26 @@ public sealed class Callbacks : EndpointGroupBase
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetCallbackAdminWorkloadByUser")
             .WithSummary("Per-assignee callback workload — admin dashboard team-workload widget.");
+
+        // POST /callbacks/internal/refresh-kpi-mv
+        //
+        // DG-INFRA-04: Triggered by Cloud Scheduler (callback-kpi-mv-refresh job,
+        // defined in infra/pubsub-scheduler-recurring-jobs.sh lines ~389-395) or
+        // indirectly by CallbackRecurringJobsSubscriber on CALLBACK_KPI_MV_REFRESH.
+        //
+        // Security: X-Internal-Token header matched against InternalApi:SharedToken
+        // (constant-time HMAC comparison — RV-01 / SEC-AI-02 pattern). No Firebase JWT
+        // is required — Cloud Scheduler cannot hold one. Do NOT add .RequireAuthorization()
+        // as that would reject unauthenticated Cloud Scheduler calls.
+        //
+        // Expected latency: ~200–500 ms (REFRESH MATERIALIZED VIEW CONCURRENTLY on
+        // callback.kpi_daily_snapshot). CONCURRENTLY is safe because migration 067/073
+        // asserts the required uq_kpi_daily_snapshot_org_date unique index.
+        g.MapPost("/internal/refresh-kpi-mv", RefreshKpiMv)
+            .WithName("RefreshCallbackKpiMv")
+            .WithSummary(
+                "[DG-INFRA-04] REFRESH MATERIALIZED VIEW CONCURRENTLY callback.kpi_daily_snapshot. " +
+                "Secured by X-Internal-Token header (Cloud Scheduler caller).");
     }
 
     private static async Task<IResult> RequestCallback(
@@ -158,23 +180,39 @@ public sealed class Callbacks : EndpointGroupBase
         ISender sender,
         Guid? userId = null,
         Guid? agentId = null,
-        CallbackStatus? status = null,
+        // Comma-separated list — the admin "All Open" filter sends PENDING,SCHEDULED,IN_PROGRESS.
+        string? status = null,
         CallbackCategory? category = null,
         int page = 1,
         int pageSize = 20,
+        // 'size' is the param name the admin client sends; accept it as an alias for pageSize.
+        int? size = null,
         CancellationToken ct = default)
     {
         if (!currentUser.IsAuthenticated) return Results.Unauthorized();
+
+        // Parse the comma-separated status filter; ignore unrecognised tokens rather than 500.
+        List<CallbackStatus>? statuses = null;
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            statuses = status
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(s => Enum.TryParse<CallbackStatus>(s, ignoreCase: true, out var parsed) ? parsed : (CallbackStatus?)null)
+                .Where(s => s.HasValue)
+                .Select(s => s!.Value)
+                .ToList();
+            if (statuses.Count == 0) statuses = null;
+        }
 
         // P6-HANDOFF-04: KPI MV has no RLS — filter by org from claims
         var query = new ListCallbacksQuery(
             UserId: userId,
             OrganizationId: currentUser.OrganizationId,
             AgentId: agentId,
-            Status: status,
+            Statuses: statuses,
             Category: category,
             Page: page,
-            PageSize: pageSize);
+            PageSize: size ?? pageSize);
 
         var result = await sender.Send(query, ct);
         return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
@@ -234,6 +272,68 @@ public sealed class Callbacks : EndpointGroupBase
         if (!currentUser.IsAuthenticated) return Results.Unauthorized();
         var result = await sender.Send(new AddNoteCommand(id, currentUser.UserId, req.Content, req.IsInternal), ct);
         return result.IsSuccess ? Results.Created() : Results.BadRequest(new { error = result.Error.Message });
+    }
+
+    /// <summary>
+    /// DG-INFRA-04: POST /callbacks/internal/refresh-kpi-mv
+    /// Refreshes callback.kpi_daily_snapshot materialized view via MediatR.
+    /// Secured by X-Internal-Token (constant-time HMAC, RV-01/SEC-AI-02 pattern).
+    /// Cloud Scheduler calls this directly; also triggered by CallbackRecurringJobsSubscriber.
+    /// </summary>
+    private static async Task<IResult> RefreshKpiMv(
+        ISender sender,
+        IConfiguration config,
+        HttpContext ctx,
+        CancellationToken ct)
+    {
+        // Validate X-Internal-Token before doing any work.
+        var configuredToken = config["InternalApi:SharedToken"];
+        var headerToken = ctx.Request.Headers["X-Internal-Token"].FirstOrDefault();
+
+        // Dev-bypass: if InternalApi:SharedToken is not configured, allow the call but log a warning.
+        // This mirrors the dev-mode patterns elsewhere in the composite host.
+        var isDev = string.Equals(
+            config["ASPNETCORE_ENVIRONMENT"] ?? "Development", "Development",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(configuredToken))
+        {
+            if (string.IsNullOrWhiteSpace(headerToken)
+                || !CryptographicEqual(configuredToken, headerToken))
+            {
+                return Results.Unauthorized();
+            }
+        }
+        else if (!isDev)
+        {
+            // Non-dev, token not configured — treat as misconfiguration → reject.
+            return Results.Problem(
+                "InternalApi:SharedToken is not configured. " +
+                "Configure it before enabling Cloud Scheduler jobs in production.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var result = await sender.Send(new RefreshKpiMvCommand(), ct);
+        return result.IsSuccess
+            ? Results.Ok(new { message = "callback.kpi_daily_snapshot refreshed successfully.", refreshedAt = DateTime.UtcNow })
+            : result.Error.ToHttpResult();
+    }
+
+    /// <summary>
+    /// RV-01 (SEC-AI-02): Constant-time token comparison using HMAC-SHA256.
+    /// Prevents timing-attack leakage of token length that occurs with
+    /// <c>CryptographicOperations.FixedTimeEquals</c> on unequal-length inputs.
+    /// Both values are hashed under the same domain key, producing equal-length
+    /// digests that are then compared with <c>FixedTimeEquals</c>.
+    /// </summary>
+    private static bool CryptographicEqual(string a, string b)
+    {
+        ReadOnlySpan<byte> domainKey = "snapaccount.internal-token.v1"u8;
+        Span<byte> hashA = stackalloc byte[32];
+        Span<byte> hashB = stackalloc byte[32];
+        HMACSHA256.TryHashData(domainKey, System.Text.Encoding.UTF8.GetBytes(a), hashA, out _);
+        HMACSHA256.TryHashData(domainKey, System.Text.Encoding.UTF8.GetBytes(b), hashB, out _);
+        return CryptographicOperations.FixedTimeEquals(hashA, hashB);
     }
 
     // GET /callbacks/kpi [Authorize] — GAP-012: real query over callback.kpi_daily_snapshot MV

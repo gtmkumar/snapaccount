@@ -197,7 +197,8 @@ describe('CommandPalette', () => {
     expect(items[1]).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('ArrowUp at top does not go negative', async () => {
+  it('ArrowUp at top wraps to last item', async () => {
+    // DG-ADMIN-07: navigation wraps (modulo). ArrowUp at index 0 → last item.
     renderPalette(true)
     const input = screen.getByPlaceholderText(/Search anything/i)
     fireEvent.change(input, { target: { value: 'gst' } })
@@ -206,22 +207,23 @@ describe('CommandPalette', () => {
 
     fireEvent.keyDown(input, { key: 'ArrowUp' })
     const items = screen.getAllByRole('option')
-    // Should stay at index 0
-    expect(items[0]).toHaveAttribute('aria-selected', 'true')
+    // Wraps: 2 results → (0 - 1 + 2) % 2 = 1, so last item is selected
+    expect(items[items.length - 1]).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('ArrowDown + ArrowDown moves to second item', async () => {
+  it('ArrowDown + ArrowDown wraps back to first item (2 results)', async () => {
+    // DG-ADMIN-07: navigation wraps. With 2 results, two ArrowDowns: 0→1→0.
     renderPalette(true)
     const input = screen.getByPlaceholderText(/Search anything/i)
     fireEvent.change(input, { target: { value: 'gst' } })
 
     await waitFor(() => screen.getByText('GSTR-3B March 2024'))
 
-    fireEvent.keyDown(input, { key: 'ArrowDown' })
-    fireEvent.keyDown(input, { key: 'ArrowDown' }) // would go to index 2 but max is 1
+    fireEvent.keyDown(input, { key: 'ArrowDown' }) // 0 → 1
+    fireEvent.keyDown(input, { key: 'ArrowDown' }) // 1 → 0 (wraps)
     const items = screen.getAllByRole('option')
-    // Still on last item
-    expect(items[items.length - 1]).toHaveAttribute('aria-selected', 'true')
+    // Wrapped back to first item
+    expect(items[0]).toHaveAttribute('aria-selected', 'true')
   })
 
   // ---------------------------------------------------------------------------

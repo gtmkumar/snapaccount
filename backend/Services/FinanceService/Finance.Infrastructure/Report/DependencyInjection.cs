@@ -30,6 +30,11 @@ public static class DependencyInjection
         // QuestPDF Community License (MIT-compatible, free for commercial use)
         QuestPDF.Settings.License = LicenseType.Community;
 
+        // NEW-D17: register the bundled Latin + Indic fonts so Hindi/Bengali PDF text
+        // renders with real glyphs instead of tofu. Fonts are placed at /app/fonts at
+        // Docker build time; idempotent and no-throw when the directory is absent.
+        QuestPdfFontConfig.RegisterBundledFonts(configuration["QuestPdf:FontsPath"]);
+
         // Application layer (MediatR pipeline, validators, PermissionBehavior)
         services.AddReportApplicationServices();
 
@@ -40,9 +45,14 @@ public static class DependencyInjection
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
         services.AddSingleton(TimeProvider.System);
 
+        // DG-SEC-01: RLS session-var interceptor for report.* tenant isolation
+        services.AddScoped<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>();
+
         services.AddDbContext<ReportServiceDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
+            // DG-SEC-01: RLS connection interceptor
+            options.AddInterceptors(sp.GetRequiredService<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>());
             options.UseNpgsql(
                 connectionString,
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", "report"));

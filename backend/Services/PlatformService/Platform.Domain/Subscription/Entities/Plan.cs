@@ -30,6 +30,12 @@ public class Plan : BaseAuditableEntity
     /// <summary>Optional description / feature list (markdown).</summary>
     public string? Description { get; private set; }
 
+    /// <summary>
+    /// Razorpay plan ID (rplan_*) — populated after SyncPlanAsync succeeds.
+    /// Null when Razorpay integration is disabled or the plan has not been synced yet.
+    /// </summary>
+    public string? RazorpayPlanId { get; private set; }
+
     private Plan() { }
 
     /// <summary>Creates a new plan.</summary>
@@ -59,4 +65,11 @@ public class Plan : BaseAuditableEntity
         Description = description;
         IsActive = isActive;
     }
+
+    /// <summary>
+    /// Records the Razorpay plan ID after a successful SyncPlanAsync call.
+    /// Called from CreatePlanCommandHandler when Razorpay integration is enabled.
+    /// </summary>
+    public void SetRazorpayPlanId(string razorpayPlanId)
+        => RazorpayPlanId = razorpayPlanId;
 }

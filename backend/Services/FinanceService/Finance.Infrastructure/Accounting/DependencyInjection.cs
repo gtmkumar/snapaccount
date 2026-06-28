@@ -41,10 +41,16 @@ public static class DependencyInjection
         services.AddScoped<ISaveChangesInterceptor, McaEditLogGucInterceptor>();
         services.AddSingleton(TimeProvider.System);
 
+        // DG-SEC-01: RLS session-var interceptor — sets app.current_user_id on every connection
+        // open so RLS policies on accounting.* tables actually enforce tenant isolation.
+        services.AddScoped<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>();
+
         // EF Core — schema isolated to 'accounting.*'
         services.AddDbContext<AccountingDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
+            // DG-SEC-01: RLS connection interceptor
+            options.AddInterceptors(sp.GetRequiredService<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>());
             options.UseNpgsql(
                 connectionString,
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", "accounting"));

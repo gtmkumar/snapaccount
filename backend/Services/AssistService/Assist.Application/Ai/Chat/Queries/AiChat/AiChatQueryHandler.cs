@@ -2,6 +2,8 @@ using System.Diagnostics;
 using AiService.Application.Common.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Pgvector;
+using Pgvector.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Domain;
 
@@ -101,6 +103,8 @@ public sealed class AiChatQueryHandler(
             }
 
             // 5. Cosine top-k retrieval — graceful degradation if no embeddings exist.
+            // DG-CHAT-01: Use pgvector CosineDistance ordering instead of ChunkIndex.
+            // The query vector from step 4 is used to rank chunks by semantic similarity.
             try
             {
                 var chunkCount = await db.AiEmbeddings
@@ -110,6 +114,11 @@ public sealed class AiChatQueryHandler(
                 if (chunkCount > 0)
                 {
                     var topK = Math.Min(request.TopK, 10);
+                    // Build a pgvector.Vector from the embed result float[].
+                    var queryVector = new Vector(embedResult.Value);
+
+                    // CosineDistance extension method from Pgvector.EntityFrameworkCore.
+                    // Translates to ORDER BY embedding <=> $queryVector LIMIT topK.
                     var chunks = await db.AiChunks
                         .Join(db.AiEmbeddings,
                             chunk => chunk.Id,
@@ -117,7 +126,7 @@ public sealed class AiChatQueryHandler(
                             (chunk, emb) => new { chunk, emb })
                         .Where(x => x.emb.OrganizationId == request.OrganizationId
                                     && x.chunk.DeletedAt == null)
-                        .OrderBy(x => x.chunk.ChunkIndex)
+                        .OrderBy(x => x.emb.Embedding.CosineDistance(queryVector))
                         .Take(topK)
                         .Select(x => x.chunk.Text)
                         .ToListAsync(cancellationToken);

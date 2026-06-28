@@ -1,11 +1,13 @@
 using ChatService.Application;
 using ChatService.Application.Appointments.Commands.GenerateSlotsFromRules;
 using ChatService.Application.Common.Interfaces;
+using ChatService.Infrastructure.EventHandlers;
 using ChatService.Infrastructure.Jobs;
 using ChatService.Infrastructure.Messaging;
 using ChatService.Infrastructure.Persistence;
 using ChatService.Infrastructure.Services;
 using ChatService.Infrastructure.SignalR;
+using Hangfire;
 using IMeetingLinkProvider = ChatService.Application.Common.Interfaces.IMeetingLinkProvider;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -13,6 +15,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Infrastructure.Auth;
+using SnapAccount.Shared.Infrastructure.Messaging;
 using SnapAccount.Shared.Infrastructure.Persistence.Interceptors;
 using StackExchange.Redis;
 
@@ -42,9 +45,14 @@ public static class DependencyInjection
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
         services.AddSingleton(TimeProvider.System);
 
+        // DG-SEC-01: RLS session-var interceptor for chat.* tenant isolation
+        services.AddScoped<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>();
+
         services.AddDbContext<ChatServiceDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
+            // DG-SEC-01: RLS connection interceptor
+            options.AddInterceptors(sp.GetRequiredService<SnapAccount.Shared.Infrastructure.Persistence.Interceptors.RlsSessionInterceptor>());
             options.UseNpgsql(
                 connectionString,
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", "chat"));
@@ -115,6 +123,11 @@ public static class DependencyInjection
             });
         }
 
+        // DG-INFRA-06: custom SignalR metrics (UpDownCounter + Counter) — registered as singleton
+        // so the same Meter/instrument is shared across the connection lifetime.
+        // Register BEFORE ChatHub and ChatHubNotifier (both take SignalRMetrics as a ctor parameter).
+        services.AddSingleton<ChatService.Infrastructure.SignalR.SignalRMetrics>();
+
         // Application-layer abstractions backed by infrastructure
         services.AddScoped<IChatHubNotifier, ChatHubNotifier>();
 
@@ -129,6 +142,19 @@ public static class DependencyInjection
         services.AddScoped<ISlotGenerationService, SlotGenerationService>();
         services.AddTransient<GenerateSlotsFromRulesJob>();
 
+        // DG-CHAT-02: Auto-complete job for CONFIRMED appointments past slot end.
+        services.AddTransient<AutoCompleteAppointmentsJob>();
+
+        // DG-CHAT-03: Appointment reminder + cancellation notification jobs.
+        services.AddTransient<SendAppointmentReminderJob>();
+        services.AddTransient<SendAppointmentCancellationJob>();
+
+        // DG-CHAT-03: MediatR notification handlers for appointment domain events.
+        // These schedule Hangfire jobs and must be registered here (Infrastructure)
+        // because they depend on IBackgroundJobClient (not available in Application layer).
+        services.AddScoped<MediatR.INotificationHandler<ChatService.Domain.Events.AppointmentBookedEvent>, AppointmentBookedEventHandler>();
+        services.AddScoped<MediatR.INotificationHandler<ChatService.Domain.Events.AppointmentCancelledByCaEvent>, AppointmentCancelledByCaEventHandler>();
+
         // GAP-031: Meeting link provider — MockMeetingLinkProvider by default (house: mock-first).
         // Set MeetingLink:Provider=GoogleCalendar in config + provision credentials for real Meet links.
         var meetingLinkProvider = configuration["MeetingLink:Provider"] ?? "Mock";
@@ -139,6 +165,16 @@ public static class DependencyInjection
 
         // DPDP: account deletion erasure subscriber
         if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();
+
+        // DG-NOTIF-01: publish chat new-message events so offline participants
+        // receive Push/InApp notifications via PlatformService's ChatEventsSubscriber.
+        // Only register when GCP is available; the null-fallback in SendMessageCommandHandler
+        // skips publishing safely in local dev / tests without credentials.
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration))
+        {
+            services.AddSingleton<IPubSubPublisher, GooglePubSubPublisher>();
+            services.AddScoped<IChatEventPublisher, ChatEventPublisher>();
+        }
 
         return services;
     }

@@ -1,78 +1,34 @@
 # SnapAccount — Migration Runner Dockerfile
-# Runs EF Core migrations as a Cloud Run Job (one-shot, not a service).
+# Runs the raw-SQL migrations as a Cloud Run Job (one-shot, not a service).
 # Built and deployed by the db-migrate.yml GitHub Actions workflow.
+#
+# Applies database/migrations/*.sql via scripts/db/apply-migrations.sh — the SAME
+# vetted applier the db-migrate-test CI gate exercises (idempotent: a public.schema_migrations
+# tracking table means only un-applied files run). Raw SQL is the authoritative migration
+# source for this repo (see the migration-replay + db-migrate-test CI jobs).
+#
+# NOTE: build context is the REPO ROOT (db-migrate.yml: `docker build -f backend/Dockerfile.migrate .`),
+# because the migrations and scripts live outside backend/.
+#
+# BASELINE (one-time, for a database previously migrated by another mechanism, e.g. EF Core):
+# seed public.schema_migrations with the already-applied filenames so this runner skips them
+# and only applies new migrations going forward.
 
-ARG DOTNET_VERSION=10.0
+FROM postgres:17-bookworm
 
-FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
-WORKDIR /src
+# Run as a dedicated non-root user (psql connects to a remote DB; no local socket needed).
+RUN useradd --uid 10001 --no-create-home --shell /bin/false migrunner
 
-COPY SnapAccount.sln ./
-COPY ServiceDefaults/ServiceDefaults.csproj ServiceDefaults/
-COPY src/AuthService/AuthService.csproj src/AuthService/
-COPY src/DocumentService/DocumentService.csproj src/DocumentService/
-COPY src/AccountingService/AccountingService.csproj src/AccountingService/
-COPY src/GstService/GstService.csproj src/GstService/
-COPY src/LoanService/LoanService.csproj src/LoanService/
-COPY src/ItrService/ItrService.csproj src/ItrService/
-COPY src/ChatService/ChatService.csproj src/ChatService/
-COPY src/NotificationService/NotificationService.csproj src/NotificationService/
-COPY src/ReportService/ReportService.csproj src/ReportService/
-COPY src/SubscriptionService/SubscriptionService.csproj src/SubscriptionService/
-COPY src/AiService/AiService.csproj src/AiService/
+WORKDIR /work
 
-RUN dotnet restore
+COPY database/ ./database/
+COPY scripts/db/apply-migrations.sh scripts/db/migrate-entrypoint.sh ./scripts/db/
+RUN chmod +x ./scripts/db/apply-migrations.sh ./scripts/db/migrate-entrypoint.sh
 
-COPY . .
+ENV MIGRATIONS_DIR=/work/database/migrations
 
-# Install EF Core tools in the image
-RUN dotnet tool install --global dotnet-ef
-ENV PATH="${PATH}:/root/.dotnet/tools"
+USER migrunner
 
-# Build all projects (needed for ef migrations)
-RUN dotnet build --no-restore -c Release
-
-# Create migration runner script
-RUN cat > /usr/local/bin/run-migrations.sh << 'EOF'
-#!/bin/bash
-set -e
-
-echo "=== SnapAccount DB Migration Runner ==="
-echo "Environment: ${ASPNETCORE_ENVIRONMENT:-Production}"
-
-SERVICES=(AuthService DocumentService AccountingService GstService LoanService ItrService ChatService NotificationService ReportService SubscriptionService AiService)
-
-for svc in "${SERVICES[@]}"; do
-    echo ""
-    echo "--- Running migrations for ${svc} ---"
-    dotnet ef database update \
-        --project "/src/src/${svc}/${svc}.csproj" \
-        --no-build \
-        2>&1 || echo "WARNING: Migration failed for ${svc} — check logs"
-done
-
-echo ""
-echo "=== All migrations complete ==="
-EOF
-
-RUN chmod +x /usr/local/bin/run-migrations.sh
-
-# Runtime: keep SDK image (needed for dotnet-ef tool)
-FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS runtime
-
-RUN groupadd --gid 10001 appgroup \
- && useradd --uid 10001 --gid appgroup --no-create-home --shell /bin/false appuser
-
-# Re-install ef tools in runtime stage
-RUN dotnet tool install --global dotnet-ef
-ENV PATH="${PATH}:/root/.dotnet/tools"
-
-WORKDIR /src
-
-COPY --from=build /src /src
-COPY --from=build /usr/local/bin/run-migrations.sh /usr/local/bin/run-migrations.sh
-
-# DB_CONNECTION is injected via Secret Manager at job execution time
-ENV ASPNETCORE_ENVIRONMENT=Production
-
-CMD ["/bin/bash", "/usr/local/bin/run-migrations.sh"]
+# DB_CONNECTION (.NET connection string) is injected via Secret Manager at job execution time;
+# the entrypoint translates it to libpq PG* vars before applying migrations.
+ENTRYPOINT ["/work/scripts/db/migrate-entrypoint.sh"]

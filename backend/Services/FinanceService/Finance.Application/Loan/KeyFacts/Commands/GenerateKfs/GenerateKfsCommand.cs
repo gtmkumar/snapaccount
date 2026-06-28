@@ -39,7 +39,15 @@ public sealed record GenerateKfsResult(
     string GrievanceOfficerContact,
     int CoolingOffDays,
     DateTime GeneratedAt,
-    string Locale = "en");
+    string Locale = "en",
+    // DG-LOAN-05: extended fields
+    decimal? NominalInterestRate = null,
+    string? InterestType = null,
+    decimal? TotalFees = null,
+    decimal? NetDisbursalAmount = null,
+    decimal? TotalAmountPayable = null,
+    string? CoolingOffTerms = null,
+    string? GrievanceOfficerJson = null);
 
 /// <summary>FluentValidation validator for <see cref="GenerateKfsCommand"/>.</summary>
 public sealed class GenerateKfsCommandValidator : AbstractValidator<GenerateKfsCommand>
@@ -151,6 +159,15 @@ public sealed class GenerateKfsCommandHandler(
             ? "en"
             : request.Locale.Trim().ToLowerInvariant();
 
+        // DG-LOAN-05: Compute extended RBI KFS disclosure fields.
+        var totalFeesAmount      = fees.Sum(f => f.amount);
+        var netDisbursalAmount   = principal - totalFeesAmount;
+        var totalAmountPayable   = monthlyEmi * tenureMonths;
+        var nominalInterestRate  = kfsConfig.NominalInterestRate;
+        var interestType         = kfsConfig.InterestType;
+        var coolingOffTerms      = kfsConfig.GetCoolingOffTerms(resolvedLocale, coolingOffDays);
+        var grievanceOfficerJson = kfsConfig.GrievanceOfficerJson;
+
         var kfs = KeyFactsStatement.Create(
             applicationId:           request.ApplicationId,
             loanAmount:              principal,
@@ -163,7 +180,14 @@ public sealed class GenerateKfsCommandHandler(
             grievanceOfficerContact: grievanceOfficerContact,
             coolingOffDays:          coolingOffDays,
             hmacSignature:           signature,
-            locale:                  resolvedLocale);
+            locale:                  resolvedLocale,
+            nominalInterestRate:     nominalInterestRate,
+            interestType:            interestType,
+            totalFees:               totalFeesAmount,
+            netDisbursalAmount:      netDisbursalAmount,
+            totalAmountPayable:      totalAmountPayable,
+            coolingOffTerms:         coolingOffTerms,
+            grievanceOfficerJson:    grievanceOfficerJson);
 
         db.KeyFactsStatements.Add(kfs);
         await db.SaveChangesAsync(cancellationToken);
@@ -180,7 +204,14 @@ public sealed class GenerateKfsCommandHandler(
             kfs.GrievanceOfficerContact,
             kfs.CoolingOffDays,
             kfs.GeneratedAt,
-            kfs.Locale));
+            kfs.Locale,
+            kfs.NominalInterestRate,
+            kfs.InterestType,
+            kfs.TotalFees,
+            kfs.NetDisbursalAmount,
+            kfs.TotalAmountPayable,
+            kfs.CoolingOffTerms,
+            kfs.GrievanceOfficerJson));
     }
 
     private static object[] BuildRepaymentSchedule(

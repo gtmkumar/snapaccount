@@ -21,6 +21,12 @@ namespace LoanService.Application.LoanApplications.Commands.RecordConsent;
 /// GAP-021 / RBI DL Guidelines: <see cref="KfsId"/> is REQUIRED. The handler validates that
 /// the referenced KFS was previously served for this application and marks it acknowledged.
 /// Consent submissions without a valid KFS reference are rejected.
+///
+/// DG-LOAN-06 / F4.2: <see cref="DeviceId"/> (masked) and <see cref="SharedWithBankIds"/>
+/// complete the F4.2 audit-trail requirement: timestamp + IP + device + bank list.
+/// Both are optional for backward compatibility; clients SHOULD supply DeviceId.
+/// SharedWithBankIds is automatically populated from the application's AssignedBankId
+/// when ConsentType is DataShareWithBank and the application already has a bank assigned.
 /// </summary>
 [RequiresPermission("loan.application.consent")]
 public record RecordConsentCommand(
@@ -31,7 +37,11 @@ public record RecordConsentCommand(
     string? UserAgent,
     /// <summary>GAP-021: ID of the Key Facts Statement acknowledged by the borrower.</summary>
     Guid KfsId,
-    string ConsentLocale = "en") : ICommand<RecordConsentResponse>;
+    string ConsentLocale = "en",
+    /// <summary>DG-LOAN-06: Raw device id from the client (will be masked server-side).</summary>
+    string? DeviceId = null,
+    /// <summary>DG-LOAN-06: Explicit bank-id list; null = resolved from application.AssignedBankId.</summary>
+    Guid[]? SharedWithBankIds = null) : ICommand<RecordConsentResponse>;
 
 /// <summary>Response after recording consent.</summary>
 public record RecordConsentResponse(Guid ConsentId, DateTime SignedAt);
@@ -55,6 +65,11 @@ public sealed class RecordConsentCommandValidator : AbstractValidator<RecordCons
             .NotEmpty()
             .MaximumLength(10)
             .WithMessage("ConsentLocale must be a BCP-47 language tag (e.g. \"en\", \"hi\").");
+        // DG-LOAN-06: DeviceId is optional but must not exceed storage limit if supplied.
+        // The handler masks it to first-8..."...last-4 before persistence.
+        RuleFor(x => x.DeviceId)
+            .MaximumLength(256)
+            .When(x => x.DeviceId is not null);
     }
 }
 
@@ -104,6 +119,21 @@ public sealed class RecordConsentCommandHandler(
         if (kfs.AcknowledgedAt is null)
             kfs.RecordAcknowledgement();
 
+        // DG-LOAN-06: mask the device id before persisting (first-8 + "..." + last-4, or raw if ≤ 12 chars).
+        var maskedDeviceId = MaskDeviceId(request.DeviceId);
+
+        // DG-LOAN-06: resolve bank-id list for DataShareWithBank consents.
+        // Use the caller-supplied list if provided; otherwise fall back to the application's
+        // currently assigned bank (if any). Other consent types get null.
+        Guid[]? bankIds = null;
+        if (request.ConsentType == ConsentType.DataShareWithBank)
+        {
+            if (request.SharedWithBankIds is { Length: > 0 })
+                bankIds = request.SharedWithBankIds;
+            else if (application.AssignedBankId.HasValue)
+                bankIds = [application.AssignedBankId.Value];
+        }
+
         var consent = new Consent
         {
             ApplicationId = request.ApplicationId,
@@ -115,11 +145,28 @@ public sealed class RecordConsentCommandHandler(
             IpAddress = request.IpAddress,
             UserAgent = request.UserAgent,
             SignatureHash = signature.Hash,
-            UserId = userId
+            UserId = userId,
+            // DG-LOAN-06: F4.2 audit fields.
+            DeviceId = maskedDeviceId,
+            SharedWithBankIds = bankIds
         };
 
         db.Consents.Add(consent);
         await db.SaveChangesAsync(cancellationToken);
         return new RecordConsentResponse(consent.Id, signedAt);
+    }
+
+    /// <summary>
+    /// DG-LOAN-06: Masks a device id to first-8 + "..." + last-4 characters for DPDP storage.
+    /// Returns null when deviceId is null/empty. Returns the raw value when &lt;= 12 chars
+    /// (no meaningful masking possible). Prevents full device fingerprints from being stored
+    /// in plaintext while preserving enough uniqueness for audit correlation.
+    /// </summary>
+    private static string? MaskDeviceId(string? deviceId)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId)) return null;
+        var raw = deviceId.Trim();
+        if (raw.Length <= 12) return raw;
+        return $"{raw[..8]}...{raw[^4..]}";
     }
 }

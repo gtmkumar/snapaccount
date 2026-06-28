@@ -50,18 +50,28 @@ public sealed class EligibilityEngine(
 
         score = Math.Min(score, 100m);
 
-        // Find qualifying products
+        // Find qualifying products and compute unmet-criteria for non-qualifying ones.
+        // DG-LOAN-07: produce per-product remediation guidance so the UI can tell users
+        // "which loans are available and what's needed for the others".
         var query = db.LoanProducts.Where(p => p.IsActive && p.DeletedAt == null);
         if (loanProductId.HasValue)
             query = query.Where(p => p.Id == loanProductId.Value);
 
         var products = await query.ToListAsync(ct);
-        var qualifying = products
-            .Where(p => MeetsProductCriteria(p, score))
-            .Select(p => p.Id)
-            .ToList();
 
-        return EligibilityScore.Create(score, reasons, qualifying);
+        var qualifying = new List<Guid>();
+        var unmetByProduct = new Dictionary<Guid, IReadOnlyList<string>>();
+
+        foreach (var product in products)
+        {
+            var (meets, productUnmet) = EvaluateProduct(product, score, reasons);
+            if (meets)
+                qualifying.Add(product.Id);
+            else
+                unmetByProduct[product.Id] = productUnmet;
+        }
+
+        return EligibilityScore.Create(score, reasons, qualifying, unmetByProduct);
     }
 
     private async Task<decimal> ComputeGstComplianceScoreAsync(
@@ -119,20 +129,67 @@ public sealed class EligibilityEngine(
         return 15m;
     }
 
-    private static bool MeetsProductCriteria(LoanProduct product, decimal score)
+    /// <summary>
+    /// DG-LOAN-07: Evaluates whether the applicant meets a product's criteria and,
+    /// if not, produces human-readable unmet-criteria strings for UI remediation guidance.
+    /// </summary>
+    /// <param name="product">Loan product to evaluate.</param>
+    /// <param name="score">Computed eligibility score (0–100).</param>
+    /// <param name="scoreReasons">Overall score-component reasons (for context in guidance).</param>
+    /// <returns>
+    /// (meets: true if eligible, unmetCriteria: list of remediation strings when not meets).
+    /// </returns>
+    private static (bool meets, IReadOnlyList<string> unmetCriteria) EvaluateProduct(
+        LoanProduct product, decimal score, IReadOnlyList<string> scoreReasons)
     {
-        // Parse minimum score from eligibility_criteria_jsonb if present
-        if (product.EligibilityCriteriaJsonb == null)
-            return score >= 50m;
+        var unmet = new List<string>();
+        var defaultMinScore = 50m;
 
-        try
+        // Determine minimum score required for this product.
+        var minScore = defaultMinScore;
+        if (product.EligibilityCriteriaJsonb != null)
         {
-            if (product.EligibilityCriteriaJsonb.RootElement
-                .TryGetProperty("minScore", out var minScore))
-                return score >= minScore.GetDecimal();
+            try
+            {
+                if (product.EligibilityCriteriaJsonb.RootElement
+                    .TryGetProperty("minScore", out var minScoreProp))
+                    minScore = minScoreProp.GetDecimal();
+            }
+            catch { /* fall through with default */ }
         }
-        catch { /* fall through */ }
 
-        return score >= 50m;
+        if (score < minScore)
+        {
+            var gap = Math.Round(minScore - score, 1);
+            unmet.Add(
+                $"Current score {score:F0}/100 is below the {product.ProductName ?? "product"} " +
+                $"minimum of {minScore:F0}. Improve your score by {gap:F0} points to qualify.");
+
+            // Provide targeted guidance from score-component reasons if any mention low sub-scores.
+            // Look for reasons that indicate missing data (i.e., defaults were used).
+            foreach (var reason in scoreReasons)
+            {
+                if (reason.Contains("unavailable", StringComparison.OrdinalIgnoreCase)
+                    || reason.Contains("default", StringComparison.OrdinalIgnoreCase))
+                {
+                    unmet.Add($"Improve: {reason}");
+                }
+            }
+
+            // GST-specific guidance.
+            if (scoreReasons.Any(r => r.Contains("3B compliance", StringComparison.OrdinalIgnoreCase)
+                && r.Contains("/12", StringComparison.OrdinalIgnoreCase)))
+            {
+                var gstReason = scoreReasons.FirstOrDefault(r =>
+                    r.Contains("3B compliance", StringComparison.OrdinalIgnoreCase));
+                if (gstReason?.Contains("/12 months filed", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    // Extract filed count from reason string "GST 3B compliance: X/12 months filed → Y points"
+                    unmet.Add("File outstanding GSTR-3B returns to increase your GST compliance score (max 30 points).");
+                }
+            }
+        }
+
+        return (unmet.Count == 0, unmet);
     }
 }

@@ -1,12 +1,18 @@
 using GstService.Application.GstReturns.Queries.GetFilingQueue;
 using GstService.Application.EInvoices.Commands.GenerateEInvoice;
+using GstService.Application.EInvoices.Commands.SetGstOrgProfile;
+using GstService.Application.EInvoices.Queries.GetGstOrgProfile;
 using GstService.Application.EWayBills.Commands.CreateEWayBill;
 using GstService.Application.GstReturns.Commands.ApproveReturn;
 using GstService.Application.GstReturns.Commands.CreateGstReturn;
 using GstService.Application.GstReturns.Commands.FileNilReturn;
 using GstService.Application.GstReturns.Commands.FileReturn;
+using GstService.Application.GstReturns.Commands.RequestRevision;
 using GstService.Application.GstReturns.Commands.SubmitForApproval;
+using GstService.Application.GstReturns.Commands.UpdateReturnArn;
 using GstService.Application.GstReturns.Queries.GetGstReturn;
+using GstService.Application.GstReturns.Queries.GetGstReturnAudit;
+using GstService.Application.GstReturns.Queries.GetLateFeePreview;
 using GstService.Application.GstReturns.Queries.ListGstReturns;
 using GstService.Application.HsnSac.Queries.SearchHsnSac;
 using GstService.Application.Invoices.Commands.AddReturnInvoice;
@@ -62,6 +68,24 @@ public sealed class Gst : EndpointGroupBase
 
         groupBuilder.MapPost("/returns/{id:guid}/file", FileReturn)
             .RequireAuthorization().RequireRateLimiting("standard");
+
+        // DG-GST-02: PATCH /gst/returns/{id}/arn — capture / correct the ARN after filing
+        groupBuilder.MapPatch("/returns/{id:guid}/arn", UpdateReturnArn)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("UpdateGstReturnArn")
+            .WithSummary("Capture or correct the ARN for a filed GST return.");
+
+        // DG-GST-02: GET /gst/returns/{id}/audit — paginated state-transition audit trail
+        groupBuilder.MapGet("/returns/{id:guid}/audit", GetGstReturnAudit)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetGstReturnAudit")
+            .WithSummary("Paginated audit trail of state transitions and ARN edits for a GST return.");
+
+        // POST /gst/returns/{id}/revision — flag a return for revision (CA/Admin only)
+        groupBuilder.MapPost("/returns/{id:guid}/revision", RequestRevision)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("RequestGstReturnRevision")
+            .WithSummary("Flags a pending/approved GST return as needing revision.");
 
         // Phase 6B: nil-return filing
         groupBuilder.MapPost("/returns/nil", FileNilReturn)
@@ -127,6 +151,23 @@ public sealed class Gst : EndpointGroupBase
         // SEC-043: stricter 30 req/min to limit IRP API cost
         groupBuilder.MapPost("/e-invoices", GenerateEInvoice)
             .RequireAuthorization().RequireRateLimiting("gst-write-strict");
+
+        // DG-GST-05: org profile (annual turnover → e-invoice threshold gate)
+        groupBuilder.MapGet("/org-profile/{organizationId:guid}", GetGstOrgProfile)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetGstOrgProfile")
+            .WithSummary("Get the GST org profile (annual turnover + e-invoice flag) for an organisation.");
+
+        groupBuilder.MapPut("/org-profile/{organizationId:guid}", SetGstOrgProfile)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("SetGstOrgProfile")
+            .WithSummary("Create or update the GST org profile (annual turnover + e-invoice flag).");
+
+        // DG-GST-04: late-fee preview before filing
+        groupBuilder.MapGet("/returns/{id:guid}/late-fee-preview", GetLateFeePreview)
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .WithName("GetGstReturnLateFeePreview")
+            .WithSummary("Preview late fee and interest for a GST return if filed today (or at a given date).");
 
         // ── E-Way Bills (Phase 6B) ────────────────────────────────────────────
         groupBuilder.MapPost("/e-way-bills", CreateEWayBill)
@@ -234,7 +275,11 @@ public sealed class Gst : EndpointGroupBase
     private static async Task<IResult> FileReturn(Guid id, FileReturnRequest req, ISender sender)
     {
         var result = await sender.Send(new FileReturnCommand(id, req.ArnNumber));
-        return result.IsSuccess ? Results.NoContent() : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
+        // DG-GST-04: Return 200 with penalty summary instead of 204 so the caller
+        // can surface any late fee / interest to the user immediately after filing.
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
     }
 
     private static async Task<IResult> FileNilReturn(FileNilReturnRequest req, ISender sender)
@@ -399,7 +444,32 @@ public sealed class Gst : EndpointGroupBase
         var result = await sender.Send(new GenerateEInvoiceCommand(req.GstInvoiceId));
         return result.IsSuccess
             ? Results.Created($"/gst/e-invoices/{result.Value.IrnNumber}", result.Value)
-            : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
+            : result.Error.ToHttpResult();
+    }
+
+    // DG-GST-05: org profile endpoints
+
+    private static async Task<IResult> GetGstOrgProfile(Guid organizationId, ISender sender)
+    {
+        var result = await sender.Send(new GetGstOrgProfileQuery(organizationId));
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    private static async Task<IResult> SetGstOrgProfile(
+        Guid organizationId, SetGstOrgProfileRequest req, ISender sender)
+    {
+        var result = await sender.Send(new SetGstOrgProfileCommand(
+            organizationId, req.AnnualTurnoverCr, req.EInvoiceEnabled, req.EffectiveFromFy));
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    // DG-GST-04: late-fee preview endpoint
+
+    private static async Task<IResult> GetLateFeePreview(
+        Guid id, ISender sender, DateTime? asOf = null)
+    {
+        var result = await sender.Send(new GetLateFeePreviewQuery(id, asOf));
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
     }
 
     private static async Task<IResult> CreateEWayBill(CreateEWayBillRequest req, ISender sender)
@@ -419,6 +489,27 @@ public sealed class Gst : EndpointGroupBase
     {
         var result = await sender.Send(new SearchHsnSacQuery(q, codeType, limit));
         return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
+    }
+
+    // ── DG-GST-02: ARN capture + audit trail ──────────────────────────────────
+
+    private static async Task<IResult> UpdateReturnArn(Guid id, UpdateReturnArnRequest req, ISender sender)
+    {
+        var result = await sender.Send(new UpdateReturnArnCommand(id, req.Arn));
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetGstReturnAudit(
+        Guid id, ISender sender, int page = 1, int pageSize = 20)
+    {
+        var result = await sender.Send(new GetGstReturnAuditQuery(id, page, pageSize));
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error.ToHttpResult();
+    }
+
+    private static async Task<IResult> RequestRevision(Guid id, RequestRevisionRequest req, ISender sender)
+    {
+        var result = await sender.Send(new RequestRevisionCommand(id, req.Note));
+        return result.IsSuccess ? Results.NoContent() : result.Error.ToHttpResult();
     }
 }
 
@@ -469,3 +560,13 @@ internal record GenerateEInvoiceRequest(Guid GstInvoiceId);
 internal record CreateEWayBillRequest(
     Guid OrganizationId, Guid? GstInvoiceId, string SupplyType, decimal TotalValue,
     string? FromPlace = null, string? ToPlace = null, string? VehicleNumber = null);
+
+// DG-GST-02: ARN capture + revision request DTOs
+internal record UpdateReturnArnRequest(string Arn);
+internal record RequestRevisionRequest(string Note);
+
+// DG-GST-05: org profile upsert request DTO
+internal record SetGstOrgProfileRequest(
+    decimal? AnnualTurnoverCr,
+    bool EInvoiceEnabled = false,
+    string? EffectiveFromFy = null);

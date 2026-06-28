@@ -149,13 +149,17 @@ public sealed class GetUserDetailQueryHandler(IAuthDbContext db, IPanEncryptionS
         var deniedOverrideIds = overrideRows.Where(x => !x.IsAllowed).Select(x => x.PermissionId).Distinct().ToList();
 
         // Primary organization (user's first owned org if any).
-        var business = await db.Organizations
+        // SEC-013 / DG-SEC-02: org PAN is now AES-encrypted at rest — mask it before returning.
+        var orgRow = await db.Organizations
             .Where(o => o.OwnerUserId == request.UserId && o.DeletedAt == null)
             .OrderBy(o => o.CreatedAt)
-            .Select(o => new UserBusinessProfileDto(
-                o.Id, o.BusinessName, o.Gstin, o.PanNumber,
-                o.IndustryType, o.AnnualTurnoverInr, o.State))
+            .Select(o => new { o.Id, o.BusinessName, o.Gstin, o.PanNumber, o.IndustryType, o.AnnualTurnoverInr, o.State })
             .FirstOrDefaultAsync(ct);
+
+        var business = orgRow is null ? null : new UserBusinessProfileDto(
+            orgRow.Id, orgRow.BusinessName, orgRow.Gstin,
+            MaskPan(orgRow.PanNumber),
+            orgRow.IndustryType, orgRow.AnnualTurnoverInr, orgRow.State);
 
         return new UserDetailDto(
             user.Id,

@@ -1,4 +1,5 @@
 using FluentValidation;
+using GstService.Application.Common.Interfaces;
 using GstService.Application.Interfaces;
 using GstService.Domain.Entities;
 using SnapAccount.Shared.Application;
@@ -57,8 +58,12 @@ public sealed class CreateGstReturnCommandValidator : AbstractValidator<CreateGs
 /// <summary>
 /// Creates a GST return draft after checking for duplicates.
 /// GST return status starts as DRAFT; it transitions through SUBMITTED → FILED.
+/// DG-GST-02: appends a CREATED audit row so the audit trail starts from creation.
 /// </summary>
-public sealed class CreateGstReturnCommandHandler(IGstReturnRepository repository)
+public sealed class CreateGstReturnCommandHandler(
+    IGstReturnRepository repository,
+    IGstDbContext dbContext,
+    ICurrentUser currentUser)
     : ICommandHandler<CreateGstReturnCommand, CreateGstReturnResponse>
 {
     /// <inheritdoc />
@@ -88,6 +93,19 @@ public sealed class CreateGstReturnCommandHandler(IGstReturnRepository repositor
         };
 
         var saved = await repository.AddAsync(gstReturn, cancellationToken);
+
+        // DG-GST-02: append audit row for the CREATED event
+        var audit = GstReturnAudit.RecordTransition(
+            gstReturnId: saved.Id,
+            eventType: "CREATED",
+            actorUserId: currentUser.UserId,
+            actorEmail: currentUser.Email ?? "unknown",
+            previousStatus: null,
+            detail: $"{request.ReturnType} {request.FinancialYear}");
+
+        dbContext.GstReturnAudits.Add(audit);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
         return new CreateGstReturnResponse(saved.Id, saved.Status);
     }
 }

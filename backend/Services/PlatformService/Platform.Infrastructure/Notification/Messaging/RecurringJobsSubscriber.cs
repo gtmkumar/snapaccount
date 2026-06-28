@@ -91,15 +91,36 @@ public sealed class RecurringJobsSubscriber(
 
     private async Task DispatchJobAsync(RecurringJobPayload payload, CancellationToken ct)
     {
-        // Map job type → notification event code. The SendNotificationCommand fan-out
-        // pipeline resolves the actual user list and template per event code.
-        // For recurring jobs, UserId is Guid.Empty (broadcast / scheduled sweep).
+        // Map job type → notification event code (must match NotificationEventCatalog uppercase codes).
+        // DG-NOTIF-03: prior mapping used dotted-lowercase codes that matched nothing in the catalog.
+        //
+        // DG-GST-03 / DG-ITR-03 FIX: sweep-only job types (GST_DEADLINE_CHECK,
+        // ITR_DEADLINE_REMINDERS) are handled by dedicated module-specific Pub/Sub subscribers
+        // (GstDeadlineEventsSubscriber, ItrDeadlineEventsSubscriber) that resolve real member
+        // UserIds from auth.org_member.  Attempting to dispatch here with Guid.Empty fails
+        // SendNotificationCommandValidator (UserId.NotEmpty rule) and produces no notifications.
+        // These job types are therefore acknowledged without attempting a direct dispatch.
+        // Only job types that carry a real TargetUserId (ITR_REFUND_POLLING, SUBSCRIPTION_RENEWAL_CHECK)
+        // are dispatched via SendNotificationCommand from this subscriber.
+        var sweepOnlyJobTypes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "GST_DEADLINE_CHECK",    // handled by GstDeadlineEventsSubscriber
+            "ITR_DEADLINE_REMINDERS" // handled by ItrDeadlineEventsSubscriber
+        };
+
+        if (sweepOnlyJobTypes.Contains(payload.JobType))
+        {
+            logger.LogInformation(
+                "RecurringJob {JobType}: sweep-only job — per-user dispatch is handled by " +
+                "the dedicated module Pub/Sub subscriber. Acknowledging without local dispatch.",
+                payload.JobType);
+            return;
+        }
+
         var eventCode = payload.JobType switch
         {
-            "GST_DEADLINE_CHECK" => "gst.deadline.reminder",
-            "ITR_DEADLINE_REMINDERS" => "itr.deadline.reminder",
-            "ITR_REFUND_POLLING" => "itr.refund.status.update",
-            "SUBSCRIPTION_RENEWAL_CHECK" => "subscription.renewal.reminder",
+            "ITR_REFUND_POLLING" => "ITR_REFUND_CREDITED",
+            "SUBSCRIPTION_RENEWAL_CHECK" => "SUB_RENEWAL_3_DAYS",
             _ => null
         };
 
@@ -109,13 +130,20 @@ public sealed class RecurringJobsSubscriber(
             return;
         }
 
-        // Broadcast path: send a marker notification with a placeholder UserId.
-        // The actual user resolution (e.g., all users with GST due) is handled
-        // by the service-specific Application layer — this subscriber only triggers the pipeline.
+        // For job types that DO carry a TargetUserId, dispatch the notification directly.
+        var targetUserId = payload.TargetUserId;
+        if (!targetUserId.HasValue || targetUserId.Value == Guid.Empty)
+        {
+            logger.LogWarning(
+                "RecurringJob {JobType}: no TargetUserId — skipping dispatch (event requires a real user ID).",
+                payload.JobType);
+            return;
+        }
+
         var variables = payload.Variables ?? new Dictionary<string, string>();
 
         var command = new SendNotificationCommand(
-            UserId: payload.TargetUserId ?? Guid.Empty,
+            UserId: targetUserId.Value,
             EventCode: eventCode,
             Locale: "en",
             Variables: variables.AsReadOnly());

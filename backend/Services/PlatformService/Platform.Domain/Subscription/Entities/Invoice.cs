@@ -80,6 +80,41 @@ public class Invoice : BaseAuditableEntity
     /// <summary>Marks invoice as failed.</summary>
     public void MarkFailed() => Status = "FAILED";
 
+    /// <summary>
+    /// DG-SUB-11: Marks invoice as refunded.
+    /// Can only be applied to a PAID invoice.
+    /// </summary>
+    /// <param name="refundReason">Human-readable reason for the refund.</param>
+    public void MarkRefunded(string? refundReason = null)
+    {
+        if (Status != "PAID")
+            throw new InvalidOperationException($"Only PAID invoices can be refunded. Current status: {Status}.");
+        Status = "REFUNDED";
+        RefundedAt = DateTime.UtcNow;
+        RefundReason = refundReason;
+    }
+
+    /// <summary>
+    /// DG-SUB-11: Voids a PENDING invoice (e.g. when subscription is cancelled before payment).
+    /// Cannot void a PAID or already-REFUNDED invoice.
+    /// </summary>
+    public void Void()
+    {
+        if (Status is "PAID" or "REFUNDED")
+            throw new InvalidOperationException($"A {Status} invoice cannot be voided.");
+        Status = "VOID";
+        VoidedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>DG-SUB-11: Timestamp when invoice was refunded.</summary>
+    public DateTime? RefundedAt { get; private set; }
+
+    /// <summary>DG-SUB-11: Human-readable reason for the refund.</summary>
+    public string? RefundReason { get; private set; }
+
+    /// <summary>DG-SUB-11: Timestamp when invoice was voided.</summary>
+    public DateTime? VoidedAt { get; private set; }
+
     /// <summary>Sets the GCS URI for the PDF invoice.</summary>
     public void SetPdfGcsUri(string gcsUri) => PdfGcsUri = gcsUri;
 

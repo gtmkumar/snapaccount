@@ -129,9 +129,20 @@ public sealed class GenerateReportCommandHandler(
 
         await db.SaveChangesAsync(cancellationToken);
 
+        // DG-DASH-02: map status to frontend enum casing (ReportStatusSchema):
+        //   Queued → QUEUED, Processing → GENERATING, Completed → COMPLETE, Failed → FAILED
+        var statusStr = job.Status switch
+        {
+            ReportJobStatus.Queued     => "QUEUED",
+            ReportJobStatus.Processing => "GENERATING",
+            ReportJobStatus.Completed  => "COMPLETE",
+            ReportJobStatus.Failed     => "FAILED",
+            _                          => job.Status.ToString().ToUpperInvariant()
+        };
+
         return new GenerateReportResponse(
             job.Id,
-            job.Status.ToString(),
+            statusStr,
             job.GcsUri,
             job.Sha256HashHex,
             job.PageCount);

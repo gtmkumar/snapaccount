@@ -6,6 +6,11 @@ namespace GstService.Application.GstReturns.Queries.GetGstReturn;
 
 public record GetGstReturnQuery(Guid GstReturnId) : IQuery<GstReturnDto>;
 
+/// <summary>
+/// Read-side DTO for a GST return.
+/// DG-GST-04: <see cref="LateFeeAmount"/> and <see cref="InterestAmount"/> are now populated
+/// from the domain entity; they are zero when the return was filed on time.
+/// </summary>
 public record GstReturnDto(
     Guid Id,
     string ReturnType,
@@ -19,6 +24,10 @@ public record GstReturnDto(
     decimal TotalSgst,
     decimal TotalCess,
     decimal NetTaxPayable,
+    /// <summary>DG-GST-04: Late fee in INR (0 when filed on time or before computation).</summary>
+    decimal LateFeeAmount,
+    /// <summary>DG-GST-04: Interest on net tax payable in INR (0 when filed on time).</summary>
+    decimal InterestAmount,
     DateOnly? FilingDeadline,
     string? ArnNumber,
     DateTime? FiledAt);
@@ -55,6 +64,8 @@ public sealed class GetGstReturnQueryHandler(IGstReturnRepository repository)
             gstReturn.TotalSgst,
             gstReturn.TotalCess,
             gstReturn.NetTaxPayable,
+            gstReturn.LateFeeAmount,
+            gstReturn.InterestAmount,
             gstReturn.FilingDeadline,
             gstReturn.ArnNumber,
             gstReturn.FiledAt);

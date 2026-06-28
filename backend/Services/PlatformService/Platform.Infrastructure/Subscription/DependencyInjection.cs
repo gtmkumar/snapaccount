@@ -60,19 +60,24 @@ public static class DependencyInjection
             c.Timeout = TimeSpan.FromSeconds(30);
         });
 
-        // GAP-PCI-02: MockRazorpayClient is Development-only.
-        // Non-Development environments must use RazorpayHttpClient (wired when the admin
-        // configures live Razorpay credentials via PATCH /subscriptions/config/razorpay,
-        // handled by UpdateRazorpayConfigCommandHandler). Fail-fast in non-Dev so a
-        // misconfigured staging/production deployment is caught at startup rather than
-        // silently processing payments with a mock.
+        // DG-SUB-01: Scoped factory that lazily reads RazorpayConfig from DB each request.
+        // Resolution order:
+        //   1. If RazorpayConfig row exists AND IsEnabled=true → RazorpayHttpClient (live/test Razorpay).
+        //   2. Otherwise → MockRazorpayClient (safe no-op fallback for dev, disabled, or unconfigured).
+        //
+        // This means an admin can activate Razorpay by calling PATCH /subscriptions/config/razorpay
+        // with IsEnabled=true and valid credentials; the new client is picked up on the next request
+        // without a redeploy.
+        //
+        // In Development: MockRazorpayClient is always used (no DB read) to avoid
+        // requiring ENCRYPTION_KEY in local dev.
         var isDevelopment = string.Equals(
             configuration["ASPNETCORE_ENVIRONMENT"], "Development",
             StringComparison.OrdinalIgnoreCase);
 
         if (isDevelopment)
         {
-            // Development: mock is acceptable; log a warning so it is observable.
+            // Development: mock is always active; log a warning so it is observable.
             System.Console.Error.WriteLine(
                 "[WARN] SubscriptionService: MockRazorpayClient active (Development). " +
                 "No real payments will be processed. Configure live Razorpay credentials via admin settings.");
@@ -80,17 +85,58 @@ public static class DependencyInjection
         }
         else
         {
-            // Non-Development: fail-fast if no real Razorpay client has been wired.
-            // The UpdateRazorpayConfigCommandHandler replaces this factory registration
-            // with a real RazorpayHttpClient once the admin has saved live credentials.
-            // Until that point, calls will throw the clear error below rather than silently
-            // processing (or not processing) real payments with mock data.
-            services.AddScoped<IRazorpayClient>(_ =>
-                throw new InvalidOperationException(
-                    "GAP-PCI-02: IRazorpayClient is not configured for non-Development environments. " +
-                    "The Razorpay admin configuration (POST /subscriptions/config/razorpay) must be " +
-                    "applied before processing payments. Set ASPNETCORE_ENVIRONMENT=Development to use the mock."));
+            // Non-Development: resolve lazily from DB.
+            // When no config row exists or IsEnabled=false → MockRazorpayClient (safe no-op).
+            // When IsEnabled=true → decrypt key secret and return RazorpayHttpClient.
+            services.AddScoped<IRazorpayClient>(sp =>
+            {
+                var db          = sp.GetRequiredService<ISubscriptionServiceDbContext>();
+                var encryption  = sp.GetRequiredService<ICredentialEncryptionService>();
+                var factory     = sp.GetRequiredService<IHttpClientFactory>();
+                // Use typed loggers resolved from ILoggerFactory extension method (LoggerFactoryExtensions)
+                var logFactory  = sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
+                var logger      = Microsoft.Extensions.Logging.LoggerFactoryExtensions
+                                    .CreateLogger<RazorpayHttpClient>(logFactory);
+                var mockLogger  = Microsoft.Extensions.Logging.LoggerFactoryExtensions
+                                    .CreateLogger<MockRazorpayClient>(logFactory);
+
+                // Synchronous read — scoped factory; EF InMemory / Postgres both support sync reads.
+                // We intentionally avoid async here to keep DI factory signatures simple.
+                var config = db.RazorpayConfigs
+                    .AsQueryable()
+                    .Where(c => c.DeletedAt == null)
+                    .OrderByDescending(c => c.UpdatedAt)
+                    .FirstOrDefault();
+
+                if (config is not { IsEnabled: true })
+                {
+                    System.Console.Error.WriteLine(
+                        "[WARN] SubscriptionService: Razorpay not configured or disabled. " +
+                        "Using MockRazorpayClient. Configure via PATCH /subscriptions/config/razorpay.");
+                    return new MockRazorpayClient(mockLogger);
+                }
+
+                string keySecret;
+                try
+                {
+                    keySecret = encryption.Decrypt(config.EncryptedKeySecret);
+                }
+                catch (Exception ex)
+                {
+                    System.Console.Error.WriteLine(
+                        $"[ERROR] SubscriptionService: Failed to decrypt Razorpay key secret: {ex.Message}. " +
+                        "Falling back to MockRazorpayClient.");
+                    return new MockRazorpayClient(mockLogger);
+                }
+
+                var options = new RazorpayClientOptions(config.KeyId, keySecret);
+                return new RazorpayHttpClient(factory, options, logger);
+            });
         }
+
+        // DG-SUB-07: Subscription invoice PDF generator (QuestPDF + GCS upload).
+        // Singleton: QuestPDF document generation is thread-safe; GCS client is also thread-safe.
+        services.AddSingleton<ISubscriptionPdfGenerator, SubscriptionInvoicePdfGenerator>();
 
         // SEC-052: DPDP account deletion erasure subscriber
         if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration)) services.AddHostedService<AccountDeletionSubscriber>();

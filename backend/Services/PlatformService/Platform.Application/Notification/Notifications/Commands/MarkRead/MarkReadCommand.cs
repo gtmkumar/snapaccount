@@ -6,7 +6,12 @@ using SnapAccount.Shared.Domain;
 
 namespace NotificationService.Application.Notifications.Commands.MarkRead;
 
-/// <summary>Marks an in-app notification log entry as read.</summary>
+/// <summary>
+/// Marks a single in-app inbox notification as read.
+/// DG-NOTIF-04: now operates on <c>InboxNotifications</c> (notification.notification)
+/// instead of the stale NotificationLog query which found nothing.
+/// No special permission required — any authenticated user may mark their own inbox.
+/// </summary>
 public record MarkReadCommand(Guid NotificationId, Guid UserId) : ICommand;
 
 /// <summary>Validates the mark-read command.</summary>
@@ -26,16 +31,18 @@ public sealed class MarkReadCommandHandler(INotificationDbContext dbContext)
     /// <inheritdoc />
     public async Task<Result> Handle(MarkReadCommand request, CancellationToken cancellationToken)
     {
-        var entry = await dbContext.NotificationLog
-            .FirstOrDefaultAsync(e => e.Id == request.NotificationId && e.UserId == request.UserId, cancellationToken);
+        var entry = await dbContext.InboxNotifications
+            .FirstOrDefaultAsync(
+                n => n.Id == request.NotificationId
+                  && n.UserId == request.UserId
+                  && n.DeletedAt == null,
+                cancellationToken);
 
         if (entry is null)
-            return Result.Failure(Error.NotFound("Notification", request.NotificationId));
+            return Result.Failure(Error.NotFound("Notification.NotFound",
+                $"Inbox notification {request.NotificationId} not found for this user."));
 
-        // In-app read marking — the log entry serves as the inbox item
-        // Status is immutable (sent/failed); we don't mutate it here.
-        // A future InAppInboxItem entity would have a ReadAt timestamp.
-        // For Phase 6A, returning success is correct — frontend optimistically marks as read.
+        entry.MarkAsRead();
         await dbContext.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

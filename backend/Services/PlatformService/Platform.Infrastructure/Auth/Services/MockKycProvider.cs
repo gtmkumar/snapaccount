@@ -31,6 +31,21 @@ public sealed class MockKycProvider(ILogger<MockKycProvider> logger) : IKycProvi
     }
 
     /// <summary>
+    /// Mock GSTIN verification — returns verified with placeholder business-profile fields.
+    /// DG-AUTH-04: allows BusinessProfileWizardScreen auto-fill to work in dev without real KYC credentials.
+    /// </summary>
+    public Task<GstinVerifyResult> VerifyGstinAsync(string gstin, CancellationToken ct = default)
+    {
+        logger.LogInformation("MockKycProvider: GSTIN {Gstin} → VERIFIED (mock).", gstin);
+        return Task.FromResult(new GstinVerifyResult(
+            Verified: true,
+            LegalName: $"Mock Business Pvt Ltd ({gstin[..2]})",
+            TradeName: $"Mock Trade ({gstin[..2]})",
+            PrincipalPlaceOfBusiness: "123, Mock Street, Mock City, India",
+            ProviderRef: $"MOCK-GSTIN-{gstin}"));
+    }
+
+    /// <summary>
     /// Generates a random 6-digit dev OTP and logs it. Returns a UUID transaction id.
     /// In production this would call UIDAI's OTP dispatch API.
     /// </summary>

@@ -1,12 +1,15 @@
 using ChatService.Application.Appointments.Commands.BookAppointment;
 using ChatService.Application.Appointments.Commands.CancelAppointment;
 using ChatService.Application.Appointments.Commands.CancelByCa;
+using ChatService.Application.Appointments.Commands.CompleteAppointment;
 using ChatService.Application.Appointments.Commands.CreateAvailabilityRule;
 using ChatService.Application.Appointments.Commands.CreateSlot;
 using ChatService.Application.Appointments.Commands.DeleteAvailabilityRule;
 using ChatService.Application.Appointments.Commands.GenerateSlotsFromRules;
+using ChatService.Application.Appointments.Commands.MarkNoShow;
 using ChatService.Application.Appointments.Commands.RateAppointment;
 using ChatService.Application.Appointments.Commands.RescheduleAppointment;
+using ChatService.Application.Appointments.Commands.WriteCaSummary;
 using ChatService.Application.Appointments.Queries.GetAppointment;
 using ChatService.Application.Appointments.Queries.GetSlotDayMap;
 using ChatService.Application.Appointments.Queries.ListAppointments;
@@ -172,12 +175,44 @@ public sealed class Appointments : EndpointGroupBase
             .WithName("CancelAppointment")
             .WithSummary("Cancel an appointment (≥2h before slot start rule enforced).");
 
+        /// <summary>POST /appointments/{id}/complete — CA marks an appointment completed.</summary>
+        g.MapPost("/{id:guid}/complete", CompleteAppointment)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("CompleteAppointment")
+            .WithSummary("CA: mark a CONFIRMED appointment as COMPLETED. Unblocks the rating path.")
+            .WithDescription(
+                "DG-CHAT-02. Requires chat.slots.manage. IDOR-scoped to the CA's own appointments. " +
+                "Also run automatically by the 'auto-complete-appointments' Hangfire job every 5 minutes " +
+                "for appointments whose slot end time has passed.");
+
+        /// <summary>POST /appointments/{id}/no-show — CA marks an appointment as no-show.</summary>
+        g.MapPost("/{id:guid}/no-show", MarkNoShow)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("MarkNoShow")
+            .WithSummary("CA: mark a CONFIRMED appointment as NO_SHOW when the user does not attend.")
+            .WithDescription(
+                "DG-CHAT-02. Requires chat.slots.manage. IDOR-scoped to the CA's own appointments. " +
+                "Releases the slot back to available.");
+
         /// <summary>POST /appointments/{id}/rate — Rate a completed appointment.</summary>
         g.MapPost("/{id:guid}/rate", RateAppointment)
             .RequireAuthorization()
             .RequireRateLimiting("standard")
             .WithName("RateAppointment")
             .WithSummary("Rate a completed appointment (1–5 stars). One rating per appointment; updates CA aggregate.");
+
+        /// <summary>PUT /appointments/{id}/ca-summary — CA writes (or overwrites) a post-call summary note.</summary>
+        g.MapPut("/{id:guid}/ca-summary", WriteCaSummary)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("WriteCaSummary")
+            .WithSummary("CA: write a post-call summary note on a COMPLETED appointment (DG-CHAT-05).")
+            .WithDescription(
+                "Requires chat.slots.manage. IDOR-scoped to the CA's own appointments. " +
+                "Only allowed when Status == COMPLETED. The note (max 4000 chars) is visible " +
+                "to the user on the appointment detail screen (GET /appointments/{id}).");
 
         // ── Message bookmarks (GAP-043) ────────────────────────────────────────
 
@@ -317,10 +352,29 @@ public sealed class Appointments : EndpointGroupBase
         return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToHttpResult();
     }
 
+    private static async Task<IResult> CompleteAppointment(Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new CompleteAppointmentCommand(id, SkipOwnerCheck: false), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToHttpResult();
+    }
+
+    private static async Task<IResult> MarkNoShow(Guid id, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new MarkNoShowCommand(id), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToHttpResult();
+    }
+
     private static async Task<IResult> RateAppointment(
         Guid id, RateAppointmentRequest req, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(new RateAppointmentCommand(id, req.Stars, req.Comment), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToHttpResult();
+    }
+
+    private static async Task<IResult> WriteCaSummary(
+        Guid id, WriteCaSummaryRequest req, ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new WriteCaSummaryCommand(id, req.SummaryNote), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToHttpResult();
     }
 
@@ -359,6 +413,12 @@ public record RateAppointmentRequest(int Stars, string? Comment = null);
 
 /// <summary>Request body for toggling a message bookmark.</summary>
 public record ToggleBookmarkRequest(Guid MessageId, string? Note = null);
+
+/// <summary>
+/// Request body for the CA writing a post-call summary note (DG-CHAT-05).
+/// Max 4000 characters; validated by WriteCaSummaryCommandValidator.
+/// </summary>
+public record WriteCaSummaryRequest(string SummaryNote);
 
 // ── Wave 7A addendum request DTOs ────────────────────────────────────────────
 

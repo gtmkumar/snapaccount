@@ -8,7 +8,9 @@
  *   - Chip appears after SLOW_DURATION_MS (5000ms) of sustained slow speed
  *   - Chip hides on recovery (clearTimeout of pending slow timer)
  *   - Chip shows immediately on offline (isInternetReachable = false)
- *   - Chip text: 'net.quality.slow' for slow, 'net.quality.offline' for offline
+ *   - Chip renders the LOCALIZED copy ('Slow connection' / 'Offline') from the
+ *     real bundle — DG-MOBUX-01 regression guard: lookups must carry the
+ *     'mobile.' namespace prefix or the raw key string would render instead.
  */
 
 import React from 'react';
@@ -149,20 +151,48 @@ describe('NetworkQualityChip', () => {
     });
   });
 
-  it('offline chip has accessibility label containing net.quality.offline', async () => {
+  // ── DG-MOBUX-01: localized copy renders (not the raw i18n key) ─────────────
+
+  it('offline chip renders the localized "Offline" label from the real bundle', async () => {
     setupNetInfo({
       isInternetReachable: false,
       type: 'none',
       details: null,
     });
 
-    const { queryByLabelText } = render(<NetworkQualityChip testID="chip" />);
+    const { queryByText, queryByLabelText } = render(
+      <NetworkQualityChip testID="chip" />,
+    );
 
     await waitFor(() => {
-      // The Pressable accessibilityLabel references quality label
-      const el = queryByLabelText(/net\.quality\.offline/);
-      expect(el).not.toBeNull();
+      // The visible chip text must be the localized string, NOT 'net.quality.offline'.
+      expect(queryByText('Offline')).not.toBeNull();
+      expect(queryByText('net.quality.offline')).toBeNull();
+      // Accessibility label interpolates the localized label.
+      expect(queryByLabelText(/Offline, double-tap for details/)).not.toBeNull();
     });
+  });
+
+  it('slow chip renders the localized "Slow connection" label from the real bundle', async () => {
+    jest.useFakeTimers();
+    setupNetInfo({
+      isInternetReachable: true,
+      type: 'wifi',
+      details: { downlink: 0.05 }, // slow
+    });
+
+    const { queryByText } = render(<NetworkQualityChip testID="chip" />);
+
+    act(() => {
+      jest.advanceTimersByTime(5100); // past SLOW_DURATION_MS
+    });
+
+    await waitFor(() => {
+      expect(queryByText('Slow connection')).not.toBeNull();
+      expect(queryByText('net.quality.slow')).toBeNull();
+    });
+
+    jest.useRealTimers();
   });
 
   // ── transition: slow → good ───────────────────────────────────────────────

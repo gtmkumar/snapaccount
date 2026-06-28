@@ -100,7 +100,9 @@ public sealed class DocumentDashboardStatsTests
         ((DocumentInMemoryContext)db).Documents.Add(DocWithStatus(status));
         await ((DocumentInMemoryContext)db).SaveChangesAsync(CancellationToken.None);
 
-        var handler = new GetDashboardStatsQueryHandler(db);
+        // Empty-Guid org → handler skips org-scoping (its documented cross-org path), so these
+        // tests stay focused on the terminal-status logic across all seeded docs.
+        var handler = new GetDashboardStatsQueryHandler(db, FakeCurrentUser.Make(Guid.Empty));
 
         var result = await handler.Handle(new GetDashboardStatsQuery(), CancellationToken.None);
 
@@ -126,7 +128,9 @@ public sealed class DocumentDashboardStatsTests
             DocWithStatus("REJECTED"));
         await ctx.SaveChangesAsync(CancellationToken.None);
 
-        var handler = new GetDashboardStatsQueryHandler(db);
+        // Empty-Guid org → handler skips org-scoping (its documented cross-org path), so these
+        // tests stay focused on the terminal-status logic across all seeded docs.
+        var handler = new GetDashboardStatsQueryHandler(db, FakeCurrentUser.Make(Guid.Empty));
 
         var result = await handler.Handle(new GetDashboardStatsQuery(), CancellationToken.None);
 
@@ -149,7 +153,9 @@ public sealed class DocumentDashboardStatsTests
             DocWithStatus("APPROVED"));
         await ctx.SaveChangesAsync(CancellationToken.None);
 
-        var handler = new GetDashboardStatsQueryHandler(db);
+        // Empty-Guid org → handler skips org-scoping (its documented cross-org path), so these
+        // tests stay focused on the terminal-status logic across all seeded docs.
+        var handler = new GetDashboardStatsQueryHandler(db, FakeCurrentUser.Make(Guid.Empty));
 
         var result = await handler.Handle(new GetDashboardStatsQuery(), CancellationToken.None);
 
@@ -167,7 +173,9 @@ public sealed class DocumentDashboardStatsTests
         ctx.Documents.Add(doc);
         await ctx.SaveChangesAsync(CancellationToken.None);
 
-        var handler = new GetDashboardStatsQueryHandler(db);
+        // Empty-Guid org → handler skips org-scoping (its documented cross-org path), so these
+        // tests stay focused on the terminal-status logic across all seeded docs.
+        var handler = new GetDashboardStatsQueryHandler(db, FakeCurrentUser.Make(Guid.Empty));
 
         var result = await handler.Handle(new GetDashboardStatsQuery(), CancellationToken.None);
 
