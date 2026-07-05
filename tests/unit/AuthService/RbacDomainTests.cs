@@ -986,6 +986,108 @@ public class DevLimitedManagerSeedingTests
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// 9b. Per-role E2E campaign seed accounts (LocalAuthDevSeed.RoleAccounts)
+// ────────────────────────────────────────────────────────────────────────────
+
+public class RoleAccountsSeedingTests
+{
+    // Pure-logic tests over the LocalAuthDevSeed.RoleAccounts contract — no EF/DB.
+    // They pin the exact login set the role-by-role E2E campaign relies on.
+
+    private static AuthService.Application.Common.DevSeed.LocalAuthDevSeed.DevRoleAccount[] Accounts
+        => AuthService.Application.Common.DevSeed.LocalAuthDevSeed.RoleAccounts.ToArray();
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RoleAccounts_ContainsExactlyNineLogins()
+        => Accounts.Should().HaveCount(9, "one login per admin-relevant system role");
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RoleAccounts_ShareTestPassword()
+    {
+        AuthService.Application.Common.DevSeed.LocalAuthDevSeed.SharedPassword
+            .Should().Be("Test@12345", "the docs hand testers this single password for all role logins");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RoleAccounts_EmailsAreUniqueAndLowercase()
+    {
+        var emails = Accounts.Select(a => a.Email).ToList();
+        emails.Should().OnlyHaveUniqueItems("each login must resolve to exactly one seeded user");
+        emails.Should().OnlyContain(e => e == e.ToLowerInvariant(),
+            "LoginAsync normalises to lower-invariant — a mixed-case seed email would never match");
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("ops@snapaccount.local",       "OPERATIONS_MANAGER",  true)]
+    [InlineData("support@snapaccount.local",   "SUPPORT_EXECUTIVE",   true)]
+    [InlineData("dataentry@snapaccount.local", "DATA_ENTRY_OPERATOR", true)]
+    [InlineData("bankrep@snapaccount.local",   "PARTNER_BANK_REP",    true)]
+    [InlineData("ca@snapaccount.local",        "CA",                  true)]
+    [InlineData("orgadmin@snapaccount.local",  "ORG_ADMIN",           false)]
+    [InlineData("manager2@snapaccount.local",  "MANAGER",             false)]
+    [InlineData("hr@snapaccount.local",        "HR",                  false)]
+    [InlineData("reviewer@snapaccount.local",  "REVIEWER",            false)]
+    public void RoleAccounts_MapsEmailToRoleAndAssignmentSurface(
+        string email, string roleName, bool isStaffRole)
+    {
+        var acct = Accounts.SingleOrDefault(a => a.Email == email);
+        acct.Should().NotBeNull($"'{email}' must be a seeded role login");
+        acct!.RoleName.Should().Be(roleName);
+        acct.IsStaffRole.Should().Be(isStaffRole,
+            "staff roles are assigned via auth.user_role; org roles via auth.organization_member");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RoleAccounts_StaffRolesMatchGetStaffListOperationalSet()
+    {
+        // The staff-flagged accounts must be exactly the operational roles the admin
+        // staff list surfaces (minus SUPER_ADMIN, which the admin@ account already holds).
+        var staffRoles = Accounts.Where(a => a.IsStaffRole).Select(a => a.RoleName).ToHashSet();
+        staffRoles.Should().BeEquivalentTo(new[]
+        {
+            "OPERATIONS_MANAGER", "SUPPORT_EXECUTIVE", "DATA_ENTRY_OPERATOR", "PARTNER_BANK_REP", "CA",
+        });
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RoleAccounts_OrgMemberRolesAreCustomerOrgRoles()
+    {
+        var orgRoles = Accounts.Where(a => !a.IsStaffRole).Select(a => a.RoleName).ToHashSet();
+        orgRoles.Should().BeEquivalentTo(new[] { "ORG_ADMIN", "MANAGER", "HR", "REVIEWER" });
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RoleAccounts_RoleNamesAreUpperCaseCanonical()
+    {
+        // The seed looks roles up by exact Name — a lower-case drift would silently skip.
+        Accounts.Select(a => a.RoleName)
+            .Should().OnlyContain(r => r == r.ToUpperInvariant() && r.Length > 0);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RoleAccounts_FullNamesAreNonEmpty()
+        => Accounts.Should().OnlyContain(a => !string.IsNullOrWhiteSpace(a.FullName));
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RoleAccounts_DoNotCollideWithExistingSeedLogins()
+    {
+        // admin@ and manager@ are seeded by steps 3/9 — the role campaign must not reuse them.
+        var emails = Accounts.Select(a => a.Email).ToHashSet();
+        emails.Should().NotContain("admin@snapaccount.local");
+        emails.Should().NotContain("manager@snapaccount.local");
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // 10. Organization field round-trip tests  (BUG-ORG-BUSINESSTYPE)
 // ────────────────────────────────────────────────────────────────────────────
 

@@ -46,8 +46,14 @@ public sealed class OtpService(
                 $"Too many attempts. Please wait {waitMinutes} minutes before requesting a new OTP.");
         }
 
-        // Generate 6-digit OTP using cryptographically secure RNG (SEC-005)
-        var otp = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        // Generate 6-digit OTP using cryptographically secure RNG (SEC-005).
+        // Dev convenience: outside Production use a fixed "123456" so manual/automated
+        // testing needs no SMS and no DB/hash lookup. Production ALWAYS uses secure RNG.
+        var isProduction = string.Equals(
+            configuration["ASPNETCORE_ENVIRONMENT"], "Production", StringComparison.OrdinalIgnoreCase);
+        var otp = isProduction
+            ? RandomNumberGenerator.GetInt32(100000, 1000000).ToString()
+            : "123456";
         var otpHash = ComputeSha256Hash($"{phoneNumber}:{otp}");
 
         // DG-AUTH-07: validity, maxAttempts, and cooldown are now config-driven.

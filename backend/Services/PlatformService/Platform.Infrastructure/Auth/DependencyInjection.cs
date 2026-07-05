@@ -192,8 +192,13 @@ public static class DependencyInjection
         // Lightweight provider connection tester ("Test with Sample Query").
         services.AddHttpClient<IAiProviderTester, HttpAiProviderTester>();
 
-        // SEC-007: Pub/Sub publisher for cross-service domain event propagation
-        services.AddSingleton<IPubSubPublisher, GooglePubSubPublisher>();
+        // SEC-007: Pub/Sub publisher for cross-service domain event propagation.
+        // Local dev (GCP-free) falls back to a no-op so event-publishing handlers
+        // (e.g. OTP verify → UserRegisteredEvent) don't fail on a missing GCP:ProjectId.
+        if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration))
+            services.AddSingleton<IPubSubPublisher, GooglePubSubPublisher>();
+        else
+            services.AddSingleton<IPubSubPublisher, NoOpPubSubPublisher>();
         services.AddScoped<IEventPublisher, PubSubEventPublisher>();
 
         // Current user — reads Firebase JWT claims from HttpContext.Items (SEC-022)

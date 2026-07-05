@@ -18,6 +18,19 @@ namespace AuthService.Infrastructure.Auth;
 /// Seeded dev accounts:
 ///   admin@snapaccount.local   / Admin@12345    → permissions ["*"], org: dev org (ORG_ADMIN)
 ///   manager@snapaccount.local / Manager@12345  → 7-permission limited set (DEV_LIMITED_MANAGER)
+///
+/// Per-role E2E campaign logins (all password Test@12345 — see LocalAuthDevSeed.RoleAccounts):
+///   Platform staff (auth.user_role):
+///     ops@snapaccount.local        → OPERATIONS_MANAGER
+///     support@snapaccount.local    → SUPPORT_EXECUTIVE
+///     dataentry@snapaccount.local  → DATA_ENTRY_OPERATOR
+///     bankrep@snapaccount.local    → PARTNER_BANK_REP
+///     ca@snapaccount.local         → CA
+///   Org members (auth.organization_member, dev org):
+///     orgadmin@snapaccount.local   → ORG_ADMIN
+///     manager2@snapaccount.local   → MANAGER
+///     hr@snapaccount.local         → HR
+///     reviewer@snapaccount.local   → REVIEWER
 /// </summary>
 public sealed class LocalAuthService(
     AuthDbContext db,
@@ -153,6 +166,7 @@ public sealed class LocalAuthService(
     ///   8  Seed ManagerPermissions onto that role (idempotent per permission)
     ///   9  Manager user (manager@snapaccount.local)
     ///  10  Manager as DEV_LIMITED_MANAGER org member
+    ///  11  One login per admin-relevant system role (LocalAuthDevSeed.RoleAccounts)
     /// </summary>
     public async Task EnsureDevAdminAsync(CancellationToken ct)
     {
@@ -310,6 +324,94 @@ public sealed class LocalAuthService(
                 OrganizationMember.Create(DevOrgId, managerUser.Id, limitedRole.Id));
             await db.SaveChangesAsync(ct);
             logger.LogWarning("LOCAL_AUTH: manager → DEV_LIMITED_MANAGER in dev org {OrgId}.", DevOrgId);
+        }
+
+        // ── Step 11: One login per admin-relevant role (E2E role campaign) ────────────
+        // Each account references a migration-seeded system role by name — never creates
+        // one. Staff roles go on auth.user_role (like the production staff population);
+        // org-member roles go on auth.organization_member in the dev org. Both the user
+        // and the assignment are independently guarded, so this self-heals every startup.
+        foreach (var acct in LocalAuthDevSeed.RoleAccounts)
+        {
+            var user = await EnsureUserAsync(acct.Email, acct.FullName, LocalAuthDevSeed.SharedPassword, ct);
+            if (acct.IsStaffRole)
+                await AssignPlatformRoleAsync(user, acct.RoleName, ct);
+            else
+                await AssignOrgMemberRoleAsync(user, acct.RoleName, ct);
+        }
+    }
+
+    /// <summary>
+    /// Idempotently seeds a dev user, self-healing a blank password hash on an existing row.
+    /// </summary>
+    private async Task<User> EnsureUserAsync(string email, string fullName, string password, CancellationToken ct)
+    {
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
+        if (user is null)
+        {
+            user = new User { Email = email, FullName = fullName, PreferredLanguage = "en" };
+            user.SetPasswordHash(PasswordHasher.Hash(password));
+            db.Users.Add(user);
+            await db.SaveChangesAsync(ct);
+            logger.LogWarning("LOCAL_AUTH: seeded dev user {Email}.", email);
+        }
+        else if (string.IsNullOrEmpty(user.PasswordHash))
+        {
+            user.SetPasswordHash(PasswordHasher.Hash(password));
+            await db.SaveChangesAsync(ct);
+        }
+        return user;
+    }
+
+    /// <summary>
+    /// Assigns a migration-seeded system role via <c>auth.user_role</c> (platform staff).
+    /// If the role row is missing, logs a warning and skips — same self-healing contract as step 8.
+    /// </summary>
+    private async Task AssignPlatformRoleAsync(User user, string roleName, CancellationToken ct)
+    {
+        var role = await db.Roles.FirstOrDefaultAsync(r => r.Name == roleName && r.IsSystemRole, ct);
+        if (role is null)
+        {
+            logger.LogWarning(
+                "LOCAL_AUTH: system role '{Role}' not found — skipping platform assignment for {Email}. " +
+                "Run migrations 036/039/041 first.",
+                roleName, user.Email);
+            return;
+        }
+
+        var alreadyAssigned = await db.UserRoles
+            .AnyAsync(ur => ur.UserId == user.Id && ur.RoleId == role.Id, ct);
+        if (!alreadyAssigned)
+        {
+            db.UserRoles.Add(UserRole.Create(user.Id, role.Id));
+            await db.SaveChangesAsync(ct);
+            logger.LogWarning("LOCAL_AUTH: {Email} → {Role} (platform staff).", user.Email, roleName);
+        }
+    }
+
+    /// <summary>
+    /// Assigns a migration-seeded system role via <c>auth.organization_member</c> in the dev org.
+    /// If the role row is missing, logs a warning and skips — same self-healing contract as step 8.
+    /// </summary>
+    private async Task AssignOrgMemberRoleAsync(User user, string roleName, CancellationToken ct)
+    {
+        var role = await db.Roles.FirstOrDefaultAsync(r => r.Name == roleName && r.IsSystemRole, ct);
+        if (role is null)
+        {
+            logger.LogWarning(
+                "LOCAL_AUTH: system role '{Role}' not found — skipping org membership for {Email}. " +
+                "Run migrations 036/039/041 first.",
+                roleName, user.Email);
+            return;
+        }
+
+        var alreadyMember = await db.OrganizationMembers
+            .AnyAsync(m => m.UserId == user.Id && m.OrganizationId == DevOrgId && m.DeletedAt == null, ct);
+        if (!alreadyMember)
+        {
+            db.OrganizationMembers.Add(OrganizationMember.Create(DevOrgId, user.Id, role.Id));
+            await db.SaveChangesAsync(ct);
+            logger.LogWarning("LOCAL_AUTH: {Email} → {Role} in dev org {OrgId}.", user.Email, roleName, DevOrgId);
         }
     }
 }

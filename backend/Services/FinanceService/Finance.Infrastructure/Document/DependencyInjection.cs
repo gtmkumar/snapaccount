@@ -113,7 +113,7 @@ public static class DependencyInjection
         {
             // ── Local dev (GCP-free) ── NEVER reached in staging/production ──
             services.AddSingleton<ICloudStorageService, LocalFileStorageService>();
-            services.AddSingleton<IPubSubPublisher, NoOpPubSubPublisher>();
+            services.AddSingleton<IPubSubPublisher, DocumentService.Infrastructure.Services.NoOpPubSubPublisher>();
             // Real, free, offline extraction via the local Tesseract CLI (default provider).
             services.AddScoped<Services.Ocr.TesseractOcrService>();
             services.AddScoped<IOcrService>(sp => sp.GetRequiredService<Services.Ocr.TesseractOcrService>());
