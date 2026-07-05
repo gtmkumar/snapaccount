@@ -48,12 +48,12 @@ export function Card({
   return (
     <div
       className={cn(
-        'bg-white transition-all duration-200',
+        'bg-[var(--surface-raised)] text-[var(--text-primary)] transition-all duration-200',
         paddingClasses[padding],
         shadowClasses[shadow],
         radiusClasses[radius],
-        !selected && !border && 'shadow-sm',
-        border && !selected && 'border border-neutral-200',
+        !selected && !border && 'shadow-sm border border-[var(--border-subtle)]',
+        border && !selected && 'border border-[var(--border-subtle)]',
         selected && 'ring-2 ring-brand-500 shadow-md',
         clickable && !selected && 'cursor-pointer hover:shadow-md hover:-translate-y-px',
         className
@@ -74,12 +74,16 @@ interface CardHeaderProps {
 
 export function CardHeader({ title, subtitle, actions, className }: CardHeaderProps) {
   return (
-    <div className={cn('flex items-start justify-between gap-4 mb-4', className)}>
-      <div>
-        <h3 className="text-base font-semibold text-neutral-800">{title}</h3>
-        {subtitle && <p className="text-sm text-neutral-500 mt-0.5">{subtitle}</p>}
+    <div className={cn('flex items-start justify-between gap-3 mb-4 min-h-[2rem]', className)}>
+      <div className="min-w-0 flex-1">
+        <h3 className="text-base font-semibold text-[var(--text-primary)] leading-snug">{title}</h3>
+        {subtitle && <p className="text-sm text-[var(--text-tertiary)] mt-0.5">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {actions && (
+        <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0 max-w-[55%]">
+          {actions}
+        </div>
+      )}
     </div>
   )
 }
@@ -91,7 +95,7 @@ interface CardFooterProps {
 
 export function CardFooter({ children, className }: CardFooterProps) {
   return (
-    <div className={cn('pt-4 mt-4 border-t border-neutral-200', className)}>
+    <div className={cn('pt-4 mt-4 border-t border-[var(--border-subtle)]', className)}>
       {children}
     </div>
   )

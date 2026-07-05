@@ -1,37 +1,25 @@
 # SnapAccount — Local Development Docker Compose
-# All 11 .NET microservices + React Admin + PostgreSQL 17 + Redis
-# Service names match .NET Aspire service discovery names.
+# 3 composite services (Platform / Finance / Assist) + React Admin + PostgreSQL 17 + Redis
 #
 # Quick start:
 #   cp .env.example .env   # fill in your local values
 #   docker compose up -d
 #
-# pgvector extension is initialised by the db-init service on first run.
+# Ports: Platform :5201, Finance :5202, Assist :5203, Admin :3000
 
 version: "3.9"
 
-# ─────────────────────────────────────────────
-# Networks
-# ─────────────────────────────────────────────
 networks:
   backend:
     driver: bridge
   frontend:
     driver: bridge
 
-# ─────────────────────────────────────────────
-# Volumes
-# ─────────────────────────────────────────────
 volumes:
   postgres_data:
   redis_data:
 
-# ─────────────────────────────────────────────
-# Services
-# ─────────────────────────────────────────────
 services:
-
-  # ── Infrastructure ────────────────────────
 
   postgres:
     image: pgvector/pgvector:pg17
@@ -72,31 +60,32 @@ services:
     networks:
       - backend
 
-  # ── .NET Microservices ─────────────────────
-  # Each service uses SERVICE_NAME build arg to select the correct entry point.
-  # All share the same Dockerfile in backend/.
-
-  auth-service:
+  # ── Platform: Auth + Subscription + Notification (:5201) ──
+  platform-service:
     build:
       context: ./backend
       dockerfile: Dockerfile
       args:
-        SERVICE_NAME: AuthService
-    container_name: snapaccount-auth
+        COMPOSITE_NAME: Platform
+    container_name: snapaccount-platform
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql};Search Path=auth"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql}"
       ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
+      REDIS_CONNECTION_STRING: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
       Firebase__ProjectId: ${FIREBASE_PROJECT_ID}
       Firebase__CredentialsJson: ${FIREBASE_CREDENTIALS_JSON}
       Msg91__ApiKey: ${MSG91_API_KEY}
-      Jwt__SecretKey: ${JWT_SECRET_KEY:-change-me-in-production-min-32-chars}
-      Jwt__Issuer: snapaccount
-      Jwt__Audience: snapaccount-clients
-      SERVICE_NAME: AuthService
+      Razorpay__KeyId: ${RAZORPAY_KEY_ID}
+      Razorpay__KeySecret: ${RAZORPAY_KEY_SECRET}
+      SendGrid__ApiKey: ${SENDGRID_API_KEY}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      PUBSUB_TOPIC_PREFIX: snapaccount
+      DEV_AUTH_BYPASS: ${DEV_AUTH_BYPASS:-true}
+      LOCAL_AUTH: ${LOCAL_AUTH:-true}
     ports:
-      - "5001:8080"
+      - "5201:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,174 +96,40 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
     networks:
       - backend
 
-  document-service:
+  # ── Finance: Document + Accounting + GST + Loan + ITR + Report (:5202) ──
+  finance-service:
     build:
       context: ./backend
       dockerfile: Dockerfile
       args:
-        SERVICE_NAME: DocumentService
-    container_name: snapaccount-document
+        COMPOSITE_NAME: Finance
+    container_name: snapaccount-finance
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql};Search Path=document"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql}"
       ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
       GoogleCloud__ProjectId: ${GCP_PROJECT_ID}
       GoogleCloud__StorageBucket: ${GCS_BUCKET_NAME:-snapaccount-documents-local}
       GoogleDocumentAi__ProcessorId: ${DOCUMENT_AI_PROCESSOR_ID}
-      PubSub__TopicPrefix: snapaccount
-      SERVICE_NAME: DocumentService
-    ports:
-      - "5002:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - backend
-
-  accounting-service:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        SERVICE_NAME: AccountingService
-    container_name: snapaccount-accounting
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql};Search Path=accounting"
-      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
-      PubSub__TopicPrefix: snapaccount
-      SERVICE_NAME: AccountingService
-    ports:
-      - "5003:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - backend
-
-  gst-service:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        SERVICE_NAME: GstService
-    container_name: snapaccount-gst
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql};Search Path=gst"
-      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
       GstPortal__BaseUrl: ${GST_PORTAL_URL:-https://api.gst.gov.in}
       GstPortal__ClientId: ${GST_PORTAL_CLIENT_ID}
       NicEInvoice__BaseUrl: ${NIC_EINVOICE_URL:-https://einvoice1.gst.gov.in}
-      PubSub__TopicPrefix: snapaccount
-      SERVICE_NAME: GstService
-    ports:
-      - "5004:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - backend
-
-  loan-service:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        SERVICE_NAME: LoanService
-    container_name: snapaccount-loan
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql};Search Path=loan"
-      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
-      PubSub__TopicPrefix: snapaccount
-      SERVICE_NAME: LoanService
-    ports:
-      - "5005:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - backend
-
-  itr-service:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        SERVICE_NAME: ItrService
-    container_name: snapaccount-itr
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql};Search Path=itr"
-      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
       ItPortal__BaseUrl: ${IT_PORTAL_URL:-https://efileapi.incometax.gov.in}
-      PubSub__TopicPrefix: snapaccount
-      SERVICE_NAME: ItrService
+      GCS_LOAN_PACKAGES_BUCKET: ${GCS_LOAN_PACKAGES_BUCKET:-snapaccount-loan-packages-dev}
+      GCS_BUCKET_ITR: ${GCS_BUCKET_ITR:-snapaccount-itr-dev}
+      GCS_REPORTS_BUCKET: ${GCS_REPORTS_BUCKET:-snapaccount-reports-dev}
+      ServiceUrls__GstService: http://finance-service:8080
+      ServiceUrls__AccountingService: http://finance-service:8080
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      PUBSUB_TOPIC_PREFIX: snapaccount
+      GST_PRODUCTION_APIS_ENABLED: ${GST_PRODUCTION_APIS_ENABLED:-false}
     ports:
-      - "5006:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - backend
-
-  chat-service:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        SERVICE_NAME: ChatService
-    container_name: snapaccount-chat
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql};Search Path=chat"
-      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
-      SignalR__BackplaneConnection: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
-      PubSub__TopicPrefix: snapaccount
-      SERVICE_NAME: ChatService
-    ports:
-      - "5007:8080"
+      - "5202:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -285,122 +140,33 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
     networks:
       - backend
 
-  notification-service:
+  # ── Assist: Chat + AI + Callback (:5203) ──
+  assist-service:
     build:
       context: ./backend
       dockerfile: Dockerfile
       args:
-        SERVICE_NAME: NotificationService
-    container_name: snapaccount-notification
+        COMPOSITE_NAME: Assist
+    container_name: snapaccount-assist
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql};Search Path=notification"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql}"
       ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
-      Firebase__ProjectId: ${FIREBASE_PROJECT_ID}
-      Firebase__CredentialsJson: ${FIREBASE_CREDENTIALS_JSON}
-      Msg91__ApiKey: ${MSG91_API_KEY}
-      SendGrid__ApiKey: ${SENDGRID_API_KEY}
-      PubSub__TopicPrefix: snapaccount
-      Features__WhatsAppEnabled: "false"
-      SERVICE_NAME: NotificationService
-    ports:
-      - "5008:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - backend
-
-  report-service:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        SERVICE_NAME: ReportService
-    container_name: snapaccount-report
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql};Search Path=report"
-      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
-      GoogleCloud__StorageBucket: ${GCS_BUCKET_NAME:-snapaccount-documents-local}
-      PubSub__TopicPrefix: snapaccount
-      SERVICE_NAME: ReportService
-    ports:
-      - "5009:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - backend
-
-  subscription-service:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        SERVICE_NAME: SubscriptionService
-    container_name: snapaccount-subscription
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql};Search Path=subscription"
-      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
-      Razorpay__KeyId: ${RAZORPAY_KEY_ID}
-      Razorpay__KeySecret: ${RAZORPAY_KEY_SECRET}
-      PubSub__TopicPrefix: snapaccount
-      SERVICE_NAME: SubscriptionService
-    ports:
-      - "5010:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - backend
-
-  ai-service:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        SERVICE_NAME: AiService
-    container_name: snapaccount-ai
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=snapaccount;Username=postgres;Password=${POSTGRES_PASSWORD:-postgresql};Search Path=ai"
-      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
+      REDIS_CONNECTION_STRING: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
+      SignalR__BackplaneConnection: "redis:6379,password=${REDIS_PASSWORD:-redispassword}"
       GoogleCloud__ProjectId: ${GCP_PROJECT_ID}
       VertexAi__Location: ${VERTEX_AI_LOCATION:-asia-south1}
       VertexAi__ModelId: ${VERTEX_AI_MODEL:-gemini-1.5-pro}
       SarvamAi__ApiKey: ${SARVAM_AI_API_KEY}
-      PubSub__TopicPrefix: snapaccount
-      SERVICE_NAME: AiService
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      PUBSUB_TOPIC_PREFIX: snapaccount
     ports:
-      - "5011:8080"
+      - "5203:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -411,18 +177,56 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
     networks:
       - backend
 
-  # ── React Admin Panel ──────────────────────
+  # ── API Gateway: YARP reverse proxy (:5000 → composites) ──
+  # Routes: /auth/* → platform-service, /documents/* → finance-service, /chat/* → assist-service, etc.
+  # appsettings.json cluster addresses are overridden via ReverseProxy__Clusters__* env vars so
+  # the gateway can reach the other containers by their Docker Compose service names.
+  # VITE_API_BASE_URL in admin-panel should point here (:5000) in container environments;
+  # for local bare-metal dev the Aspire AppHost maps the gateway to :6060.
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.gateway
+    container_name: snapaccount-gateway
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      # YARP cluster destinations — override the Aspire service-discovery addresses with
+      # Docker Compose service names so containers can reach each other.
+      ReverseProxy__Clusters__platform__Destinations__platform__Address: http://platform-service:8080
+      ReverseProxy__Clusters__finance__Destinations__finance__Address: http://finance-service:8080
+      ReverseProxy__Clusters__assist__Destinations__assist__Address: http://assist-service:8080
+      # Rate limiting: disable in local dev to avoid throttling rapid test loops
+      RateLimiting__Enabled: "false"
+    ports:
+      - "5000:8080"
+    depends_on:
+      platform-service:
+        condition: service_healthy
+      finance-service:
+        condition: service_healthy
+      assist-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - backend
+      - frontend
 
   admin-panel:
     build:
       context: ./src/admin
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5001}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5000}
         VITE_FIREBASE_API_KEY: ${FIREBASE_WEB_API_KEY}
         VITE_FIREBASE_AUTH_DOMAIN: ${FIREBASE_AUTH_DOMAIN}
         VITE_FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
@@ -432,7 +236,7 @@ services:
     ports:
       - "3000:8080"
     depends_on:
-      - auth-service
+      - api-gateway
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s

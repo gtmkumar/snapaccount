@@ -12,7 +12,7 @@ All findings from `docs/security/sec-ai-02-ai-service-review-2026-06-11.md` addr
 ## Fixes Applied
 
 **H-01 (AuthService) — AES-CBC → AES-GCM with versioned format:**
-- File: `backend/Services/AuthService/AuthService.Infrastructure/Services/AesAiKeyProtector.cs`
+- File: `backend/Services/PlatformService/Platform.Infrastructure/Auth/Services/AesAiKeyProtector.cs`
 - New format: `Base64(0x02 || Nonce(12) || Tag(16) || Ciphertext)` for v2 (GCM).
 - `Decrypt()` accepts both v2 (GCM, authenticated) and v1 (CBC, legacy read-only).
 - `Encrypt()` always writes v2. Re-encryption happens organically on next update.
@@ -20,11 +20,11 @@ All findings from `docs/security/sec-ai-02-ai-service-review-2026-06-11.md` addr
 - 9 new tests in `tests/unit/AuthService/AesAiKeyProtectorTests.cs` (round-trip, tamper, legacy, fail-fast).
 
 **H-02 (AuthService) — GetEffectiveAiConfig endpoint gated:**
-- File: `backend/Services/AuthService/AuthService.Application/AiConfig/Queries/GetEffectiveAiConfig/GetEffectiveAiConfigQuery.cs`
+- File: `backend/Services/PlatformService/Platform.Application/Auth/AiConfig/Queries/GetEffectiveAiConfig/GetEffectiveAiConfigQuery.cs`
 - Added `[RequiresPermission(Permissions.PlatformAiManage)]` to the query.
-- File: `backend/Services/AuthService/AuthService.Api/Endpoints/AiConfigEndpoints.cs`
+- File: `backend/Services/PlatformService/Platform.WebApi/Endpoints/Auth/AiConfigEndpoints.cs`
 - Internal service calls (AiService/DocumentService) bypass PermissionBehavior via `X-Internal-Token` header (constant-time comparison). Direct handler injection used to avoid MediatR pipeline for internal path.
-- File: `backend/Services/AiService/AiService.Infrastructure/Providers/AiProviderResolver.cs`
+- File: `backend/Services/AssistService/Assist.Infrastructure/Ai/Providers/AiProviderResolver.cs`
 - Sends `X-Internal-Token` header from `InternalApi:SharedToken` config when calling AuthService.
 - Config key: `InternalApi:SharedToken` — must be set in GCP Secret Manager for staging/prod.
 
@@ -35,24 +35,24 @@ All findings from `docs/security/sec-ai-02-ai-service-review-2026-06-11.md` addr
 - `ExtractFieldsCommandHandler` now has `ITokenBudgetService` as second ctor parameter.
 
 **H-04 (AiService) — Pub/Sub message ownership verification:**
-- File: `backend/Services/AiService/AiService.Infrastructure/Messaging/RagIngestionSubscriber.cs`
+- File: `backend/Services/AssistService/Assist.Infrastructure/Ai/Messaging/RagIngestionSubscriber.cs`
 - Before ingest: cross-schema SQL check on `document.documents` (id + organization_id + deleted_at IS NULL). Fail-open on DB error (logs warning). ACK (drop) on mismatch to prevent DLQ poisoning.
 - Also caps OcrText at 500k chars as defence-in-depth before the command validator.
 
 **M-02 (AiService) — Prompt injection / role separation:**
-- File: `backend/Services/AiService/AiService.Infrastructure/Providers/VertexAiProvider.cs`
+- File: `backend/Services/AssistService/Assist.Infrastructure/Ai/Providers/VertexAiProvider.cs`
 - ExtractFieldsAsync: system prompt in `systemInstruction` top-level field; data in user-role content.
 - ChatAsync: system prompt in `systemInstruction`; RAG chunks as model-role turn; user message as user-role turn.
 - L-01 fix included: API key now sent in `x-goog-api-key` header, NOT query string.
 - New: `AiService.Application.Common.PromptSanitizer.EscapeDelimiters()` — escapes `^---` lines.
 
 **M-03 (AiService) — IDOR: OrganizationId from JWT only:**
-- File: `backend/Services/AiService/AiService.Api/Endpoints/Ai.cs`
+- File: `backend/Services/AssistService/Assist.WebApi/Endpoints/Ai/Ai.cs`
 - `ChatRequest` DTO no longer has `OrganizationId` field.
 - `ChatAsync` derives org exclusively from JWT `org_id` claim. Returns 400 if missing.
 
 **L-02 (AiService) — PII redaction before RAG chunk storage:**
-- File: `backend/Services/AiService/AiService.Application/Rag/Commands/IngestDocument/IngestDocumentCommandHandler.cs`
+- File: `backend/Services/AssistService/Assist.Application/Ai/Rag/Commands/IngestDocument/IngestDocumentCommandHandler.cs`
 - `ITextRedactor` injected; `redactor.Redact()` applied to full OCR text before chunking.
 - `PromptSanitizer.EscapeDelimiters()` applied to the sanitized text before chunking (line structure preserved at this stage).
 - `IngestDocumentCommandHandler` ctor now: `(IAiProviderResolver, ITextRedactor, IAiServiceDbContext, ILogger)`.

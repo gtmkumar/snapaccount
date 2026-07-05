@@ -1,21 +1,11 @@
 /**
- * BUG-W7-IOS-001 — CHAT_HUB_BASE_URL resolution tests.
+ * Gateway API base URL + CHAT_HUB_BASE_URL resolution tests.
  *
- * The SignalR chat hub lives on ChatService (/hubs/chat on :5107), NOT on the
- * AuthService host that extra.apiBaseUrl points at (:5101 — negotiate 404s
- * there). These tests pin lib/api's CHAT_HUB_BASE_URL:
- *   1. default: HOST_ROOT (from apiBaseUrl) + the pinned chat port 5107 —
- *      never the apiBaseUrl port itself;
- *   2. extra.chatBaseUrl override wins (same pattern as documentsBaseUrl);
- *   3. Android: localhost is rewritten to the emulator loopback 10.0.2.2,
- *      for both the derived URL and the override.
- *
- * Each case loads src/lib/api fresh with its own expo-constants /
- * react-native mocks (module-level constant), same isolation pattern as
- * api.integrityHeader.test.ts.
+ * After the 3-composite refactor, all REST + SignalR traffic goes through the
+ * YARP gateway (:5000). Routes are /auth/…, /hubs/chat — NOT /api/auth/…
+ * (the admin Vite dev server adds/strips /api; mobile hits the gateway directly).
  */
 
-// Block the axios fetch-adapter crash in jest (see api.interceptor.test.ts).
 global.fetch = jest.fn(() =>
   Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response),
 );
@@ -26,9 +16,11 @@ interface ExtraConfig {
 }
 
 /** Load src/lib/api fresh under the given platform + app.json extra. */
-function loadApiModule(platformOS: 'ios' | 'android', extra: ExtraConfig) {
-  let mod: { CHAT_HUB_BASE_URL: string } | undefined;
+function loadApiModule(platformOS: 'ios' | 'android', extra: ExtraConfig, env?: Record<string, string>) {
+  let mod: { CHAT_HUB_BASE_URL: string; normalizeGatewayBaseUrl: (u: string) => string } | undefined;
   jest.isolateModules(() => {
+    const prevEnv = { ...process.env };
+    if (env) Object.assign(process.env, env);
     jest.doMock('expo-constants', () => ({
       __esModule: true,
       default: { expoConfig: { extra } },
@@ -41,56 +33,71 @@ function loadApiModule(platformOS: 'ios' | 'android', extra: ExtraConfig) {
     }));
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     mod = require('../../src/lib/api');
+    process.env = prevEnv;
   });
   if (!mod) throw new Error('failed to load src/lib/api');
   return mod;
 }
 
-describe('CHAT_HUB_BASE_URL (BUG-W7-IOS-001)', () => {
+describe('normalizeGatewayBaseUrl', () => {
+  it('strips a trailing /api segment (admin-style URL)', () => {
+    const { normalizeGatewayBaseUrl } = loadApiModule('ios', {});
+    expect(normalizeGatewayBaseUrl('http://localhost:5000/api')).toBe('http://localhost:5000');
+    expect(normalizeGatewayBaseUrl('http://localhost:5000/api/')).toBe('http://localhost:5000');
+  });
+
+  it('leaves a bare gateway URL unchanged', () => {
+    const { normalizeGatewayBaseUrl } = loadApiModule('ios', {});
+    expect(normalizeGatewayBaseUrl('http://localhost:5000')).toBe('http://localhost:5000');
+  });
+});
+
+describe('CHAT_HUB_BASE_URL (gateway composite)', () => {
   afterEach(() => {
     jest.resetModules();
   });
 
-  it('targets ChatService :5107, never the apiBaseUrl (AuthService :5101) host:port', () => {
+  it('uses the same gateway host as apiBaseUrl (hub routed via /hubs/chat)', () => {
     const { CHAT_HUB_BASE_URL } = loadApiModule('ios', {
-      apiBaseUrl: 'http://localhost:5101',
+      apiBaseUrl: 'http://localhost:5000',
     });
-    expect(CHAT_HUB_BASE_URL).toBe('http://localhost:5107');
-    expect(CHAT_HUB_BASE_URL).not.toBe('http://localhost:5101');
+    expect(CHAT_HUB_BASE_URL).toBe('http://localhost:5000');
   });
 
-  it('defaults to localhost:5107 when no extra config is present (iOS)', () => {
+  it('defaults to localhost:5000 when no extra config is present (iOS)', () => {
     const { CHAT_HUB_BASE_URL } = loadApiModule('ios', {});
-    expect(CHAT_HUB_BASE_URL).toBe('http://localhost:5107');
+    expect(CHAT_HUB_BASE_URL).toBe('http://localhost:5000');
   });
 
-  it('derives the chat port from a custom apiBaseUrl host (gateway-style host reuse)', () => {
-    const { CHAT_HUB_BASE_URL } = loadApiModule('ios', {
-      apiBaseUrl: 'http://192.168.1.20:5101',
-    });
-    expect(CHAT_HUB_BASE_URL).toBe('http://192.168.1.20:5107');
+  it('prefers EXPO_PUBLIC_API_BASE_URL over app.json extra', () => {
+    const { CHAT_HUB_BASE_URL } = loadApiModule(
+      'ios',
+      { apiBaseUrl: 'http://localhost:5000' },
+      { EXPO_PUBLIC_API_BASE_URL: 'http://192.168.1.20:5000' },
+    );
+    expect(CHAT_HUB_BASE_URL).toBe('http://192.168.1.20:5000');
   });
 
   it('honours the extra.chatBaseUrl override from app.json', () => {
     const { CHAT_HUB_BASE_URL } = loadApiModule('ios', {
-      apiBaseUrl: 'http://localhost:5101',
+      apiBaseUrl: 'http://localhost:5000',
       chatBaseUrl: 'https://chat.staging.snapaccount.in',
     });
     expect(CHAT_HUB_BASE_URL).toBe('https://chat.staging.snapaccount.in');
   });
 
-  it('rewrites localhost to 10.0.2.2 on Android (derived URL)', () => {
+  it('rewrites localhost to 10.0.2.2 on Android', () => {
     const { CHAT_HUB_BASE_URL } = loadApiModule('android', {
-      apiBaseUrl: 'http://localhost:5101',
+      apiBaseUrl: 'http://localhost:5000',
     });
-    expect(CHAT_HUB_BASE_URL).toBe('http://10.0.2.2:5107');
+    expect(CHAT_HUB_BASE_URL).toBe('http://10.0.2.2:5000');
   });
 
   it('rewrites localhost to 10.0.2.2 on Android (chatBaseUrl override)', () => {
     const { CHAT_HUB_BASE_URL } = loadApiModule('android', {
-      apiBaseUrl: 'http://localhost:5101',
-      chatBaseUrl: 'http://localhost:5107',
+      apiBaseUrl: 'http://localhost:5000',
+      chatBaseUrl: 'http://localhost:5000',
     });
-    expect(CHAT_HUB_BASE_URL).toBe('http://10.0.2.2:5107');
+    expect(CHAT_HUB_BASE_URL).toBe('http://10.0.2.2:5000');
   });
 });

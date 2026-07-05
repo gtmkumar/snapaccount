@@ -152,3 +152,106 @@ jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter', () => {
   }
   return { __esModule: true, default: MockNativeEventEmitter };
 });
+
+// DG-CHAT-04 (Wave 2): screens that import expo-image-picker (e.g. ChatDetailScreen attachment
+// sending) would otherwise invoke the native bridge under jsdom. Provide a default global mock;
+// individual tests can still override with their own jest.mock('expo-image-picker', ...).
+jest.mock('expo-image-picker', () => ({
+  requestCameraPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true, status: 'granted' })),
+  requestMediaLibraryPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true, status: 'granted' })),
+  launchCameraAsync: jest.fn(() => Promise.resolve({ canceled: true, assets: [] })),
+  launchImageLibraryAsync: jest.fn(() => Promise.resolve({ canceled: true, assets: [] })),
+  MediaTypeOptions: { Images: 'Images', Videos: 'Videos', All: 'All' },
+}));
+
+// DG-MOBUX-06 / DG-DOC-08: the document upload queue strips EXIF + downscales
+// captured photos via expo-image-manipulator and stages them under
+// expo-file-system/legacy's documentDirectory before upload. Both are native
+// modules; provide deterministic, bridge-free stubs so the queue logic (and any
+// screen that imports useDocumentQueue) runs under jsdom. manipulateAsync echoes
+// a deterministic processed uri; the legacy FileSystem stub no-ops directory
+// creation/copy and reports a fixed file size for the manifest.
+jest.mock('expo-image-manipulator', () => ({
+  __esModule: true,
+  SaveFormat: { JPEG: 'jpeg', PNG: 'png', WEBP: 'webp' },
+  FlipType: { Vertical: 'vertical', Horizontal: 'horizontal' },
+  manipulateAsync: jest.fn((uri) =>
+    Promise.resolve({ uri: `${uri}.processed.jpg`, width: 1024, height: 1365 }),
+  ),
+}));
+
+jest.mock(
+  'expo-file-system/legacy',
+  () => ({
+    __esModule: true,
+    documentDirectory: 'file:///mock-documents/',
+    makeDirectoryAsync: jest.fn(() => Promise.resolve()),
+    getInfoAsync: jest.fn(() =>
+      Promise.resolve({ exists: true, isDirectory: false, size: 204800, uri: 'file:///mock' }),
+    ),
+    copyAsync: jest.fn(() => Promise.resolve()),
+    deleteAsync: jest.fn(() => Promise.resolve()),
+    EncodingType: { UTF8: 'utf8', Base64: 'base64' },
+  }),
+  { virtual: true },
+);
+
+// DG-AUTH-03 (B1.2): the Android SMS Retriever package is a native module
+// (Google SMS Retriever API). Screens/services that import smsRetriever.ts
+// lazy-require it, but the OTP-verify component test still needs a stub so the
+// require resolves under jsdom. Tests can drive auto-read via the service's
+// __testing.simulateMessage / globalThis.__SNAP_SIMULATE_OTP_SMS__ dev hook.
+jest.mock(
+  '@pushpendersingh/react-native-otp-verify',
+  () => ({
+    getHash: jest.fn(() => Promise.resolve(['mockAppHash1'])),
+    startOtpListener: jest.fn(),
+    removeListener: jest.fn(),
+  }),
+  { virtual: true },
+);
+
+// DG-NOTIF-05 (Phase 6E): NotificationCenterScreen's NotificationRow wraps each
+// row in react-native-gesture-handler's <Swipeable>, which reaches the native
+// RNGestureHandlerModule (importing the real module throws the __fbBatchedBridge
+// invariant under jsdom). Provide a fully synthetic, bridge-free module exposing
+// the exports the app uses. renderRightActions/renderLeftActions are not
+// exercised in unit tests (they need a real pan gesture).
+jest.mock('react-native-gesture-handler', () => {
+  const React = require('react');
+  const { View, ScrollView, FlatList, TouchableOpacity, Text } = require('react-native');
+  const Swipeable = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({
+      close: () => {},
+      openLeft: () => {},
+      openRight: () => {},
+    }));
+    return React.createElement(View, null, props.children);
+  });
+  const passthrough = (Comp) =>
+    React.forwardRef((props, ref) => React.createElement(Comp, { ...props, ref }));
+  return {
+    __esModule: true,
+    Swipeable,
+    GestureHandlerRootView: View,
+    ScrollView,
+    FlatList,
+    Switch: View,
+    TextInput: View,
+    DrawerLayoutAndroid: View,
+    TouchableOpacity,
+    TouchableHighlight: TouchableOpacity,
+    TouchableWithoutFeedback: TouchableOpacity,
+    TouchableNativeFeedback: TouchableOpacity,
+    RectButton: passthrough(View),
+    BaseButton: passthrough(View),
+    BorderlessButton: passthrough(View),
+    RawButton: passthrough(View),
+    Text,
+    State: {},
+    Directions: {},
+    gestureHandlerRootHOC: (C) => C,
+    GestureDetector: ({ children }) => children,
+    Gesture: new Proxy({}, { get: () => () => ({}) }),
+  };
+});

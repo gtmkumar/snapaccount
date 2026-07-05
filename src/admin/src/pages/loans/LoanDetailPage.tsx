@@ -99,7 +99,7 @@ function ApplicationTab({ application }: { application: ReturnType<typeof getLoa
       {/* Left column */}
       <div className="space-y-4">
         <Card padding="md">
-          <h3 className="font-semibold text-sm text-neutral-700 mb-3 flex items-center gap-2">
+          <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-3 flex items-center gap-2">
             <Building2 className="h-4 w-4" aria-hidden="true" />
             {t('admin.loanDetail.section.applicant')}
           </h3>
@@ -114,7 +114,7 @@ function ApplicationTab({ application }: { application: ReturnType<typeof getLoa
             )}
             {application.annualRevenueFy != null && (
               <div className="flex justify-between gap-2">
-                <dt className="text-neutral-500">{t('admin.loanDetail.field.revenue')}</dt>
+                <dt className="text-[var(--text-tertiary)]">{t('admin.loanDetail.field.revenue')}</dt>
                 <dd><AmountDisplay amount={application.annualRevenueFy} size="sm" /></dd>
               </div>
             )}
@@ -122,13 +122,13 @@ function ApplicationTab({ application }: { application: ReturnType<typeof getLoa
         </Card>
 
         <Card padding="md">
-          <h3 className="font-semibold text-sm text-neutral-700 mb-3 flex items-center gap-2">
+          <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-3 flex items-center gap-2">
             <Banknote className="h-4 w-4" aria-hidden="true" />
             {t('admin.loanDetail.section.params')}
           </h3>
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between gap-2">
-              <dt className="text-neutral-500">{t('admin.loanDetail.field.amount')}</dt>
+              <dt className="text-[var(--text-tertiary)]">{t('admin.loanDetail.field.amount')}</dt>
               <dd><AmountDisplay amount={application.requestedAmount} size="sm" /></dd>
             </div>
             <DetailRow label={t('admin.loanDetail.field.tenure')} value={`${application.tenureMonths} months`} />
@@ -141,17 +141,17 @@ function ApplicationTab({ application }: { application: ReturnType<typeof getLoa
 
         {(application.eligibilityScore != null || (application.eligibilityReasons?.length ?? 0) > 0) && (
           <Card padding="md">
-            <h3 className="font-semibold text-sm text-neutral-700 mb-3">
+            <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-3">
               {t('admin.loanDetail.section.eligibilitySnapshot')}
             </h3>
             {application.eligibilityScore != null && (
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-neutral-500 text-sm">{t('admin.loanDetail.field.score')}</span>
-                <span className="text-lg font-bold text-neutral-900">{application.eligibilityScore}</span>
+                <span className="text-[var(--text-tertiary)] text-sm">{t('admin.loanDetail.field.score')}</span>
+                <span className="text-lg font-bold text-[var(--text-primary)]">{application.eligibilityScore}</span>
               </div>
             )}
             {application.eligibilityReasons && (
-              <ul className="space-y-1 text-xs text-neutral-600">
+              <ul className="space-y-1 text-xs text-[var(--text-secondary)]">
                 {application.eligibilityReasons.map((r, i) => (
                   <li key={i} className="flex items-start gap-1.5">
                     <span className="text-success-600 mt-0.5">✓</span>
@@ -167,7 +167,7 @@ function ApplicationTab({ application }: { application: ReturnType<typeof getLoa
       {/* Right column */}
       <div className="space-y-4">
         <Card padding="md">
-          <h3 className="font-semibold text-sm text-neutral-700 mb-3 flex items-center gap-2">
+          <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-3 flex items-center gap-2">
             <FileText className="h-4 w-4" aria-hidden="true" />
             {t('admin.loanDetail.section.bankAssignment')}
           </h3>
@@ -183,23 +183,23 @@ function ApplicationTab({ application }: { application: ReturnType<typeof getLoa
                 )}
               </div>
               {application.currentBankRecipientEmail && (
-                <p className="text-xs text-neutral-500">
+                <p className="text-xs text-[var(--text-tertiary)]">
                   {t('admin.loanDetail.field.recipientEmail')}: {application.currentBankRecipientEmail}
                 </p>
               )}
               {application.currentBankEndpointMasked && (
-                <p className="text-xs text-neutral-500 font-mono">
+                <p className="text-xs text-[var(--text-tertiary)] font-mono">
                   {t('admin.loanDetail.field.endpoint')}: {application.currentBankEndpointMasked}
                 </p>
               )}
             </div>
           ) : (
-            <p className="text-sm text-neutral-400">{t('admin.loanDetail.bankAssignment.none')}</p>
+            <p className="text-sm text-[var(--text-disabled)]">{t('admin.loanDetail.bankAssignment.none')}</p>
           )}
         </Card>
 
         <Card padding="md">
-          <h3 className="font-semibold text-sm text-neutral-700 mb-3 flex items-center gap-2">
+          <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-3 flex items-center gap-2">
             <User className="h-4 w-4" aria-hidden="true" />
             {t('admin.loanDetail.section.owner')}
           </h3>
@@ -208,7 +208,7 @@ function ApplicationTab({ application }: { application: ReturnType<typeof getLoa
 
         {application.bankReferenceNo && (
           <Card padding="md">
-            <h3 className="font-semibold text-sm text-neutral-700 mb-2">
+            <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-2">
               {t('admin.loanDetail.field.bankRef')}
             </h3>
             <p className="font-mono text-sm">{application.bankReferenceNo}</p>
@@ -222,8 +222,8 @@ function ApplicationTab({ application }: { application: ReturnType<typeof getLoa
 function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex justify-between gap-2">
-      <dt className="text-neutral-500">{label}</dt>
-      <dd className="text-neutral-900 font-medium text-right">{value ?? '—'}</dd>
+      <dt className="text-[var(--text-tertiary)]">{label}</dt>
+      <dd className="text-[var(--text-primary)] font-medium text-right">{value ?? '—'}</dd>
     </div>
   )
 }
@@ -285,7 +285,7 @@ function DocumentsTab({ applicationId }: { applicationId: string }) {
     {
       accessorKey: 'fileName',
       header: t('admin.loanDetail.docs.col.file'),
-      cell: ({ getValue }) => <span className="text-xs text-neutral-600">{getValue<string>()}</span>,
+      cell: ({ getValue }) => <span className="text-xs text-[var(--text-secondary)]">{getValue<string>()}</span>,
     },
   ]
 
@@ -329,14 +329,14 @@ function ConsentsTab({ applicationId }: { applicationId: string }) {
   }
 
   if (isLoading) {
-    return <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-28 rounded-lg bg-neutral-100 animate-pulse" />)}</div>
+    return <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-28 rounded-lg bg-[var(--surface-sunken)] animate-pulse" />)}</div>
   }
 
   const items = data?.items ?? []
 
   if (items.length === 0) {
     return (
-      <div className="py-12 text-center text-neutral-400">
+      <div className="py-12 text-center text-[var(--text-disabled)]">
         {t('admin.loanDetail.consents.empty')}
       </div>
     )
@@ -369,10 +369,10 @@ function ConsentsTab({ applicationId }: { applicationId: string }) {
           size="lg"
         >
           <div className="p-4 space-y-3">
-            <p className="text-xs text-neutral-500 font-mono">
+            <p className="text-xs text-[var(--text-tertiary)] font-mono">
               {t('admin.loanDetail.consent.version')}: {textModal.consentVersion}
             </p>
-            <p className="text-sm text-neutral-600">
+            <p className="text-sm text-[var(--text-secondary)]">
               {t('admin.loanDetail.consent.textUnavailable')}
             </p>
           </div>
@@ -410,9 +410,9 @@ function TimelineTab({ applicationId, currentStatus }: { applicationId: string; 
       <StatusTimeline steps={steps} orientation="horizontal" />
 
       {isLoading ? (
-        <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-neutral-100 rounded animate-pulse" />)}</div>
+        <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-[var(--surface-sunken)] rounded animate-pulse" />)}</div>
       ) : entries.length === 0 ? (
-        <p className="text-sm text-neutral-400">{t('admin.loanDetail.timeline.empty')}</p>
+        <p className="text-sm text-[var(--text-disabled)]">{t('admin.loanDetail.timeline.empty')}</p>
       ) : (
         <div className="relative space-y-0">
           {entries.map((entry, idx) => (
@@ -426,30 +426,30 @@ function TimelineTab({ applicationId, currentStatus }: { applicationId: string; 
 
 function TimelineEntry({ entry, isLast }: { entry: StatusLogEntry; isLast: boolean }) {
   const actorColors: Record<string, string> = {
-    user: 'bg-brand-100 text-brand-700',
-    system: 'bg-neutral-100 text-neutral-600',
-    officer: 'bg-amber-100 text-amber-700',
-    bank: 'bg-purple-100 text-purple-700',
+    user: 'bg-[var(--badge-brand-bg)] text-[var(--badge-brand-fg)]',
+    system: 'bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)]',
+    officer: 'bg-[var(--semantic-warning-bg)] text-[var(--semantic-warning-fg)]',
+    bank: 'bg-[var(--badge-gst-bg)] text-[var(--badge-gst-fg)]',
   }
   const colorClass = actorColors[entry.actorType] ?? actorColors.system
 
   return (
     <div className="flex gap-4">
       <div className="flex flex-col items-center">
-        <div className="h-3 w-3 rounded-full bg-brand-500 ring-2 ring-white ring-offset-1 shrink-0 mt-1" aria-hidden="true" />
-        {!isLast && <div className="w-0.5 flex-1 bg-neutral-200 my-1" aria-hidden="true" />}
+        <div className="h-3 w-3 rounded-full bg-brand-500 ring-2 ring-[var(--surface-raised)] ring-offset-1 shrink-0 mt-1" aria-hidden="true" />
+        {!isLast && <div className="w-0.5 flex-1 bg-[var(--border-default)] my-1" aria-hidden="true" />}
       </div>
       <div className="pb-5 flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2 mb-0.5">
-          <span className="text-xs text-neutral-400">{formatDate(entry.timestamp)}</span>
+          <span className="text-xs text-[var(--text-tertiary)]">{formatDate(entry.timestamp)}</span>
           <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-medium', colorClass)}>
             {entry.actorName ?? entry.actorType}
           </span>
         </div>
-        <p className="text-sm font-medium text-neutral-800">
+        <p className="text-sm font-medium text-[var(--text-primary)]">
           → {t(`admin.loans.status.${entry.toStatus.toLowerCase()}`)}
         </p>
-        {entry.note && <p className="text-xs text-neutral-500 mt-0.5">{entry.note}</p>}
+        {entry.note && <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{entry.note}</p>}
       </div>
     </div>
   )
@@ -474,9 +474,9 @@ function BankCommsTab({ applicationId }: { applicationId: string }) {
       {/* List */}
       <div className="lg:col-span-3 space-y-2">
         {isLoading ? (
-          Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-neutral-100 rounded animate-pulse" />)
+          Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-[var(--surface-sunken)] rounded animate-pulse" />)
         ) : messages.length === 0 ? (
-          <p className="text-sm text-neutral-400 py-4">{t('admin.loanDetail.bankComms.empty')}</p>
+          <p className="text-sm text-[var(--text-disabled)] py-4">{t('admin.loanDetail.bankComms.empty')}</p>
         ) : (
           messages.map(msg => (
             <button
@@ -484,19 +484,21 @@ function BankCommsTab({ applicationId }: { applicationId: string }) {
               type="button"
               onClick={() => setSelected(msg)}
               className={cn(
-                'w-full text-left rounded-lg border p-3 hover:border-brand-300 transition-colors',
-                selected?.messageId === msg.messageId ? 'border-brand-400 bg-brand-50' : 'border-neutral-200 bg-white'
+                'w-full text-left rounded-lg border p-3 hover:border-brand-500/50 transition-colors',
+                selected?.messageId === msg.messageId
+                  ? 'border-brand-500 bg-[var(--badge-brand-bg)]'
+                  : 'border-[var(--border-default)] bg-[var(--surface-raised)]'
               )}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-mono text-neutral-400">{msg.messageId.slice(0, 12)}…</span>
+                <span className="text-xs font-mono text-[var(--text-tertiary)]">{msg.messageId.slice(0, 12)}…</span>
                 <BankCommStatusBadge status={msg.status} />
               </div>
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-neutral-500">{msg.direction === 'outbound' ? '↑' : '↓'}</span>
-                <span className="text-sm text-neutral-800 truncate">{msg.subject ?? msg.endpoint ?? '—'}</span>
+                <span className="text-xs text-[var(--text-tertiary)]">{msg.direction === 'outbound' ? '↑' : '↓'}</span>
+                <span className="text-sm text-[var(--text-primary)] truncate">{msg.subject ?? msg.endpoint ?? '—'}</span>
               </div>
-              <div className="text-xs text-neutral-400 mt-0.5">{formatDate(msg.timestamp)}</div>
+              <div className="text-xs text-[var(--text-disabled)] mt-0.5">{formatDate(msg.timestamp)}</div>
             </button>
           ))
         )}
@@ -507,7 +509,7 @@ function BankCommsTab({ applicationId }: { applicationId: string }) {
         {selected ? (
           <Card padding="md" className="space-y-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-medium text-neutral-700">{selected.bankName}</span>
+              <span className="text-xs font-medium text-[var(--text-primary)]">{selected.bankName}</span>
               {selected.adapterType && <BankAdapterTypeBadge adapterType={selected.adapterType} />}
               <BankCommStatusBadge status={selected.status} />
             </div>
@@ -527,13 +529,13 @@ function BankCommsTab({ applicationId }: { applicationId: string }) {
             )}
             {selected.responseMasked && (
               <div>
-                <p className="text-xs font-medium text-neutral-600 mb-1">{t('admin.loanDetail.bankComms.response')}</p>
+                <p className="text-xs font-medium text-[var(--text-secondary)] mb-1">{t('admin.loanDetail.bankComms.response')}</p>
                 <PayloadViewer kind="json" payload={selected.responseMasked} />
               </div>
             )}
           </Card>
         ) : (
-          <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-8 text-center text-sm text-neutral-400">
+          <div className="rounded-lg border border-[var(--border-default)] bg-[var(--surface-sunken)] p-8 text-center text-sm text-[var(--text-disabled)]">
             {t('admin.loanDetail.bankComms.selectHint')}
           </div>
         )}
@@ -623,7 +625,7 @@ function DisbursementTab({ application }: { application: { applicationId: string
           </span>
         </div>
         {application.bankReferenceNo && (
-          <p className="text-sm text-neutral-600 font-mono">
+          <p className="text-sm text-[var(--text-secondary)] font-mono">
             {t('admin.loanDetail.disbursement.utr')}: {application.bankReferenceNo}
           </p>
         )}
@@ -638,7 +640,7 @@ function DisbursementTab({ application }: { application: { applicationId: string
           <Clock className="h-5 w-5" aria-hidden="true" />
           <span className="font-semibold">{t('admin.loanDetail.disbursement.awaiting')}</span>
         </div>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-[var(--text-tertiary)]">
           {t('admin.loanDetail.disbursement.manualNote')}
         </p>
         <Button onClick={() => setShowModal(true)} leftIcon={<Banknote className="h-4 w-4" />}>
@@ -656,7 +658,7 @@ function DisbursementTab({ application }: { application: { applicationId: string
   }
 
   return (
-    <div className="py-8 text-center text-neutral-400 text-sm">
+    <div className="py-8 text-center text-[var(--text-disabled)] text-sm">
       {t('admin.loanDetail.disbursement.notAvailable')}
     </div>
   )
@@ -721,10 +723,10 @@ export default function LoanDetailPage() {
   if (isLoading) {
     return (
       <div className="space-y-4 animate-pulse">
-        <div className="h-6 w-48 bg-neutral-200 rounded" />
-        <div className="h-24 bg-neutral-100 rounded-xl" />
-        <div className="h-10 bg-neutral-100 rounded-xl" />
-        <div className="h-64 bg-neutral-100 rounded-xl" />
+        <div className="h-6 w-48 bg-[var(--surface-sunken)] rounded" />
+        <div className="h-24 bg-[var(--surface-sunken)] rounded-xl" />
+        <div className="h-10 bg-[var(--surface-sunken)] rounded-xl" />
+        <div className="h-64 bg-[var(--surface-sunken)] rounded-xl" />
       </div>
     )
   }
@@ -748,22 +750,22 @@ export default function LoanDetailPage() {
   return (
     <div className="space-y-4">
       {/* Breadcrumb */}
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm text-neutral-500">
-        <Link to="/loans" className="hover:text-brand-600 transition-colors">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm text-[var(--text-tertiary)]">
+        <Link to="/loans" className="hover:text-brand-500 transition-colors">
           {t('admin.loans.title')}
         </Link>
         <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        <span className="text-neutral-900 font-medium font-mono">{application.applicationId.slice(0, 8)}…</span>
+        <span className="text-[var(--text-primary)] font-medium font-mono">{application.applicationId.slice(0, 8)}…</span>
       </nav>
 
       {/* Header block */}
-      <div className="rounded-xl border border-neutral-200 bg-white p-5 space-y-3">
+      <Card padding="md" className="!p-5 space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg font-bold text-neutral-900">{application.orgName ?? t('admin.loanDetail.unknownOrg')}</h1>
-              {application.pan && <span className="text-xs text-neutral-500 font-mono">{application.pan}</span>}
-              {application.gstin && <span className="text-xs text-neutral-500 font-mono">{application.gstin}</span>}
+              <h1 className="text-lg font-bold text-[var(--text-primary)]">{application.orgName ?? t('admin.loanDetail.unknownOrg')}</h1>
+              {application.pan && <span className="text-xs text-[var(--text-tertiary)] font-mono">{application.pan}</span>}
+              {application.gstin && <span className="text-xs text-[var(--text-tertiary)] font-mono">{application.gstin}</span>}
             </div>
             <div className="mt-1">
               <LoanStatusBadge status={application.status} />
@@ -794,7 +796,7 @@ export default function LoanDetailPage() {
               type="button"
               onClick={() => void refetch()}
               aria-label={t('common.refresh')}
-              className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500"
+              className="p-1.5 rounded-lg hover:bg-[var(--surface-sunken)] text-[var(--text-tertiary)]"
             >
               <RefreshCw className="h-4 w-4" />
             </button>
@@ -802,7 +804,7 @@ export default function LoanDetailPage() {
         </div>
 
         {/* Summary strip */}
-        <div className="flex flex-wrap gap-4 text-sm text-neutral-600 pt-1 border-t border-neutral-100">
+        <div className="flex flex-wrap gap-4 text-sm text-[var(--text-secondary)] pt-1 border-t border-[var(--border-subtle)]">
           <div className="flex items-center gap-1">
             <AmountDisplay amount={application.requestedAmount} size="sm" />
           </div>
@@ -827,7 +829,7 @@ export default function LoanDetailPage() {
             </>
           )}
         </div>
-      </div>
+      </Card>
 
       {/* Tabs */}
       <div>
@@ -835,7 +837,7 @@ export default function LoanDetailPage() {
         <div
           role="tablist"
           aria-label={t('admin.loanDetail.tabs')}
-          className="flex overflow-x-auto border-b border-neutral-200 -mb-px"
+          className="flex overflow-x-auto border-b border-[var(--border-default)] -mb-px"
         >
           {TABS.map(tab => (
             <button
@@ -848,8 +850,8 @@ export default function LoanDetailPage() {
               className={cn(
                 'px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
                 activeTab === tab.id
-                  ? 'border-brand-500 text-brand-600'
-                  : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:border-neutral-300'
+                  ? 'border-brand-500 text-brand-500'
+                  : 'border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:border-[var(--border-default)]'
               )}
               onKeyDown={e => {
                 const idx = TABS.findIndex(t => t.id === tab.id)
@@ -937,14 +939,14 @@ export default function LoanDetailPage() {
         >
           <div className="p-4 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">
+              <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
                 {t('admin.loanDetail.action.rejectReason')} *
               </label>
               <textarea
                 value={rejectReason}
                 onChange={e => setRejectReason(e.target.value)}
                 rows={3}
-                className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] text-[var(--text-primary)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 required
               />
             </div>

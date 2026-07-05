@@ -23,31 +23,31 @@ const config: Record<AlertType, {
   icon: React.FC<{ className?: string }>
 }> = {
   success: {
-    bg: 'bg-emerald-50',
-    border: '',
-    title: 'text-emerald-800',
-    text: 'text-emerald-700',
+    bg: 'bg-[var(--semantic-success-bg)]',
+    border: 'border border-[var(--semantic-success-fg)]/20',
+    title: 'text-[var(--semantic-success-fg)]',
+    text: 'text-[var(--semantic-success-fg)]',
     icon: CheckCircle,
   },
   error: {
-    bg: 'bg-red-50',
-    border: '',
-    title: 'text-red-800',
-    text: 'text-red-700',
+    bg: 'bg-[var(--semantic-error-bg)]',
+    border: 'border border-[var(--semantic-error-fg)]/20',
+    title: 'text-[var(--semantic-error-fg)]',
+    text: 'text-[var(--semantic-error-fg)]',
     icon: XCircle,
   },
   warning: {
-    bg: 'bg-amber-50',
-    border: '',
-    title: 'text-amber-800',
-    text: 'text-amber-700',
+    bg: 'bg-[var(--semantic-warning-bg)]',
+    border: 'border border-[var(--semantic-warning-fg)]/20',
+    title: 'text-[var(--semantic-warning-fg)]',
+    text: 'text-[var(--semantic-warning-fg)]',
     icon: AlertTriangle,
   },
   info: {
-    bg: 'bg-info-50',
-    border: '',
-    title: 'text-info-800',
-    text: 'text-info-700',
+    bg: 'bg-[var(--semantic-info-bg)]',
+    border: 'border border-[var(--semantic-info-fg)]/20',
+    title: 'text-[var(--semantic-info-fg)]',
+    text: 'text-[var(--semantic-info-fg)]',
     icon: Info,
   },
 }
@@ -70,6 +70,7 @@ export function AlertBanner({
       className={cn(
         'flex gap-3 rounded-xl px-4 py-3.5',
         c.bg,
+        c.border,
         className
       )}
       role="alert"

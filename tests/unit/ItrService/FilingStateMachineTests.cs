@@ -12,7 +12,7 @@ namespace ItrService.Tests;
 public sealed class FilingStateMachineTests
 {
     private static Filing CreateFiling(string regime = "NEW")
-        => Filing.Create(Guid.NewGuid(), "AY2025-26", "ITR-1", regime);
+        => Filing.Create(Guid.NewGuid(), "AY2025-26", "ITR-1", regime, Guid.NewGuid());
 
     // ── Initial State ────────────────────────────────────────────────────────
 
@@ -113,7 +113,7 @@ public sealed class FilingStateMachineTests
         var caId = Guid.NewGuid();
         var result = filing.RejectByCa(caId, "Incorrect income details.");
         result.IsSuccess.Should().BeTrue();
-        filing.Status.Should().Be("REJECTED_BY_CA");
+        filing.Status.Should().Be("CA_REJECTED"); // DG-ITR-06: aligned to DB CHECK constraint
         filing.CaRejectionReason.Should().Be("Incorrect income details.");
     }
 

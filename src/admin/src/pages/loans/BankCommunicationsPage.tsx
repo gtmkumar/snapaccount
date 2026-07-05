@@ -10,15 +10,20 @@ import { useQuery } from '@tanstack/react-query'
 import { type ColumnDef } from '@tanstack/react-table'
 import { Search, RefreshCw, MessageSquare } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { FilterBar } from '@/components/layout/FilterBar'
+import { DetailPanePlaceholder } from '@/components/shared/DetailPanePlaceholder'
 import { DataTable } from '@/components/ui/DataTable'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { Card } from '@/components/ui/Card'
+import { Input } from '@/components/ui/Input'
+import { NativeSelect } from '@/components/ui/NativeSelect'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { BankAdapterTypeBadge } from '@/components/ui/BankAdapterTypeBadge'
 import { BankCommStatusBadge } from '@/components/ui/BankCommStatusBadge'
 import { PayloadViewer } from '@/components/ui/PayloadViewer'
 import { Button } from '@/components/ui/Button'
-import { formatDate, cn } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 import { t } from '@/i18n'
 import {
   listBankCommunications,
@@ -55,7 +60,9 @@ function BankCommKpiStrip() {
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-20 rounded-xl bg-neutral-100 animate-pulse" />)}
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} variant="card" className="!p-4 !py-5 h-20" />
+        ))}
       </div>
     )
   }
@@ -78,9 +85,9 @@ function DetailPane({ message }: { message: BankCommMessage | null }) {
 
   if (!message) {
     return (
-      <div className="rounded-lg border border-neutral-200 bg-neutral-50 h-full min-h-64 flex items-center justify-center text-sm text-neutral-400 p-6">
+      <DetailPanePlaceholder>
         {t('admin.bankComms.selectHint')}
-      </div>
+      </DetailPanePlaceholder>
     )
   }
 
@@ -90,7 +97,7 @@ function DetailPane({ message }: { message: BankCommMessage | null }) {
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm text-neutral-900">{message.bankName ?? '—'}</span>
+            <span className="font-semibold text-sm text-[var(--text-primary)]">{message.bankName ?? '—'}</span>
             {message.adapterType && <BankAdapterTypeBadge adapterType={message.adapterType} />}
           </div>
           <BankCommStatusBadge status={message.status} />
@@ -108,37 +115,37 @@ function DetailPane({ message }: { message: BankCommMessage | null }) {
       </div>
 
       {/* Metadata */}
-      <dl className="text-xs space-y-1.5">
+      <dl className="text-xs space-y-1.5 text-[var(--text-secondary)]">
         <div className="flex justify-between gap-2">
-          <dt className="text-neutral-500">{t('admin.bankComms.col.ts')}</dt>
+          <dt className="text-[var(--text-tertiary)]">{t('admin.bankComms.col.ts')}</dt>
           <dd>{formatDate(message.timestamp)}</dd>
         </div>
         <div className="flex justify-between gap-2">
-          <dt className="text-neutral-500">{t('admin.bankComms.col.direction')}</dt>
+          <dt className="text-[var(--text-tertiary)]">{t('admin.bankComms.col.direction')}</dt>
           <dd className="capitalize">{message.direction === 'outbound' ? '↑ Outbound' : '↓ Inbound'}</dd>
         </div>
         {message.subject && (
           <div className="flex justify-between gap-2">
-            <dt className="text-neutral-500">{t('admin.bankComms.col.subject')}</dt>
+            <dt className="text-[var(--text-tertiary)]">{t('admin.bankComms.col.subject')}</dt>
             <dd className="text-right max-w-xs truncate">{message.subject}</dd>
           </div>
         )}
         {message.endpoint && (
           <div className="flex justify-between gap-2">
-            <dt className="text-neutral-500">{t('admin.bankComms.col.endpoint')}</dt>
+            <dt className="text-[var(--text-tertiary)]">{t('admin.bankComms.col.endpoint')}</dt>
             <dd className="font-mono text-xs text-right max-w-xs truncate">{message.endpoint}</dd>
           </div>
         )}
         {message.responseStatus != null && (
           <div className="flex justify-between gap-2">
-            <dt className="text-neutral-500">{t('admin.bankComms.responseCode')}</dt>
+            <dt className="text-[var(--text-tertiary)]">{t('admin.bankComms.responseCode')}</dt>
             <dd className={message.responseStatus >= 400 ? 'text-error-700 font-semibold' : 'text-success-700'}>
               {message.responseStatus}
             </dd>
           </div>
         )}
         <div className="flex justify-between gap-2">
-          <dt className="text-neutral-500">{t('admin.bankComms.col.messageId')}</dt>
+          <dt className="text-[var(--text-tertiary)]">{t('admin.bankComms.col.messageId')}</dt>
           <dd className="font-mono text-xs">{message.messageId}</dd>
         </div>
       </dl>
@@ -146,7 +153,7 @@ function DetailPane({ message }: { message: BankCommMessage | null }) {
       {/* Payload */}
       {message.payloadMasked && (
         <div>
-          <p className="text-xs font-medium text-neutral-600 mb-1.5">
+          <p className="text-xs font-medium text-[var(--text-secondary)] mb-1.5">
             {t('admin.bankComms.payload')}
           </p>
           <PayloadViewer
@@ -159,7 +166,7 @@ function DetailPane({ message }: { message: BankCommMessage | null }) {
       {/* Response */}
       {message.responseMasked && (
         <div>
-          <p className="text-xs font-medium text-neutral-600 mb-1.5">
+          <p className="text-xs font-medium text-[var(--text-secondary)] mb-1.5">
             {t('admin.bankComms.response')}
           </p>
           <PayloadViewer kind="json" payload={message.responseMasked} />
@@ -285,7 +292,7 @@ export default function BankCommunicationsPage() {
       accessorKey: 'messageId',
       header: t('admin.bankComms.col.messageId'),
       cell: ({ getValue }) => (
-        <span className="font-mono text-xs text-neutral-500">{(getValue<string>()).slice(0, 16)}…</span>
+        <span className="font-mono text-xs text-[var(--text-tertiary)]">{(getValue<string>()).slice(0, 16)}…</span>
       ),
       size: 160,
     },
@@ -314,68 +321,66 @@ export default function BankCommunicationsPage() {
       )}
 
       {/* Filter bar */}
-      <Card className="p-4">
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-48">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" aria-hidden="true" />
-            <input
-              type="search"
-              value={filters.search}
-              onChange={e => setFilter('search', e.target.value)}
-              placeholder={t('admin.bankComms.searchPlaceholder')}
-              className={cn(
-                'w-full rounded-lg border border-neutral-200 pl-9 pr-3 py-2 text-sm',
-                'focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent',
-                'placeholder:text-neutral-400'
-              )}
-            />
-          </div>
-
-          <select
-            value={filters.status}
-            onChange={e => setFilter('status', e.target.value as BankCommStatus | '')}
-            className="rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            aria-label={t('admin.bankComms.filter.status')}
-          >
-            <option value="">{t('admin.bankComms.filter.allStatuses')}</option>
-            {(['QUEUED', 'SENT', 'DELIVERED', 'RESPONDED', 'BOUNCED', 'FAILED'] as BankCommStatus[]).map(s => (
-              <option key={s} value={s}>{t(`admin.bankComms.status.${s.toLowerCase()}`)}</option>
-            ))}
-          </select>
-
-          <select
-            value={filters.direction}
-            onChange={e => setFilter('direction', e.target.value as 'outbound' | 'inbound' | '')}
-            className="rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            aria-label={t('admin.bankComms.filter.direction')}
-          >
-            <option value="">{t('admin.bankComms.filter.allDirections')}</option>
-            <option value="outbound">{t('admin.bankComms.direction.outbound')}</option>
-            <option value="inbound">{t('admin.bankComms.direction.inbound')}</option>
-          </select>
-
-          <select
-            value={filters.channel}
-            onChange={e => setFilter('channel', e.target.value as 'email' | 'rest' | 'oauth' | '')}
-            className="rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            aria-label={t('admin.bankComms.filter.channel')}
-          >
-            <option value="">{t('admin.bankComms.filter.allChannels')}</option>
-            <option value="email">Email</option>
-            <option value="rest">REST</option>
-            <option value="oauth">OAuth2</option>
-          </select>
-
-          <Button
-            variant="ghost"
+      <FilterBar align="center">
+        <div className="flex-1 min-w-48">
+          <Input
+            type="search"
+            value={filters.search}
+            onChange={e => setFilter('search', e.target.value)}
+            placeholder={t('admin.bankComms.searchPlaceholder')}
+            prefix={<Search className="h-4 w-4" />}
             size="sm"
-            leftIcon={<RefreshCw className="h-4 w-4" />}
-            onClick={() => void refetch()}
-          >
-            {t('common.refresh')}
-          </Button>
+          />
         </div>
-      </Card>
+
+        <NativeSelect
+          label={t('admin.bankComms.filter.status')}
+          value={filters.status}
+          onChange={e => setFilter('status', e.target.value as BankCommStatus | '')}
+          aria-label={t('admin.bankComms.filter.status')}
+          className="min-w-[140px]"
+        >
+          <option value="">{t('admin.bankComms.filter.allStatuses')}</option>
+          {(['QUEUED', 'SENT', 'DELIVERED', 'RESPONDED', 'BOUNCED', 'FAILED'] as BankCommStatus[]).map(s => (
+            <option key={s} value={s}>{t(`admin.bankComms.status.${s.toLowerCase()}`)}</option>
+          ))}
+        </NativeSelect>
+
+        <NativeSelect
+          label={t('admin.bankComms.filter.direction')}
+          value={filters.direction}
+          onChange={e => setFilter('direction', e.target.value as 'outbound' | 'inbound' | '')}
+          aria-label={t('admin.bankComms.filter.direction')}
+          className="min-w-[140px]"
+        >
+          <option value="">{t('admin.bankComms.filter.allDirections')}</option>
+          <option value="outbound">{t('admin.bankComms.direction.outbound')}</option>
+          <option value="inbound">{t('admin.bankComms.direction.inbound')}</option>
+        </NativeSelect>
+
+        <NativeSelect
+          label={t('admin.bankComms.filter.channel')}
+          value={filters.channel}
+          onChange={e => setFilter('channel', e.target.value as 'email' | 'rest' | 'oauth' | '')}
+          aria-label={t('admin.bankComms.filter.channel')}
+          className="min-w-[140px]"
+        >
+          <option value="">{t('admin.bankComms.filter.allChannels')}</option>
+          <option value="email">Email</option>
+          <option value="rest">REST</option>
+          <option value="oauth">OAuth2</option>
+        </NativeSelect>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={<RefreshCw className="h-4 w-4" />}
+          onClick={() => void refetch()}
+          className="self-end"
+        >
+          {t('common.refresh')}
+        </Button>
+      </FilterBar>
 
       {/* SplitView */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
@@ -387,12 +392,14 @@ export default function BankCommunicationsPage() {
             loading={isLoading}
             onRowClick={row => setSelected(row)}
             emptyState={
-              <div className="py-14 text-center text-neutral-400">
-                <MessageSquare className="h-8 w-8 mx-auto mb-2 text-neutral-300" aria-hidden="true" />
+              <div className="py-14 text-center text-[var(--text-tertiary)]">
+                <MessageSquare className="h-8 w-8 mx-auto mb-2 text-[var(--text-disabled)]" aria-hidden="true" />
                 {t('admin.bankComms.empty')}
               </div>
             }
             pageSize={50}
+            tableId="bank-comms"
+            density="compact"
           />
         </div>
 

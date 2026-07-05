@@ -17,10 +17,10 @@ The backend invite/member system **already existed and is production-grade** —
 
 ## Changes made (Phase 2 — DONE, all verified)
 
-### Backend (`backend/Services/AuthService/` + `database/`)
+### Backend (`backend/Services/PlatformService/Platform.Application/Auth/` + `database/`)
 1. **Keystone fix** — `.../Organizations/Commands/CreateOrganization/CreateOrganizationCommand.cs`: the creating owner is now added as an `OrganizationMember` with the **`ORG_ADMIN`** role. Before, org creation set only `Organization.OwnerUserId` with **no membership/role**, so `FirebaseAuthService.BuildSessionClaimsAsync` resolved **no `organizationId` and no `org.*` permissions** into the session JWT → the owner could never invite anyone. Role lookup is graceful (skips membership if `ORG_ADMIN` absent), so existing tests are unaffected.
 2. **`ORG_MEMBER` role** — `database/migrations/059_auth_seed_org_member_role.sql` (additive, idempotent, applied + verified on local dev DB). System role, basic perms: `org.members.read`, `document.read/update/share`, `itr.filing.read`, `itr.grievance.read`. Default for invited members. `ORG_ADMIN` ⊇ these, so the invite delegation rule allows granting it.
-3. **Surface the invite token** — `.../AuthService.Api/Endpoints/Invitations.cs` `CreateInvite` now returns `{ inviteId, token, expiresAt }` (the raw one-time token was previously discarded, contradicting the endpoint's own summary). Lets mobile build a shareable `snapaccount://invite/{token}` link.
+3. **Surface the invite token** — `.../Platform.WebApi/Endpoints/Auth/Invitations.cs` `CreateInvite` now returns `{ inviteId, token, expiresAt }` (the raw one-time token was previously discarded, contradicting the endpoint's own summary). Lets mobile build a shareable `snapaccount://invite/{token}` link.
 
 ### Mobile (`mobile/`)
 - **NEW** `src/lib/team.ts` — typed client for all `/auth/team*` + `/auth/invite/*` endpoints; treats HTTP 410 on validate as a clean "invalid invite". `+ __tests__/lib/team.test.ts` (12 tests).

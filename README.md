@@ -2,13 +2,13 @@
 
 Mobile-first SME financial platform for India: accounting from a photo, GST filing (GSTR‑1, GSTR‑3B, e‑invoicing, e‑way bill), business loan packaging with partner banks, ITR filing for individuals and SMEs, plus a human-in-the-loop CA/ops workflow (chat, callbacks, notice tracking). Designed around the "Technology + Human Service" model — users capture documents on mobile; OCR + ledger automation prepares the data; CAs and operators review, approve, and file via the admin web app.
 
-The platform is built as 12 .NET 10 microservices (Clean Architecture + CQRS), a React 19 admin web app, an Expo SDK 52 React Native mobile app, and a single PostgreSQL 17 database with schema-per-service isolation. Cloud target is Google Cloud (asia-south1, Mumbai) for DPDP Act 2023 compliance.
+The platform is built as **3 .NET 10 composite services** (Platform, Finance, Assist) hosting 12 business modules, a React 19 admin web app, an Expo SDK 52 React Native mobile app, and a single PostgreSQL 17 database with schema-per-service isolation. Cloud target is Google Cloud (asia-south1, Mumbai) for DPDP Act 2023 compliance.
 
 ---
 
 ## Tech Stack
 
-**Backend** — .NET 10, C# 14, Clean Architecture, EF Core 10, .NET Aspire (orchestration), MediatR (CQRS), FluentValidation, xUnit. 12 microservices: Auth, Document, Accounting, GST, Loan, ITR, Chat, Notification, Report, Subscription, AI, Callback.
+**Backend** — .NET 10, C# 14, Clean Architecture, EF Core 10, .NET Aspire, YARP API Gateway (:5000), MediatR, FluentValidation, xUnit. **3 composites** (Platform :5201, Finance :5202, Assist :5203) hosting 12 modules; clients use the gateway on :5000.
 
 **Frontend (admin)** — React 19, TypeScript (strict), Vite 5, TanStack Query v5, React Router v7, Tailwind CSS v4, Zod, vitest + Testing Library, react-i18next (en/hi/bn).
 
@@ -95,17 +95,15 @@ docker compose up postgres redis -d
 # Wait for postgres to be healthy
 docker compose ps
 
-# Set the DB password secret for each service (one-off, per service)
-# Example for AuthService:
-cd backend/Services/AuthService/AuthService.Api
+# Set DB password secret (once per composite WebApi)
+cd backend/Services/PlatformService/Platform.WebApi
 dotnet user-secrets init
 dotnet user-secrets set "DB_PASSWORD" "postgresql"
 cd ../../../..
 
-# Apply migrations (Aspire AppHost runs them automatically on first start;
-# alternatively run them manually for a single service):
-cd backend/Services/AuthService/AuthService.Infrastructure
-dotnet ef database update --startup-project ../AuthService.Api
+# EF migrations (example — Auth module under Platform)
+cd backend/Services/PlatformService/Platform.Infrastructure
+dotnet ef database update --startup-project ../Platform.WebApi
 cd ../../../..
 
 # Seed reference data (idempotent)
@@ -117,18 +115,29 @@ The `database/migrations/` folder contains 30 numbered SQL files (001 → 030) a
 ### e. Start the backend
 
 ```bash
-# Recommended: run all 12 microservices via .NET Aspire
+# Recommended: run all 3 composites + API gateway via .NET Aspire
 cd backend
-dotnet run --project AppHost
-# Aspire dashboard: http://localhost:15888
+dotnet run --project Services/AppHost
+# API Gateway: http://localhost:5000/healthz
+# Aspire dashboard: https://localhost:17241
 ```
 
-To run a single service:
+Clients call **one URL** — `http://localhost:5000` — not the composite ports directly:
+
+| Client | Config |
+|--------|--------|
+| Admin (`src/admin`) | Vite proxies `/api` → gateway :5000 |
+| Mobile (`mobile/app.json`) | `extra.apiBaseUrl`: `http://localhost:5000` (use LAN IP on physical device) |
+
+To run a single composite (debug only):
 
 ```bash
-cd backend/Services/<ServiceName>/<ServiceName>.Api
-dotnet run
+cd backend/Services/PlatformService/Platform.WebApi && dotnet run   # :5201
+cd backend/Services/FinanceService/Finance.WebApi && dotnet run    # :5202
+cd backend/Services/AssistService/Assist.WebApi && dotnet run     # :5203
 ```
+
+Legacy note — do not use old per-module Api paths; all hosts are composite WebApi projects.
 
 ### f. Start the frontend(s)
 
@@ -181,21 +190,14 @@ Seed data creates accounts for these roles for local development:
 
 ```
 snapaccount/
-├── backend/                       # .NET 10 microservices (12 services)
-│   ├── AppHost/                   # .NET Aspire orchestration entry point
+├── backend/                       # .NET 10 — 3 composites + gateway
 │   ├── Services/
-│   │   ├── AuthService/           # Phone OTP, RBAC, device binding, DPDP erasure
-│   │   ├── DocumentService/       # OCR (Document AI), GCS upload, OCR callback
-│   │   ├── AccountingService/     # Ledger posting, P&L, BS, Trial Balance
-│   │   ├── GstService/            # GSTR‑1, GSTR‑3B, notices, e‑invoice, e‑way bill
-│   │   ├── LoanService/           # Eligibility, consents, package PDF, bank adapters
-│   │   ├── ItrService/            # Tax computation engine, Form 16 OCR, e-verification
-│   │   ├── ChatService/           # SignalR + Redis backplane, category routing
-│   │   ├── NotificationService/   # 26+ events × push/SMS/email + DLT gating + DLQ
-│   │   ├── ReportService/         # QuestPDF templates, LoanPackage merge
-│   │   ├── SubscriptionService/   # Razorpay HMAC, plans, MRR, lifecycle
-│   │   ├── AiService/             # RAG, Vertex AI, Sarvam AI
-│   │   └── CallbackService/       # Lead-gen + scheduled callbacks state machine
+│   │   ├── AppHost/               # .NET Aspire orchestration entry point
+│   │   ├── Gateway/               # YARP API gateway (:5000)
+│   │   ├── PlatformService/       # Auth, Subscription, Notification (:5201)
+│   │   ├── FinanceService/        # Document, Accounting, GST, Loan, ITR, Report (:5202)
+│   │   └── AssistService/         # Chat, AI, Callback (:5203)
+│   ├── ServiceDefaults/           # Aspire shared defaults
 │   └── Shared/                    # Common base types, value objects (PAN/GSTIN/Money)
 │
 ├── src/admin/                     # React 19 admin panel (Vite)
@@ -257,7 +259,7 @@ snapaccount/
 
 ```bash
 cd backend
-dotnet run --project AppHost                    # all 12 services via Aspire
+dotnet run --project Services/AppHost                    # all 12 services via Aspire
 dotnet test                                     # all xUnit tests
 dotnet test --filter "Category=Unit"            # unit only
 dotnet build                                    # 0-warnings policy

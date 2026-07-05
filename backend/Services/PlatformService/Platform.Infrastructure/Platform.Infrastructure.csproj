@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <NoWarn>NU1608</NoWarn>
+    <RootNamespace>Platform.Infrastructure</RootNamespace>
+    <AssemblyName>Platform.Infrastructure</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.*">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.*" />
+    <PackageReference Include="FirebaseAdmin" Version="3.*" />
+    <PackageReference Include="BCrypt.Net-Next" Version="4.*" />
+    <PackageReference Include="Otp.NET" Version="1.4.1" />
+    <PackageReference Include="Hangfire.Core" Version="1.*" />
+    <PackageReference Include="Google.Cloud.PubSub.V1" Version="3.*" />
+    <PackageReference Include="Google.Cloud.Storage.V1" Version="4.*" />
+    <PackageReference Include="MediatR" Version="12.*" />
+    <PackageReference Include="QuestPDF" Version="2025.*" />
+    <PackageReference Include="Microsoft.Extensions.ServiceDiscovery" Version="10.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Platform.Application/Platform.Application.csproj" />
+    <ProjectReference Include="../Platform.Domain/Platform.Domain.csproj" />
+    <ProjectReference Include="../../../Shared/SnapAccount.Shared.Infrastructure/SnapAccount.Shared.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

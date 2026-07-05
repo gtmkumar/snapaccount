@@ -223,6 +223,6 @@ WHERE assessment_year = '{AY}'
 ## Related
 
 - Schema: `database/migrations/` (ItrService migrations)
-- Service: `backend/Services/ItrService/ItrService.Infrastructure/`
+- Service: `backend/Services/FinanceService/Finance.Infrastructure/Itr/`
 - Scope doc: `.claude/orchestrator/phase-6D-scope.md`
 - Document AI quota: `docs/devops/document-ai-quota-itr.md`

@@ -19,11 +19,14 @@ export type Regime = z.infer<typeof RegimeSchema>
 export const FilingStatusSchema = z.enum([
   'DRAFT',
   'UNDER_CA_REVIEW',
+  'CA_REJECTED',    // DG-ITR-06: backend uses CA_REJECTED (matches DB CHECK constraint)
+  'CA_APPROVED',    // DG-ITR-06: DB allows CA_APPROVED (entity ApproveByCa sets USER_APPROVED, CA_APPROVED is a DB-only alias)
   'USER_APPROVED',
   'FILED',
   'E_VERIFIED',
   'REFUND_ISSUED',
   'NOTICE_RECEIVED',
+  'CANCELLED',
 ])
 export type FilingStatus = z.infer<typeof FilingStatusSchema>
 

@@ -19,7 +19,9 @@ import React, {
 import {
   AccessibilityInfo,
   ActivityIndicator,
+  Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -32,6 +34,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useReducedMotion } from 'react-native-reanimated';
+import * as ImagePicker from 'expo-image-picker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NavigationProp, RouteProp } from '@react-navigation/native';
@@ -57,6 +60,17 @@ import {
   type ChatMessage,
   type ChatThread,
 } from '../../api/chat';
+import {
+  listVaultDocuments,
+  parseAttachments,
+  serializeAttachments,
+  uploadChatAttachment,
+  vaultDocumentToAttachment,
+  MAX_CHAT_ATTACHMENTS,
+  type ChatAttachment,
+  type LocalPickedFile,
+  type VaultDocument,
+} from '../../api/chatAttachments';
 import { createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { newClientMessageId } from '../../lib/ids';
 import { useHaptics } from '../../hooks/useHaptics';
@@ -82,10 +96,36 @@ interface BubbleProps {
   highlighted?: boolean;
 }
 
+/** Icon for an attachment chip based on its MIME type. */
+function attachmentIcon(
+  mimeType: string,
+): React.ComponentProps<typeof Ionicons>['name'] {
+  if (mimeType.startsWith('image/')) return 'image-outline';
+  if (mimeType === 'application/pdf') return 'document-text-outline';
+  return 'document-outline';
+}
+
 function ChatBubble({ message, isSelf, showAvatar, onRetry, onLongPress, highlighted }: BubbleProps) {
   const styles = useStyles();
   const { tokens } = useTheme();
   const { t } = useTranslation();
+
+  // DG-CHAT-04: attachments travel as a JSON string on the message; merge any
+  // client-only local attachments (optimistic, pre-server-echo) for display.
+  const attachments: ChatAttachment[] = React.useMemo(() => {
+    const parsed = parseAttachments(message.attachmentsJson);
+    if (parsed.length > 0) return parsed;
+    if (message.localAttachments && message.localAttachments.length > 0) {
+      return message.localAttachments.map((la) => ({
+        documentId: '',
+        storagePath: la.localUri,
+        fileName: la.fileName ?? 'attachment',
+        mimeType: la.mimeType ?? 'application/octet-stream',
+        source: 'capture' as const,
+      }));
+    }
+    return [];
+  }, [message.attachmentsJson, message.localAttachments]);
 
   const statusIcon: React.ComponentProps<typeof Ionicons>['name'] =
     message.localStatus === 'queued'
@@ -169,14 +209,59 @@ function ChatBubble({ message, isSelf, showAvatar, onRetry, onLongPress, highlig
             <Ionicons name="bookmark" size={12} color={tokens.brand500} />
           </View>
         )}
-        <Text
-          style={[
-            styles.bubbleText,
-            { color: isSelf ? tokens.textOnBrand : tokens.textPrimary },
-          ]}
-        >
-          {message.body}
-        </Text>
+        {message.body ? (
+          <Text
+            style={[
+              styles.bubbleText,
+              { color: isSelf ? tokens.textOnBrand : tokens.textPrimary },
+            ]}
+          >
+            {message.body}
+          </Text>
+        ) : null}
+
+        {attachments.length > 0 && (
+          <View style={styles.bubbleAttachments} testID={`bubble-attachments-${message.messageId}`}>
+            {attachments.map((att, i) => {
+              const isImage = att.mimeType.startsWith('image/');
+              const localPreview = att.storagePath.startsWith('file:') || att.storagePath.startsWith('content:');
+              return (
+                <View
+                  key={`${att.documentId || att.fileName}-${i}`}
+                  style={[
+                    styles.attachmentChip,
+                    {
+                      backgroundColor: isSelf ? tokens.textOnBrand + '22' : tokens.raised,
+                      borderColor: isSelf ? tokens.textOnBrand + '44' : tokens.border,
+                    },
+                  ]}
+                  accessibilityLabel={t('mobile.chat.attach.attachmentLabel', {
+                    name: att.fileName,
+                  })}
+                >
+                  {isImage && localPreview ? (
+                    <Image source={{ uri: att.storagePath }} style={styles.attachmentThumb} />
+                  ) : (
+                    <Ionicons
+                      name={attachmentIcon(att.mimeType)}
+                      size={18}
+                      color={isSelf ? tokens.textOnBrand : tokens.brand500}
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.attachmentChipText,
+                      { color: isSelf ? tokens.textOnBrand : tokens.textPrimary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {att.fileName}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
 
         <View style={styles.bubbleMeta}>
           <Text
@@ -297,6 +382,13 @@ export function ChatDetailScreen() {
   const [exportState, setExportState] = useState<'idle' | 'preparing' | 'failed'>('idle');
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const exportCancelledRef = useRef(false);
+
+  // ── DG-CHAT-04: attachments (camera/gallery upload + Document Vault picker) ─
+  const [attachSheetOpen, setAttachSheetOpen] = useState(false);
+  const [vaultOpen, setVaultOpen] = useState(false);
+  const [vaultSelected, setVaultSelected] = useState<Record<string, VaultDocument>>({});
+  const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
+  const [attachBusy, setAttachBusy] = useState(false);
 
   const typingStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -428,6 +520,165 @@ export function ChatDetailScreen() {
     [],
   );
 
+  // ── DG-CHAT-04: attachment handlers ────────────────────────────────────────
+  // Capture / gallery files are streamed through the SAME GCS pipeline the
+  // Document Vault uses (POST /documents/upload) so every chat attachment is a
+  // first-class, org-scoped, retained document. The Vault picker references
+  // existing documents by id without re-uploading.
+
+  const remainingSlots = MAX_CHAT_ATTACHMENTS - pendingAttachments.length;
+
+  // Vault documents (lazy — only fetched when the picker opens).
+  const { data: vaultDocs = [], isLoading: vaultLoading } = useQuery<VaultDocument[]>({
+    queryKey: ['chat-vault-documents'],
+    queryFn: () => listVaultDocuments(),
+    enabled: vaultOpen,
+  });
+
+  const addUploadedFile = useCallback(
+    async (file: LocalPickedFile) => {
+      setAttachBusy(true);
+      try {
+        const attachment = await uploadChatAttachment(file);
+        setPendingAttachments((prev) =>
+          prev.length >= MAX_CHAT_ATTACHMENTS ? prev : [...prev, attachment],
+        );
+        haptics.success();
+      } catch {
+        haptics.error();
+        Alert.alert(
+          t('mobile.chat.attach.uploadFailedTitle'),
+          t('mobile.chat.attach.uploadFailedBody'),
+        );
+      } finally {
+        setAttachBusy(false);
+      }
+    },
+    [haptics, t],
+  );
+
+  const handleAttachCapture = useCallback(async () => {
+    setAttachSheetOpen(false);
+    if (remainingSlots <= 0) {
+      Alert.alert(
+        t('mobile.chat.attach.maxTitle'),
+        t('mobile.chat.attach.maxBody', { max: MAX_CHAT_ATTACHMENTS }),
+      );
+      return;
+    }
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(
+        t('mobile.chat.attach.cameraPermTitle'),
+        t('mobile.chat.attach.cameraPermBody'),
+      );
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: 'images',
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    await addUploadedFile({
+      uri: asset.uri,
+      fileName: asset.fileName ?? `photo_${Date.now()}.jpg`,
+      mimeType: asset.mimeType ?? 'image/jpeg',
+      sizeBytes: asset.fileSize,
+      source: 'capture',
+    });
+  }, [remainingSlots, addUploadedFile, t]);
+
+  const handleAttachGallery = useCallback(async () => {
+    setAttachSheetOpen(false);
+    if (remainingSlots <= 0) {
+      Alert.alert(
+        t('mobile.chat.attach.maxTitle'),
+        t('mobile.chat.attach.maxBody', { max: MAX_CHAT_ATTACHMENTS }),
+      );
+      return;
+    }
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(
+        t('mobile.chat.attach.galleryPermTitle'),
+        t('mobile.chat.attach.galleryPermBody'),
+      );
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      quality: 0.85,
+      allowsMultipleSelection: true,
+      selectionLimit: remainingSlots,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    // Upload sequentially so progress/error per file stays simple.
+    for (const asset of result.assets.slice(0, remainingSlots)) {
+      await addUploadedFile({
+        uri: asset.uri,
+        fileName: asset.fileName ?? `image_${Date.now()}.jpg`,
+        mimeType: asset.mimeType ?? 'image/jpeg',
+        sizeBytes: asset.fileSize,
+        source: 'gallery',
+      });
+    }
+  }, [remainingSlots, addUploadedFile, t]);
+
+  const handleOpenVault = useCallback(() => {
+    setAttachSheetOpen(false);
+    if (remainingSlots <= 0) {
+      Alert.alert(
+        t('mobile.chat.attach.maxTitle'),
+        t('mobile.chat.attach.maxBody', { max: MAX_CHAT_ATTACHMENTS }),
+      );
+      return;
+    }
+    setVaultSelected({});
+    setVaultOpen(true);
+  }, [remainingSlots, t]);
+
+  const toggleVaultSelection = useCallback(
+    (doc: VaultDocument) => {
+      setVaultSelected((prev) => {
+        const next = { ...prev };
+        if (next[doc.documentId]) {
+          delete next[doc.documentId];
+        } else {
+          if (Object.keys(next).length >= remainingSlots) {
+            haptics.error();
+            return prev;
+          }
+          next[doc.documentId] = doc;
+        }
+        return next;
+      });
+    },
+    [remainingSlots, haptics],
+  );
+
+  const confirmVaultSelection = useCallback(() => {
+    const chosen = Object.values(vaultSelected).map(vaultDocumentToAttachment);
+    if (chosen.length === 0) {
+      setVaultOpen(false);
+      return;
+    }
+    setPendingAttachments((prev) => {
+      const existingIds = new Set(prev.map((a) => a.documentId));
+      const toAdd = chosen.filter((a) => !existingIds.has(a.documentId));
+      return [...prev, ...toAdd].slice(0, MAX_CHAT_ATTACHMENTS);
+    });
+    haptics.success();
+    setVaultSelected({});
+    setVaultOpen(false);
+  }, [vaultSelected, haptics]);
+
+  const removePendingAttachment = useCallback((documentId: string, fileName: string) => {
+    setPendingAttachments((prev) =>
+      prev.filter((a) => !(a.documentId === documentId && a.fileName === fileName)),
+    );
+  }, []);
+
   // ── SignalR lifecycle (focus/blur aware) ───────────────────────────────────
   useFocusEffect(
     useCallback(() => {
@@ -491,10 +742,11 @@ export function ChatDetailScreen() {
   // logical message and persisted in the optimistic message state. A retry of
   // a failed send MUST reuse the same id — that is the backend dedupe key.
   const performSend = useCallback(
-    async (body: string, clientMessageId: string) => {
+    async (body: string, clientMessageId: string, attachmentsJson?: string) => {
       try {
         const sent = await sendMessage(threadId, {
           body,
+          attachmentsJson,
           clientMessageId,
         });
         setMessages((prev) =>
@@ -526,14 +778,18 @@ export function ChatDetailScreen() {
 
   const handleSend = useCallback(async () => {
     const text = composerText.trim();
-    if (!text || isSending) return;
+    // DG-CHAT-04: allow sending an attachment-only message (no body text).
+    const attachments = pendingAttachments;
+    if ((!text && attachments.length === 0) || isSending) return;
 
+    const attachmentsJson = serializeAttachments(attachments);
     const clientMessageId = newClientMessageId();
     const optimisticMsg: ChatMessage = {
       messageId: clientMessageId,
       threadId,
       senderUserId: 'me',
       body: text,
+      attachmentsJson,
       createdAt: new Date().toISOString(),
       clientMessageId,
       localStatus: isOffline ? 'queued' : 'sending',
@@ -541,6 +797,7 @@ export function ChatDetailScreen() {
 
     setMessages((prev) => [...prev, optimisticMsg]);
     setComposerText('');
+    setPendingAttachments([]);
     setIsSending(true);
 
     if (typingDebounceTimer.current) {
@@ -553,8 +810,8 @@ export function ChatDetailScreen() {
       return;
     }
 
-    await performSend(text, clientMessageId);
-  }, [composerText, isSending, isOffline, threadId, performSend]);
+    await performSend(text, clientMessageId, attachmentsJson);
+  }, [composerText, pendingAttachments, isSending, isOffline, threadId, performSend]);
 
   // ── Retry failed send (reuses the persisted clientMessageId — dedupe point) ─
   const handleRetry = useCallback(
@@ -569,7 +826,8 @@ export function ChatDetailScreen() {
         ),
       );
       setIsSending(true);
-      await performSend(failed.body, clientMessageId);
+      // Preserve the original attachments on retry (same clientMessageId dedupe).
+      await performSend(failed.body, clientMessageId, failed.attachmentsJson);
     },
     [isSending, performSend],
   );
@@ -770,6 +1028,55 @@ export function ChatDetailScreen() {
           </Pressable>
         )}
 
+        {/* DG-CHAT-04: pending attachments strip (above the composer) */}
+        {(pendingAttachments.length > 0 || attachBusy) && (
+          <View
+            style={[styles.pendingStrip, { backgroundColor: tokens.sunken, borderTopColor: tokens.border }]}
+            testID="chat-pending-attachments"
+          >
+            <FlatList
+              data={pendingAttachments}
+              keyExtractor={(a, i) => `${a.documentId || a.fileName}-${i}`}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.pendingList}
+              ListFooterComponent={
+                attachBusy ? (
+                  <View style={[styles.pendingChip, styles.pendingChipBusy, { borderColor: tokens.border }]}>
+                    <ActivityIndicator size="small" color={tokens.brand500} />
+                  </View>
+                ) : null
+              }
+              renderItem={({ item }) => {
+                const isImage = item.mimeType.startsWith('image/');
+                const hasLocalPreview =
+                  item.storagePath.startsWith('file:') || item.storagePath.startsWith('content:');
+                return (
+                  <View style={[styles.pendingChip, { backgroundColor: tokens.raised, borderColor: tokens.border }]}>
+                    {isImage && hasLocalPreview ? (
+                      <Image source={{ uri: item.storagePath }} style={styles.pendingThumb} />
+                    ) : (
+                      <Ionicons name={attachmentIcon(item.mimeType)} size={20} color={tokens.brand500} />
+                    )}
+                    <Text style={[styles.pendingChipText, { color: tokens.textPrimary }]} numberOfLines={1}>
+                      {item.fileName}
+                    </Text>
+                    <Pressable
+                      style={styles.pendingRemove}
+                      onPress={() => removePendingAttachment(item.documentId, item.fileName)}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('mobile.chat.attach.remove', { name: item.fileName })}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={18} color={tokens.textSecondary} />
+                    </Pressable>
+                  </View>
+                );
+              }}
+            />
+          </View>
+        )}
+
         {/* Composer */}
         <View
           style={[
@@ -779,11 +1086,14 @@ export function ChatDetailScreen() {
         >
           <Pressable
             style={styles.composerAction}
+            onPress={() => setAttachSheetOpen(true)}
+            disabled={attachBusy}
             accessibilityRole="button"
-            accessibilityLabel={t('mobile.chat.mobile.attach.camera')}
+            accessibilityLabel={t('mobile.chat.attach.open')}
             hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+            testID="chat-attach-button"
           >
-            <Ionicons name="camera-outline" size={22} color={tokens.brand500} />
+            <Ionicons name="add-circle-outline" size={24} color={tokens.brand500} />
           </Pressable>
 
           <TextInput
@@ -809,11 +1119,13 @@ export function ChatDetailScreen() {
               styles.sendBtn,
               {
                 backgroundColor:
-                  composerText.trim() ? tokens.brand500 : tokens.border,
+                  composerText.trim() || pendingAttachments.length > 0
+                    ? tokens.brand500
+                    : tokens.border,
               },
             ]}
             onPress={() => void handleSend()}
-            disabled={!composerText.trim() || isSending}
+            disabled={(!composerText.trim() && pendingAttachments.length === 0) || isSending}
             accessibilityRole="button"
             accessibilityLabel={t('mobile.chat.detail.send')}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -915,6 +1227,174 @@ export function ChatDetailScreen() {
               <Ionicons name="close-outline" size={20} color={tokens.textSecondary} />
               <Text style={[styles.sheetActionText, { color: tokens.textSecondary }]}>
                 {t('mobile.common.cancel')}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* DG-CHAT-04: attach options bottom sheet */}
+      <Modal
+        visible={attachSheetOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAttachSheetOpen(false)}
+      >
+        <View style={styles.sheetBackdrop}>
+          <Pressable
+            style={styles.sheetBackdropTouch}
+            onPress={() => setAttachSheetOpen(false)}
+            accessibilityLabel={t('mobile.common.close')}
+          />
+          <View style={styles.sheet} accessibilityViewIsModal testID="chat-attach-sheet">
+            <Text style={styles.sheetHint}>{t('mobile.chat.attach.sheetHint')}</Text>
+            <Pressable
+              style={styles.sheetAction}
+              onPress={() => void handleAttachCapture()}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.chat.attach.camera')}
+              testID="chat-attach-camera"
+            >
+              <Ionicons name="camera-outline" size={20} color={tokens.brand500} />
+              <Text style={styles.sheetActionText}>{t('mobile.chat.attach.camera')}</Text>
+            </Pressable>
+            <Pressable
+              style={styles.sheetAction}
+              onPress={() => void handleAttachGallery()}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.chat.attach.gallery')}
+              testID="chat-attach-gallery"
+            >
+              <Ionicons name="image-outline" size={20} color={tokens.brand500} />
+              <Text style={styles.sheetActionText}>{t('mobile.chat.attach.gallery')}</Text>
+            </Pressable>
+            <Pressable
+              style={styles.sheetAction}
+              onPress={handleOpenVault}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.chat.attach.vault')}
+              testID="chat-attach-vault"
+            >
+              <Ionicons name="folder-open-outline" size={20} color={tokens.brand500} />
+              <Text style={styles.sheetActionText}>{t('mobile.chat.attach.vault')}</Text>
+            </Pressable>
+            <Pressable
+              style={styles.sheetAction}
+              onPress={() => setAttachSheetOpen(false)}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.common.cancel')}
+            >
+              <Ionicons name="close-outline" size={20} color={tokens.textSecondary} />
+              <Text style={[styles.sheetActionText, { color: tokens.textSecondary }]}>
+                {t('mobile.common.cancel')}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* DG-CHAT-04: Document Vault picker (multi-select, max 10) */}
+      <Modal
+        visible={vaultOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setVaultOpen(false)}
+      >
+        <View style={styles.sheetBackdrop}>
+          <Pressable
+            style={styles.sheetBackdropTouch}
+            onPress={() => setVaultOpen(false)}
+            accessibilityLabel={t('mobile.common.close')}
+          />
+          <View style={[styles.vaultSheet, { backgroundColor: tokens.raised }]} accessibilityViewIsModal testID="chat-vault-sheet">
+            <View style={styles.vaultHeader}>
+              <Text style={[styles.vaultTitle, { color: tokens.textPrimary }]}>
+                {t('mobile.chat.attach.vaultTitle')}
+              </Text>
+              <Pressable
+                onPress={() => setVaultOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.common.close')}
+                style={styles.vaultClose}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={22} color={tokens.textSecondary} />
+              </Pressable>
+            </View>
+
+            {vaultLoading ? (
+              <View style={styles.vaultLoading}>
+                <ActivityIndicator color={tokens.brand500} />
+              </View>
+            ) : vaultDocs.length === 0 ? (
+              <View style={styles.vaultEmpty}>
+                <Ionicons name="folder-outline" size={40} color={tokens.textTertiary} />
+                <Text style={[styles.vaultEmptyText, { color: tokens.textSecondary }]}>
+                  {t('mobile.chat.attach.vaultEmpty')}
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={vaultDocs}
+                keyExtractor={(d) => d.documentId}
+                style={styles.vaultList}
+                renderItem={({ item }) => {
+                  const selected = !!vaultSelected[item.documentId];
+                  return (
+                    <Pressable
+                      style={[styles.vaultRow, selected && { backgroundColor: tokens.brandTint }]}
+                      onPress={() => toggleVaultSelection(item)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: selected }}
+                      accessibilityLabel={item.fileName}
+                      testID={`vault-row-${item.documentId}`}
+                    >
+                      <Ionicons
+                        name={attachmentIcon(item.mimeType)}
+                        size={22}
+                        color={tokens.brand500}
+                      />
+                      <View style={styles.vaultRowMid}>
+                        <Text style={[styles.vaultRowName, { color: tokens.textPrimary }]} numberOfLines={1}>
+                          {item.fileName}
+                        </Text>
+                        {item.category ? (
+                          <Text style={[styles.vaultRowMeta, { color: tokens.textTertiary }]} numberOfLines={1}>
+                            {item.category}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Ionicons
+                        name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={22}
+                        color={selected ? tokens.brand500 : tokens.border}
+                      />
+                    </Pressable>
+                  );
+                }}
+              />
+            )}
+
+            <Pressable
+              style={[
+                styles.vaultConfirm,
+                {
+                  backgroundColor:
+                    Object.keys(vaultSelected).length > 0 ? tokens.brand500 : tokens.border,
+                },
+              ]}
+              onPress={confirmVaultSelection}
+              disabled={Object.keys(vaultSelected).length === 0}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.chat.attach.vaultConfirm', {
+                count: Object.keys(vaultSelected).length,
+              })}
+              testID="chat-vault-confirm"
+            >
+              <Text style={styles.vaultConfirmText}>
+                {t('mobile.chat.attach.vaultConfirm', {
+                  count: Object.keys(vaultSelected).length,
+                })}
               </Text>
             </Pressable>
           </View>
@@ -1170,5 +1650,96 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  // DG-CHAT-04: attachment chips inside a message bubble
+  bubbleAttachments: { gap: 4, marginTop: 2 },
+  attachmentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    maxWidth: 220,
+  },
+  attachmentThumb: { width: 28, height: 28, borderRadius: 6 },
+  attachmentChipText: { fontSize: 13, fontWeight: '500', flexShrink: 1 },
+
+  // DG-CHAT-04: pending-attachments strip above the composer
+  pendingStrip: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 8,
+  },
+  pendingList: { paddingHorizontal: 8, gap: 8 },
+  pendingChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingLeft: 8,
+    paddingRight: 4,
+    paddingVertical: 6,
+    maxWidth: 180,
+  },
+  pendingChipBusy: {
+    width: 56,
+    height: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  pendingThumb: { width: 28, height: 28, borderRadius: 6 },
+  pendingChipText: { fontSize: 12, fontWeight: '500', flexShrink: 1 },
+  pendingRemove: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // DG-CHAT-04: Document Vault picker sheet
+  vaultSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+    maxHeight: '80%',
+  },
+  vaultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  vaultTitle: { fontSize: 17, fontWeight: '700' },
+  vaultClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  vaultLoading: { paddingVertical: 48, alignItems: 'center' },
+  vaultEmpty: { paddingVertical: 48, alignItems: 'center', gap: 12, paddingHorizontal: 24 },
+  vaultEmptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  vaultList: { paddingHorizontal: 12 },
+  vaultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 56,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  vaultRowMid: { flex: 1, gap: 2 },
+  vaultRowName: { fontSize: 14, fontWeight: '600' },
+  vaultRowMeta: { fontSize: 12 },
+  vaultConfirm: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    minHeight: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vaultConfirmText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   }),
 );

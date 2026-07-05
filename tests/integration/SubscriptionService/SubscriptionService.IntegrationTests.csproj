@@ -12,7 +12,7 @@
   <!--
     NOTE FOR BACKEND-AGENT (P6-INT-02):
     Before these tests can be run, add the following to
-    backend/Services/SubscriptionService/SubscriptionService.Api/SubscriptionService.Api.csproj:
+    backend/Services/PlatformService/Platform.WebApi/Platform.WebApi.csproj:
 
       <ItemGroup>
         <InternalsVisibleTo Include="SubscriptionService.IntegrationTests" />
@@ -45,10 +45,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\backend\Services\SubscriptionService\SubscriptionService.Api\SubscriptionService.Api.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\SubscriptionService\SubscriptionService.Application\SubscriptionService.Application.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\SubscriptionService\SubscriptionService.Domain\SubscriptionService.Domain.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\SubscriptionService\SubscriptionService.Infrastructure\SubscriptionService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.WebApi/Platform.WebApi.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.Application/Platform.Application.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.Domain/Platform.Domain.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.Infrastructure/Platform.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
   </ItemGroup>
 

@@ -548,7 +548,7 @@ Mobile LoanHubScreen calls `GET /loans/products?pageSize=50` on mount.
 | POST | /loans/applications/{id}/documents | Required | Attach a supporting document | `{ documentId, documentType }` | `{ applicationDocumentId }` 201 |
 | POST | /loans/applications/{id}/kfs | Required | Generate RBI-compliant Key Facts Statement | `?locale=en\|hi\|bn` (optional, defaults to en) | `{ kfsId, annualPercentageRate, loanAmount, tenureMonths, monthlyEmi, fees, repaymentSchedule, lenderName, grievanceOfficerContact, coolingOffDays, generatedAt, locale }` 201 |
 | GET | /loans/applications/{id}/kfs | Required | Retrieve current KFS | `?kfsId` (optional, defaults to latest) `?locale=hi` (optional, prefers locale variant) | `{ kfsId, applicationId, annualPercentageRate, loanAmount, tenureMonths, monthlyEmi, feesJson, repaymentScheduleJson, locale, ... }` 200 |
-| POST | /loans/applications/{id}/consents | Required | Record consent signature (HMAC-SHA256) | `{ consentType, consentTextVersion, kfsId, consentLocale? }` | `{ consentId, signatureHex }` 201 |
+| POST | /loans/applications/{id}/consents | Required | Record consent signature (HMAC-SHA256) | `{ consentType, consentTextVersion, kfsId, consentLocale?, deviceId?, sharedWithBankIds? }` | `{ consentId, signatureHex }` 201 |
 | POST | /loans/applications/{id}/submit | Required | Submit DRAFT application for bank review | — | 200 |
 | POST | /loans/applications/{id}/assign-bank | `loan.applications.assign` | Assign to partner bank | `{ bankId, packageId }` | `{ assignedBankId, ... }` 200 |
 | POST | /loans/applications/{id}/bank-decision | `loan.applications.decide` | Record bank decision (approve/reject/docs) | `{ decision, bankReferenceNo?, reason? }` | 200 |
@@ -562,8 +562,8 @@ Mobile LoanHubScreen calls `GET /loans/products?pageSize=50` on mount.
 
 | Method | Route | Auth | Description | Request Body | Response |
 |--------|-------|------|-------------|-------------|----------|
-| POST | /loans/eligibility-check | Required | Run eligibility engine for org | `{ orgId, loanProductId? }` | `{ isEligible, score, reasons:[string], eligibleProducts:[...] }` 200 |
-| GET | /loans/eligibility | Required | Get latest eligibility result for org | `?orgId` (required) | `{ isEligible, score, lastCheckedAt, reasons:[string] }` 200 |
+| POST | /loans/eligibility-check | Required | Run eligibility engine for org | `{ orgId, loanProductId? }` | `{ score, isEligible, eligibilityStatus, reasons:[string], qualifyingProductIds:[guid], unmetCriteriaByProduct:{[productId]:string[]} }` 200 |
+| GET | /loans/eligibility | Required | Get latest eligibility result for org | `?orgId` (required) | `{ score, isEligible, eligibilityStatus, reasons:[string], qualifyingProductIds:[guid], unmetCriteriaByProduct:{[productId]:string[]} }` 200 |
 
 ### KPI & Dashboard
 
@@ -703,9 +703,12 @@ Mobile LoanHubScreen calls `GET /loans/products?pageSize=50` on mount.
 | PUT | /subscriptions/plans/{id} | Required | `subscription.plan.update` | Update plan | `{ name, priceInr, description?, isActive }` | 204 |
 | GET | /subscriptions/me | Required | — | Get current org subscription | — | `{ subscriptionId, planId, planName, planTier, billingCycle, priceInr, status, currentPeriodStart, currentPeriodEnd, createdAt }` 200; **404** `{ code: "Subscription.NotFound", message }` when no subscription (CONTRACT-GAPS task #27, item 3) |
 | POST | /subscriptions | Required | — | Subscribe org to plan | `{ planId, razorpaySubscriptionId?, razorpayCustomerId? }` | `{ subscriptionId, status, currentPeriodEnd }` 201 |
-| POST | /subscriptions/{id}/cancel | Required | — | Cancel subscription | — | 204 |
-| POST | /subscriptions/{id}/upgrade | Required | — | Upgrade to higher-tier plan | `{ newPlanId }` | `{ subscriptionId, newPlanId }` 200 |
-| POST | /subscriptions/{id}/downgrade | Required | — | Downgrade to lower-tier plan | `{ newPlanId }` | `{ subscriptionId, newPlanId }` 200 |
+| POST | /subscriptions/{id}/cancel | Required | — | Cancel subscription (admin route; explicit id) | — | 204 |
+| POST | /subscriptions/{id}/upgrade | Required | — | Upgrade to higher-tier plan (admin route; explicit id) | `{ newPlanId }` | 204 |
+| POST | /subscriptions/{id}/downgrade | Required | — | Downgrade to lower-tier plan (admin route; explicit id) | `{ newPlanId }` | 204 |
+| DELETE | /subscriptions/me | Required | — | **DG-SUB-04** Self-service cancel — resolves subscription from caller's org | — | 204; 404 if no active sub; 422 if already cancelled |
+| POST | /subscriptions/me/upgrade | Required | — | **DG-SUB-04** Self-service upgrade — resolves subscription from caller's org | `{ newPlanId }` | 204; 404 if no active sub; 422 if not a higher tier |
+| POST | /subscriptions/me/downgrade | Required | — | **DG-SUB-04** Self-service downgrade — resolves subscription from caller's org | `{ newPlanId }` | 204; 404 if no active sub; 422 if not a lower tier |
 | GET | /subscriptions/invoices | Required | — | List invoices for org | `?page&pageSize` | `[{ invoiceId, invoiceNumber, amountInr, gstAmountInr, status, paidAt }]` 200 |
 | POST | /subscriptions/{id}/invoices | Required | — | Generate invoice for subscription period | — | `{ invoiceId, invoiceNumber, amountInr, gstAmountInr, pdfGcsUri }` 201 |
 | POST | /subscriptions/{id}/payments | Required | — | Record Razorpay payment and renew subscription | `{ razorpayPaymentId, invoiceNumber, amountInr, newPeriodEnd }` | 204 |
@@ -718,6 +721,8 @@ Mobile LoanHubScreen calls `GET /loans/products?pageSize=50` on mount.
 - **404** `{ code: "Subscription.NotFound", message: "This organisation has no active subscription." }` when the org has no subscription (free tier / never subscribed). Clients must treat 404 as "no subscription" — NOT as an error.
 - Mobile client (`mobile/src/api/subscriptions.ts`): already handles 404 → null.
 - Admin client (`src/admin/src/lib/subscriptionApi.ts`): should catch 404 and treat as no-subscription state (empty body / null result).
+
+**DG-SUB-03 Webhook secret resolution:** `POST /webhooks/razorpay` now resolves the HMAC secret in priority order: (1) `RazorpayConfig.EncryptedWebhookSecret` (DB row, decrypted via AES-256-GCM `ICredentialEncryptionService`) — set via `PATCH /subscriptions/config/razorpay`; (2) `RAZORPAY_WEBHOOK_SECRET` env var / appsettings (fallback). If neither is set, returns 503. Admin-saved webhook secret is now effective without redeploying.
 
 **Webhook header:** `X-Razorpay-Signature` (HMAC-SHA256 verified).
 **Plan tiers:** Free=0, Starter=1, Growth=2, Enterprise=3.
@@ -1919,3 +1924,62 @@ Android simulator needs `http://10.0.2.2:5107` — use `resolveHost()` from `mob
 |-------|--------|-------|-----------|
 | AuthService Unit | 641 | 780 | +139 (DeviceIntegrityVerifierTests: 12, DeviceIntegrityEntityTests: 9, pre-existing growth) |
 | ChatService Unit | 195 | 199 | +4 (SignalRHubConfigTests) |
+
+---
+
+## Gap-close 2026-06-28 — DG-LOAN-06 + DG-LOAN-07
+
+### DG-LOAN-06 — Loan Consent device-id + bank-list audit fields
+
+**Migration:** `109_loan_consent_device_bank_and_eligibility_status.sql`
+
+Adds two columns to `loan.consents`:
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `device_id` | `VARCHAR(128) NULL` | Masked device identifier (first-8...last-4). Populated server-side from request body field `deviceId`. |
+| `shared_with_bank_ids` | `JSONB NULL` | UUID array of partner banks. Auto-resolved from `LoanApplication.AssignedBankId` for `DATA_SHARE_WITH_BANK` consents; caller may also supply `sharedWithBankIds` explicitly. |
+
+**POST /loans/applications/{id}/consents** — request body extended (additive, all new fields optional):
+
+```json
+{
+  "consentType": "DATA_SHARE_WITH_BANK",
+  "consentTextVersion": "v1.4",
+  "kfsId": "<uuid>",
+  "consentLocale": "hi",
+  "deviceId": "abc12345-xyz-9876",
+  "sharedWithBankIds": ["<bankId>"]
+}
+```
+
+Existing clients sending only the original 4 fields continue to work. `deviceId` is masked to `first-8...last-4` before storage. F4.2 audit-trail now complete: timestamp + IP + User-Agent + device + bank list.
+
+### DG-LOAN-07 — Partially-eligible tri-state eligibility result
+
+**No schema migration required** — status is computed at runtime.
+
+`EligibilityStatus` enum added to `LoanService.Domain.ValueObjects`:
+- `Eligible` — score >= 50 and all candidate products qualify
+- `PartiallyEligible` — score >= 50 but only a subset of products qualify
+- `NotEligible` — score < 50
+
+**POST /loans/eligibility-check** and **GET /loans/eligibility** response now includes:
+
+```json
+{
+  "score": 65.0,
+  "isEligible": true,
+  "eligibilityStatus": "PartiallyEligible",
+  "reasons": ["GST 3B compliance: 9/12 months filed → 22.5 points", "..."],
+  "qualifyingProductIds": ["<productId1>"],
+  "unmetCriteriaByProduct": {
+    "<productId2>": [
+      "Current score 65/100 is below the MSME Business Loan minimum of 70. Improve your score by 5 points to qualify.",
+      "File outstanding GSTR-3B returns to increase your GST compliance score (max 30 points)."
+    ]
+  }
+}
+```
+
+`isEligible` retained for backward compatibility (`isEligible = score >= 50`). `unmetCriteriaByProduct` is empty `{}` when `eligibilityStatus` is `Eligible`.

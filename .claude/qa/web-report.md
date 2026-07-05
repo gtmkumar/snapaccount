@@ -73,7 +73,7 @@ var normalized = phone?.Replace("+91", "").Trim() ?? string.Empty;
 | ID | Fix | Grep Target | Result |
 |---|---|---|---|
 | SEC-005 | CSPRNG OTP generation | `RandomNumberGenerator.GetInt32` | FOUND — `AuthService.Infrastructure/Services/OtpService.cs` |
-| SEC-002 | CORS explicit origins | `WithOrigins` in `Program.cs` | FOUND — `AuthService.Api/Program.cs` |
+| SEC-002 | CORS explicit origins | `WithOrigins` in `Program.cs` | FOUND — `Platform.WebApi/Program.cs` |
 | SEC-012 | Authorization pipeline | `PermissionBehavior` | FOUND — `AuthService.Application/Behaviors/PermissionBehavior.cs` + registered in `Program.cs` |
 | SEC-013 | PAN AES encryption | `AesPanEncryptionService` | FOUND — `AuthService.Infrastructure/Services/AesPanEncryptionService.cs` + DI registration |
 | SEC-008 | Refresh token revocation | `RevokeRefreshTokensAsync` | FOUND — `AuthService.Application/Commands/RequestAccountDeletion/` + `IFirebaseAuthService` interface |

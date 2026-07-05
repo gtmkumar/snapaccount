@@ -44,6 +44,9 @@ const statusOrder: Record<FilingStatus, number> = {
   E_VERIFIED: 4,
   REFUND_ISSUED: 5,
   NOTICE_RECEIVED: 3, // placed alongside FILED
+  CA_APPROVED: 2,     // CA approved → alongside USER_APPROVED stage
+  CA_REJECTED: 1,     // bounced back at CA review stage
+  CANCELLED: 0,       // terminal/none
 }
 
 function HorizontalStatusTimeline({ current }: { current: FilingStatus }) {

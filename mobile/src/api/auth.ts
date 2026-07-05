@@ -73,6 +73,51 @@ export async function revokeDevice(id: string): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Device registration (DG-AUTH-01 — B1.3 Device Binding)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Body of POST /auth/devices (AddDeviceCommand). Contract mirrored exactly from
+ * Platform.Application/Auth/Devices/Commands/AddDevice/AddDeviceCommand.cs:
+ *   { deviceId, deviceName?, platform, osVersion?, appVersion?, fcmToken? }
+ * `platform` MUST be one of ANDROID | IOS | WEB (validator-enforced).
+ */
+export interface AddDeviceRequest {
+  /** Stable per-device identifier — MUST match the value other device flows key on
+   *  (Device.modelId), so DevicesScreen "this device" + the approval reviewer match. */
+  deviceId: string;
+  deviceName?: string;
+  platform: 'ANDROID' | 'IOS' | 'WEB';
+  osVersion?: string;
+  appVersion?: string;
+  /** FCM/APNs push token (optional — registration must not fail when absent). */
+  fcmToken?: string;
+}
+
+/** Response of POST /auth/devices — { deviceEntityId } (auth.user_device PK). */
+export interface AddDeviceResponse {
+  /** The auth.user_device row id created for this device. */
+  deviceEntityId: string;
+}
+
+/**
+ * POST /auth/devices — registers THIS device against the authenticated account
+ * (B1.3 device binding). When the user already has ≥1 active device, the backend
+ * creates a DeviceApprovalRequest and pushes the approve/deny prompt to existing
+ * devices (GAP-047); soft-launch is gated server-side by DeviceApproval:Enforce.
+ *
+ * Must be called AFTER a session token is set (it is an [Authorize] endpoint).
+ * Callers should treat failures as non-fatal — device binding must never block
+ * an otherwise-successful login (see registerCurrentDevice() in pushTokenManager).
+ */
+export async function addDevice(
+  body: AddDeviceRequest,
+): Promise<AddDeviceResponse> {
+  const res = await apiClient.post<AddDeviceResponse>('/auth/devices', body);
+  return res.data;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Wave 7A — GAP-047 device approval
 // RECONCILED 2026-06-12 against docs/api/endpoints.md "Wave 7B → GAP-047" and
 // AuthService.Application/Devices/* :

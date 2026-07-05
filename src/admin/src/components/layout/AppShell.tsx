@@ -4,6 +4,7 @@ import { TopBar } from './TopBar'
 import { cn } from '@/lib/utils'
 import { CommandPaletteWrapper } from '@/components/ui/CommandPalette'
 import { KeyboardShortcutsOverlay } from '@/components/ui/KeyboardShortcutsOverlay'
+import { t } from '@/i18n'
 
 interface AppShellProps {
   children: ReactNode
@@ -26,6 +27,29 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--surface-canvas)]">
+      {/* DG-ADMIN-05: Skip-to-content link — first focusable element, visible on focus */}
+      <a
+        href="#main-content"
+        onClick={(e) => {
+          e.preventDefault()
+          const main = document.getElementById('main-content')
+          if (main) {
+            main.focus()
+            main.scrollIntoView()
+          }
+        }}
+        className={cn(
+          // Visually hidden until focused — then appears as a branded banner
+          'sr-only focus:not-sr-only',
+          'focus:fixed focus:top-2 focus:left-1/2 focus:-translate-x-1/2 focus:z-[100]',
+          'focus:px-4 focus:py-2 focus:rounded-lg focus:shadow-lg',
+          'focus:bg-[var(--brand-primary)] focus:text-white focus:text-sm focus:font-medium',
+          'focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-white'
+        )}
+      >
+        {t('a11y.skipToContent')}
+      </a>
+
       {/* Mobile overlay backdrop */}
       {mobileSidebarOpen && (
         <div

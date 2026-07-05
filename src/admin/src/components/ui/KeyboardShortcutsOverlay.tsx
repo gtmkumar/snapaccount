@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { t } from '@/i18n'
 import { Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 interface ShortcutRow {
   keys: string[]
@@ -29,7 +30,7 @@ const SHORTCUT_SECTIONS: ShortcutSection[] = [
       { keys: ['g', 'h'], label: 'Go to Dashboard' },
       { keys: ['g', 'u'], label: 'Go to Users', roles: ['SUPER_ADMIN', 'OPERATIONS_MANAGER'] },
       { keys: ['g', 'd'], label: 'Go to Documents' },
-      { keys: ['g', 'a'], label: 'Go to Accounting' },
+      { keys: ['g', 'a'], label: 'Go to Edit Log (Accounting)' },
       { keys: ['g', 'g'], label: 'Go to GST' },
       { keys: ['g', 'i'], label: 'Go to ITR' },
       { keys: ['g', 'l'], label: 'Go to Loans' },
@@ -87,10 +88,13 @@ export function KeyboardShortcutsOverlay() {
   const [filter, setFilter] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // DG-ADMIN-04: focus trap — cycles Tab within the overlay, restores focus on close
+  const panelRef = useFocusTrap<HTMLDivElement>(isCheatSheetOpen)
+
   useEffect(() => {
     if (isCheatSheetOpen) {
       setFilter('')
-      setTimeout(() => inputRef.current?.focus(), 10)
+      requestAnimationFrame(() => inputRef.current?.focus())
     }
   }, [isCheatSheetOpen])
 
@@ -122,7 +126,9 @@ export function KeyboardShortcutsOverlay() {
         onClick={closeCheatSheet}
         aria-hidden="true"
       />
+      {/* Focus trap container (DG-ADMIN-04) */}
       <div
+        ref={panelRef}
         className={cn(
           'relative w-full max-w-2xl mx-4 rounded-2xl shadow-[var(--shadow-lg)]',
           'bg-[var(--surface-raised)] border border-[var(--border-subtle)]',

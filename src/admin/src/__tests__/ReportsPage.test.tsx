@@ -1,6 +1,13 @@
 /**
- * ReportsPage — Phase 6F smoke tests
+ * ReportsPage — Phase 6F smoke tests (DG-DASH-02 / DG-DASH-07)
  * Covers: 6 report types generate trigger; share-link button fires share endpoint.
+ *
+ * DG-DASH-07: Share flow now opens a two-tab modal (Share with CA / Share with Bank).
+ * generateShareLink is called from the modal's "Send to CA" / "Send to Bank" button,
+ * NOT directly from the Share-link row button in the jobs table.
+ *
+ * DG-DASH-02: ReportJobRow displays human-readable labels (via REPORT_LABELS map)
+ * rather than the raw ReportType enum value ("Profit & Loss" not "ProfitAndLoss").
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -84,6 +91,8 @@ beforeEach(() => {
     url: 'https://app.snapaccount.in/shared/report/abc123',
     expiresAt: new Date(Date.now() + 86400000).toISOString(),
   })
+  vi.spyOn(reportApi, 'listTallyExportJobs').mockResolvedValue({ items: [], totalCount: 0 })
+  ;(navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockClear()
 })
 
 // ---------------------------------------------------------------------------
@@ -171,13 +180,17 @@ describe('ReportsPage', () => {
     })
   })
 
-  it('renders job rows with report type and status', async () => {
+  it('renders job rows with human-readable report type and status badge', async () => {
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText('ProfitAndLoss')).toBeInTheDocument()
-      expect(screen.getByText('COMPLETE')).toBeInTheDocument()
-      expect(screen.getByText('TrialBalance')).toBeInTheDocument()
-      expect(screen.getByText('GENERATING')).toBeInTheDocument()
+      // DG-DASH-02: ReportJobRow shows human-readable labels from REPORT_LABELS map
+      // "ProfitAndLoss" → "Profit & Loss"; appears in card header AND recent jobs row
+      expect(screen.getAllByText('Profit & Loss').length).toBeGreaterThan(0)
+      // COMPLETE appears as status Badge text
+      expect(screen.getAllByText('COMPLETE').length).toBeGreaterThan(0)
+      // "Trial Balance" appears in card header AND recent jobs row
+      expect(screen.getAllByText('Trial Balance').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('GENERATING').length).toBeGreaterThan(0)
     })
   })
 
@@ -204,7 +217,8 @@ describe('ReportsPage', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // Share link
+  // Share link (DG-DASH-07: now opens a modal; generateShareLink is called
+  // when the user clicks "Send to CA" / "Send to Bank" inside the modal)
   // ---------------------------------------------------------------------------
 
   it('Share link button visible for COMPLETE job', async () => {
@@ -214,22 +228,42 @@ describe('ReportsPage', () => {
     })
   })
 
-  it('clicking Share link button calls generateShareLink endpoint', async () => {
+  it('clicking Share link button opens the Share modal', async () => {
     renderPage()
     await waitFor(() => screen.getByRole('button', { name: /Share link/i }))
 
     fireEvent.click(screen.getByRole('button', { name: /Share link/i }))
 
     await waitFor(() => {
-      expect(reportApi.generateShareLink).toHaveBeenCalledWith('job-001')
+      // DG-DASH-07: modal opens as a dialog with aria-modal
+      // Note: "Share Report" also appears as KpiStrip button text, so query the dialog role
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      // The modal dialog has two tab buttons for CA and Bank sharing
+      expect(screen.getByRole('button', { name: /Share with CA/i })).toBeInTheDocument()
     })
   })
 
-  it('share link copies URL to clipboard', async () => {
+  it('submitting share modal calls generateShareLink and copies URL to clipboard', async () => {
     renderPage()
     await waitFor(() => screen.getByRole('button', { name: /Share link/i }))
 
+    // Open the share modal (row share button in recent jobs table)
     fireEvent.click(screen.getByRole('button', { name: /Share link/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Click "Send to CA" to trigger the generateShareLink mutation
+    const sendBtn = screen.getByRole('button', { name: /Send to CA/i })
+    fireEvent.click(sendBtn)
+
+    await waitFor(() => {
+      expect(reportApi.generateShareLink).toHaveBeenCalledWith(
+        'job-001',
+        expect.objectContaining({ expiryHours: expect.any(Number) })
+      )
+    })
 
     await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
@@ -245,7 +279,11 @@ describe('ReportsPage', () => {
     })
     renderPage()
 
-    await waitFor(() => screen.getByText('GENERATING'))
+    // GENERATING appears in multiple places (KpiStrip MetricCard + status badge)
+    await waitFor(() => {
+      const genEls = screen.getAllByText('GENERATING')
+      expect(genEls.length).toBeGreaterThan(0)
+    })
     expect(screen.queryByRole('button', { name: /Download/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Share link/i })).not.toBeInTheDocument()
   })

@@ -48,6 +48,9 @@ function filingStatusBadge(status: FilingStatus) {
     E_VERIFIED: { variant: 'brand', label: t('itr.admin.status.eVerified') },
     REFUND_ISSUED: { variant: 'success', label: t('itr.admin.status.refundIssued') },
     NOTICE_RECEIVED: { variant: 'error', label: t('itr.admin.status.noticeReceived') },
+    CA_APPROVED: { variant: 'success', label: t('itr.admin.status.caApproved') },
+    CA_REJECTED: { variant: 'error', label: t('itr.admin.status.caRejected') },
+    CANCELLED: { variant: 'neutral', label: t('itr.admin.status.cancelled') },
   }
   const cfg = config[status] ?? { variant: 'neutral' as const, label: status }
   return <Badge variant={cfg.variant}>{cfg.label}</Badge>
@@ -476,9 +479,9 @@ function NoticeTrackerTab({ ay }: { ay: string }) {
 
       {isLoading ? (
         <div className="space-y-2 animate-pulse">
-          {[1, 2, 3].map(i => <div key={i} className="h-12 bg-neutral-100 rounded-xl" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-12 bg-[var(--surface-sunken)] rounded-xl" />)}
         </div>
-      ) : notices.length === 0 ? (
+      ) : isError ? null : notices.length === 0 ? (
         <Card>
           <div className="flex flex-col items-center py-12 gap-3">
             <Inbox className="h-10 w-10 text-neutral-300" />

@@ -55,26 +55,26 @@
 
 | ID | Severity | Expected Fix | Verified? | Evidence |
 |----|----------|-------------|-----------|---------|
-| SEC-001 | Critical | HMAC-SHA256 webhook with `CryptographicOperations.FixedTimeEquals` | YES — with caveat | `backend/Services/SubscriptionService/SubscriptionService.Api/Program.cs` lines 104–114. HMAC-SHA256 implemented; `CryptographicOperations.FixedTimeEquals` present. Caveat noted below (NEW-001). |
-| SEC-002 | Critical | `WithOrigins(...)` instead of `AllowAnyOrigin()` | YES | `backend/Services/AuthService/AuthService.Api/Program.cs` lines 72–79; `backend/Services/SubscriptionService/SubscriptionService.Api/Program.cs` lines 25–32; `backend/Services/GstService/GstService.Api/Program.cs` lines 23–30. All use `WithOrigins(AdminPanel, Mobile)` with config fallback. |
-| SEC-003 | Critical | Hangfire dashboard has `HangfireRoleAuthorizationFilter` | YES | `backend/Services/AuthService/AuthService.Api/Program.cs` lines 132–135. `DashboardOptions { Authorization = [new HangfireRoleAuthorizationFilter("SYSTEM_ADMIN")] }` in place. |
+| SEC-001 | Critical | HMAC-SHA256 webhook with `CryptographicOperations.FixedTimeEquals` | YES — with caveat | `backend/Services/PlatformService/Platform.WebApi/Program.cs` lines 104–114. HMAC-SHA256 implemented; `CryptographicOperations.FixedTimeEquals` present. Caveat noted below (NEW-001). |
+| SEC-002 | Critical | `WithOrigins(...)` instead of `AllowAnyOrigin()` | YES | `backend/Services/PlatformService/Platform.WebApi/Program.cs` lines 72–79; `backend/Services/PlatformService/Platform.WebApi/Program.cs` lines 25–32; `backend/Services/FinanceService/Finance.WebApi/Program.cs` lines 23–30. All use `WithOrigins(AdminPanel, Mobile)` with config fallback. |
+| SEC-003 | Critical | Hangfire dashboard has `HangfireRoleAuthorizationFilter` | YES | `backend/Services/PlatformService/Platform.WebApi/Program.cs` lines 132–135. `DashboardOptions { Authorization = [new HangfireRoleAuthorizationFilter("SYSTEM_ADMIN")] }` in place. |
 | SEC-004 | High | All stub services have `FirebaseAuthMiddleware` + `RequireAuthorization()` | YES | Verified in GstService (`Program.cs` lines 67–84) and SubscriptionService (`Program.cs` lines 69–81). All stub endpoints call `.RequireAuthorization()`. Webhook endpoint correctly exempt with HMAC verification instead. |
-| SEC-005 | High | `RandomNumberGenerator.GetInt32(100000, 1000000)` | YES | `backend/Services/AuthService/AuthService.Infrastructure/Services/OtpService.cs` line 42. |
+| SEC-005 | High | `RandomNumberGenerator.GetInt32(100000, 1000000)` | YES | `backend/Services/PlatformService/Platform.Infrastructure/Auth/Services/OtpService.cs` line 42. |
 | SEC-006 | High | Root `.gitignore` covers `.env*`, credential files, `*.pem`, `appsettings.*.json` | YES | `/Users/gtmkumar/Documents/source/snapaccount/.gitignore` present. Covers `.env`, `.env.local`, `.env.*.local`, `.env.development`, `.env.production`, `google-services.json`, `GoogleService-Info.plist`, `service-account*.json`, `*.pfx`, `*.p12`, `*.pem`, `*.key`, `appsettings.Development.json`, `appsettings.Local.json`, `appsettings.Staging.json`, `appsettings.Production.json`, and `**/bin/`. |
-| SEC-007 | High | `AccountDeletionRequestedEventHandler` publishes to Pub/Sub | YES | `backend/Services/AuthService/AuthService.Application/EventHandlers/AccountDeletionRequestedEventHandler.cs` lines 29–44. Publishes to `account-deletion-events` topic via `IEventPublisher`. Pub/Sub failure is caught and logged without blocking deletion. |
-| SEC-008 | High | `RequestAccountDeletionCommandHandler` calls `RevokeRefreshTokensAsync` | YES — with new defect | `backend/Services/AuthService/AuthService.Application/Commands/RequestAccountDeletion/RequestAccountDeletionCommandHandler.cs` lines 29–35. Firebase revocation is called. New defect noted (NEW-002): the comment says "Non-fatal" but the code returns the failure result, making Firebase revocation fatal to the deletion flow. |
+| SEC-007 | High | `AccountDeletionRequestedEventHandler` publishes to Pub/Sub | YES | `backend/Services/PlatformService/Platform.Application/Auth/EventHandlers/AccountDeletionRequestedEventHandler.cs` lines 29–44. Publishes to `account-deletion-events` topic via `IEventPublisher`. Pub/Sub failure is caught and logged without blocking deletion. |
+| SEC-008 | High | `RequestAccountDeletionCommandHandler` calls `RevokeRefreshTokensAsync` | YES — with new defect | `backend/Services/PlatformService/Platform.Application/Auth/Commands/RequestAccountDeletion/RequestAccountDeletionCommandHandler.cs` lines 29–35. Firebase revocation is called. New defect noted (NEW-002): the comment says "Non-fatal" but the code returns the failure result, making Firebase revocation fatal to the deletion flow. |
 | SEC-009 | High | `GoogleCredential.GetApplicationDefaultAsync()` | YES | `backend/Shared/SnapAccount.Shared.Infrastructure/Storage/GoogleCloudStorageService.cs` lines 52–58. `GoogleCredential.GetApplicationDefaultAsync(ct)` used; `UrlSigner.FromCredential(credential)` pattern in place. |
 | SEC-010 | High | PostgreSQL rules exist to block DELETE and UPDATE on `shared.audit_log` | YES | `database/shared/V2__audit_log_immutability.sql` lines 10–16. Both `no_delete_audit_log` and `no_update_audit_log` rules created with `DO INSTEAD NOTHING`. |
-| SEC-011 | High | `AddRateLimiter` configured on all services | YES | `backend/Services/AuthService/AuthService.Api/Program.cs` lines 82–93 (sliding window, 5 req / 10 min, applied to OTP endpoints at lines 155 and 164). SubscriptionService and GstService use fixed window (100 req/min). |
-| SEC-012 | High | `PermissionBehavior<TRequest, TResponse>` implements `IPipelineBehavior` | YES | `backend/Services/AuthService/AuthService.Application/Behaviors/PermissionBehavior.cs`. `[RequiresPermissionAttribute]` and `PermissionBehavior<TRequest, TResponse>` both implemented. Registered in MediatR pipeline at `AuthService.Api/Program.cs` line 56. |
-| SEC-013 | Medium | `AesPanEncryptionService.cs` with AES-256 | YES | `backend/Services/AuthService/AuthService.Infrastructure/Services/AesPanEncryptionService.cs`. AES-256-CBC with PKCS7 padding; IV prepended to ciphertext; 32-byte key enforced; key sourced from config (GCP Secret Manager in prod). |
+| SEC-011 | High | `AddRateLimiter` configured on all services | YES | `backend/Services/PlatformService/Platform.WebApi/Program.cs` lines 82–93 (sliding window, 5 req / 10 min, applied to OTP endpoints at lines 155 and 164). SubscriptionService and GstService use fixed window (100 req/min). |
+| SEC-012 | High | `PermissionBehavior<TRequest, TResponse>` implements `IPipelineBehavior` | YES | `backend/Services/PlatformService/Platform.Application/Auth/Behaviors/PermissionBehavior.cs`. `[RequiresPermissionAttribute]` and `PermissionBehavior<TRequest, TResponse>` both implemented. Registered in MediatR pipeline at `Platform.WebApi/Program.cs` line 56. |
+| SEC-013 | Medium | `AesPanEncryptionService.cs` with AES-256 | YES | `backend/Services/PlatformService/Platform.Infrastructure/Auth/Services/AesPanEncryptionService.cs`. AES-256-CBC with PKCS7 padding; IV prepended to ciphertext; 32-byte key enforced; key sourced from config (GCP Secret Manager in prod). |
 | SEC-014 | Medium | `mobile/src/lib/pinnedHttpClient.ts` exists | YES — placeholder certs | `mobile/src/lib/pinnedHttpClient.ts` exists. `react-native-ssl-pinning` integrated. `PINNED_CERTS` array contains `sha256/PLACEHOLDER_HASH_1==` and `sha256/PLACEHOLDER_HASH_2==` — placeholder values not replaced with real hashes. Bug-log acknowledges this: "placeholder cert hashes need replacing by DevOps before prod build." See INFO-001. |
 | SEC-015 | Medium | `useSensitiveScreen` found on sensitive screens | YES | Hook at `mobile/src/hooks/usePreventScreenCapture.ts` wraps `expo-screen-capture`. Found on 9 files: `ITRDashboardScreen.tsx`, `GstDashboardScreen.tsx`, `Gstr3bScreen.tsx`, `GstApprovalScreen.tsx`, `LoanHubScreen.tsx`, `LoanEligibilityScreen.tsx`, `LoanStatusScreen.tsx`, `ReportDetailScreen.tsx`, and the hook file itself. |
-| SEC-016 | Medium | `IsolationLevel.Serializable` transaction in `AddDeviceCommandHandler` | YES | `backend/Services/AuthService/AuthService.Application/Commands/AddDevice/AddDeviceCommandHandler.cs` line 21. `GetByIdWithSerializableTransactionAsync` called, per comment at lines 17–20. |
+| SEC-016 | Medium | `IsolationLevel.Serializable` transaction in `AddDeviceCommandHandler` | YES | `backend/Services/PlatformService/Platform.Application/Auth/Commands/AddDevice/AddDeviceCommandHandler.cs` line 21. `GetByIdWithSerializableTransactionAsync` called, per comment at lines 17–20. |
 | SEC-017 | Medium | `infra/scripts/deploy-admin.sh` and `docs/devops/admin-panel-security.md` exist | PARTIAL | Both files exist. Cloud Armor policy creation scripted. Script explicitly warns at lines 97–103 that LB/NEG wiring is a manual step. `--allow-unauthenticated --ingress=all` remains on Cloud Run service (line 71–72 of deploy-admin.sh) — Cloud Armor only effective once LB is wired. Consistent with bug-log status PARTIAL. |
-| SEC-018 | Medium | `#{DB_PASSWORD}#` placeholder in `appsettings.json`, no plaintext password | YES | `backend/Services/AuthService/AuthService.Api/appsettings.json` line 10 uses `#{DB_PASSWORD}#`. The `bin/Release/net10.0/appsettings.json` copy retains the old plaintext password but is covered by `**/bin/` in `.gitignore` and is not a source file. |
+| SEC-018 | Medium | `#{DB_PASSWORD}#` placeholder in `appsettings.json`, no plaintext password | YES | `backend/Services/PlatformService/Platform.WebApi/appsettings.json` line 10 uses `#{DB_PASSWORD}#`. The `bin/Release/net10.0/appsettings.json` copy retains the old plaintext password but is covered by `**/bin/` in `.gitignore` and is not a source file. |
 | SEC-019 | Medium | `database/shared/V3__audit_log_partition_automation.sql` partition function exists | YES | File present. `shared.create_audit_log_partitions(months_ahead)` function creates monthly partitions up to N months ahead. Immediately calls `SELECT shared.create_audit_log_partitions(12)` on migration run. |
-| SEC-020 | Medium | `TaxComputation` entity has `ComputationHash` field | YES | `backend/Services/ItrService/ItrService.Domain/Entities/TaxComputation.cs` line 40. SHA-256 of canonical JSON inputs computed on `Create()` (line 81); `VerifyIntegrity()` method uses `CryptographicOperations.FixedTimeEquals` (lines 89–92). |
+| SEC-020 | Medium | `TaxComputation` entity has `ComputationHash` field | YES | `backend/Services/FinanceService/Finance.Domain/Itr/Entities/TaxComputation.cs` line 40. SHA-256 of canonical JSON inputs computed on `Create()` (line 81); `VerifyIntegrity()` method uses `CryptographicOperations.FixedTimeEquals` (lines 89–92). |
 | SEC-021 | Low | `database/auth/V2__fix_otp_hash_comment.sql` corrects bcrypt comment | YES | `database/auth/V2__fix_otp_hash_comment.sql`. `COMMENT ON COLUMN auth.otp_request.otp_hash` updated to accurately describe SHA-256 with phone+OTP composite input. |
 | SEC-022 | Low | Warning log in `FirebaseAuthMiddleware` catch block | YES | `backend/Shared/SnapAccount.Shared.Infrastructure/Auth/FirebaseAuthMiddleware.cs` lines 36–41. `logger.LogWarning(...)` logs the path when a token is present but invalid. |
 | SEC-023 | Low | `partialize` strips `panNumber: undefined` from persisted state | YES | `mobile/src/store/authStore.ts` lines 132–156. `panNumber: undefined` explicitly set on `user`, `currentOrganization`, and all entries in `organizations[]` array. `firebaseToken` also excluded. |
@@ -86,14 +86,14 @@
 ### New Issues Introduced by Phase 5 Fixes
 
 #### [HIGH] NEW-002: Firebase Revocation Failure Blocks Account Deletion
-- **File:** `backend/Services/AuthService/AuthService.Application/Commands/RequestAccountDeletion/RequestAccountDeletionCommandHandler.cs`
+- **File:** `backend/Services/PlatformService/Platform.Application/Auth/Commands/RequestAccountDeletion/RequestAccountDeletionCommandHandler.cs`
 - **Line:** 33–35
 - **Description:** The inline comment at line 33 states "Non-fatal: log but do not block deletion if Firebase revocation fails", but the implementation immediately returns the failure result (`if (revokeResult.IsFailure) return revokeResult`). This means a transient Firebase API error or network timeout will cause the entire account deletion flow to fail and return an error to the user. The user's local refresh tokens have already been revoked at line 25, but the `auth.user` record is never marked as deleted (line 37 is not reached). This creates an inconsistent state: local tokens revoked, Firebase session still active, account not soft-deleted. From a DPDP Act 2023 perspective, a user exercising their Right to Erasure can be denied deletion by a Firebase service hiccup.
 - **Recommended Fix:** Demote the Firebase revocation failure to a warning log only — do not return the failure result. Continue to `userRepository.UpdateAsync(user, cancellationToken)`. A background retry job should handle Firebase revocation for accounts where it failed. This matches the intent of the inline comment.
 - **Reference:** DPDP Act 2023, Section 12 (Right to Erasure); CWE-754 (Improper Check for Unusual or Exceptional Conditions)
 
 #### [MEDIUM] NEW-001: SEC-001 HMAC Comparison Uses Hex String Bytes, Not Decoded Bytes
-- **File:** `backend/Services/SubscriptionService/SubscriptionService.Api/Program.cs`
+- **File:** `backend/Services/PlatformService/Platform.WebApi/Program.cs`
 - **Line:** 108–113
 - **Description:** `CryptographicOperations.FixedTimeEquals` is called with `Encoding.UTF8.GetBytes(signature)` and `Encoding.UTF8.GetBytes(expectedSignature)` — both arguments are UTF-8 byte representations of lowercase hex strings, not decoded raw hash bytes. This is not a security bypass vulnerability (both sides encode the same way, and a timing-safe comparison of hex strings is still correct). However, the comparison is length-sensitive: if the received `X-Razorpay-Signature` header has different length than the computed hex (e.g., the Razorpay header is uppercase or contains a trailing newline), `FixedTimeEquals` returns `false` immediately without comparing content, partially defeating the timing-safe intent. The standard practice is to decode both hex strings to `byte[]` before comparing, which also ensures both buffers are always the same length (32 bytes for SHA-256).
 - **Recommended Fix:** Replace the comparison with:
@@ -107,7 +107,7 @@
 - **Reference:** CWE-208 (Observable Timing Discrepancy); OWASP Cryptographic Failures
 
 #### [LOW] NEW-003: AES-256-CBC Used Instead of AES-256-GCM for PAN Encryption
-- **File:** `backend/Services/AuthService/AuthService.Infrastructure/Services/AesPanEncryptionService.cs`
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Auth/Services/AesPanEncryptionService.cs`
 - **Line:** 38–48
 - **Description:** PAN is encrypted with AES-256-CBC (PKCS7 padding). CBC mode provides confidentiality but not integrity — a padding oracle attack or ciphertext manipulation could corrupt or forge encrypted PAN values without detection. AES-256-GCM (Authenticated Encryption with Associated Data) is the current recommended mode as it provides both confidentiality and integrity in a single operation, and is supported natively by `System.Security.Cryptography.AesGcm` in .NET.
 - **Recommended Fix:** Migrate to `AesGcm` with a 12-byte nonce and 16-byte tag. Storage format: `Base64( Nonce[12] || Tag[16] || Ciphertext )`. The GCM tag prevents ciphertext tampering and eliminates padding oracle risk.
@@ -309,7 +309,7 @@ One HIGH-severity finding was introduced by Phase 5 (NEW-002) and must be fixed 
 
 #### [HIGH] SEC-027 — DPDP Right-to-Erasure Cascade Missing for callback.* and notification.* Tables (P6-HANDOFF-05)
 
-- **File:** `backend/Services/AuthService/AuthService.Application/Users/EventHandlers/AccountDeletionRequestedEventHandler.cs`
+- **File:** `backend/Services/PlatformService/Platform.Application/Auth/Users/EventHandlers/AccountDeletionRequestedEventHandler.cs`
 - **Lines:** 21–47
 - **Description:** The `AccountDeletionRequestedEventHandler` publishes to `account-deletion-events` Pub/Sub topic. This was the Phase 5 fix for SEC-007. However, the downstream consumer services must subscribe and implement erasure logic for their own tables. As of Phase 6, two new data stores contain user PII that is not covered: (1) `callback.call_notes` — notes authored by or about a user; must be soft-deleted (`deleted_at = NOW()`). (2) `callback.callbacks.user_id` — must be anonymized to NULL with `anonymized_at` and `anonymization_reason = 'DPDP_ORG_ERASURE'` columns (both columns exist in migration 018, so the schema is ready). (3) `notification.notification_log` — contains `user_id` and rendered notification body which may contain user-specific data. (4) `notification.dlq_items` — contains `user_id` and original send payload. The DB columns for anonymization exist; enforcement is application-layer only and has not been implemented. This is P6-HANDOFF-05 confirmed unresolved.
 - **Severity:** HIGH — DPDP Act 2023 Right to Erasure violation; regulatory non-compliance.
@@ -319,7 +319,7 @@ One HIGH-severity finding was introduced by Phase 5 (NEW-002) and must be fixed 
 
 #### [HIGH] SEC-028 — DLQ Endpoints Accessible to Any Authenticated User (Missing Operator-Role Gate)
 
-- **File:** `backend/Services/NotificationService/NotificationService.Api/Endpoints/Notifications.cs`
+- **File:** `backend/Services/PlatformService/Platform.WebApi/Endpoints/Notification/Notifications.cs`
 - **Lines:** 67–80 (GetDlq), 74–80 (RetryDlqItem)
 - **Description:** `GET /notifications/dlq` and `POST /notifications/dlq/{id}/retry` use `.RequireAuthorization()` only, with no permission attribute or role check. Any authenticated mobile user can enumerate all failed notification delivery records (which may include other users' event codes, channels, and error messages) and trigger arbitrary retry dispatches. The DLQ is explicitly described as "operator review" tooling. The RLS policy `dlq_items_user_isolation` provides some protection at DB layer (user_id = current_user OR user_id IS NULL), but this relies on `app.current_user_id` being set correctly by the ORM session and does not prevent an authenticated user from seeing NULL-user_id system-level DLQ entries.
 - **Severity:** HIGH — Unauthorized information disclosure and ability to trigger unintended notification dispatches.
@@ -329,7 +329,7 @@ One HIGH-severity finding was introduced by Phase 5 (NEW-002) and must be fixed 
 
 #### [HIGH] SEC-029 — IDOR on GetCallbackById and All Callback State Transition Endpoints
 
-- **File:** `backend/Services/CallbackService/CallbackService.Api/Endpoints/Callbacks.cs`
+- **File:** `backend/Services/AssistService/Assist.WebApi/Endpoints/Callback/Callbacks.cs`
 - **Lines:** 157–161 (GetCallbackById), 163–168 (AssignCallback), 170–175 (ConfirmCallback), 177–181 (CompleteCallback), 183–188 (EscalateCallback), 190–195 (CancelCallback), 197–202 (RescheduleCallback), 205–211 (AddNote)
 - **Description:** `GetCallbackById` does not inject `ICurrentUser` and passes only the GUID to the query handler. The handler fetches by `c.Id == callbackId` with no `org_id` or `user_id` ownership check. Any authenticated user who knows or guesses a callback UUID can read the full detail including phone number, issue description, call notes (including internal notes), and resolution summary belonging to another organization. All state-transition endpoints (Assign, Confirm, Complete, Escalate, Cancel, Reschedule, AddNote) have the same pattern — they send only the GUID to their command handlers without checking ownership. The DB-layer RLS policy (`callbacks_org_or_assignee_isolation`) provides protection only when `app.current_user_id` is set in the Postgres session, which EF Core does not do by default without an interceptor.
 - **Severity:** HIGH — Cross-organization data exposure and unauthorized state manipulation; IDOR.
@@ -339,7 +339,7 @@ One HIGH-severity finding was introduced by Phase 5 (NEW-002) and must be fixed 
 
 #### [MEDIUM] SEC-030 — Callback Audit Trail Not Written by Application Layer
 
-- **File:** `backend/Services/CallbackService/CallbackService.Application/Callbacks/Commands/AssignCallback/AssignCallbackCommand.cs` (representative; same pattern in all transition commands)
+- **File:** `backend/Services/AssistService/Assist.Application/Callback/Callbacks/Commands/AssignCallback/AssignCallbackCommand.cs` (representative; same pattern in all transition commands)
 - **Lines:** 23–42
 - **Description:** Migration 018 creates `callback.assignments_log` as an append-only audit table tracking who assigned whom, when, and why. The `AssignCallbackCommandHandler` (and all other transition handlers) updates `callback.callbacks` but never inserts a row into `assignments_log`. This means the "who-assigned, who-completed, who-escalated" audit trail required by the Phase 6E scope is absent at runtime. The `callback.callbacks` table has `updated_by` column but this is insufficient — it records only the last actor, not the full history.
 - **Severity:** MEDIUM — Compliance gap; audit trail integrity requirement unmet.
@@ -349,7 +349,7 @@ One HIGH-severity finding was introduced by Phase 5 (NEW-002) and must be fixed 
 
 #### [MEDIUM] SEC-031 — RecurringJobsSubscriber In-Process Dedupe Resets on Restart
 
-- **File:** `backend/Services/NotificationService/NotificationService.Infrastructure/Messaging/RecurringJobsSubscriber.cs`
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Notification/Messaging/RecurringJobsSubscriber.cs`
 - **Lines:** 23, 39–47
 - **Description:** The `_processedEventIds` HashSet used for deduplication is an instance field, scoped to the process lifetime. On Cloud Run instance restart or scale-out to multiple instances, the dedupe state is lost and previously delivered Pub/Sub messages with the same `MessageId` could be processed again. Cloud Run scales horizontally and restarts regularly. For recurring job triggers (GST deadline, ITR reminders), double-dispatch may cause users to receive duplicate push/SMS/email notifications.
 - **Severity:** MEDIUM — Double-send risk on scale-out or restart; user experience and TRAI DLT compliance impact (sending identical SMS twice within minutes).
@@ -359,7 +359,7 @@ One HIGH-severity finding was introduced by Phase 5 (NEW-002) and must be fixed 
 
 #### [MEDIUM] SEC-032 — BootstrapCoa Endpoint Has No Authorization Check on Organization Ownership
 
-- **File:** `backend/Services/AccountingService/AccountingService.Api/Endpoints/Accounting.cs`
+- **File:** `backend/Services/FinanceService/Finance.WebApi/Endpoints/Accounting/Accounting.cs`
 - **Lines:** 145–151
 - **Description:** `POST /accounting/organizations/{id}/bootstrap-coa` accepts an arbitrary organization UUID from the URL path and sends it directly to the command handler without any check that the calling user belongs to or owns that organization. Any authenticated user can trigger COA bootstrap for any organization UUID. While bootstrapping an already-bootstrapped org is idempotent (will return existing records), it could be used to probe valid organization IDs or cause unintended state in a fresh organization.
 - **Severity:** MEDIUM — Unauthorized cross-org action; information disclosure.
@@ -398,7 +398,7 @@ One HIGH-severity finding was introduced by Phase 5 (NEW-002) and must be fixed 
 
 #### [LOW] SEC-036 — FCM Push Data Payload Exposes Event Code in Cleartext to Device Notification Tray
 
-- **File:** `backend/Services/NotificationService/NotificationService.Infrastructure/Adapters/FcmPushAdapter.cs`
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Notification/Adapters/FcmPushAdapter.cs`
 - **Lines:** 41–44
 - **Description:** The FCM `data` payload includes `event_code` (e.g., `ITR_REFUND_CREDITED`, `LOAN_EMI_DUE`) and `locale` as plaintext key-value pairs. On Android, `data` messages may be visible in the notification shade or accessible via notification history APIs if the app is not the active receiver. While event codes are not PII themselves, they can reveal sensitive context (e.g., a `LOAN_EMI_DUE` event on a shared device screen implies the user has an outstanding loan). More critically, if a future developer adds `amount` or `account_number` to the data map, it will be exposed immediately.
 - **Severity:** LOW — Minimal current risk; preventive hygiene.
@@ -408,7 +408,7 @@ One HIGH-severity finding was introduced by Phase 5 (NEW-002) and must be fixed 
 
 #### [LOW] SEC-037 — OcrResultSubscriber Uses Hardcoded Fallback Account UUIDs
 
-- **File:** `backend/Services/AccountingService/AccountingService.Infrastructure/Messaging/OcrResultSubscriber.cs`
+- **File:** `backend/Services/FinanceService/Finance.Infrastructure/Accounting/Messaging/OcrResultSubscriber.cs`
 - **Lines:** 88–90
 - **Description:** When `SuggestedDebitAccountId` or `SuggestedCreditAccountId` are null in the OCR payload, the subscriber falls back to hardcoded UUIDs `00000000-0000-0000-0000-000000001200` (Accounts Receivable) and `00000000-0000-0000-0000-000000004100` (Revenue). These are synthetic UUIDs that almost certainly do not correspond to actual `accounting.account` rows. If the per-org COA bootstrap has not been run, EF Core will throw a foreign key violation at post time, or worse — if these UUIDs coincidentally exist in a test org's accounts table, incorrect postings will be silently accepted.
 - **Severity:** LOW — Data integrity risk rather than security; included because incorrect financial postings can mask fraud or trigger audit findings.
@@ -417,13 +417,13 @@ One HIGH-severity finding was introduced by Phase 5 (NEW-002) and must be fixed 
 
 #### [INFO] INFO-001 — Notification Template Catalog: 26 Events Reviewed, No PII Leakage Found
 
-- **File:** `backend/Services/NotificationService/NotificationService.Application/Catalog/NotificationEventCatalog.cs`
+- **File:** `backend/Services/PlatformService/Platform.Application/Notification/Catalog/NotificationEventCatalog.cs`
 - **Description:** All 26 event catalog entries reviewed. Event names and categories are generic (e.g., "GST Return Due in 7 Days", "ITR Refund Credited", "Callback Scheduled"). No template embeds tax amounts, refund values, account numbers, PAN, GSTIN, or Aadhaar. The `Variables` dictionary mechanism allows callers to inject values at dispatch time — it is the caller's responsibility to not pass sensitive values; this is noted for future code review.
 - **Status:** PASS
 
 #### [INFO] INFO-002 — Dedup Window Is Date-of-Send Only; Does Not Prevent Repeated Quiet-Hours Suppression
 
-- **File:** `backend/Services/NotificationService/NotificationService.Application/Notifications/Commands/SendNotification/SendNotificationCommand.cs`
+- **File:** `backend/Services/PlatformService/Platform.Application/Notification/Notifications/Commands/SendNotification/SendNotificationCommand.cs`
 - **Lines:** 83–96
 - **Description:** The 6-hour dedup window is checked before quiet-hours suppression. This means if a notification is suppressed by quiet hours (not sent), the dedup key is still not written to the log (because `Suppressed` status is not persisted to `NotificationLog`). A notification suppressed at 11 PM for quiet hours will be retried at the next fan-out call — which is correct behavior. No security issue, noted for product awareness.
 - **Status:** INFO only
@@ -620,7 +620,7 @@ Staging deployment is acceptable for QA/integration testing provided:
 
 #### [HIGH] SEC-051 — Razorpay Webhook HMAC Verification Eliminated (SEC-001 Regression)
 
-- **File:** `backend/Services/SubscriptionService/SubscriptionService.Api/Endpoints/Subscriptions.cs`
+- **File:** `backend/Services/PlatformService/Platform.WebApi/Endpoints/Subscription/Subscriptions.cs`
 - **Line:** 108–114 (POST /subscriptions/{id}/payments)
 - **Description:** The Phase 5 fix for SEC-001 implemented Razorpay webhook HMAC-SHA256 verification using `CryptographicOperations.FixedTimeEquals`. In Phase 6F, the `SubscriptionService` has been rebuilt from scratch and no Razorpay webhook endpoint exists. The `POST /subscriptions/{id}/payments` endpoint at line 108 is Firebase-JWT-authenticated (`RequireAuthorization()`). Razorpay cannot supply a Firebase JWT — it calls with an `X-Razorpay-Signature` HMAC header. This means: (1) Razorpay cannot actually trigger subscription renewals via webhook; (2) if any future developer adds an anonymous endpoint for the webhook, the HMAC verification is not present to protect it; (3) the `RecordPaymentCommand` docstring at line 11 falsely claims "SEC-001 HMAC verified" when there is no such endpoint. This is a critical architectural regression — subscriptions cannot be renewed by Razorpay event, breaking the core billing flow. Any authenticated user can call `POST /subscriptions/{id}/payments` with an arbitrary payment ID to fraudulently mark their subscription as renewed.
 - **Severity:** HIGH — Financial fraud vector (any authenticated user can renew any subscription in their org with fake payment data); SEC-001 regression; billing broken.
@@ -630,7 +630,7 @@ Staging deployment is acceptable for QA/integration testing provided:
 
 #### [MEDIUM] SEC-052 — SubscriptionService Missing AccountDeletionSubscriber (DPDP Erasure Gap)
 
-- **File:** `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/DependencyInjection.cs`
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Subscription/DependencyInjection.cs`
 - **Lines:** All — no `AddHostedService<AccountDeletionSubscriber>()` call exists
 - **Description:** `subscription.subscriptions` stores `organization_id` and Razorpay payment metadata. `subscription.invoices` stores `organization_id`, billing amounts (INR), GST amounts, and Razorpay payment IDs. When a user invokes their DPDP Act 2023 right to erasure, the AuthService publishes to `account-deletion-events`. The SubscriptionService has no subscriber, so subscription records and invoice history linked to the deleted user's organization are not processed. Per RBI/GSTN regulations, subscription invoices must be retained 7 years but the user reference within them must be anonymized. No anonymization columns exist in the subscription.subscriptions or subscription.invoices tables.
 - **Severity:** MEDIUM — DPDP Act 2023 compliance gap; the impact is lower than HIGH because subscriptions are org-scoped (not user-scoped), so the primary PII is the organization record rather than individual user data.
@@ -640,7 +640,7 @@ Staging deployment is acceptable for QA/integration testing provided:
 
 #### [MEDIUM] SEC-053 — SendMessage REST Endpoint Shares General Rate-Limit Policy (No Anti-Flood Dedicated Window)
 
-- **File:** `backend/Services/ChatService/ChatService.Api/Endpoints/Chat.cs`
+- **File:** `backend/Services/AssistService/Assist.WebApi/Endpoints/Chat/Chat.cs`
 - **Line:** 60–63 (SendMessage endpoint uses "standard" policy)
 - **Description:** `POST /chat/threads/{id}/messages` shares the "standard" 100-requests-per-minute fixed-window policy with all other chat endpoints (GetInbox, GetThread, GetMessages, MarkRead, etc.). A user can send 100 messages per minute per IP, which is functionally unlimited for messaging abuse. Phase 6B GstService correctly introduced a dedicated "gst-write-strict" (30 req/min) policy for write endpoints that trigger expensive operations — the same pattern should apply to message send, which triggers SignalR hub broadcasts and DB writes.
 - **Severity:** MEDIUM — Abuse/flooding risk; SignalR broadcasts amplify load; no per-user message throttle.
@@ -672,7 +672,7 @@ Staging deployment is acceptable for QA/integration testing provided:
 
 - **File:** `src/admin/src/lib/settingsApi.ts`
 - **Lines:** 57 (PATCH /auth/org/settings), 77 (PATCH /auth/config/ai), 91 (PATCH /auth/feature-flags/{flag}), 109 (PATCH /auth/config/language), 128 (PATCH /auth/config/whatsapp)
-- **Description:** The admin Settings page calls five PATCH endpoints in AuthService that do not exist in any backend service. `AuthService.Api/Endpoints/` contains only `Auth.cs` and `Search.cs`. No feature-flag, AI config, org settings, language, or WhatsApp config endpoint is defined. API calls will receive 404 responses. This is noted as a security finding because: (a) the absence of a backend endpoint for feature-flag toggling means there is no server-side enforcement of flag changes made in the UI; and (b) if stub endpoints are added later without proper permission gating, they become an unprotected privilege escalation path.
+- **Description:** The admin Settings page calls five PATCH endpoints in AuthService that do not exist in any backend service. `Platform.WebApi/Endpoints/Auth/` contains only `Auth.cs` and `Search.cs`. No feature-flag, AI config, org settings, language, or WhatsApp config endpoint is defined. API calls will receive 404 responses. This is noted as a security finding because: (a) the absence of a backend endpoint for feature-flag toggling means there is no server-side enforcement of flag changes made in the UI; and (b) if stub endpoints are added later without proper permission gating, they become an unprotected privilege escalation path.
 - **Severity:** LOW — Functional gap more than security issue currently; security risk materializes only when endpoints are created without gates.
 - **Recommended Fix:** Ensure all Settings PATCH endpoints, when implemented, have `[RequiresPermission("admin.settings.*")]` attributes and are gated to `SYSTEM_ADMIN` role. Track implementation in Phase 7 scope.
 - **Agent:** backend-agent
@@ -686,7 +686,7 @@ Staging deployment is acceptable for QA/integration testing provided:
 
 #### [INFO] INFO-005 — ChatService: No Dedicated Rate Limit on SignalR Hub Methods
 
-- **File:** `backend/Services/ChatService/ChatService.Infrastructure/SignalR/ChatHub.cs`
+- **File:** `backend/Services/AssistService/Assist.Infrastructure/Chat/SignalR/ChatHub.cs`
 - **Description:** The `[Authorize]` attribute ensures authenticated access. However, hub methods `JoinThread`, `Heartbeat`, and any future hub-level send method have no application-layer rate limit. ASP.NET Core's `IRateLimiter` does not apply to SignalR hub method invocations (only to HTTP endpoints). A connected client could call `JoinThread` in a tight loop to spam group membership operations. Redis `Groups.AddToGroupAsync` is not idempotent at the StackExchange.Redis layer — repeated calls increment reference counts.
 - **Severity:** INFO — Structural gap to be addressed with a custom hub filter in Phase 7.
 - **Recommended Fix:** Implement a custom `IHubFilter` that checks a per-connection invocation counter stored in Redis (or in-memory for the connection lifetime) and rejects hub method calls above a threshold (e.g., 30 JoinThread calls / connection lifetime).
@@ -822,9 +822,9 @@ All 4 HIGH blockers confirmed fixed by source-code inspection. No new Critical o
 #### [HIGH] SEC-038 — IDOR on GST Notice Handlers (GetNotice, RespondToNotice, AssignNoticeToCa)
 
 - **Files**:
-  - `backend/Services/GstService/GstService.Application/Notices/Queries/GetNotice/GetNoticeQuery.cs` line 51
-  - `backend/Services/GstService/GstService.Application/Notices/Commands/RespondToNotice/RespondToNoticeCommand.cs` line 43
-  - `backend/Services/GstService/GstService.Application/Notices/Commands/AssignNoticeToCa/AssignNoticeToCaCommand.cs` line 36
+  - `backend/Services/FinanceService/Finance.Application/Gst/Notices/Queries/GetNotice/GetNoticeQuery.cs` line 51
+  - `backend/Services/FinanceService/Finance.Application/Gst/Notices/Commands/RespondToNotice/RespondToNoticeCommand.cs` line 43
+  - `backend/Services/FinanceService/Finance.Application/Gst/Notices/Commands/AssignNoticeToCa/AssignNoticeToCaCommand.cs` line 36
 - **Description**: All three handlers query `gst.notices` by `n.Id == request.NoticeId` only. There is no `OrganizationId` filter and no `ICurrentUser` injection. Any authenticated user who knows (or brute-forces) a notice UUID can read its full contents including attachments metadata, file a response on it, and re-assign it to any CA. The endpoint returns `OrganizationId` in the DTO, confirming cross-tenant data exposure. This is the same IDOR class as SEC-029 which was fixed in the CallbackService — the fix pattern was not carried forward to the GstService Phase 6B handlers.
 - **Recommended Fix**: Inject `ICurrentUser` into each handler. Add `&& n.OrganizationId == currentUser.OrganizationId` to the EF Where clause. Return `Error.NotFound` (not `Forbidden`) on mismatch to avoid existence leakage — consistent with the SEC-029 fix in CallbackService handlers.
 - **Reference**: CWE-639 (Authorization Bypass Through User-Controlled Key), OWASP API3:2023 Broken Object Level Authorization.
@@ -832,16 +832,16 @@ All 4 HIGH blockers confirmed fixed by source-code inspection. No new Critical o
 #### [HIGH] SEC-039 — IDOR on ITR Filing Handlers (all 10 mutation/query handlers)
 
 - **Files**:
-  - `backend/Services/ItrService/ItrService.Application/Filings/Queries/GetFiling/GetFilingQuery.cs` line 28
-  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/ComputeTax/ComputeTaxCommand.cs` line 65
-  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/SubmitForCaReview/SubmitForCaReviewCommand.cs` line 24
-  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/CaApprove/CaApproveCommand.cs` (analogous pattern)
-  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/CaReject/CaRejectCommand.cs` (analogous pattern)
-  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/MarkFiled/MarkFiledCommand.cs` line 27
-  - `backend/Services/ItrService/ItrService.Application/Filings/Commands/MarkEVerified/MarkEVerifiedCommand.cs` (analogous pattern)
-  - `backend/Services/ItrService/ItrService.Application/Form16/Commands/UploadForm16/UploadForm16Command.cs` line 43
-  - `backend/Services/ItrService/ItrService.Application/Notices/Commands/RespondToNotice/RespondToNoticeCommand.cs` (analogous pattern)
-  - `backend/Services/ItrService/ItrService.Application/Filings/Queries/ListFilings/ListFilingsQuery.cs` line 29
+  - `backend/Services/FinanceService/Finance.Application/Itr/Filings/Queries/GetFiling/GetFilingQuery.cs` line 28
+  - `backend/Services/FinanceService/Finance.Application/Itr/Filings/Commands/ComputeTax/ComputeTaxCommand.cs` line 65
+  - `backend/Services/FinanceService/Finance.Application/Itr/Filings/Commands/SubmitForCaReview/SubmitForCaReviewCommand.cs` line 24
+  - `backend/Services/FinanceService/Finance.Application/Itr/Filings/Commands/CaApprove/CaApproveCommand.cs` (analogous pattern)
+  - `backend/Services/FinanceService/Finance.Application/Itr/Filings/Commands/CaReject/CaRejectCommand.cs` (analogous pattern)
+  - `backend/Services/FinanceService/Finance.Application/Itr/Filings/Commands/MarkFiled/MarkFiledCommand.cs` line 27
+  - `backend/Services/FinanceService/Finance.Application/Itr/Filings/Commands/MarkEVerified/MarkEVerifiedCommand.cs` (analogous pattern)
+  - `backend/Services/FinanceService/Finance.Application/Itr/Form16/Commands/UploadForm16/UploadForm16Command.cs` line 43
+  - `backend/Services/FinanceService/Finance.Application/Itr/Notices/Commands/RespondToNotice/RespondToNoticeCommand.cs` (analogous pattern)
+  - `backend/Services/FinanceService/Finance.Application/Itr/Filings/Queries/ListFilings/ListFilingsQuery.cs` line 29
 - **Description**: Every ITR filing handler loads records by `FilingId` or `AssesseeId` from the request body — there is no `ICurrentUser` injection and no check that the filing's `AssesseeId` belongs to the authenticated user. An authenticated user can compute tax on another user's filing (modifying it), submit it for CA review, mark it as filed with a forged acknowledgement number, or read the full filing detail. `ListFilingsQuery` filters by caller-supplied `assesseeId` query parameter, not the authenticated identity — any user can list any other user's filings by supplying their `assesseeId`. This affects all 17 ITR endpoints.
 - **Recommended Fix**: Inject `ICurrentUser` into all handlers. For `ListFilings`: replace `request.AssesseeId` filter with a lookup of the current user's assessee record first, then scope to that assessee. For all mutation handlers: after loading the filing, verify `filing.AssesseeId == currentUser's assesseeId` (looked up from itr.assessee_profiles). Return `Error.NotFound` on mismatch.
 - **Reference**: CWE-639, OWASP API3:2023.
@@ -849,15 +849,15 @@ All 4 HIGH blockers confirmed fixed by source-code inspection. No new Critical o
 #### [HIGH] SEC-040 — DPDP: No AccountDeletionSubscriber in GstService or ItrService
 
 - **Files**:
-  - `backend/Services/GstService/GstService.Infrastructure/DependencyInjection.cs` (missing subscriber registration)
-  - `backend/Services/ItrService/ItrService.Infrastructure/DependencyInjection.cs` line 79 (ItrRecurringJobsSubscriber registered; no AccountDeletionSubscriber)
+  - `backend/Services/FinanceService/Finance.Infrastructure/Gst/DependencyInjection.cs` (missing subscriber registration)
+  - `backend/Services/FinanceService/Finance.Infrastructure/Itr/DependencyInjection.cs` line 79 (ItrRecurringJobsSubscriber registered; no AccountDeletionSubscriber)
 - **Description**: Neither GstService nor ItrService has an `AccountDeletionSubscriber` BackgroundService subscribing to the `account-deletion-events` Pub/Sub topic. Both services store PII subject to DPDP Act 2023 Right to Erasure: GstService holds `gst.invoices` (customer/supplier GSTIN, names), `gst.notices` (notice body, response text, attachment metadata); ItrService holds `itr.assessee_profiles` (PAN ciphertext, full name, email, phone, DOB, address), `itr.filings` (computation JSON with salary/income breakdown), `itr.form_16_extracts` (employer PAN cipher, salary figures), `itr.notices` (notice body, response attachments). P6-HANDOFF-16 and P6-HANDOFF-21 explicitly required these subscribers; they are present in CallbackService and NotificationService from the SEC-027 fix but were not applied to the two Phase 6B/6D services.
 - **Recommended Fix**: Implement `AccountDeletionSubscriber : BackgroundService` in both `GstService.Infrastructure/Messaging/` and `ItrService.Infrastructure/Messaging/`. Subscribe to `account-deletion-events`. For GstService: soft-delete `gst.invoices` rows with matching `organization_id`; null-out `gst.notices` body/response/attachments + set `anonymized_at`. For ItrService: soft-delete `itr.assessee_profiles`; null `full_name`, `email`, `phone`, `dob`, `address`, `pan` cipher in profile; null computation JSON in filings; purge `form_16_extracts.parsed_json`; null notice bodies. Register both subscribers in the respective `DependencyInjection.cs`. Follow the pattern established in CallbackService.Infrastructure for idempotent handling.
 - **Reference**: DPDP Act 2023 Section 12 (Right of erasure), CWE-212 (Improper Removal of Sensitive Information Before Storage or Transfer).
 
 #### [MEDIUM] SEC-041 — Form 16 Upload Accepts Client-Submitted PAN Cipher Without Server-Side Encryption
 
-- **File**: `backend/Services/ItrService/ItrService.Application/Form16/Commands/UploadForm16/UploadForm16Command.cs` lines 37–54
+- **File**: `backend/Services/FinanceService/Finance.Application/Itr/Form16/Commands/UploadForm16/UploadForm16Command.cs` lines 37–54
 - **Description**: The `UploadForm16Command` accepts `EmployeePanCipher` directly from the request body and stores it verbatim via `Form16Extract.Create(...)`. The validator (`RuleFor(x => x.EmployeePanCipher).NotEmpty()`) only checks presence, not ciphertext format or integrity. A client can submit an arbitrary string — including a plaintext PAN, an empty string (as the mobile currently does at `Form16UploadScreen.tsx` line 68), or crafted binary data — and it will be stored in `itr.form_16_extracts.employee_pan_cipher`. The backend has `IPanEncryptionService` (SEC-013 pattern) available but the handler does not call it. The mobile client is expected to supply pre-encrypted ciphertext but there is no server-side enforcement that the ciphertext is valid AES-256-CBC output.
 - **Recommended Fix**: The handler should accept raw PAN (or the GCS URI from which Document AI extracts PAN server-side), call `IPanEncryptionService.Encrypt()` on the backend, and store the resulting ciphertext. Never trust a client-supplied ciphertext as the canonical encrypted value. If the design intent is that OCR runs server-side (via Document AI), the `EmployeePanCipher` parameter should be removed from the command entirely and populated post-OCR.
 - **Reference**: CWE-311 (Missing Encryption of Sensitive Data), OWASP A02:2021 Cryptographic Failures.
@@ -878,7 +878,7 @@ All 4 HIGH blockers confirmed fixed by source-code inspection. No new Critical o
 
 #### [LOW] SEC-043 — e-Invoice and GST Notice Endpoints Use Standard Rate-Limit Policy Only
 
-- **File**: `backend/Services/GstService/GstService.Api/Endpoints/Gst.cs` lines 96–103
+- **File**: `backend/Services/FinanceService/Finance.WebApi/Endpoints/Gst/Gst.cs` lines 96–103
 - **Description**: `POST /gst/e-invoices` and `POST /gst/notices` apply `.RequireRateLimiting("standard")` — the same policy as all other GST endpoints. The checklist requirement specified that these two endpoints should have stricter rate limiting given their cost and abuse vectors: e-invoice generation triggers external IRP API calls (throttled by NIC at ~100/min per GSTIN); notice creation at volume could be used to create noise for compliance teams. The "standard" policy from GstService Program.cs is a fixed-window general policy, not a tighter per-GSTIN or per-org window for these high-value operations.
 - **Recommended Fix**: Add a named rate-limit policy (e.g., `"gst-write"` at 20 req/min per IP or org) and apply `.RequireRateLimiting("gst-write")` on `POST /gst/e-invoices`, `POST /gst/e-way-bills`, and `POST /gst/notices`. This prevents runaway IRP API cost and notice spam.
 - **Reference**: OWASP API4:2023 Unrestricted Resource Consumption.
@@ -987,9 +987,9 @@ The remaining MEDIUM/LOW findings (SEC-041, SEC-042, SEC-043) and INFO-002 are p
 #### SEC-038 — CONFIRMED-FIXED
 
 **Files read**:
-- `backend/Services/GstService/GstService.Application/Notices/Queries/GetNotice/GetNoticeQuery.cs`
-- `backend/Services/GstService/GstService.Application/Notices/Commands/RespondToNotice/RespondToNoticeCommand.cs`
-- `backend/Services/GstService/GstService.Application/Notices/Commands/AssignNoticeToCa/AssignNoticeToCaCommand.cs`
+- `backend/Services/FinanceService/Finance.Application/Gst/Notices/Queries/GetNotice/GetNoticeQuery.cs`
+- `backend/Services/FinanceService/Finance.Application/Gst/Notices/Commands/RespondToNotice/RespondToNoticeCommand.cs`
+- `backend/Services/FinanceService/Finance.Application/Gst/Notices/Commands/AssignNoticeToCa/AssignNoticeToCaCommand.cs`
 - `tests/unit/GstService/GstNoticeIdorTests.cs`
 
 **Evidence**:
@@ -1009,9 +1009,9 @@ Test file `GstNoticeIdorTests.cs`: 7 tests present, seeding a notice owned by `_
 #### SEC-039 — CONFIRMED-FIXED (3 handlers sampled)
 
 **Files read**:
-- `backend/Services/ItrService/ItrService.Application/Filings/Queries/GetFiling/GetFilingQuery.cs`
-- `backend/Services/ItrService/ItrService.Application/Filings/Queries/ListFilings/ListFilingsQuery.cs`
-- `backend/Services/ItrService/ItrService.Application/Filings/Commands/CaApprove/CaApproveCommand.cs`
+- `backend/Services/FinanceService/Finance.Application/Itr/Filings/Queries/GetFiling/GetFilingQuery.cs`
+- `backend/Services/FinanceService/Finance.Application/Itr/Filings/Queries/ListFilings/ListFilingsQuery.cs`
+- `backend/Services/FinanceService/Finance.Application/Itr/Filings/Commands/CaApprove/CaApproveCommand.cs`
 - `tests/unit/ItrService/FilingIdorTests.cs`
 
 **Evidence**:
@@ -1031,10 +1031,10 @@ Test file `FilingIdorTests.cs`: 9 tests present, covering GetFiling, ListFilings
 #### SEC-040 — CONFIRMED-FIXED
 
 **Files read**:
-- `backend/Services/GstService/GstService.Infrastructure/Messaging/AccountDeletionSubscriber.cs`
-- `backend/Services/ItrService/ItrService.Infrastructure/Messaging/AccountDeletionSubscriber.cs`
-- `backend/Services/GstService/GstService.Infrastructure/DependencyInjection.cs`
-- `backend/Services/ItrService/ItrService.Infrastructure/DependencyInjection.cs`
+- `backend/Services/FinanceService/Finance.Infrastructure/Gst/Messaging/AccountDeletionSubscriber.cs`
+- `backend/Services/FinanceService/Finance.Infrastructure/Itr/Messaging/AccountDeletionSubscriber.cs`
+- `backend/Services/FinanceService/Finance.Infrastructure/Gst/DependencyInjection.cs`
+- `backend/Services/FinanceService/Finance.Infrastructure/Itr/DependencyInjection.cs`
 - `tests/unit/GstService/GstDpdpErasureTests.cs`
 - `tests/unit/ItrService/ItrDpdpErasureTests.cs`
 
@@ -1059,8 +1059,8 @@ The subscriber erases invoices/notices where `CreatedBy == userId`. This aligns 
 #### SEC-043 — CONFIRMED-FIXED
 
 **Files read**:
-- `backend/Services/GstService/GstService.Api/Program.cs`
-- `backend/Services/GstService/GstService.Api/Endpoints/Gst.cs`
+- `backend/Services/FinanceService/Finance.WebApi/Program.cs`
+- `backend/Services/FinanceService/Finance.WebApi/Endpoints/Gst/Gst.cs`
 
 **Evidence**:
 
@@ -1078,7 +1078,7 @@ The subscriber erases invoices/notices where `CreatedBy == userId`. This aligns 
 
 #### SEC-041 — DEFERRED: TODO PRESENT, STATUS OPEN
 
-**File read**: `backend/Services/ItrService/ItrService.Application/Form16/Commands/UploadForm16/UploadForm16Command.cs`
+**File read**: `backend/Services/FinanceService/Finance.Application/Itr/Form16/Commands/UploadForm16/UploadForm16Command.cs`
 
 The handler was located at `UploadForm16Command.cs` (handler and command co-located, not a separate `*CommandHandler.cs` file). Lines 53–55 contain:
 
@@ -1182,7 +1182,7 @@ The following patterns from SEC-026..029 (Phase 6A+6E) and SEC-038..043 (Phase 6
 
 #### [HIGH] SEC-044: Disbursement Webhook HMAC Verification Bypassable When WebhookSecretRef Is Null
 
-- **File:** `backend/Services/LoanService/LoanService.Infrastructure/Webhooks/DisbursementWebhookHandler.cs`
+- **File:** `backend/Services/FinanceService/Finance.Infrastructure/Loan/Webhooks/DisbursementWebhookHandler.cs`
 - **Line:** 58–75
 - **Description:** The HMAC-SHA256 signature verification block is guarded by `if (!string.IsNullOrEmpty(bank.WebhookSecretRef))`. If a partner bank record has a null or empty `WebhookSecretRef` — through admin error, partial configuration, or deliberate omission — the entire signature verification is silently skipped and the webhook is processed as legitimate. An attacker who can send HTTP to the webhook endpoint and knows a valid `bankId` (UUID, guessable from the admin UI or by enumeration) can record any disbursement amount for any loan application assigned to that bank, with zero authentication. This endpoint is intentionally unauthenticated (no JWT), so the HMAC is the sole trust boundary. Additionally, the implementation uses hex-string byte comparison (same as SEC-001/NEW-001 pattern) rather than decoded raw bytes — the constant-time comparison is length-sensitive to case normalization, not a bypass but a deficiency in the pattern.
 - **Impact:** Unauthorized disbursement recording; financial data integrity violation; potential fraud trigger for LOAN_DISBURSED notifications.
@@ -1204,7 +1204,7 @@ The following patterns from SEC-026..029 (Phase 6A+6E) and SEC-038..043 (Phase 6
 
 #### [MEDIUM] SEC-046: Signed URL TTL Is 1 Hour — Exceeds 15-Minute Maximum
 
-- **File:** `backend/Services/LoanService/LoanService.Application/LoanApplications/Queries/GetPackageDownloadUrl/GetPackageDownloadUrlQuery.cs` line 45; `backend/Services/ReportService/ReportService.Application/Reports/Queries/GetDownloadUrl/GetDownloadUrlQuery.cs` line 46
+- **File:** `backend/Services/FinanceService/Finance.Application/Loan/LoanApplications/Queries/GetPackageDownloadUrl/GetPackageDownloadUrlQuery.cs` line 45; `backend/Services/FinanceService/Finance.Application/Report/Reports/Queries/GetDownloadUrl/GetDownloadUrlQuery.cs` line 46
 - **Description:** Both handlers use `TimeSpan.FromHours(1)`. P6-HANDOFF-20 specifies a maximum of 15 minutes for signed URLs exposing PII-containing documents. LoanPackage PDFs contain PAN, Aadhaar references, bank account numbers, and income data. A 1-hour window significantly increases the exposure window for URL leakage via browser history, referrer headers, or accidental forwarding.
 - **Recommended Fix:** Change `TimeSpan.FromHours(1)` to `TimeSpan.FromMinutes(15)` in both handlers. The mobile client already uses `staleTime:0 / gcTime:0` ensuring fresh URL fetch per view.
 - **Reference:** OWASP A01:2021; P6-HANDOFF-20
@@ -1213,7 +1213,7 @@ The following patterns from SEC-026..029 (Phase 6A+6E) and SEC-038..043 (Phase 6
 
 #### [MEDIUM] SEC-047: LoanDisbursed Notification Passes DisbursedAmount to Push Channel
 
-- **File:** `backend/Services/NotificationService/NotificationService.Infrastructure/Messaging/LoanEventsSubscriber.cs`
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Notification/Messaging/LoanEventsSubscriber.cs`
 - **Line:** 123–130
 - **Description:** `DispatchNotificationAsync` builds a `variables` dictionary including `["disbursedAmount"] = $"₹{payload.DisbursedAmount.Value:N2}"`. This is passed to `SendNotificationCommand` for `LOAN_DISBURSED`, which uses Push (FCM) channel (`NotificationEventCatalog.cs` line 37). If the FCM template uses `{{disbursedAmount}}`, the exact rupee amount appears in the push notification body and is visible on device lock screens. The checklist explicitly required push body must NOT include disbursed_amount. Even if the current template does not use it, the variable is present and can leak if the template is updated without a security review.
 - **Impact:** Financial PII on device lock screen; DPDP Act 2023 data minimization violation.
@@ -1234,7 +1234,7 @@ The following patterns from SEC-026..029 (Phase 6A+6E) and SEC-038..043 (Phase 6
 
 #### [MEDIUM] SEC-049: PDF Watermark Text Diverges from Canonical Specification
 
-- **File:** `backend/Services/ReportService/ReportService.Infrastructure/Reports/SnapAccountDocumentStyles.cs`
+- **File:** `backend/Services/FinanceService/Finance.Infrastructure/Report/Reports/SnapAccountDocumentStyles.cs`
 - **Line:** 13–14
 - **Description:** The canonical watermark per checklist: `"Generated by SnapAccount | {orgName} | {date} | Package ID: {id} | Not a CA certification"`. Actual constant: `"Generated by SnapAccount | Not a CA Certification | For Lending Purposes Only"`. The watermark omits `orgName`, `date`, and `Package ID` — all required for document traceability. Without the Package ID in the watermark, a printed PDF cannot be linked back to its GCS object or the generating org for forensic purposes.
 - **Recommended Fix:** Pass `OrgName`, `LoanApplicationId`, and generation timestamp to `LoanPackageReportGenerator.BuildDocument()` and render the full canonical watermark dynamically. `WatermarkText` should be a format string, not a constant.
@@ -1254,7 +1254,7 @@ The following patterns from SEC-026..029 (Phase 6A+6E) and SEC-038..043 (Phase 6
 
 #### [INFO] INFO-006: AccountDeletionSubscriber Idempotency Check Body Is Empty
 
-- **File:** `backend/Services/LoanService/LoanService.Infrastructure/Messaging/AccountDeletionSubscriber.cs`
+- **File:** `backend/Services/FinanceService/Finance.Infrastructure/Loan/Messaging/AccountDeletionSubscriber.cs`
 - **Line:** 78–83
 - **Description:** The idempotency check block creates a scope and gets the DbContext, but executes no query. The comment says "Simple deduplication via checking anonymizedAt already set" but this is never checked. The `AnonymiseUserDataAsync` method is de-facto idempotent (filters `AnonymizedAt == null`) but the explicit dedup block is dead code that misleads future maintainers.
 - **Recommended Fix:** Remove the empty scope creation or implement a real idempotency key check. Add a comment explaining the method-level idempotency.
@@ -1264,7 +1264,7 @@ The following patterns from SEC-026..029 (Phase 6A+6E) and SEC-038..043 (Phase 6
 
 #### [INFO] INFO-007: Webhook Rate Limiting Absent — Consider IP Allowlisting
 
-- **File:** `backend/Services/LoanService/LoanService.Api/Endpoints/Loans.cs`
+- **File:** `backend/Services/FinanceService/Finance.WebApi/Endpoints/Loan/Loans.cs`
 - **Line:** 153–156
 - **Description:** The disbursement webhook endpoint (`POST /loans/webhooks/{bankId}/disbursement`) has no rate limiting. The comment states "No rate limit (bank calls only)". This is an accepted risk for B2B webhook endpoints that are IP-allowlisted at the network layer. If Cloud Armor or VPC firewall rules are not configured to allowlist partner bank IPs, this endpoint is exposed to unrestricted request volume from the internet. The HMAC check provides integrity protection but not availability protection.
 - **Recommended Fix:** Confirm Cloud Armor IP allowlist is configured for each partner bank's outbound IP range before production. As a defense-in-depth measure, add a dedicated "webhook" rate limit policy (e.g., 60 req/min per IP) that is separate from the standard policy.
@@ -1517,9 +1517,9 @@ SEC-044 (HIGH) is CONFIRMED-FIXED. No bypass path remains. Three Medium findings
 
 | Finding | Severity | File(s) Verified | Result |
 |---------|----------|-----------------|--------|
-| SEC-051 — Razorpay webhook HMAC | HIGH | `SubscriptionService.Api/Endpoints/RazorpayWebhook.cs` | CONFIRMED-FIXED |
+| SEC-051 — Razorpay webhook HMAC | HIGH | `Platform.WebApi/Endpoints/Subscription/RazorpayWebhook.cs` | CONFIRMED-FIXED |
 | SEC-052 — SubscriptionService AccountDeletionSubscriber | MEDIUM | `SubscriptionService.Infrastructure/Messaging/AccountDeletionSubscriber.cs`, `DependencyInjection.cs` | CONFIRMED-FIXED |
-| SEC-053 — Chat rate-limit | MEDIUM | `ChatService.Api/Program.cs`, `ChatService.Api/Endpoints/Chat.cs`, `ChatService.Infrastructure/SignalR/ChatHub.cs` | CONFIRMED-FIXED — with one observation (see INFO-006) |
+| SEC-053 — Chat rate-limit | MEDIUM | `Assist.WebApi/Program.cs`, `Assist.WebApi/Endpoints/Chat/Chat.cs`, `ChatService.Infrastructure/SignalR/ChatHub.cs` | CONFIRMED-FIXED — with one observation (see INFO-006) |
 | SEC-045 — PayloadViewer OAuth masking | MEDIUM | `src/admin/src/components/ui/PayloadViewer.tsx` | CONFIRMED-FIXED |
 | SEC-048 — Real biometric on 3 screens | MEDIUM | `mobile/package.json`, `LoanConsentScreen.tsx`, `LoanPackagePreviewScreen.tsx`, `UserApprovalScreen.tsx` | CONFIRMED-FIXED |
 | SEC-050 — consent_text_version dynamic | MEDIUM | `mobile/src/api/loans.ts`, `LoanConsentScreen.tsx` | CONFIRMED-FIXED |
@@ -1729,7 +1729,7 @@ buildChatHubConnection(HUB_BASE_URL, () => FirebaseAuth.getIdToken())
 
 #### [INFO] INFO-006 — ChatHub Redis Rate Key Missing `chat:` Namespace Prefix
 
-- **File:** `backend/Services/ChatService/ChatService.Infrastructure/SignalR/ChatHub.cs` line 143
+- **File:** `backend/Services/AssistService/Assist.Infrastructure/Chat/SignalR/ChatHub.cs` line 143
 - **Description:** The Redis rate-limit key is `rate:{userId}:{minuteBucket}`. The inline comment at line 119 documents the key as `chat:rate:{userId}:{minute}` (with the `chat:` prefix). The actual implementation omits the `chat:` prefix. On a shared Redis instance (which the Aspire config provisions as a single Redis for all services), this generic `rate:` key could collide with rate-limit keys from other services that happen to use the same key pattern. The security impact is low — the only consequence would be that a rate-limit counter set in one service partially inhibits message sending in ChatService for the same userId+minute bucket, which would only over-throttle (not under-throttle). This is a namespacing hygiene issue, not a bypass.
 - **Severity:** INFO — No security bypass; over-throttling is the failure mode; key collision is unlikely in practice because no other service currently uses `rate:{userId}:{minute}` pattern.
 - **Recommended Fix:** Change the key to `chat:rate:{userId}:{minuteBucket}` to match the comment and align with Redis key namespacing convention. Update the comment to match.
@@ -1890,7 +1890,7 @@ Operations team pre-production checklist:
 
 #### [HIGH] M1-002: RBAC Module 1 Delegation Guard Completely Unimplemented — Backend Command Handlers Are Empty Stub Directories
 
-- **File:** `backend/Services/AuthService/AuthService.Application/Roles/Commands/SetRolePermissions/` (empty directory), `backend/Services/AuthService/AuthService.Application/Roles/Commands/CreateOrgRole/` (empty), `backend/Services/AuthService/AuthService.Application/Invitations/Commands/CreateInvitation/` (empty), `backend/Services/AuthService/AuthService.Application/Invitations/Commands/AcceptInvitation/` (empty), `backend/Services/AuthService/AuthService.Application/Permissions/Queries/GetGrantablePermissions/` (empty)
+- **File:** `backend/Services/PlatformService/Platform.Application/Auth/Roles/Commands/SetRolePermissions/` (empty directory), `backend/Services/PlatformService/Platform.Application/Auth/Roles/Commands/CreateOrgRole/` (empty), `backend/Services/PlatformService/Platform.Application/Auth/Invitations/Commands/CreateInvitation/` (empty), `backend/Services/PlatformService/Platform.Application/Auth/Invitations/Commands/AcceptInvitation/` (empty), `backend/Services/PlatformService/Platform.Application/Auth/Permissions/Queries/GetGrantablePermissions/` (empty)
 - **Description:** The scope document (§4 backend-agent) requires server-side enforcement that a delegate cannot grant permissions they do not themselves hold, and cannot assign a role whose permission set exceeds their own. This is the primary security requirement of Module 1. All the command handler directories that would implement this logic (`SetRolePermissions`, `CreateOrgRole`, `UpdateOrgRole`, `DeleteOrgRole`) contain only empty subdirectories — no `.cs` files exist within them. Similarly, `CreateInvitation`, `AcceptInvitation`, `ResendInvitation`, `RevokeInvitation`, and `GetGrantablePermissions` are all empty. The only implemented handler is `GetOrgRoles` (a read query). No new API endpoints for `POST /auth/org/roles`, `PUT /auth/org/roles/{id}/permissions`, `POST /auth/org/members/invite`, `GET /auth/me/grantable-permissions`, etc. are registered in `Auth.cs`. This means the entire delegation enforcement surface described in the scope is absent from the codebase. The `auth.invitation` table and DB schema are correct, but no backend code creates, validates, or accepts invitations.
 - **Recommended Fix:** Implement all command handlers before marking this module ready for security review gate. The specific delegation guard logic required: in `SetRolePermissionsCommandHandler`, after loading the caller's effective permission set via `ICurrentUser`, verify that every permission in the request is contained in the caller's own set — reject with 403 Forbidden if any requested permission is not in the caller's set. Similarly in `CreateOrgRole` and `UpdateOrgRole`, verify the role's intended permissions are all held by the caller. This logic must be in the application layer, not only in the validator or middleware.
 - **Reference:** CWE-269 (Improper Privilege Management); OWASP ASVS V4.1 (Access Control)
@@ -1908,7 +1908,7 @@ Operations team pre-production checklist:
 
 #### [HIGH] M1-004: GetUserPermissionsQuery Returns Role Names as Permission Codes — Frontend Permission Gates Are Meaningless
 
-- **File:** `backend/Services/AuthService/AuthService.Application/Users/Queries/GetUserPermissions/GetUserPermissionsQuery.cs`, lines 22–26
+- **File:** `backend/Services/PlatformService/Platform.Application/Auth/Users/Queries/GetUserPermissions/GetUserPermissionsQuery.cs`, lines 22–26
 - **Description:** The `GET /auth/me/permissions` endpoint is used by the frontend permission system (Phase 6F) to determine which UI actions a user may perform. The handler `GetUserPermissionsQueryHandler` returns `currentUser.Roles.ToList()` — that is, it returns role names (`["SYSTEM_ADMIN", "CA"]`) as if they were permission codes. Role names are not permission codes. The frontend `usePermission.ts` hook and `RoleGuard` consume this endpoint expecting strings like `"org.members.invite"` or `"gst.returns.file"`. When the frontend calls `GET /auth/me/permissions` and receives role names, the `hasPermission("org.members.invite")` check fails for everyone because no token will ever carry the string `"org.members.invite"` — the user profile object only carries role names. The module scope (§4 backend-agent) explicitly calls this out: `GET /auth/me/grantable-permissions` must return the subset of permissions the caller may delegate. The current implementation means every permission check relying on this endpoint returns false, and the role matrix UI cannot accurately grey out non-grantable permissions. Additionally a comment in the file says "Phase 2 will expand roles → permission codes via IAuthDbContext" — this was never implemented.
 - **Recommended Fix:** Implement the handler to join `auth.user_role` → `auth.role_permission` → `auth.permission` for the current user's org context and return the resolved permission name strings. Separately implement `GET /auth/me/grantable-permissions` which further intersects with the caller's own permission set. The wildcard `"*"` case (SYSTEM_ADMIN) must still be preserved.
 - **Reference:** CWE-732 (Incorrect Permission Assignment for Critical Resource); OWASP ASVS V4.3 (Other Access Control Considerations)
@@ -1917,7 +1917,7 @@ Operations team pre-production checklist:
 
 #### [MEDIUM] M1-005: Invitation Token Entropy and Single-Use/Replay Protection Cannot Be Verified — CreateInvitation Handler Is Absent
 
-- **File:** `backend/Services/AuthService/AuthService.Application/Invitations/Commands/CreateInvitation/` (empty directory), `backend/Services/AuthService/AuthService.Domain/Entities/Invitation.cs`
+- **File:** `backend/Services/PlatformService/Platform.Application/Auth/Invitations/Commands/CreateInvitation/` (empty directory), `backend/Services/PlatformService/Platform.Domain/Auth/Entities/Invitation.cs`
 - **Description:** The `Invitation` entity correctly stores a `token_hash` (SHA-256 of the raw token) and has a `UNIQUE` constraint on `token_hash`. However, since `CreateInvitationCommandHandler` does not exist, we cannot verify: (1) the raw token is generated with sufficient entropy (minimum 256 bits from `RandomNumberGenerator`), (2) the token is single-use (the `Accept()` method sets status but there is no guard preventing re-use if the status check is skipped), (3) the expiry is enforced at the point of acceptance. The `IsValid(DateTime utcNow)` method on the entity exists but will only be called if `AcceptInvitationCommandHandler` is implemented and uses it. The scope requires replay protection — once an invite is accepted, the same token must not be usable again. This cannot be confirmed without the handler.
 - **Recommended Fix:** When implementing `CreateInvitationCommandHandler`: generate the raw token with `RandomNumberGenerator.GetBytes(32)` (256 bits minimum), store only `Convert.ToHexString(SHA256.HashData(tokenBytes))` as `token_hash`. When implementing `AcceptInvitationCommandHandler`: look up by token hash, call `IsValid(DateTime.UtcNow)` and reject if false (expired or already accepted), call `invitation.Accept()` to set status, then persist before any other action to make the transition atomic. Do not call `Accept()` after the member is already added.
 - **Reference:** OWASP Testing Guide — Testing for Insecure Object References; CWE-330 (Use of Insufficiently Random Values)
@@ -1935,7 +1935,7 @@ Operations team pre-production checklist:
 
 #### [MEDIUM] M1-007: Admin Endpoints /auth/admin/* Lack Permission Gate — Any Authenticated User Can Access Them
 
-- **File:** `backend/Services/AuthService/AuthService.Api/Endpoints/Auth.cs`, lines 72–106
+- **File:** `backend/Services/PlatformService/Platform.WebApi/Endpoints/Auth/Auth.cs`, lines 72–106
 - **Description:** The endpoints `GET /auth/admin/team-members`, `GET /auth/admin/audit-events`, `GET /auth/admin/users`, and `GET /auth/admin/users/{id}` each call `.RequireAuthorization()` (checking only that the user is authenticated) and then dispatch to queries that carry `[RequiresPermission("admin.dashboard.read")]` or `[RequiresPermission("admin.users.read")]`. The permission check runs correctly through `PermissionBehavior` for `GetTeamMembersQuery`, `GetAuditEventsQuery`, `ListUsersQuery`, and `GetUserDetailQuery`. However: `PermissionBehavior` reads permissions from `currentUser.HasPermission(...)` which in turn reads from the `"permissions"` claim in the JWT. For Firebase-authenticated users (production path), Firebase ID tokens do not carry a `"permissions"` claim — they carry only Firebase-standard claims. The `"permissions"` claim is only present in LOCAL_AUTH JWTs (set explicitly in `LocalAuthService.LoginAsync`). For Firebase users the `HasPermission` check falls back to role-name matching (`Roles.Any(r => r.Equals(permission, ...))`), which will never match a dotted permission string like `"admin.users.read"`. The net result for production Firebase users is: `HasPermission("admin.users.read")` returns false, and `PermissionBehavior` returns a Forbidden result — meaning these admin endpoints are broken (always 403) for Firebase-authenticated users, not merely permissive. However, for LOCAL_AUTH dev users with `SYSTEM_ADMIN` role, the wildcard `"*"` permission is set, so they pass. This is a correctness and privilege issue: the permission enforcement works in dev mode but silently fails in production.
 - **Recommended Fix:** Implement `GetUserPermissionsQueryHandler` to resolve actual permissions from the database (see M1-004). For Firebase-authenticated users, their permissions must be loaded from `auth.role_permission` on every request (or cached in a short-lived distributed cache). Until M1-004 is fixed, the admin endpoints are inaccessible to production users regardless of their role.
 - **Reference:** CWE-285 (Improper Authorization); OWASP ASVS V4.1
@@ -1944,7 +1944,7 @@ Operations team pre-production checklist:
 
 #### [LOW] M1-008: OTP Service Logs Plaintext OTP in Non-Production Environments Including Staging
 
-- **File:** `backend/Services/AuthService/AuthService.Infrastructure/Services/OtpService.cs`, lines 60–62
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Auth/Services/OtpService.cs`, lines 60–62
 - **Description:** The OTP service logs the plaintext OTP to the application log in all non-production environments: `logger.LogWarning("OTP for {Phone}: {Otp} (DEVELOPMENT ONLY — never log in production)", phoneNumber, otp)`. The condition is `!string.Equals(env, "Production", ...)`. If the service is deployed to a staging environment with `ASPNETCORE_ENVIRONMENT=Staging`, this log statement executes and the plaintext OTP is written to Cloud Logging (GCP). Any team member or service account with Cloud Logging read access to the staging project can read all staging OTPs, enabling account takeover on staging. If staging uses any real user phone numbers or if staging credentials are ever used to access production data, this is a direct exposure risk.
 - **Recommended Fix:** Change the condition to only log the OTP when `ASPNETCORE_ENVIRONMENT=Development` (local dev only), not for any deployed environment. Use `app.Environment.IsDevelopment()` via `IHostEnvironment` injection rather than reading the raw string. Alternatively, remove the log entirely and rely on the dev seed admin account for local testing.
 - **Reference:** CWE-532 (Insertion of Sensitive Information into Log File); OWASP Logging Cheat Sheet
@@ -1953,7 +1953,7 @@ Operations team pre-production checklist:
 
 #### [LOW] M1-009: Weak Placeholder PAN Encryption Key Committed in appsettings.json
 
-- **File:** `backend/Services/AuthService/AuthService.Api/appsettings.json`, line 29
+- **File:** `backend/Services/PlatformService/Platform.WebApi/appsettings.json`, line 29
 - **Description:** `appsettings.json` contains `"Key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="` as the placeholder `PanEncryption:Key`. This is a base64-encoded string of 32 zero-bytes — a trivially predictable key. Although `AesPanEncryptionService` correctly requires a 32-byte key and uses GCP Secret Manager in production, the committed placeholder key means: (1) if a developer forgets to set the real key before running tests, PANs are encrypted with a known-weak key, (2) if any integration test database contains data encrypted with this key, those PANs can be trivially decrypted. The `.gitignore` excludes `appsettings.Development.json` and `appsettings.Local.json` but not `appsettings.json` itself — so this file is correctly tracked, but the placeholder being cryptographically weak is a risk.
 - **Recommended Fix:** Replace the all-zeros placeholder with an explanatory string: `"Key": "SET_VIA_ENV_OR_SECRET_MANAGER"`. Modify `AesPanEncryptionService` to explicitly reject this sentinel value at startup with a clear error message. This prevents accidental use of a weak key in any environment.
 - **Reference:** CWE-321 (Use of Hard-coded Cryptographic Key); OWASP Cryptographic Storage Cheat Sheet
@@ -2037,7 +2037,7 @@ Module 1 cannot be approved for any deployed environment in its current state. T
 
 #### [HIGH] M1-R-001: RlsSessionInterceptor Uses String Interpolation to Construct SQL — Potential SQL Injection in app.current_user_id
 
-- **File:** `backend/Services/AuthService/AuthService.Infrastructure/Persistence/Interceptors/RlsSessionInterceptor.cs`, lines 61–63
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Auth/Persistence/Interceptors/RlsSessionInterceptor.cs`, lines 61–63
 - **Description:** The interceptor sets the RLS session variable using a C# interpolated string directly in `cmd.CommandText`:
   ```csharp
   cmd.CommandText = $"""
@@ -2059,7 +2059,7 @@ Module 1 cannot be approved for any deployed environment in its current state. T
 
 #### [MEDIUM] M1-R-002: AcceptInvitationCommand Is Unauthenticated — Invitation Acceptance Can Be Triggered by Any Signed-In User, Not Just the Invitee
 
-- **File:** `backend/Services/AuthService/AuthService.Api/Endpoints/Invitations.cs`, line 61; `backend/Services/AuthService/AuthService.Application/Invitations/Commands/AcceptInvitation/AcceptInvitationCommand.cs`, lines 39–103
+- **File:** `backend/Services/PlatformService/Platform.WebApi/Endpoints/Auth/Invitations.cs`, line 61; `backend/Services/PlatformService/Platform.Application/Auth/Invitations/Commands/AcceptInvitation/AcceptInvitationCommand.cs`, lines 39–103
 - **Description:** The `POST /auth/invite/{token}/accept` endpoint requires `.RequireAuthorization()` (the user must be authenticated), and `AcceptInvitationCommandHandler` confirms `currentUser.IsAuthenticated`. However, the invitation was sent to a specific email address (`invitation.Email`). The handler does not verify that the authenticated caller's email matches the invited email before creating the org membership. Any authenticated user who obtains the invite token (e.g. by intercepting the email, or if the token is shared) can accept the invitation as themselves — joining the organization under a different identity than intended. The intended invitee cannot then accept the invite (it will already be accepted). In a B2B multi-tenant system where invitations represent explicit access grants to specific named individuals, accepting on behalf of a different identity is an access control gap.
 - **Recommended Fix:** Add an email match check in `AcceptInvitationCommandHandler` before creating the membership:
   ```csharp
@@ -2075,7 +2075,7 @@ Module 1 cannot be approved for any deployed environment in its current state. T
 
 #### [LOW] M1-R-003: RlsSessionInterceptor Silently Swallows Failure — RLS Isolation Silently Degrades Without Alert
 
-- **File:** `backend/Services/AuthService/AuthService.Infrastructure/Persistence/Interceptors/RlsSessionInterceptor.cs`, lines 72–79
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Auth/Persistence/Interceptors/RlsSessionInterceptor.cs`, lines 72–79
 - **Description:** The interceptor catches all exceptions during session variable setting and logs a warning, but allows the request to continue:
   ```csharp
   catch (Exception ex)
@@ -2091,7 +2091,7 @@ Module 1 cannot be approved for any deployed environment in its current state. T
 
 #### [INFO] M1-R-INFO-001: ValidateInviteToken Is a Public Unauthenticated Endpoint — Timing Oracle for Token Existence
 
-- **File:** `backend/Services/AuthService/AuthService.Api/Endpoints/Invitations.cs`, lines 57–59, 102–110; `backend/Services/AuthService/AuthService.Application/Invitations/Queries/ValidateInviteToken/ValidateInviteTokenQuery.cs`
+- **File:** `backend/Services/PlatformService/Platform.WebApi/Endpoints/Auth/Invitations.cs`, lines 57–59, 102–110; `backend/Services/PlatformService/Platform.Application/Auth/Invitations/Queries/ValidateInviteToken/ValidateInviteTokenQuery.cs`
 - **Description:** `GET /auth/invite/{token}` is public — no `RequireAuthorization()`. It looks up an invitation by token hash and returns different responses for valid vs. invalid tokens (200 with details vs. 410 with `isValid: false`). For a non-existent token, the handler returns `Error.NotFound` which maps to 404. An attacker can distinguish: 404 (token not in DB) vs. 410 with `isValid: false` (token exists but expired/revoked) vs. 200 (token valid). This is an oracle for whether a given token string is in the database. Given that tokens are 256-bit random values, brute-force is not feasible, but the 404 vs. 410/200 distinction slightly leaks information about system state. The more significant risk is that this endpoint reveals org name, email (invitee's email), role name, and expiry time to anyone who has the token — confirming this is intentional (the accept page needs this data), but the endpoint has no rate limiting.
 - **Recommended Fix:** Add the `"otp"` or a new `"invite"` rate limiting policy to this endpoint to limit oracle/enumeration attempts: `group.MapGet("/invite/{token}", ...).RequireRateLimiting("invite")`. A modest limit (20 req/min per IP) is sufficient since legitimate users open the link once.
 
@@ -2099,7 +2099,7 @@ Module 1 cannot be approved for any deployed environment in its current state. T
 
 #### [INFO] M1-R-INFO-002: GetOrgMembersQuery Role Name Filter Accepts Arbitrary String — No Whitelist
 
-- **File:** `backend/Services/AuthService/AuthService.Application/Members/Queries/GetOrgMembers/GetOrgMembersQuery.cs`, lines 58–60
+- **File:** `backend/Services/PlatformService/Platform.Application/Auth/Members/Queries/GetOrgMembers/GetOrgMembersQuery.cs`, lines 58–60
 - **Description:** `GetOrgMembersQuery` accepts a `Role` string parameter and filters by `r.Name == request.Role`. Unlike `GetTeamMembersQuery` (the existing admin query) which validates `request.Role` against an explicit `OperationalRoles` whitelist, `GetOrgMembersQuery` passes the role name string directly to EF Core. Since this is a parameterized LINQ query (not raw SQL), SQL injection is not possible. However, the free-form role name filter allows a caller with `org.members.read` to probe whether any given role name exists in the system (including system roles not visible in their UI) by observing whether the filter returns 0 results vs. records. This is a low-severity information disclosure.
 - **Recommended Fix:** For the user-supplied `role` filter in `GetOrgMembersQuery`, validate the value against roles actually visible within the caller's org (i.e. join to `auth.role` scoped to the org before applying the filter) rather than accepting arbitrary strings. This is naturally enforced by the LINQ join on `db.Roles.Where(r => r.DeletedAt == null)` which already limits to visible roles, but the observable 0-vs-N result oracle remains.
 
@@ -2212,7 +2212,7 @@ The core security requirements of Module 1 are correctly implemented:
 - `AuthService.Application/PermissionCatalog/Commands/UpdatePermission/UpdatePermissionCommand.cs`
 - `AuthService.Application/PermissionCatalog/Commands/DeletePermission/DeletePermissionCommand.cs`
 - `AuthService.Application/Common/Guards/OrgContextGuard.cs`
-- `AuthService.Api/Endpoints/Permissions.cs` (updated with write routes)
+- `Platform.WebApi/Endpoints/Auth/Permissions.cs` (updated with write routes)
 - `AuthService.Domain/Entities/Permission.cs`
 - Modified handlers adopting OrgContextGuard: `CreateOrgRoleCommand`, `SetRolePermissionsCommand`, `UpdateOrgMemberCommand`, `SuspendOrgMemberCommand`, `RemoveOrgMemberCommand`, `CreateInvitationCommand`
 
@@ -2386,7 +2386,7 @@ I1.1-001 (MEDIUM) is a data-integrity gap around soft-deleted `role_permission` 
 - `AuthService.Domain/Entities/UserPermission.cs`
 - `AuthService.Domain/Entities/Permission.cs` (updated — `IsActive`, `SetActive`)
 - `AuthService.Infrastructure/Persistence/Configurations/UserPermissionConfiguration.cs`
-- `AuthService.Api/Endpoints/AdminUsers.cs`
+- `Platform.WebApi/Endpoints/Auth/AdminUsers.cs`
 - `database/migrations/038_user_permission.sql`
 
 Updated files reviewed for regressions:
@@ -2720,7 +2720,7 @@ CRITICAL: 0 | HIGH: 0 | MEDIUM: 1 (I1.3-002) | LOW: 1 (I1.3-003) | INFO: 1 (I1.3
 - `AuthService.Application/ReferenceData/Queries/GetReferenceData/GetReferenceDataQuery.cs`
 - `AuthService.Domain/Entities/ReferenceData.cs` (+ `ReferenceDataCategory`)
 - `AuthService.Infrastructure/Persistence/Configurations/ReferenceDataConfiguration.cs`
-- `AuthService.Api/Endpoints/ReferenceDataEndpoints.cs`
+- `Platform.WebApi/Endpoints/Auth/ReferenceDataEndpoints.cs`
 - `database/migrations/039_reference_data.sql`
 
 Deferred backlog items remain deferred per standing instruction.
@@ -2895,7 +2895,7 @@ I1.4A-001 (LOW) is the only substantive finding: the `_ => 0` default in `CountU
 
 #### [LOW] GAP-PCI-01: `IRazorpayClient.VerifyWebhookSignature` Uses Non-Constant-Time Comparison — Dead Code With Dangerous Implementation
 
-- **File:** `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/Razorpay/RazorpayHttpClient.cs`
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Subscription/Razorpay/RazorpayHttpClient.cs`
 - **Line:** 154–160
 - **Description:** The `VerifyWebhookSignature` method on the production `RazorpayHttpClient` compares HMAC-SHA256 signatures using `string.Equals(computed64, signature, StringComparison.OrdinalIgnoreCase)`. This is a non-constant-time comparison that is susceptible to timing attacks. However, this method is **not called from any production code path** — the webhook endpoint (`RazorpayWebhook.cs`) implements its own private static `VerifyHmac()` method that correctly uses `CryptographicOperations.FixedTimeEquals`. The `VerifyWebhookSignature` method exists on the `IRazorpayClient` interface (confirmed at `SubscriptionService.Application/Common/Interfaces/IRazorpayClient.cs:50`) and is implemented in both `RazorpayHttpClient` and `MockRazorpayClient`, but no code in the `Application` or `Api` layer calls it. The risk is that a future refactor that routes webhook verification through `IRazorpayClient` would silently introduce a timing vulnerability.
 - **Recommended Fix:** Remove `VerifyWebhookSignature` from the `IRazorpayClient` interface and from both implementations. Webhook signature verification is a transport-layer concern that belongs exclusively in `RazorpayWebhook.cs`. This avoids having two divergent implementations of the same security-critical operation.
@@ -2905,7 +2905,7 @@ I1.4A-001 (LOW) is the only substantive finding: the `_ => 0` default in `CountU
 
 #### [LOW] GAP-PCI-02: No Startup Guard Preventing MockRazorpayClient in Production
 
-- **File:** `backend/Services/SubscriptionService/SubscriptionService.Infrastructure/DependencyInjection.cs`
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Subscription/DependencyInjection.cs`
 - **Line:** 64
 - **Description:** `MockRazorpayClient` is registered unconditionally as the `IRazorpayClient` implementation: `services.AddScoped<IRazorpayClient, MockRazorpayClient>()`. The real `RazorpayHttpClient` is only registered when an admin calls `PATCH /subscriptions/config/razorpay` (via `UpdateRazorpayConfigCommand`). There is no startup-time validation that fails or warns if the service is deployed to a non-Development environment without a live `RazorpayConfig` row. The `AesCredentialEncryptionService` correctly throws `InvalidOperationException` on startup if `ENCRYPTION_KEY` is absent — the same defensive pattern should apply here. With the mock active, all subscription create/renew operations return `mock_order_*` / `mock_sub_*` IDs without charging users, silently appearing successful.
 - **Recommended Fix:** On startup in non-Development environments, perform a database check (or at minimum a config-layer check) for a `RazorpayConfig` row with `IsEnabled = true` and `TestMode = false`. If absent, log a `LogWarning` with a clear message. For hard enforcement, add a `IHostedService` startup check that writes a health-check failure. Also consider throwing in `MockRazorpayClient.CreateOrderAsync` when `ASPNETCORE_ENVIRONMENT != Development` to provide a loud failure mode.
@@ -2933,7 +2933,7 @@ I1.4A-001 (LOW) is the only substantive finding: the `_ => 0` default in `CountU
 
 #### [INFO] GAP-PCI-05: `VerifyHmac` Compares UTF-8 Hex String Bytes Rather Than Decoded Binary Bytes
 
-- **File:** `backend/Services/SubscriptionService/SubscriptionService.Api/Endpoints/RazorpayWebhook.cs`
+- **File:** `backend/Services/PlatformService/Platform.WebApi/Endpoints/Subscription/RazorpayWebhook.cs`
 - **Line:** 116–140
 - **Description:** This was previously documented as NEW-001 (MEDIUM) in Phase 5. Recording here for traceability. The production webhook `VerifyHmac` static method converts both the computed hash and the received signature to their UTF-8 byte representations as hex strings, then compares using `CryptographicOperations.FixedTimeEquals`. Both sides are lowercased before comparison. The comparison is functionally correct and timing-safe when both sides are valid lowercase hex strings of equal length. The method's `try/catch` at line 137 handles malformed (non-hex) signatures by returning `false`. The remaining theoretical risk (length-mismatch early exit before constant-time comparison) is present but the 503 path (missing secret) exits before the comparison in the likely misconfiguration scenario. Status: DEFERRED (recorded in Phase 5 as medium-priority fix before production).
 - **Recommended Fix:** Decode both hex strings to `byte[]` before comparison: `CryptographicOperations.FixedTimeEquals(Convert.FromHexString(computedHex), Convert.FromHexString(signature.ToLowerInvariant()))`. Wrap in try/catch for `FormatException`.

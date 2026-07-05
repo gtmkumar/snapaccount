@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { AmountDisplay } from '../../components/ui/AmountDisplay';
@@ -22,7 +23,10 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { getCurrentFinancialYear } from '../../lib/utils';
-import apiClient from '../../lib/api';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../contexts/ThemeContext';
+import { getReportRows, normalizeReportSlug } from '../../api/accounting';
+import { reportTypeForSlug } from '../../api/reports';
 import type { HomeStackParamList } from '../../navigation/HomeStack';
 import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 
@@ -31,46 +35,52 @@ type RoutePropType = RouteProp<HomeStackParamList, 'ReportDetail'>;
 
 interface Props { navigation: NavProp; route: RoutePropType }
 
-const REPORT_TITLES: Record<string, string> = {
-  'trial-balance': 'Trial Balance',
-  'pnl': 'Profit & Loss',
-  'balance-sheet': 'Balance Sheet',
-  'cash-flow': 'Cash Flow Statement',
-  'tax-liability': 'Tax Liability',
-  'ledger': 'Ledger',
-  'comparative': 'Comparative Analysis',
-  'forecast': 'Cash Flow Forecast',
+// i18n title key per incoming slug (UI aliases included: pnl, cash-flow, …).
+const REPORT_TITLE_KEYS: Record<string, string> = {
+  'trial-balance': 'mobile.reports.types.trialBalance',
+  'pnl': 'mobile.reports.types.pnl',
+  'profit-and-loss': 'mobile.reports.types.pnl',
+  'balance-sheet': 'mobile.reports.types.balanceSheet',
+  'cash-flow': 'mobile.reports.types.cashFlow',
+  'tax-liability': 'mobile.reports.types.taxLiability',
+  'ledger': 'mobile.reports.types.ledger',
+  'comparative': 'mobile.reports.types.comparative',
+  'forecast': 'mobile.reports.types.forecast',
 };
-
-interface ReportRow {
-  label: string;
-  amount: number;
-  isTotal?: boolean;
-  isHighlighted?: boolean;
-}
 
 export function ReportDetailScreen({ navigation, route }: Props) {
   const styles = useStyles();
+  const { tokens } = useTheme();
+  const { t } = useTranslation();
   // SEC-015: Prevent screenshots on financial report detail screen (shows balance sheet, P&L, tax liability)
   useSensitiveScreen();
 
   const { reportType } = route.params;
   const fy = getCurrentFinancialYear();
-  const title = REPORT_TITLES[reportType] ?? 'Report';
+  // Normalise the FinancialReportsList card slug to a backend-canonical report
+  // type ('pnl' → 'profit-and-loss'); unsupported slugs (cash-flow / ledger /
+  // forecast) resolve to null → "not available" state, no API call.
+  const apiType = normalizeReportSlug(reportType);
+  const titleKey = REPORT_TITLE_KEYS[reportType];
+  const title = titleKey ? t(titleKey) : t('mobile.reports.detail.fallbackTitle');
 
-  const { data: reportData, isLoading } = useQuery({
-    queryKey: ['report', reportType, fy.label],
-    queryFn: async () => {
-      const res = await apiClient.get<{ rows: ReportRow[]; period: string }>(`/reports/${reportType}`);
-      return res.data;
-    },
-    placeholderData: { rows: [], period: fy.label },
+  // DG-DASH-05: only slugs with a backend PDF generator can be exported/previewed.
+  const canExportPdf = reportTypeForSlug(reportType) !== null;
+  const openPdfPreview = () =>
+    navigation.navigate('ReportPdfPreview', { reportType, title });
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['report-rows', apiType, fy.startYear],
+    queryFn: () => getReportRows(apiType!, { fyYear: fy.startYear }),
+    enabled: apiType !== null,
   });
+
+  const rows = data?.rows ?? [];
 
   const handleShare = async () => {
     await Share.share({
       title: `${title} - ${fy.label}`,
-      message: `SnapAccount ${title} report for ${fy.label}`,
+      message: t('mobile.reports.detail.shareMessage', { report: title, fy: fy.label }),
     });
   };
 
@@ -78,16 +88,36 @@ export function ReportDetailScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.common.back')}
+        >
           <Text style={styles.backText}>←</Text>
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
         <View style={styles.headerActions}>
-          <Pressable onPress={handleShare} style={styles.headerActionBtn} accessibilityLabel="Share">
-            <Text style={styles.headerActionText}>⬆️</Text>
-          </Pressable>
-          <Pressable style={styles.headerActionBtn} accessibilityLabel="Download">
-            <Text style={styles.headerActionText}>⬇️</Text>
+          {canExportPdf && (
+            <Pressable
+              onPress={openPdfPreview}
+              style={styles.headerIconBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.reports.detail.downloadPdf')}
+            >
+              <Ionicons name="download-outline" size={20} color={tokens.brand500} />
+            </Pressable>
+          )}
+          <Pressable
+            onPress={handleShare}
+            style={styles.headerIconBtn}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.reports.detail.share')}
+          >
+            <Ionicons name="share-outline" size={20} color={tokens.brand500} />
           </Pressable>
         </View>
       </View>
@@ -97,21 +127,46 @@ export function ReportDetailScreen({ navigation, route }: Props) {
         <Card style={styles.reportHeaderCard}>
           <Text style={styles.reportTitle}>{title}</Text>
           <Text style={styles.reportPeriod}>
-            Period: {fy.label} (April {fy.startYear} – March {fy.endYear})
+            {t('mobile.reports.detail.periodLine', {
+              fy: fy.label,
+              startYear: fy.startYear,
+              endYear: fy.endYear,
+            })}
           </Text>
-          <Text style={styles.reportGenerated}>Generated: {new Date().toLocaleDateString('en-IN')}</Text>
+          <Text style={styles.reportGenerated}>
+            {t('mobile.reports.detail.generated', {
+              date: new Date().toLocaleDateString('en-IN'),
+            })}
+          </Text>
         </Card>
 
         {/* Report rows */}
         <Card style={styles.reportContent}>
-          {isLoading ? (
+          {apiType === null ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>
+                {t('mobile.reports.detail.notAvailable')}
+              </Text>
+            </View>
+          ) : isLoading ? (
             <View style={styles.loadingRows}>
               {[1, 2, 3, 4, 5].map((i) => (
                 <View key={i} style={styles.skeletonRow} />
               ))}
             </View>
-          ) : reportData?.rows && reportData.rows.length > 0 ? (
-            reportData.rows.map((row, index) => (
+          ) : isError ? (
+            <View
+              style={styles.emptyState}
+              accessibilityLiveRegion="assertive"
+              accessibilityRole="alert"
+            >
+              <Text style={styles.emptyStateText}>{t('mobile.reports.error')}</Text>
+              <View style={styles.errorRetry}>
+                <Button label={t('mobile.reports.retry')} size="sm" onPress={() => refetch()} />
+              </View>
+            </View>
+          ) : rows.length > 0 ? (
+            rows.map((row, index) => (
               <View
                 key={index}
                 style={[
@@ -139,7 +194,7 @@ export function ReportDetailScreen({ navigation, route }: Props) {
           ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>
-                No data available for {fy.label}.{'\n'}Upload documents to generate this report.
+                {t('mobile.reports.detail.empty', { fy: fy.label })}
               </Text>
             </View>
           )}
@@ -147,15 +202,19 @@ export function ReportDetailScreen({ navigation, route }: Props) {
 
         {/* Action bar */}
         <View style={styles.actionBar}>
+          {canExportPdf && (
+            <Button
+              label={t('mobile.reports.detail.downloadPdf')}
+              onPress={openPdfPreview}
+              disabled={rows.length === 0}
+              fullWidth
+            />
+          )}
           <Button
-            label="Download PDF"
-            variant="secondary"
-            onPress={() => {}}
-            fullWidth
-          />
-          <Button
-            label="Share"
+            label={t('mobile.reports.detail.share')}
+            variant={canExportPdf ? 'secondary' : 'primary'}
             onPress={handleShare}
+            disabled={rows.length === 0}
             fullWidth
           />
         </View>
@@ -179,9 +238,13 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   backBtn: { padding: 4, marginRight: 8 },
   backText: { fontSize: 20, color: tk.brand500 },
   headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: tk.textPrimary },
-  headerActions: { flexDirection: 'row', gap: 8 },
-  headerActionBtn: { padding: 8 },
-  headerActionText: { fontSize: 18 },
+  headerActions: { flexDirection: 'row', gap: 4 },
+  headerIconBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scrollContent: { padding: 16, gap: 16 },
   reportHeaderCard: { padding: 16 },
   reportTitle: { fontSize: 20, fontWeight: '700', color: tk.textPrimary },
@@ -213,13 +276,14 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     backgroundColor: tk.border,
     borderRadius: 4,
   },
-  emptyState: { padding: 32, alignItems: 'center' },
+  emptyState: { padding: 32, alignItems: 'center', gap: 12 },
   emptyStateText: {
     fontSize: 14,
     color: tk.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
   },
+  errorRetry: { marginTop: 4 },
   actionBar: { gap: 10 },
   }),
 );

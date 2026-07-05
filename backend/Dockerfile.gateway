@@ -1,0 +1,62 @@
+# SnapAccount API Gateway — multi-stage Dockerfile
+# Builds the YARP reverse-proxy gateway (Gateway.csproj) as a standalone image.
+#
+# The gateway is a thin .NET 10 host (no EF, no Pub/Sub, no domain logic).
+# It is intentionally kept in a separate Dockerfile from the composite services
+# so the build matrix in CI can vary cache keys independently.
+#
+# Usage (from repo root):
+#   docker build -f backend/Dockerfile.gateway -t snapaccount/api-gateway ./backend
+#
+# Cloud Run image tag (cd-production.yml / cd-staging.yml):
+#   asia-south1-docker.pkg.dev/<PROJECT>/snapaccount/services/api-gateway:<tag>
+
+ARG DOTNET_VERSION=10.0
+
+# ── Stage 1: build ────────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
+WORKDIR /src
+
+# Copy everything (gateway references ServiceDefaults + Shared — all under backend/)
+COPY . .
+
+RUN dotnet restore Services/Gateway/Gateway.csproj
+
+RUN dotnet publish Services/Gateway/Gateway.csproj \
+    --no-restore \
+    -c Release \
+    -o /app/publish \
+    /p:UseAppHost=false \
+    /p:PublishTrimmed=false
+
+# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
+
+# Non-root user — same UID/GID pattern as Dockerfile for composites (SEC-NNN)
+RUN groupadd --gid 10001 appgroup \
+ && useradd  --uid 10001 --gid appgroup --no-create-home --shell /bin/false appuser
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=build --chown=appuser:appgroup /app/publish .
+
+# Cloud Run sets PORT env var; ASPNETCORE_URLS is overridden at runtime.
+# Default 8080 matches every Cloud Run deploy_service call in cloud-run-services.sh.
+ENV ASPNETCORE_URLS=http://+:${PORT:-8080} \
+    ASPNETCORE_ENVIRONMENT=Production \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    DOTNET_GCConserveMemory=9
+
+USER appuser
+
+# Gateway exposes /healthz (mapped in Program.cs via app.MapGet("/healthz", ...))
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8080}/healthz || exit 1
+
+EXPOSE 8080
+
+CMD ["dotnet", "/app/SnapAccount.Gateway.dll"]

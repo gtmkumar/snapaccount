@@ -41,7 +41,7 @@ Backend unit: **AuthService 271** · GstService 33 · ItrService 38. Frontend vi
 
 ## 3. Local run
 - **Postgres** localhost:5432/snapaccount (trust auth; password `postgresql`). Logins: `admin@snapaccount.local`/`Admin@12345` (SUPER_ADMIN `*`), `manager@snapaccount.local`/`Manager@12345` (limited).
-- **AuthService :5101** — `ASPNETCORE_ENVIRONMENT=Development LOCAL_AUTH=true ASPNETCORE_URLS=http://localhost:5101 dotnet run --no-launch-profile --project backend/Services/AuthService/AuthService.Api/AuthService.Api.csproj`
+- **AuthService :5201** — `ASPNETCORE_ENVIRONMENT=Development LOCAL_AUTH=true ASPNETCORE_URLS=http://localhost:5201 dotnet run --no-launch-profile --project backend/Services/PlatformService/Platform.WebApi/Platform.WebApi.csproj`
 - **Admin UI :3000** — `cd src/admin && npm run dev` (Vite proxies `/api/<prefix>` → fixed ports).
 - Other 10 services GCP-gated; run per the prior runbook (ports 5102–5112) — most return 500 locally when not running (graceful degradation in the UI).
 

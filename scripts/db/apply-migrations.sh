@@ -54,12 +54,33 @@ echo "Migration order (${#FILES[@]} files):"
 for f in "${FILES[@]}"; do echo "  - $(basename "$f")"; done
 echo
 
+# Tracking table so re-runs are idempotent (incremental). On a FRESH database this is
+# empty, so every file is applied (db-migrate-test still exercises the full chain); on an
+# EXISTING database only un-applied files run, instead of failing on `CREATE TABLE ... already
+# exists`. NOTE: a database previously migrated by a DIFFERENT mechanism (e.g. EF Core) must be
+# baselined first — INSERT the already-applied filenames into public.schema_migrations so this
+# runner skips them. See docs/devops/recurring-jobs-decision.md / db-migrate.yml.
+psql -v ON_ERROR_STOP=1 --quiet -c \
+  "CREATE TABLE IF NOT EXISTS public.schema_migrations (filename text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());"
+
+applied=0
+skipped=0
 for f in "${FILES[@]}"; do
-  echo ">>> Applying $(basename "$f")"
+  base="$(basename "$f")"
+  if [ "$(psql -v ON_ERROR_STOP=1 -tAc "SELECT 1 FROM public.schema_migrations WHERE filename = '${base}';")" = "1" ]; then
+    echo "--- skip (already applied): ${base}"
+    skipped=$((skipped + 1))
+    continue
+  fi
+  echo ">>> Applying ${base}"
   # ON_ERROR_STOP=1 makes psql exit non-zero on the first SQL error;
-  # set -e then aborts the whole script, failing the CI job.
+  # set -e then aborts the whole script, failing the CI job. The file is recorded only
+  # AFTER it applies cleanly, so a failed migration is retried on the next run.
   psql -v ON_ERROR_STOP=1 --quiet -f "$f"
+  psql -v ON_ERROR_STOP=1 --quiet -c \
+    "INSERT INTO public.schema_migrations (filename) VALUES ('${base}') ON CONFLICT (filename) DO NOTHING;"
+  applied=$((applied + 1))
 done
 
 echo
-echo "SUCCESS: all ${#FILES[@]} migrations applied with zero errors."
+echo "SUCCESS: applied ${applied}, skipped ${skipped} (of ${#FILES[@]} files) with zero errors."

@@ -279,7 +279,7 @@ public sealed class DataExportJobTests : IDisposable
     public async Task ExecuteAsync_RequestNotFound_DoesNotThrowAndLeavesNoMutation()
     {
         // The job silently returns if the request row doesn't exist.
-        var job = new DataExportJob(_db, NullLogger<DataExportJob>.Instance);
+        var job = new DataExportJob(_db, new Mock<IDpdpDataAggregator>().Object, new Mock<IDataExportStorageService>().Object, NullLogger<DataExportJob>.Instance);
         var nonExistentId = Guid.NewGuid();
         var userId = Guid.NewGuid();
 
@@ -310,7 +310,7 @@ public sealed class DataExportJobTests : IDisposable
         mockDb.Setup(d => d.Users)
               .Throws(new InvalidOperationException("Simulated DB failure"));
 
-        var job = new DataExportJob(mockDb.Object, NullLogger<DataExportJob>.Instance);
+        var job = new DataExportJob(mockDb.Object, new Mock<IDpdpDataAggregator>().Object, new Mock<IDataExportStorageService>().Object, NullLogger<DataExportJob>.Instance);
 
         // The job MUST re-throw so Hangfire records it as failed (not succeeded).
         await job.Invoking(j => j.ExecuteAsync(exportRequest.Id, userId, default))

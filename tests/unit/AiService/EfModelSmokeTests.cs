@@ -1,6 +1,7 @@
 using AiService.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Pgvector.EntityFrameworkCore;
 
 namespace AiService.Tests;
 
@@ -34,7 +35,8 @@ public sealed class AiEfModelSmokeTests
     private static AiServiceDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AiServiceDbContext>()
-            .UseNpgsql(LocalConnectionString, o => o.SetPostgresVersion(17, 0))
+            // DG-CHAT-01: UseVector enables the pgvector(768) `embedding` column mapping (migration 098).
+            .UseNpgsql(LocalConnectionString, o => o.SetPostgresVersion(17, 0).UseVector())
             .Options;
         return new AiServiceDbContext(options);
     }
@@ -86,7 +88,7 @@ public sealed class AiEfModelSmokeTests
                 e.Id,
                 e.ChunkId,
                 e.OrganizationId,
-                e.Vector   // mapped to float_vector (float4[]) column
+                e.Embedding   // DG-CHAT-01: pgvector(768) `embedding` column (migration 098)
             })
             .ToListAsync();
         await act.Should().NotThrowAsync(

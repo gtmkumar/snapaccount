@@ -199,6 +199,7 @@ export function LoanConsentScreen({ navigation, route }: Props) {
       // and Alert-fallback for Expo Go / no-hardware paths.
       const passed = await triggerBiometric({
         promptMessage: t('mobile.biometric.prompt'),
+        flowKey: 'loan.consent',
       });
       if (!passed) return;
       setBiometricPassed(true);

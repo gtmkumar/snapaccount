@@ -93,7 +93,7 @@ describe('BankCommunicationsPage — page structure', () => {
     vi.spyOn(loanApi, 'getBankCommKpi').mockReturnValue(new Promise(() => {}))
     vi.spyOn(loanApi, 'listBankCommunications').mockReturnValue(new Promise(() => {}))
     renderPage()
-    const skeletons = document.querySelectorAll('.animate-pulse')
+    const skeletons = document.querySelectorAll('.skeleton-shimmer')
     expect(skeletons.length).toBeGreaterThan(0)
   })
 })
@@ -167,9 +167,7 @@ describe('BankCommunicationsPage — message list (3/5 side)', () => {
   it('shows hint text when no message selected (2/5 detail pane)', async () => {
     renderPage()
     await waitFor(() => {
-      // Detail pane shows select hint when nothing is selected
-      const hint = document.querySelector('.text-neutral-400')
-      expect(hint).toBeTruthy()
+      expect(screen.getByText(/select a row/i)).toBeInTheDocument()
     })
   })
 })

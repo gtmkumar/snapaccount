@@ -12,7 +12,7 @@
  * Failed/unavailable metrics render a dash, never a fabricated number.
  * A11y: KPI cards have role="group" with accessible name; urgent state uses icon + text (not colour only).
  */
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import {
@@ -49,6 +49,13 @@ import {
 } from '@/lib/dashboardApi'
 import { t } from '@/i18n'
 import { getAggregateHealth } from '@/lib/healthApi'
+import { getFilingQueue } from '@/lib/gstApi'
+import { getVerificationKpi } from '@/lib/itrApi'
+import { getLoanKpi } from '@/lib/loanApi'
+
+// Default AY shown by the ITR workspace — keep in sync with ItrPage CURRENT_AY
+// so the dashboard ITR card matches the queue the user lands on.
+const ITR_DASHBOARD_AY = 'AY2026-27'
 
 // PR #8: counts now fetched live via getAdminDashboardStats() which fans out
 // 5 parallel calls to per-service /admin/dashboard-stats endpoints. The
@@ -61,10 +68,174 @@ const PENDING_DOCS_THRESHOLD = 50
 // ---------------------------------------------------------------------------
 function SampleDataBadge() {
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-warning-50 text-warning-600 border border-warning-200">
-      <FlaskConical className="h-3 w-3" aria-hidden="true" />
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--semantic-warning-bg)] text-[var(--semantic-warning-fg)] border border-[var(--semantic-warning-fg)]/25 whitespace-nowrap">
+      <FlaskConical className="h-3 w-3 shrink-0" aria-hidden="true" />
       {t('dashboard.sampleDataBadge')}
     </span>
+  )
+}
+
+/** Equal-height queue summary card — label/value rows + bottom CTA. */
+function QueueSummaryCard({
+  title,
+  badge,
+  rows,
+  ctaLabel,
+  onCta,
+}: {
+  title: string
+  badge: ReactNode
+  rows: { label: string; value: ReactNode; valueClassName?: string }[]
+  ctaLabel: string
+  onCta: () => void
+}) {
+  return (
+    <Card className="flex flex-col h-full">
+      {/* Header — title clamped to a fixed 2-line box so all three cards have
+          equal-height headers and their rows line up horizontally. */}
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <h3 className="text-base font-semibold text-[var(--text-primary)] leading-snug line-clamp-2 min-h-[2.75rem] min-w-0">
+          {title}
+        </h3>
+        <div className="shrink-0">{badge}</div>
+      </div>
+      {/* Fixed-height rows keep values aligned even when a label wraps to 2 lines. */}
+      <div className="flex-1 space-y-1">
+        {rows.map(row => (
+          <div key={row.label} className="flex justify-between items-center gap-3 min-h-[2.5rem]">
+            <span className="text-sm text-[var(--text-secondary)]">{row.label}</span>
+            <span className={cn('text-sm font-semibold tabular-nums shrink-0', row.valueClassName ?? 'text-[var(--text-primary)]')}>
+              {row.value}
+            </span>
+          </div>
+        ))}
+      </div>
+      <Button variant="primary" size="sm" fullWidth className="mt-4 whitespace-nowrap" onClick={onCta}>
+        {ctaLabel}
+      </Button>
+    </Card>
+  )
+}
+
+/**
+ * Renders a value cell for a queue card: spinner ellipsis while loading,
+ * em-dash on error (never a fabricated number), the real count otherwise.
+ */
+function queueValue(value: number, isLoading: boolean, isError: boolean): ReactNode {
+  if (isLoading) return '…'
+  if (isError) return '—'
+  return value
+}
+
+// ---------------------------------------------------------------------------
+// GST queue card — live counts from the same source as GstFilingQueuePage
+// (GET /gst/admin/filing-queue). Draft / Pending Approval / Overdue match the
+// filing-queue page exactly.
+// ---------------------------------------------------------------------------
+function GstQueueCard() {
+  const navigate = useNavigate()
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['gst', 'filing-queue', { status: undefined }],
+    queryFn: () => getFilingQueue({ status: undefined }),
+    refetchInterval: 60_000,
+  })
+
+  const items = data ?? []
+  const draft = items.filter(i => i.status === 'DRAFT').length
+  const pendingApproval = items.filter(i => i.status === 'PENDING_APPROVAL').length
+  const overdue = items.filter(i => i.filingDeadline && new Date(i.filingDeadline) < new Date()).length
+
+  return (
+    <QueueSummaryCard
+      title={t('dashboard.gstQueue.title')}
+      badge={<Badge variant="gst">GST</Badge>}
+      rows={[
+        { label: t('dashboard.gstQueue.draft'), value: queueValue(draft, isLoading, isError) },
+        {
+          label: t('dashboard.gstQueue.pendingApproval'),
+          value: queueValue(pendingApproval, isLoading, isError),
+          valueClassName: pendingApproval > 0 ? 'text-warning-600' : undefined,
+        },
+        {
+          label: t('dashboard.gstQueue.overdue'),
+          value: queueValue(overdue, isLoading, isError),
+          valueClassName: overdue > 0 ? 'text-error-600' : undefined,
+        },
+      ]}
+      ctaLabel={t('dashboard.gstQueue.cta')}
+      onCta={() => void navigate('/gst')}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ITR queue card — live KPIs from the same source as ItrPage
+// (GET /itr/filings/kpi). Mirrors the ITR verification KPI strip.
+// ---------------------------------------------------------------------------
+function ItrQueueCard() {
+  const navigate = useNavigate()
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['itr-kpi', ITR_DASHBOARD_AY],
+    queryFn: () => getVerificationKpi(ITR_DASHBOARD_AY),
+    staleTime: 60_000,
+  })
+
+  return (
+    <QueueSummaryCard
+      title={t('dashboard.itrQueue.title')}
+      badge={<Badge variant="itr">ITR</Badge>}
+      rows={[
+        {
+          label: t('dashboard.itrQueue.pendingVerification'),
+          value: queueValue(data?.awaitingReview ?? 0, isLoading, isError),
+        },
+        {
+          label: t('itr.admin.kpi.slaBreached'),
+          value: queueValue(data?.slaBreached ?? 0, isLoading, isError),
+          valueClassName: (data?.slaBreached ?? 0) > 0 ? 'text-error-600' : undefined,
+        },
+        {
+          label: t('itr.admin.kpi.totalFilings'),
+          value: queueValue(data?.totalFilingsAy ?? 0, isLoading, isError),
+        },
+      ]}
+      ctaLabel={t('dashboard.itrQueue.cta')}
+      onCta={() => void navigate('/itr')}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Loan queue card — live KPIs from the same source as LoansListPage
+// (GET /loans/kpi). Total Active reuses the cross-service dashboard stat.
+// ---------------------------------------------------------------------------
+function LoanQueueCard({ activeCount }: { activeCount: ReactNode }) {
+  const navigate = useNavigate()
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['loanKpi'],
+    queryFn: getLoanKpi,
+    retry: 1,
+  })
+
+  return (
+    <QueueSummaryCard
+      title={t('dashboard.loanQueue.title')}
+      badge={<Badge variant="loan">Loans</Badge>}
+      rows={[
+        {
+          label: t('dashboard.loanQueue.underReview'),
+          value: queueValue(data?.underReview ?? 0, isLoading, isError),
+          valueClassName: (data?.underReview ?? 0) > 0 ? 'text-warning-600' : undefined,
+        },
+        {
+          label: t('dashboard.loanQueue.decisionPending'),
+          value: queueValue(data?.submitted ?? 0, isLoading, isError),
+        },
+        { label: t('dashboard.loanQueue.totalActive'), value: activeCount },
+      ]}
+      ctaLabel={t('dashboard.loanQueue.cta')}
+      onCta={() => void navigate('/loans')}
+    />
   )
 }
 
@@ -119,13 +290,13 @@ function SystemHealthWidget() {
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="flex items-center gap-3 p-3 rounded-[var(--radius-lg)] bg-[var(--surface-sunken)]">
-              <div className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium', overallColor)}>
+            <div className="flex flex-col gap-2 p-3 rounded-[var(--radius-lg)] bg-[var(--surface-sunken)]">
+              <div className={cn('self-start shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium', overallColor)}>
                 <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
                 {t(`health.status.${overallStatus}`)}
               </div>
-              <div>
-                <p className="text-xs text-[var(--text-secondary)]">{t('dashboard.systemHealth.overall')}</p>
+              <div className="min-w-0">
+                <p className="text-xs text-[var(--text-secondary)] truncate">{t('dashboard.systemHealth.overall')}</p>
                 <p className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">{healthy}/{services.length}</p>
               </div>
             </div>
@@ -137,13 +308,13 @@ function SystemHealthWidget() {
                 : 'bg-[var(--surface-sunken)] text-[var(--text-disabled)]'
               const label = svc.name.replace(/-service$/, '').replace(/-/g, ' ')
               return (
-                <div key={svc.name} className="flex items-center gap-3 p-3 rounded-[var(--radius-lg)] bg-[var(--surface-sunken)]">
-                  <div className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium', svcColor)}>
+                <div key={svc.name} className="flex flex-col gap-2 p-3 rounded-[var(--radius-lg)] bg-[var(--surface-sunken)]">
+                  <div className={cn('self-start shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium', svcColor)}>
                     <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
                     {t(`health.status.${svc.status}`)}
                   </div>
-                  <div>
-                    <p className="text-xs text-[var(--text-secondary)] capitalize">{label}</p>
+                  <div className="min-w-0">
+                    <p className="text-xs text-[var(--text-secondary)] capitalize truncate">{label}</p>
                     <p className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">
                       {svc.responseMs != null ? `${svc.responseMs}ms` : '—'}
                     </p>
@@ -505,18 +676,21 @@ export default function DashboardPage() {
     refetchInterval: 30_000,
   })
 
-  // Derive UI-shape from the merged API response. Per-service failures land
-  // in data.errors and the affected count is undefined — render a dash there
-  // rather than fabricating a number.
+  const statsErrors = data?.errors ?? {}
+  const hasStatsErrors = Object.keys(statsErrors).length > 0
+
+  // Per-service failures → undefined in API; show dash, never fabricate a number.
   const stats = {
-    pendingDocuments: data?.pendingDocuments ?? 0,
-    gstReturnsDueToday: data?.gstReturnsDueToday ?? 0,
-    itrVerificationsPending: data?.itrVerificationsPending ?? 0,
-    openCallbacks: data?.openCallbacks ?? 0,
-    loanApplicationsActive: data?.loanApplicationsActive ?? 0,
-    pendingDocumentsOverThreshold: (data?.pendingDocuments ?? 0) > PENDING_DOCS_THRESHOLD,
-    gstReturnsDueTodayUrgent: (data?.gstReturnsDueToday ?? 0) > 0,
+    pendingDocuments: statsErrors.documents ? undefined : data?.pendingDocuments,
+    gstReturnsDueToday: statsErrors.gst ? undefined : data?.gstReturnsDueToday,
+    itrVerificationsPending: statsErrors.itr ? undefined : data?.itrVerificationsPending,
+    openCallbacks: statsErrors.callbacks ? undefined : data?.openCallbacks,
+    loanApplicationsActive: statsErrors.loans ? undefined : data?.loanApplicationsActive,
+    pendingDocumentsOverThreshold: !statsErrors.documents && (data?.pendingDocuments ?? 0) > PENDING_DOCS_THRESHOLD,
+    gstReturnsDueTodayUrgent: !statsErrors.gst && (data?.gstReturnsDueToday ?? 0) > 0,
   }
+
+  const displayStat = (v: number | undefined) => (v === undefined ? '—' : v)
 
   // Urgent = any of the tier-1 metrics is actionable
   const hasUrgentItems = stats.gstReturnsDueTodayUrgent || stats.pendingDocumentsOverThreshold
@@ -541,12 +715,25 @@ export default function DashboardPage() {
         }
       />
 
+      {hasStatsErrors && (
+        <AlertBanner
+          type="warning"
+          title={t('dashboard.statsPartialError')}
+          description={Object.keys(statsErrors).join(', ')}
+          actions={
+            <Button variant="ghost" size="sm" onClick={() => void refetch()} loading={isFetching}>
+              {t('dashboard.refresh')}
+            </Button>
+          }
+        />
+      )}
+
       {/* ── GST urgency alert banner (conditional) ── */}
       {stats.gstReturnsDueTodayUrgent && (
         <AlertBanner
           type="error"
           title={t('dashboard.gstDueAlert.title')}
-          description={t('dashboard.gstDueAlert.description', { count: stats.gstReturnsDueToday })}
+          description={t('dashboard.gstDueAlert.description', { count: stats.gstReturnsDueToday ?? 0 })}
           actions={
             <Button variant="ghost" size="sm" onClick={() => void navigate('/gst')}>
               {t('dashboard.gstDueAlert.cta')}
@@ -564,16 +751,18 @@ export default function DashboardPage() {
         <TierHeading label={t('dashboard.tier1.heading')}>
           <span className="sr-only" id="tier1-heading">{t('dashboard.tier1.heading')}</span>
         </TierHeading>
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
 
           {/* Pending Documents — urgent if over threshold */}
           <div
             role="group"
-            aria-label={`${t('dashboard.kpi.pendingDocs')}, ${stats.pendingDocuments}, ${stats.pendingDocumentsOverThreshold ? t('dashboard.kpi.pendingDocs.urgent', { threshold: PENDING_DOCS_THRESHOLD }) : t('dashboard.kpi.pendingDocs.normal')}`}
+            className="h-full"
+            aria-label={`${t('dashboard.kpi.pendingDocs')}, ${displayStat(stats.pendingDocuments)}, ${stats.pendingDocumentsOverThreshold ? t('dashboard.kpi.pendingDocs.urgent', { threshold: PENDING_DOCS_THRESHOLD }) : t('dashboard.kpi.pendingDocs.normal')}`}
           >
             <MetricCard
+              className="h-full"
               title={t('dashboard.kpi.pendingDocs')}
-              value={stats.pendingDocuments}
+              value={displayStat(stats.pendingDocuments)}
               color={stats.pendingDocumentsOverThreshold ? 'warning' : 'brand'}
               icon={<FileText className="h-6 w-6" />}
               trend={stats.pendingDocumentsOverThreshold ? 'up' : 'neutral'}
@@ -588,11 +777,13 @@ export default function DashboardPage() {
           {/* GST Returns Due Today — urgent if > 0 */}
           <div
             role="group"
-            aria-label={`${t('dashboard.kpi.gstDueToday')}, ${stats.gstReturnsDueToday}, ${stats.gstReturnsDueTodayUrgent ? t('dashboard.kpi.gstDueToday.urgent') : t('dashboard.kpi.gstDueToday.ok')}`}
+            className="h-full"
+            aria-label={`${t('dashboard.kpi.gstDueToday')}, ${displayStat(stats.gstReturnsDueToday)}, ${stats.gstReturnsDueTodayUrgent ? t('dashboard.kpi.gstDueToday.urgent') : t('dashboard.kpi.gstDueToday.ok')}`}
           >
             <MetricCard
+              className="h-full"
               title={t('dashboard.kpi.gstDueToday')}
-              value={stats.gstReturnsDueToday}
+              value={displayStat(stats.gstReturnsDueToday)}
               color={stats.gstReturnsDueTodayUrgent ? 'error' : 'success'}
               icon={
                 stats.gstReturnsDueTodayUrgent
@@ -611,11 +802,13 @@ export default function DashboardPage() {
           {/* Open Callbacks */}
           <div
             role="group"
-            aria-label={`${t('dashboard.kpi.openCallbacks')}, ${stats.openCallbacks}`}
+            className="h-full"
+            aria-label={`${t('dashboard.kpi.openCallbacks')}, ${displayStat(stats.openCallbacks)}`}
           >
             <MetricCard
+              className="h-full"
               title={t('dashboard.kpi.openCallbacks')}
-              value={stats.openCallbacks}
+              value={displayStat(stats.openCallbacks)}
               color="warning"
               icon={<Phone className="h-6 w-6" />}
               loading={isLoading}
@@ -659,12 +852,13 @@ export default function DashboardPage() {
         <TierHeading label={t('dashboard.tier2.heading')}>
           <span className="sr-only" id="tier2-heading">{t('dashboard.tier2.heading')}</span>
         </TierHeading>
-        <div className="mt-3 grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 items-stretch">
 
-          <div role="group" aria-label={`${t('dashboard.kpi.itrPending')}, ${stats.itrVerificationsPending}`}>
+          <div role="group" className="h-full" aria-label={`${t('dashboard.kpi.itrPending')}, ${displayStat(stats.itrVerificationsPending)}`}>
             <MetricCard
+              className="h-full"
               title={t('dashboard.kpi.itrPending')}
-              value={stats.itrVerificationsPending}
+              value={displayStat(stats.itrVerificationsPending)}
               color="itr"
               icon={<FileSpreadsheet className="h-5 w-5" />}
               loading={isLoading}
@@ -672,10 +866,11 @@ export default function DashboardPage() {
             />
           </div>
 
-          <div role="group" aria-label={`${t('dashboard.kpi.activeLoans')}, ${stats.loanApplicationsActive}`}>
+          <div role="group" className="h-full" aria-label={`${t('dashboard.kpi.activeLoans')}, ${displayStat(stats.loanApplicationsActive)}`}>
             <MetricCard
+              className="h-full"
               title={t('dashboard.kpi.activeLoans')}
-              value={stats.loanApplicationsActive}
+              value={displayStat(stats.loanApplicationsActive)}
               color="loan"
               icon={<CreditCard className="h-5 w-5" />}
               loading={isLoading}
@@ -684,7 +879,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Notices Due Widget fills remaining 2 cells */}
-          <div className="col-span-2">
+          <div className="col-span-1 sm:col-span-2 xl:col-span-2 h-full min-h-0">
             <NoticesDueWidget />
           </div>
         </div>
@@ -692,102 +887,16 @@ export default function DashboardPage() {
 
       {/* ════════════════════════════════════════════════════════
           Row 3: Queue Status Mini-Widgets (GST/ITR/Loan)
-          Static data — badge present.
+          Live data — each card queries the same source as its list page
+          so the counts match when the user opens the queue.
           ════════════════════════════════════════════════════════ */}
       <section aria-label="Queue status">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* GST Queue */}
-          <Card>
-            <CardHeader
-              title={t('dashboard.gstQueue.title')}
-              actions={<><Badge variant="gst">GST</Badge><SampleDataBadge /></>}
-            />
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-[var(--text-secondary)]">{t('dashboard.gstQueue.draft')}</span>
-                <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">24</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-[var(--text-secondary)]">{t('dashboard.gstQueue.pendingApproval')}</span>
-                <span className="text-sm font-semibold text-warning-600 tabular-nums">8</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-[var(--text-secondary)]">{t('dashboard.gstQueue.overdue')}</span>
-                <span className="text-sm font-semibold text-error-600 tabular-nums">3</span>
-              </div>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              fullWidth
-              className="mt-4"
-              onClick={() => void navigate('/gst')}
-            >
-              {t('dashboard.gstQueue.cta')}
-            </Button>
-          </Card>
-
-          {/* ITR Queue */}
-          <Card>
-            <CardHeader
-              title={t('dashboard.itrQueue.title')}
-              actions={<><Badge variant="itr">ITR</Badge><SampleDataBadge /></>}
-            />
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-[var(--text-secondary)]">{t('dashboard.itrQueue.pendingVerification')}</span>
-                <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">12</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-[var(--text-secondary)]">{t('dashboard.itrQueue.filingInProgress')}</span>
-                <span className="text-sm font-semibold text-brand-600 tabular-nums">5</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-[var(--text-secondary)]">{t('dashboard.itrQueue.deadlineThisWeek')}</span>
-                <span className="text-sm font-semibold text-warning-600 tabular-nums">7</span>
-              </div>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              fullWidth
-              className="mt-4"
-              onClick={() => void navigate('/itr')}
-            >
-              {t('dashboard.itrQueue.cta')}
-            </Button>
-          </Card>
-
-          {/* Loan Queue */}
-          <Card>
-            <CardHeader
-              title={t('dashboard.loanQueue.title')}
-              actions={<><Badge variant="loan">Loans</Badge><SampleDataBadge /></>}
-            />
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-[var(--text-secondary)]">{t('dashboard.loanQueue.underReview')}</span>
-                <span className="text-sm font-semibold text-warning-600 tabular-nums">3</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-[var(--text-secondary)]">{t('dashboard.loanQueue.decisionPending')}</span>
-                <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">2</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-[var(--text-secondary)]">{t('dashboard.loanQueue.totalActive')}</span>
-                <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">{stats.loanApplicationsActive}</span>
-              </div>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              fullWidth
-              className="mt-4"
-              onClick={() => void navigate('/loans')}
-            >
-              {t('dashboard.loanQueue.cta')}
-            </Button>
-          </Card>
+        {/* 3-up only at lg+ where each card is wide enough for a single-line CTA;
+            below that the cards stack full-width so labels/buttons never wrap. */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+          <GstQueueCard />
+          <ItrQueueCard />
+          <LoanQueueCard activeCount={displayStat(stats.loanApplicationsActive)} />
         </div>
       </section>
 

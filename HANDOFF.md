@@ -32,7 +32,7 @@ Phase 6 is complete. **All 6 sub-phases (6A, 6B, 6C, 6D, 6E, 6F) cleared their s
 - **Frontend admin (vitest):** 677/677 ✅ (35 test files)
 - **Mobile (jest):** 324/325 ✅ (1 pre-existing LoanPackagePreviewScreen watermark test)
 - **Backend integration scaffolds:** ~50 authored across 5 services (Skip=P6-INT-02 — Docker socket gate)
-- **Build:** 0 errors / 0 warnings across 12 microservices + AppHost.
+- **Build:** 0 errors / 0 warnings across 3 composite services + AppHost.
 
 ---
 
@@ -157,7 +157,7 @@ Phase 6 is complete. **All 6 sub-phases (6A, 6B, 6C, 6D, 6E, 6F) cleared their s
 - `docs/api/endpoints.md` — API contract authoritative
 - `docs/design/component-library.md` — design system
 - `docs/security/security-report.md` — security review
-- `CLAUDE.md` — project conventions (now reflects 12 microservices)
+- `CLAUDE.md` — project conventions (now reflects 3 composite services)
 
 ---
 

@@ -97,6 +97,21 @@ describe('useAuth LOCAL_AUTH — token field (data.token, not data.accessToken)'
     expect(setTokenSpy).not.toHaveBeenCalledWith(undefined)
   })
 
+  it('does not restore a zombie session when user exists but token is missing', () => {
+    localStorage.setItem('sa_admin_user', JSON.stringify({
+      uid: 'user-zombie',
+      email: 'ghost@test.com',
+      displayName: 'Ghost',
+      photoURL: null,
+      role: 'SUPER_ADMIN',
+    }))
+
+    const { result } = wrapHook()
+
+    expect(result.current.user).toBeNull()
+    expect(localStorage.getItem('sa_admin_user')).toBeNull()
+  })
+
   it('stores user in localStorage after successful login', async () => {
     mockPost.mockResolvedValueOnce({
       data: {

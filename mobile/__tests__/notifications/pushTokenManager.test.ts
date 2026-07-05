@@ -10,6 +10,10 @@ jest.mock('../../src/api/notifications', () => ({
   registerPushToken: jest.fn(() => Promise.resolve()),
 }));
 
+jest.mock('../../src/api/auth', () => ({
+  addDevice: jest.fn(() => Promise.resolve({ deviceEntityId: 'entity-1' })),
+}));
+
 // Mutable flags object — prefixed `mock` so jest.mock factory can reference it
 const mockDevice = {
   isDevice: true,
@@ -23,8 +27,10 @@ jest.mock('expo-device', () => mockDevice);
 import * as Notifications from 'expo-notifications';
 import * as SecureStore from 'expo-secure-store';
 import { registerPushToken } from '../../src/api/notifications';
+import { addDevice } from '../../src/api/auth';
 
 const mockRegisterPushToken = registerPushToken as jest.Mock;
+const mockAddDevice = addDevice as jest.Mock;
 const mockGetPermissions = Notifications.getPermissionsAsync as jest.Mock;
 const mockRequestPermissions = Notifications.requestPermissionsAsync as jest.Mock;
 const mockGetToken = Notifications.getDevicePushTokenAsync as jest.Mock;
@@ -41,6 +47,7 @@ beforeEach(() => {
   mockAddListener.mockReturnValue({ remove: jest.fn() });
   mockGetItem.mockResolvedValue(null);
   mockSetItem.mockResolvedValue(undefined);
+  mockAddDevice.mockResolvedValue({ deviceEntityId: 'entity-1' });
 });
 
 // Re-import the module under test AFTER mocks are established.
@@ -155,5 +162,42 @@ describe('initPushNotifications — token rotation listener', () => {
       expect.objectContaining({ token: 'fcm-token-rotated-xyz' }),
     );
     expect(mockSetItem).toHaveBeenCalledWith('push_token_registered', 'fcm-token-rotated-xyz');
+  });
+});
+
+// ─── Device binding (DG-AUTH-01 — B1.3) ───────────────────────────────────────
+
+describe('registerCurrentDevice — auth device binding', () => {
+  it('POSTs /auth/devices with Device.modelId as the stable deviceId + IOS platform', async () => {
+    const id = await getModule().registerCurrentDevice();
+
+    expect(mockAddDevice).toHaveBeenCalledTimes(1);
+    expect(mockAddDevice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deviceId: 'iPhone16,1', // raw modelId — matches DevicesScreen / approval reviewer
+        platform: 'IOS',
+        osVersion: '17.0',
+      }),
+    );
+    expect(id).toBe('entity-1');
+  });
+
+  it('carries the already-registered FCM token from SecureStore when present', async () => {
+    mockGetItem.mockImplementation((key: string) => {
+      if (key === 'push_token_registered') return Promise.resolve('fcm-token-abc');
+      return Promise.resolve(null);
+    });
+
+    await getModule().registerCurrentDevice();
+
+    expect(mockAddDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ fcmToken: 'fcm-token-abc' }),
+    );
+  });
+
+  it('never throws and returns null when registration fails (login must not be blocked)', async () => {
+    mockAddDevice.mockRejectedValue(new Error('500 server error'));
+
+    await expect(getModule().registerCurrentDevice()).resolves.toBeNull();
   });
 });

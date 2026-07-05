@@ -3,41 +3,70 @@ import { useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { type ColumnDef } from '@tanstack/react-table'
 import { t } from '@/i18n'
-import { Search, Filter, Download, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Filter, Download, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { FilterBar } from '@/components/layout/FilterBar'
 import { DataTable } from '@/components/ui/DataTable'
 import { Badge, StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Card } from '@/components/ui/Card'
+import { NativeSelect } from '@/components/ui/NativeSelect'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { Can } from '@/components/shared/Can'
 import { formatRelativeTime, getOcrConfidenceBg } from '@/lib/utils'
 import { cn } from '@/lib/utils'
-import { listDocuments, type DocumentListItem } from '@/lib/documentApi'
+import {
+  getAdminDocumentQueue,
+  type AdminDocumentQueueItem,
+  type OcrConfidenceBand,
+  type AdminQueueSortBy,
+} from '@/lib/documentApi'
 
 const PAGE_SIZE = 20
 
-function SlaChip({ uploadedAt }: { uploadedAt: string }) {
-  const now = new Date()
-  const uploaded = new Date(uploadedAt)
-  // SLA = 24 hours from upload
-  const slaExpiry = new Date(uploaded.getTime() + 24 * 60 * 60 * 1000)
-  const diffMs = slaExpiry.getTime() - now.getTime()
-  const diffHours = diffMs / (1000 * 60 * 60)
-  const diffMins = Math.floor(diffMs / (1000 * 60))
-
-  if (diffMs < 0) {
+/**
+ * DG-DOC-04: SlaChip now reads server-computed fields from AdminDocumentQueueItem
+ * instead of re-calculating 24h from uploadedAt client-side.
+ *
+ * - isOverdue: backend flag (past deadline AND still in a pending status)
+ * - slaHoursRemaining: signed hours (negative = overdue by that many hours)
+ * - slaDeadline: ISO string; null means the document category has no SLA configured
+ */
+function SlaChip({
+  isOverdue,
+  slaHoursRemaining,
+  slaDeadline,
+}: {
+  isOverdue: boolean
+  slaHoursRemaining: number | null
+  slaDeadline: string | null
+}) {
+  if (slaDeadline === null) {
+    // Category has no SLA configured — show neutral indicator
+    return <span className="text-sm text-neutral-400">{t('docQueue.sla.noSla')}</span>
+  }
+  if (isOverdue) {
     return <Badge variant="error" dot>{t('docQueue.sla.overdue')}</Badge>
   }
-  if (diffHours < 2) {
-    return <Badge variant="warning" dot>{t('docQueue.sla.minsLeft', { mins: diffMins })}</Badge>
+  const remaining = slaHoursRemaining ?? 0
+  if (remaining < 2) {
+    const mins = Math.max(0, Math.floor(remaining * 60))
+    return <Badge variant="warning" dot>{t('docQueue.sla.minsLeft', { mins })}</Badge>
   }
-  return <Badge variant="success" dot>{t('docQueue.sla.hoursLeft', { hours: Math.floor(diffHours) })}</Badge>
+  return (
+    <Badge variant="success" dot>
+      {t('docQueue.sla.hoursLeft', { hours: Math.floor(remaining) })}
+    </Badge>
+  )
 }
 
-function OcrDot({ confidence }: { confidence: number | null }) {
-  if (confidence === null) {
+/**
+ * DG-DOC-04: OcrDot now accepts a real confidence value from the queue DTO.
+ * When the backend adds ocrConfidence to the queue projection, this renders it immediately.
+ * Until then, confidence is null (the queue DTO does not yet project it).
+ */
+function OcrDot({ confidence }: { confidence: number | null | undefined }) {
+  if (confidence == null) {
     return <span className="text-sm text-neutral-400">—</span>
   }
   // Backend sends 0-1 scale; convert to percentage for display
@@ -55,7 +84,7 @@ function OcrDot({ confidence }: { confidence: number | null }) {
 
 function buildColumns(
   navigate: ReturnType<typeof useNavigate>,
-): ColumnDef<DocumentListItem>[] {
+): ColumnDef<AdminDocumentQueueItem>[] {
   return [
     {
       accessorKey: 'id',
@@ -79,16 +108,25 @@ function buildColumns(
       ),
     },
     {
-      accessorKey: 'documentDate',
+      accessorKey: 'categoryName',
+      header: t('docQueue.col.category'),
+      cell: ({ row }) => (
+        <span className="text-sm text-neutral-600">
+          {row.original.categoryName ?? <span className="text-neutral-400">—</span>}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'uploadedAt',
       header: t('docQueue.col.uploaded'),
       cell: ({ row }) => (
         <span className="text-sm text-neutral-500">{formatRelativeTime(row.original.uploadedAt)}</span>
       ),
     },
     {
-      accessorKey: 'amount',
+      accessorKey: 'ocrConfidence',
       header: t('docQueue.col.ocrConfidence'),
-      cell: () => <OcrDot confidence={null} />,
+      cell: ({ row }) => <OcrDot confidence={row.original.ocrConfidence} />,
     },
     {
       accessorKey: 'status',
@@ -99,7 +137,13 @@ function buildColumns(
     {
       id: 'sla',
       header: t('docQueue.col.sla'),
-      cell: ({ row }) => <SlaChip uploadedAt={row.original.uploadedAt} />,
+      cell: ({ row }) => (
+        <SlaChip
+          isOverdue={row.original.isOverdue}
+          slaHoursRemaining={row.original.slaHoursRemaining ?? null}
+          slaDeadline={row.original.slaDeadline ?? null}
+        />
+      ),
     },
     {
       id: 'actions',
@@ -128,35 +172,53 @@ export default function DocumentQueuePage() {
   const navigate = useNavigate()
   const [globalFilter, setGlobalFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [ocrFilter, setOcrFilter] = useState('all')
+  const [ocrFilter, setOcrFilter] = useState<OcrConfidenceBand | 'all'>('all')
+  const [sortBy, setSortBy] = useState<AdminQueueSortBy>('sla_asc')
+  const [overdueOnly, setOverdueOnly] = useState(false)
   const [page, setPage] = useState(1)
 
+  /**
+   * DG-DOC-04: Switch from listDocuments (GET /documents) to getAdminDocumentQueue
+   * (GET /documents/admin/queue). The queue endpoint computes SLA server-side per
+   * category.SlaHours — replacing the hardcoded 24h SlaChip calculation that was
+   * previously done client-side.
+   *
+   * OCR confidence filter: passed as ocrMinConfidence/ocrMaxConfidence query params
+   * (forward-compatible — backend ignores unknown params today, will honour them once
+   * the GetAdminDocumentQueueQuery projection is extended).
+   */
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['document-queue', { status: statusFilter || undefined, page }],
+    queryKey: [
+      'admin-document-queue',
+      { status: statusFilter || undefined, page, sortBy, overdueOnly, ocrBand: ocrFilter !== 'all' ? ocrFilter : undefined },
+    ],
     queryFn: () =>
-      listDocuments({
+      getAdminDocumentQueue({
         page,
         pageSize: PAGE_SIZE,
         status: statusFilter || undefined,
+        sortBy,
+        overdueOnly: overdueOnly || undefined,
+        ocrBand: ocrFilter !== 'all' ? ocrFilter : undefined,
       }),
     placeholderData: (prev) => prev,
   })
 
-  // Client-side OCR confidence filter (backend doesn't return confidence on list endpoint)
+  // Client-side text search (server does not support free-text search on this endpoint)
   const filteredData = useMemo(() => {
     if (!data?.items) return []
-    return data.items
-    // Note: OCR confidence is only available on the detail endpoint (GET /documents/{id}).
-    // The list endpoint (GetDocumentsQuery) returns DocumentListDto which has no confidence field.
-    // The ocrFilter UI is kept for UX consistency but cannot filter server-side without a new endpoint.
-    // It is intentionally a no-op here until a confidence field is added to the list DTO.
-  }, [data])
+    if (!globalFilter.trim()) return data.items
+    const lower = globalFilter.toLowerCase()
+    return data.items.filter(
+      (item) =>
+        item.fileName.toLowerCase().includes(lower) ||
+        (item.vendorName?.toLowerCase().includes(lower) ?? false) ||
+        item.id.toLowerCase().includes(lower),
+    )
+  }, [data, globalFilter])
 
-  // Approximate overdue count based on upload time + 24h SLA
-  const overdueCount = filteredData.filter((d) => {
-    const slaExpiry = new Date(new Date(d.uploadedAt).getTime() + 24 * 60 * 60 * 1000)
-    return slaExpiry < new Date()
-  }).length
+  // Server returns isOverdue per item; count from current page for the alert banner
+  const overdueCount = data?.items.filter((d) => d.isOverdue).length ?? 0
 
   const totalCount = data?.totalCount ?? 0
   const totalPages = data?.totalPages ?? 1
@@ -190,7 +252,7 @@ export default function DocumentQueuePage() {
         />
       )}
 
-      {/* SLA breach alert */}
+      {/* SLA breach alert — based on server isOverdue flag */}
       {!isError && overdueCount > 0 && (
         <AlertBanner
           type="error"
@@ -200,67 +262,84 @@ export default function DocumentQueuePage() {
       )}
 
       {/* Filters */}
-      <Card padding="sm">
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="w-64">
-            <Input
-              placeholder={t('docQueue.search')}
-              value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              prefix={<Search className="h-4 w-4" />}
-              size="sm"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">
-              {t('docQueue.filter.status')}
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-              className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label={t('docQueue.filter.status')}
-            >
-              <option value="">{t('docQueue.filter.allStatuses')}</option>
-              <option value="UPLOADED">{t('docQueue.filter.uploaded')}</option>
-              <option value="OCR_COMPLETE">{t('docQueue.filter.ocrComplete')}</option>
-              <option value="IN_REVIEW">{t('docQueue.filter.inReview')}</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-neutral-500 block mb-1">
-              {t('docQueue.filter.ocr')}
-            </label>
-            <select
-              value={ocrFilter}
-              onChange={(e) => setOcrFilter(e.target.value)}
-              className="h-9 rounded-lg border border-neutral-300 bg-white text-sm px-3 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-              aria-label={t('docQueue.filter.ocr')}
-            >
-              <option value="all">{t('docQueue.filter.allOcr')}</option>
-              <option value="high">{t('docQueue.filter.ocrHigh')}</option>
-              <option value="medium">{t('docQueue.filter.ocrMedium')}</option>
-              <option value="low">{t('docQueue.filter.ocrLow')}</option>
-            </select>
-          </div>
-
-          <Button
-            variant="ghost"
+      <FilterBar>
+        <div className="w-64">
+          <Input
+            placeholder={t('docQueue.search')}
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            prefix={<Search className="h-4 w-4" />}
             size="sm"
-            leftIcon={<Filter className="h-4 w-4" />}
-            onClick={() => {
-              setGlobalFilter('')
-              setStatusFilter('')
-              setOcrFilter('all')
-              setPage(1)
-            }}
-          >
-            {t('docQueue.filter.reset')}
-          </Button>
+          />
         </div>
-      </Card>
+
+        <NativeSelect
+          label={t('docQueue.filter.status')}
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+          aria-label={t('docQueue.filter.status')}
+          className="min-w-[10rem]"
+        >
+          <option value="">{t('docQueue.filter.allStatuses')}</option>
+          <option value="UPLOADED">{t('docQueue.filter.uploaded')}</option>
+          <option value="OCR_COMPLETE">{t('docQueue.filter.ocrComplete')}</option>
+          <option value="IN_REVIEW">{t('docQueue.filter.inReview')}</option>
+        </NativeSelect>
+
+        {/* DG-DOC-04: OCR confidence filter — server-side via ocrMinConfidence/ocrMaxConfidence params */}
+        <NativeSelect
+          label={t('docQueue.filter.ocr')}
+          value={ocrFilter}
+          onChange={(e) => { setOcrFilter(e.target.value as OcrConfidenceBand | 'all'); setPage(1) }}
+          aria-label={t('docQueue.filter.ocr')}
+          className="min-w-[10rem]"
+        >
+          <option value="all">{t('docQueue.filter.allOcr')}</option>
+          <option value="high">{t('docQueue.filter.ocrHigh')}</option>
+          <option value="medium">{t('docQueue.filter.ocrMedium')}</option>
+          <option value="low">{t('docQueue.filter.ocrLow')}</option>
+        </NativeSelect>
+
+        {/* DG-DOC-04: Sort by SLA urgency (server-side) */}
+        <NativeSelect
+          label={t('docQueue.filter.sortBy')}
+          value={sortBy}
+          onChange={(e) => { setSortBy(e.target.value as AdminQueueSortBy); setPage(1) }}
+          aria-label={t('docQueue.filter.sortBy')}
+          className="min-w-[10rem]"
+        >
+          <option value="sla_asc">{t('docQueue.filter.sortSlaUrgent')}</option>
+          <option value="uploaded_desc">{t('docQueue.filter.sortNewest')}</option>
+        </NativeSelect>
+
+        {/* DG-DOC-04: Overdue-only toggle (server-side filter) */}
+        <label className="flex items-center gap-1.5 cursor-pointer select-none text-sm text-neutral-700">
+          <input
+            type="checkbox"
+            checked={overdueOnly}
+            onChange={(e) => { setOverdueOnly(e.target.checked); setPage(1) }}
+            className="h-4 w-4 rounded border-neutral-300 text-brand-600 focus:ring-brand-500"
+          />
+          <Clock className="h-3.5 w-3.5 text-red-500" aria-hidden="true" />
+          {t('docQueue.filter.overdueOnly')}
+        </label>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={<Filter className="h-4 w-4" />}
+          onClick={() => {
+            setGlobalFilter('')
+            setStatusFilter('')
+            setOcrFilter('all')
+            setSortBy('sla_asc')
+            setOverdueOnly(false)
+            setPage(1)
+          }}
+        >
+          {t('docQueue.filter.reset')}
+        </Button>
+      </FilterBar>
 
       {/* Table */}
       <DataTable

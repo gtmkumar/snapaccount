@@ -60,7 +60,7 @@ BEGIN
     ) THEN
         CREATE TRIGGER trg_notice_deadline_rules_updated_at
             BEFORE UPDATE ON gst.notice_deadline_rules
-            FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+            FOR EACH ROW EXECUTE FUNCTION shared.set_updated_at();
     END IF;
 END;
 $$;

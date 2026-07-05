@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <RootNamespace>Assist.Application</RootNamespace>
+    <AssemblyName>Assist.Application</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MediatR" Version="12.*" />
+    <PackageReference Include="FluentValidation" Version="11.*" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.*" />
+    <PackageReference Include="Pgvector" Version="0.3.2" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Assist.Domain/Assist.Domain.csproj" />
+    <ProjectReference Include="../../../Shared/SnapAccount.Shared.Application/SnapAccount.Shared.Application.csproj" />
+    <ProjectReference Include="../../../Shared/SnapAccount.Shared.Domain/SnapAccount.Shared.Domain.csproj" />
+  </ItemGroup>
+</Project>

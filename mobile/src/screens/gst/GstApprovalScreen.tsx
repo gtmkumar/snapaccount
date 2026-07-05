@@ -94,7 +94,7 @@ export function GstApprovalScreen({ navigation, route }: Props) {
   const handleApprove = async () => {
     if (!allChecked) return;
     // GAP-063 / M4: Biometric step-up before GST approval submission.
-    const passed = await triggerBiometric({ promptMessage: t('mobile.gst.approval.biometricPrompt') });
+    const passed = await triggerBiometric({ promptMessage: t('mobile.gst.approval.biometricPrompt'), flowKey: 'gst.approve' });
     if (!passed) return;
     setSubmitting(true);
     try {

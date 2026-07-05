@@ -1,5 +1,20 @@
 # SnapAccount — Orchestrator Status
 
+> **2026-06-28 (late) — Tier-3 tail closed + full green re-verification.** Verified the whole tree on
+> `feature/repository-refactor`: backend builds 0 err + all 12 unit suites green (Auth 793, Gst 217,
+> Chat 199, Loan 171, Notif 114, Sub 110, Itr 80, Doc 60, Acct 60, Ai 98, Report 55, Callback 35);
+> admin lint/build clean + vitest 1105; mobile type-check/lint clean + jest 862. The 104-gap doc-vs-impl
+> inventory (`remediation-plan-2026-06-28.md`) is all committed (1541 files vs main). Then closed the
+> remaining tier-3 delegable items: **GAP-114** (gateway request logging + `X-Correlation-Id` mint/propagate
+> via YARP transform), **GAP-116** (mobile force-update — anonymous `GET /app/min-version` config-driven
+> endpoint + gateway `platform-app` route + `ForceUpdateGate` block/nudge in `App.tsx` + i18n en/hi/bn;
+> 13 backend + 3 mobile tests), and **GAP-115** (DR plan `docs/devops/disaster-recovery.md` — RPO/RTO,
+> `asia-south2` cross-region failover, drill matrix). All that now remains is **TL-gated / deploy-time**
+> (credentials, key rotation, billing, bank pilots, GCP replica provisioning + first DR/PITR drill).
+> Details: `gap-analysis-2026-06-28-tier3.md`. Working-tree changes uncommitted.
+
+> **2026-06-28 — Fresh doc-vs-implementation audit on `feature/repository-refactor`.** A 13-area parallel audit (with per-gap adversarial verification) found **104 verified real gaps** (8 critical / 36 high / 35 medium / 25 low) — mostly frontend/mobile↔backend contract divergences, orphaned engines (GSTR-3B, Razorpay client, notification fan-out, semantic RAG), and real security holes (RLS GUC never set, org PAN plaintext, no Document DPDP erasure). Inventory: **`gap-analysis-2026-06-28-doc-vs-impl.md`** (IDs `DG-*`). 4-wave subagent plan: **`remediation-plan-2026-06-28.md`**. NOTE: the "all delegable gaps closed" line below was true for the OLD 12-service branch's Phase-7 scope; this new audit measured the docs against the *current* code and found additional implementation gaps.
+
 ## Current Phase: Phase 7 — Gap Closure & Production Readiness (WAVE 8 COMPLETE — 2026-06-12; all delegable gaps closed, remaining queue is TL-gated)
 
 ### Phase 7 Wave 8 — GAP-064 device integrity attestation + SignalR local-dev fix (2026-06-12, COMPLETE — live-verified on local stack)
@@ -157,7 +172,7 @@ Batch 2 (queued): mobile M3 (KFS screen + Privacy Center) + M4 (biometric step-u
 ## Decisions Log
 
 1. Added 3 new modules beyond project doc: Subscription & Billing, Audit & Compliance, Analytics & BI, TDS Management
-2. Added 11 microservices (original 9 + Subscription Service + AI Service)
+2. Added 3 composite services (original 9 + Subscription Service + AI Service)
 3. Database-per-service via PostgreSQL schemas within shared cluster
 4. Technology versions: .NET 10, React 19, Expo SDK 52+, PostgreSQL 17
 5. **Cloud changed from Azure to GCP + Firebase** — Cloud Run, Cloud SQL, Cloud Storage, Pub/Sub, Secret Manager, Artifact Registry; GCP asia-south1 (Mumbai) for DPDP Act compliance

@@ -30,10 +30,10 @@
 ### Admin web (earlier task in same session)
 - `src/admin/src/pages/settings/NavigationManagementPage.tsx` — relabeled "Required permissions" → "Who can see this item"; full-sentence hint; **"Public — visible to all" callout** when none selected; **selected-count + Clear all**; **module-grouped** permission list with sticky headers + descriptions; empty-search state. (Clarified the misconception: the checkboxes are the menu item's *gate*, not the admin's own perms.)
 
-### Backend (`backend/Services/AuthService/`)
+### Backend (`backend/Services/PlatformService/`)
 - `.../Users/Queries/GetCurrentUser/GetCurrentUserQuery.cs` — `GET /auth/me` now returns `UserType` (from `Profile?.UserType`, null if no profile).
 - `.../Users/Commands/UpdateUserProfile/UpdateUserProfileCommand.cs` — added optional `UserType` param, **validated `BUSINESS_OWNER|EMPLOYEE`** (STAFF rejected); stamped on profile create + update. Lets Individual onboarding set `EMPLOYEE` **without creating an org**.
-- `.../AuthService.Api/Endpoints/Auth.cs` — threaded `UserType` through `PUT /auth/profile` DTO + handler.
+- `.../Platform.WebApi/Endpoints/Auth/Auth.cs` — threaded `UserType` through `PUT /auth/profile` DTO + handler.
 - `database/migrations/058_auth_seed_platform_refdata_ai_permissions.sql` — **NEW**; seeds `platform.refdata.manage` + `platform.ai.manage` (were enforced in code but unseeded → ungrantable/invisible), grants both to `SUPER_ADMIN`. **Applied to local dev DB + verified.**
 
 ### Mobile (`mobile/`)

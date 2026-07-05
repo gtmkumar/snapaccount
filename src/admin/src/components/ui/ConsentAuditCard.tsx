@@ -57,7 +57,7 @@ export function ConsentAuditCard({
   return (
     <div
       className={cn(
-        'rounded-lg border border-neutral-200 bg-white p-4 space-y-3',
+        'rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-4 space-y-3',
         className
       )}
       role="article"
@@ -66,8 +66,8 @@ export function ConsentAuditCard({
       {/* Header row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Shield className="h-4 w-4 text-neutral-500 shrink-0" aria-hidden="true" />
-          <span className="font-semibold text-sm text-neutral-900">
+          <Shield className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" aria-hidden="true" />
+          <span className="font-semibold text-sm text-[var(--text-primary)]">
             {consentTypeLabels[consentType]}
           </span>
         </div>
@@ -75,7 +75,7 @@ export function ConsentAuditCard({
       </div>
 
       {/* Meta rows */}
-      <div className="text-xs text-neutral-600 space-y-1">
+      <div className="text-xs text-[var(--text-secondary)] space-y-1">
         <p>
           <span className="font-medium">{t('admin.loanDetail.consent.version')}: </span>
           {version}
@@ -86,14 +86,14 @@ export function ConsentAuditCard({
           aria-label={`Signature ending ${last4}`}
         >
           <span className="font-medium">{t('admin.loanDetail.consent.hash')}: </span>
-          <span className="font-mono text-neutral-400">…{last4}</span>
+          <span className="font-mono text-[var(--text-disabled)]">…{last4}</span>
         </p>
         {ip && (
           <p>
             <span className="font-medium">IP: </span>
             {ip}
             {userAgent && (
-              <> · <span className="text-neutral-400 truncate max-w-xs inline-block align-bottom">{userAgent.slice(0, 60)}</span></>
+              <> · <span className="text-[var(--text-disabled)] truncate max-w-xs inline-block align-bottom">{userAgent.slice(0, 60)}</span></>
             )}
             {biometricUsed !== null && biometricUsed !== undefined && (
               <> · Bio: {biometricUsed ? 'yes' : 'no'}</>
@@ -125,7 +125,7 @@ export function ConsentAuditCard({
         >
           {t('admin.loanDetail.consent.viewText', { version })}
         </button>
-        <span className="text-neutral-300" aria-hidden="true">·</span>
+        <span className="text-[var(--border-default)]" aria-hidden="true">·</span>
         <button
           type="button"
           onClick={onVerifyHmac}

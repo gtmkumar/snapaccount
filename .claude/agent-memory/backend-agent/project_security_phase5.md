@@ -15,7 +15,7 @@ Already implemented in SubscriptionService. Verified: `CryptographicOperations.F
 All 11 service Program.cs files: `WithOrigins(AdminPanel, Mobile)` with `AllowCredentials()`. Config keys: `AllowedOrigins:AdminPanel` and `AllowedOrigins:Mobile`. Dev defaults: localhost:5173 and localhost:3000.
 
 ### SEC-003 (Critical) — Hangfire Dashboard
-Already secured: `HangfireRoleAuthorizationFilter("SYSTEM_ADMIN")` in `AuthService.Api/HangfireRoleAuthorizationFilter.cs`. Checks `httpContext.User.IsInRole(requiredRole)`.
+Already secured: `HangfireRoleAuthorizationFilter("SYSTEM_ADMIN")` in `Platform.WebApi/HangfireRoleAuthorizationFilter.cs`. Checks `httpContext.User.IsInRole(requiredRole)`.
 
 ### SEC-004 (High) — Auth on Stub Services
 All 10 stub services updated: `app.UseMiddleware<FirebaseAuthMiddleware>()` + `RequireAuthorization()` on all routes. Firebase initialized with ADC pattern. Each stub service now has Firebase init block.
@@ -71,7 +71,7 @@ New: `ItrService.Domain/Entities/TaxComputation.cs` — SHA-256 of canonical JSO
 `RequestAccountDeletionCommandHandler.cs`: The `RevokeRefreshTokensAsync` call was incorrectly fatal — it returned the failure result, blocking deletion. Fixed to `try/catch(Exception)` with `logger.LogWarning`. `ILogger<RequestAccountDeletionCommandHandler>` added to primary constructor. Firebase token TTL (1hr) is the acceptable exposure window per audit section 2.3.
 
 ### NEW-001 (Medium) — Razorpay Webhook Raw-Byte HMAC Comparison
-`SubscriptionService.Api/Program.cs`: Previously compared `Encoding.UTF8.GetBytes(signature)` vs `Encoding.UTF8.GetBytes(expectedSignature)` (both hex strings as UTF-8) — worked but wrong approach. Fixed to: compute `expectedBytes = HMACSHA256.HashData(...)`, decode `receivedSignature` from hex to `receivedBytes` via `Convert.FromHexString` (with `FormatException` guard), then `CryptographicOperations.FixedTimeEquals(receivedBytes, expectedBytes)` on raw bytes. Eliminates case-sensitivity risk and is the correct cryptographic pattern.
+`Platform.WebApi/Program.cs`: Previously compared `Encoding.UTF8.GetBytes(signature)` vs `Encoding.UTF8.GetBytes(expectedSignature)` (both hex strings as UTF-8) — worked but wrong approach. Fixed to: compute `expectedBytes = HMACSHA256.HashData(...)`, decode `receivedSignature` from hex to `receivedBytes` via `Convert.FromHexString` (with `FormatException` guard), then `CryptographicOperations.FixedTimeEquals(receivedBytes, expectedBytes)` on raw bytes. Eliminates case-sensitivity risk and is the correct cryptographic pattern.
 
 ## Build Notes
 

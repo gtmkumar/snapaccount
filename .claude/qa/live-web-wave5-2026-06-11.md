@@ -27,7 +27,7 @@
 
 **Title:** GstService fails to start with Wave 5 binary — Hangfire static API called before JobStorage is initialized
 
-**Root cause:** `GstService.Api/Program.cs` line 110 calls `RecurringJob.AddOrUpdate<ImsDeemedAcceptanceJob>(...)` (static Hangfire API) before `app.Run()` at line 122. The static `RecurringJob.AddOrUpdate` requires `JobStorage.Current` to be set, which only happens when the Hangfire hosted service registers during `app.Run()`. This results in:
+**Root cause:** `Finance.WebApi/Program.cs` line 110 calls `RecurringJob.AddOrUpdate<ImsDeemedAcceptanceJob>(...)` (static Hangfire API) before `app.Run()` at line 122. The static `RecurringJob.AddOrUpdate` requires `JobStorage.Current` to be set, which only happens when the Hangfire hosted service registers during `app.Run()`. This results in:
 
 ```
 System.InvalidOperationException: Current JobStorage instance has not been initialized yet.
@@ -49,7 +49,7 @@ Please see https://docs.hangfire.io/en/latest/configuration/
 **Cannot run IMS frontend page** — ImsInboxPage.tsx calls `/gst/ims/invoices` on mount; GstService DOWN causes all data to fail.
 
 **Reproduction:**
-1. `cd backend/Services/GstService/GstService.Api`
+1. `cd backend/Services/FinanceService/Finance.WebApi`
 2. `dotnet user-secrets set "DB_PASSWORD" "postgresql"`
 3. `dotnet run` → crashes with `InvalidOperationException` on Hangfire static API at Program.cs:110
 

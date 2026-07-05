@@ -22,7 +22,7 @@ Four API contract fixes applied on 2026-06-11 (branch `2026-06-10-s5t4`):
 **Item 3 — GET /subscriptions/me null vs 404 contract:**
 - **Decision: 404** when no subscription exists. Contract: 200+body when subscription exists; 404 `{ code: "Subscription.NotFound", message }` when org has no subscription.
 - Mobile client already handles 404 → null (see `mobile/src/api/subscriptions.ts`).
-- Files: `SubscriptionService.Api/Endpoints/Subscriptions.cs` — GetSubscription handler updated.
+- Files: `Platform.WebApi/Endpoints/Subscription/Subscriptions.cs` — GetSubscription handler updated.
 
 **Item 4 — GET /auth/config/privacy-contact (new endpoint):**
 - New query: `GetPrivacyContactQuery` / `PrivacyContactDto` / `GetPrivacyContactQueryHandler`.

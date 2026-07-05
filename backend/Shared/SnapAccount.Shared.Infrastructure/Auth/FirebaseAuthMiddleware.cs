@@ -27,8 +27,8 @@ public sealed class FirebaseAuthMiddleware(
         // Super Admin
         ["dev-superadmin-token"] = new Dictionary<string, object>
         {
-            ["userId"] = "11111111-1111-1111-1111-111111111111",
-            ["organizationId"] = "00000000-0000-0000-0000-000000000000",
+            ["userId"] = "22222222-2222-2222-2222-222222222222",
+            ["organizationId"] = "11111111-1111-1111-1111-111111111111",
             ["roles"] = new[] { "SUPER_ADMIN", "OPERATIONS_MANAGER" },
             // Wildcard "*" grants all permissions — without it, every [RequiresPermission]
             // endpoint (e.g. admin.dashboard.read) is denied under DEV_AUTH_BYPASS because
@@ -43,8 +43,9 @@ public sealed class FirebaseAuthMiddleware(
         ["dev-admin-token"] = new Dictionary<string, object>
         {
             ["userId"] = "22222222-2222-2222-2222-222222222222",
-            ["organizationId"] = "00000000-0000-0000-0000-000000000000",
+            ["organizationId"] = "11111111-1111-1111-1111-111111111111",
             ["roles"] = new[] { "CA", "OPERATIONS_MANAGER" },
+            ["permissions"] = new[] { "*" },
             ["phone_number"] = "+919000000002",
             ["email"] = "admin@snapaccount.local",
             ["firebase_uid"] = "dev-admin-uid",

@@ -21,21 +21,21 @@ const stepStyles: Record<StepStatus, { circle: string; connector: string; text: 
   completed: {
     circle: 'bg-success-600 border-success-600 text-white',
     connector: 'bg-success-600',
-    text: 'text-neutral-700',
+    text: 'text-[var(--text-primary)]',
   },
   active: {
     circle: 'bg-brand-500 border-brand-500 text-white pulse-brand',
-    connector: 'bg-neutral-200',
-    text: 'text-brand-700 font-semibold',
+    connector: 'bg-[var(--border-default)]',
+    text: 'text-brand-500 font-semibold',
   },
   pending: {
-    circle: 'bg-white border-neutral-300 text-neutral-400',
-    connector: 'bg-neutral-200',
-    text: 'text-neutral-400',
+    circle: 'bg-[var(--surface-raised)] border-[var(--border-default)] text-[var(--text-disabled)]',
+    connector: 'bg-[var(--border-default)]',
+    text: 'text-[var(--text-disabled)]',
   },
   error: {
     circle: 'bg-error-600 border-error-600 text-white',
-    connector: 'bg-neutral-200',
+    connector: 'bg-[var(--border-default)]',
     text: 'text-error-600',
   },
 }
@@ -76,7 +76,7 @@ export function StatusTimeline({ steps, orientation = 'horizontal', className }:
                 >
                   {step.status === 'completed' && <CheckIcon />}
                   {step.status === 'error' && <XIcon />}
-                  {step.status === 'active' && <span className="h-2 w-2 rounded-full bg-white" />}
+                  {step.status === 'active' && <span className="h-2 w-2 rounded-full bg-[var(--text-inverse)]" />}
                 </div>
                 {!isLast && (
                   <div className={cn('w-0.5 flex-1 my-1 min-h-[24px]', styles.connector)} />
@@ -85,12 +85,12 @@ export function StatusTimeline({ steps, orientation = 'horizontal', className }:
               <div className="pb-6">
                 <p className={cn('text-sm font-medium', styles.text)}>{step.label}</p>
                 {step.timestamp && (
-                  <p className="text-xs text-neutral-400 mt-0.5">
+                  <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
                     {formatDateTime(step.timestamp)}
                   </p>
                 )}
                 {step.description && (
-                  <p className="text-xs text-neutral-500 mt-1">{step.description}</p>
+                  <p className="text-xs text-[var(--text-tertiary)] mt-1">{step.description}</p>
                 )}
               </div>
             </li>
@@ -119,15 +119,15 @@ export function StatusTimeline({ steps, orientation = 'horizontal', className }:
               >
                 {step.status === 'completed' && <CheckIcon />}
                 {step.status === 'error' && <XIcon />}
-                {step.status === 'active' && <span className="h-2 w-2 rounded-full bg-white" />}
-                {step.status === 'pending' && <span className="h-2 w-2 rounded-full bg-neutral-300" />}
+                {step.status === 'active' && <span className="h-2 w-2 rounded-full bg-[var(--text-inverse)]" />}
+                {step.status === 'pending' && <span className="h-2 w-2 rounded-full bg-[var(--border-strong)]" />}
               </div>
               <div className={cn('w-full h-0.5', isLast ? 'opacity-0' : '', styles.connector)} />
             </div>
             <div className="mt-2 text-center">
               <p className={cn('text-xs font-medium', styles.text)}>{step.label}</p>
               {step.timestamp && (
-                <p className="text-xs text-neutral-400 mt-0.5">
+                <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
                   {formatDateTime(step.timestamp)}
                 </p>
               )}

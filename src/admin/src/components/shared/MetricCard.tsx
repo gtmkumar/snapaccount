@@ -86,7 +86,7 @@ export function MetricCard({
 
   if (loading) {
     return (
-      <div className={cn('bg-white rounded-xl shadow-sm p-5', className)}>
+      <div className={cn('bg-[var(--surface-raised)] border border-[var(--border-subtle)] rounded-xl shadow-sm p-5', className)}>
         <div className="flex items-start gap-4">
           <div className="h-12 w-12 rounded-lg skeleton-shimmer" />
           <div className="flex-1 space-y-2">
@@ -102,7 +102,7 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        'bg-white rounded-xl shadow-sm p-5 transition-all duration-200',
+        'bg-[var(--surface-raised)] border border-[var(--border-subtle)] rounded-xl shadow-sm p-5 transition-all duration-200',
         onClick && 'cursor-pointer hover:shadow-md hover:-translate-y-px',
         className
       )}
@@ -128,21 +128,21 @@ export function MetricCard({
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-neutral-500 leading-snug">{title}</p>
-          <p className="text-2xl font-bold text-neutral-900 mt-1 leading-tight tabular-nums">
+          <p className="text-sm font-medium text-[var(--text-tertiary)] leading-snug">{title}</p>
+          <p className="text-2xl font-bold text-[var(--text-primary)] mt-1 leading-tight tabular-nums">
             {value}
           </p>
           {subtitle && (
-            <p className="text-xs text-neutral-400 mt-1">{subtitle}</p>
+            <p className="text-xs text-[var(--text-disabled)] mt-1">{subtitle}</p>
           )}
           {trend && trendValue && (
             <div className={cn(
               'inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-xs font-medium',
               trend === 'up'
-                ? `${config.trendUpColor} bg-success-50`
+                ? 'bg-[var(--semantic-success-bg)] text-[var(--semantic-success-fg)]'
                 : trend === 'down'
-                ? `${config.trendDownColor} bg-error-50`
-                : 'text-neutral-500 bg-neutral-50'
+                ? 'bg-[var(--semantic-error-bg)] text-[var(--semantic-error-fg)]'
+                : 'bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)]'
             )}>
               {trend === 'up' && <TrendingUp className="h-3 w-3" aria-hidden="true" />}
               {trend === 'down' && <TrendingDown className="h-3 w-3" aria-hidden="true" />}

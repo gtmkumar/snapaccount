@@ -38,6 +38,8 @@ import PartnerBanksSettingsPage from '@/pages/loans/PartnerBanksSettingsPage'
 // Phase 6F — Chat (full build)
 import ChatPage from '@/pages/chat/ChatPage'
 import ChatThreadDetailPage from '@/pages/chat/ChatThreadDetailPage'
+// DG-CHAT-09 — Chat Analytics (Screen 83)
+import ChatAnalyticsPage from '@/pages/chat/ChatAnalyticsPage'
 import TeamPage from '@/pages/team/TeamPage'
 import SubscriptionsPage from '@/pages/subscriptions/SubscriptionsPage'
 import ReportsPage from '@/pages/reports/ReportsPage'
@@ -45,6 +47,11 @@ import ReportsPage from '@/pages/reports/ReportsPage'
 import CallbackListPage from '@/pages/callbacks/CallbackListPage'
 import CallbackDetailPage from '@/pages/callbacks/CallbackDetailPage'
 import CallbackKpiPage from '@/pages/callbacks/CallbackKpiPage'
+// DG-DASH-06 — Reports & Analytics suite (Screens 100-103)
+import OperationalReportPage from '@/pages/reports/OperationalReportPage'
+import PlatformRevenuePage from '@/pages/reports/PlatformRevenuePage'
+import UserAnalyticsPage from '@/pages/reports/UserAnalyticsPage'
+import ComplianceReportPage from '@/pages/reports/ComplianceReportPage'
 // Module 1 — Auth/RBAC
 import RolesPermissionsPage from '@/pages/roles/RolesPermissionsPage'
 import PermissionCatalogPage from '@/pages/roles/PermissionCatalogPage'
@@ -288,11 +295,20 @@ export const router = createBrowserRouter([
   },
 
   // Chat — Phase 6F full build
+  // DG-CHAT-09: /chat/analytics is a STATIC segment — must appear BEFORE /:threadId
   {
     path: '/chat',
     element: (
       <ProtectedLayout>
         <ChatPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    path: '/chat/analytics',
+    element: (
+      <ProtectedLayout>
+        <ChatAnalyticsPage />
       </ProtectedLayout>
     ),
   },
@@ -377,6 +393,40 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedLayout>
         <ReportsPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // DG-DASH-06 — Reports & Analytics suite (Screens 100-103)
+  {
+    path: '/reports/operational',
+    element: (
+      <ProtectedLayout>
+        <OperationalReportPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    path: '/reports/revenue',
+    element: (
+      <ProtectedLayout>
+        <PlatformRevenuePage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    path: '/reports/users',
+    element: (
+      <ProtectedLayout>
+        <UserAnalyticsPage />
+      </ProtectedLayout>
+    ),
+  },
+  {
+    path: '/reports/compliance',
+    element: (
+      <ProtectedLayout>
+        <ComplianceReportPage />
       </ProtectedLayout>
     ),
   },

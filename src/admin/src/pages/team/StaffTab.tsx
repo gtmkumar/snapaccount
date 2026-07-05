@@ -230,7 +230,7 @@ export function StaffTab({ onInvite }: StaffTabProps) {
             primaryCta={{ label: t('team.staff.invite'), onPress: onInvite }}
           />
         ) : (
-          <DataTable data={filtered} columns={columns} pageSize={25} />
+          <DataTable data={filtered} columns={columns} pageSize={25} tableId="team-staff" density="roomy" />
         )}
       </ErrorBoundary>
 

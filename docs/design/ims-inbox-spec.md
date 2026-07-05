@@ -2,7 +2,7 @@
 
 > **Status:** Implementation-ready spec. GAP-101 / board #32 (HIGH). Mandatory regulatory surface from **1 Apr 2026**.
 > **Owner:** ui-ux-agent (this spec) · frontend-dev (`src/admin`) · mobile-dev (`mobile/src`) · qa-web / qa-mobile (a11y + behaviour gates).
-> **Grounding (read on branch `2026-06-10-s5t4`):** backend endpoints `backend/Services/GstService/GstService.Api/Endpoints/GstIms.cs`; entity/state-machine `GstService.Domain/Entities/ImsInvoice.cs`; API contracts `docs/api/endpoints.md` §GstService-IMS; design system `docs/design/tokens.json` (v2.1.0), `docs/design/component-library.md`, `docs/design/design-elevation-spec.md`, `docs/design/accessibility-standard.md`.
+> **Grounding (read on branch `2026-06-10-s5t4`):** backend endpoints `backend/Services/FinanceService/Finance.WebApi/Endpoints/Gst/GstIms.cs`; entity/state-machine `GstService.Domain/Entities/ImsInvoice.cs`; API contracts `docs/api/endpoints.md` §GstService-IMS; design system `docs/design/tokens.json` (v2.1.0), `docs/design/component-library.md`, `docs/design/design-elevation-spec.md`, `docs/design/accessibility-standard.md`.
 > **a11y is a regulatory mandate on this surface:** WCAG 2.1 AA + IS 17802 (RBI/SEBI/Supreme-Court-2025 mandate per `accessibility-standard.md` §0). Every rule in that doc is binding here; where this spec and the a11y spec touch the same token, the a11y rule wins.
 
 ---

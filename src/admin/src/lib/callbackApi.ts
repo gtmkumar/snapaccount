@@ -218,9 +218,68 @@ export interface ListCallbacksParams {
   sort?: string
 }
 
-export async function listCallbacks(params: ListCallbacksParams = {}) {
+/**
+ * Backend GET /callbacks returns a thin summary row (ListCallbacksDto/CallbackSummaryDto):
+ *   { items: [{ id, userId, status, category, priority, assignedAgentId, scheduledAt, phoneNumber, createdAt }], totalCount }
+ * The list page expects the richer CallbackSchema shape (userName, userPhone, requestedAt, slaExpiresAt…).
+ * Parse the actual response and map it, filling fields the summary DTO doesn't carry with safe
+ * fallbacks, so the list renders instead of failing Zod validation. (Enriching the backend list
+ * DTO with user name / SLA / agent name is a separate follow-up.)
+ */
+// The Assist API serialises enums as their integer value (no JsonStringEnumConverter), and its
+// backend vocabulary differs from this admin client's: backend CallbackStatus is
+// Pending=0/Assigned=1/Confirmed=2/Completed=3/Escalated=4/Cancelled=5, Category is
+// General=0/Gst=1/Itr=2/Loan=3/Accounting=4/Subscription=5/Technical=6, Priority Low=0..Urgent=3.
+// Map those onto the labels this page's badges/i18n already know (a full vocabulary alignment —
+// renaming to ASSIGNED/CONFIRMED/etc. across zod enums + badges + i18n — is a separate follow-up).
+const STATUS_BY_INT: CallbackStatus[] = ['PENDING', 'SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'ESCALATED_TO_CA', 'CANCELLED']
+const CATEGORY_BY_INT: CallbackCategory[] = ['OTHER', 'GST', 'ITR', 'LOAN', 'BILLING', 'BILLING', 'OTHER']
+const PRIORITY_BY_INT: CallbackPriority[] = ['LOW', 'NORMAL', 'HIGH', 'URGENT']
+
+const mapByInt = <T,>(table: T[], v: number | string, fallback: T): T =>
+  typeof v === 'number' ? (table[v] ?? fallback) : (table.includes(v as T) ? (v as T) : fallback)
+
+const CallbackListItemBackendSchema = z.object({
+  id: z.string(),
+  userId: z.string().nullable().optional(),
+  status: z.union([z.number(), z.string()]),
+  category: z.union([z.number(), z.string()]),
+  priority: z.union([z.number(), z.string()]),
+  assignedAgentId: z.string().nullable().optional(),
+  scheduledAt: z.string().nullable().optional(),
+  phoneNumber: z.string().nullable().optional(),
+  createdAt: z.string(),
+})
+
+const CallbackListBackendSchema = z.object({
+  items: z.array(CallbackListItemBackendSchema),
+  totalCount: z.number(),
+})
+
+export async function listCallbacks(
+  params: ListCallbacksParams = {},
+): Promise<z.infer<typeof CallbackListSchema>> {
   const res = await api.get('/callbacks', { params })
-  return CallbackListSchema.parse(res.data)
+  const parsed = CallbackListBackendSchema.parse(res.data)
+  return {
+    items: parsed.items.map((it): Callback => ({
+      id: it.id,
+      userId: it.userId ?? '',
+      userName: it.userId ? `User ${it.userId.slice(0, 8)}` : '—',
+      userPhone: it.phoneNumber ?? '',
+      organizationId: '',
+      status: mapByInt(STATUS_BY_INT, it.status, 'PENDING'),
+      category: mapByInt(CATEGORY_BY_INT, it.category, 'OTHER'),
+      priority: mapByInt(PRIORITY_BY_INT, it.priority, 'NORMAL'),
+      assignedAgentId: it.assignedAgentId ?? null,
+      assignedAgentName: null,
+      scheduledAt: it.scheduledAt ?? null,
+      requestedAt: it.createdAt,
+      slaExpiresAt: null,
+    })),
+    page: params.page ?? 1,
+    total: parsed.totalCount,
+  }
 }
 
 export async function getCallback(id: string) {

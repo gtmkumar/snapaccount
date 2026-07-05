@@ -216,15 +216,15 @@ jobs:
       - name: Run migrations dry-run (script only — no apply)
         working-directory: backend
         run: |
-          SERVICES=(AuthService DocumentService AccountingService GstService LoanService ItrService ChatService NotificationService ReportService SubscriptionService AiService)
-          for svc in "${SERVICES[@]}"; do
-            echo "=== Generating migration script for $svc ==="
+          COMPOSITES=(Platform Finance Assist)
+          for comp in "${COMPOSITES[@]}"; do
+            echo "=== Generating migration script for ${comp} composite ==="
             dotnet ef migrations script \
-              --project "src/${svc}/${svc}.csproj" \
+              --project "Services/${comp}Service/${comp}.Infrastructure/${comp}.Infrastructure.csproj" \
+              --startup-project "Services/${comp}Service/${comp}.WebApi/${comp}.WebApi.csproj" \
               --idempotent \
-              --output "/tmp/${svc}-migration.sql" \
-              --no-build \
-              2>&1 || echo "No migrations configured yet for $svc — skipping"
+              --output "/tmp/${comp}-migration.sql" \
+              2>&1 || echo "No EF migrations configured yet for ${comp} — skipping"
           done
           echo "Dry-run complete. No database was modified."
 
@@ -456,42 +456,15 @@ jobs:
       fail-fast: false   # report ALL failing services, not just the first
       matrix:
         include:
-          - service: AuthService
-            project: backend/Services/AuthService/AuthService.Api
-            port: 5101
-          - service: DocumentService
-            project: backend/Services/DocumentService/DocumentService.Api
-            port: 5102
-          - service: AccountingService
-            project: backend/Services/AccountingService/AccountingService.Api
-            port: 5103
-          - service: GstService
-            project: backend/Services/GstService/GstService.Api
-            port: 5104
-          - service: LoanService
-            project: backend/Services/LoanService/LoanService.Api
-            port: 5105
-          - service: ItrService
-            project: backend/Services/ItrService/ItrService.Api
-            port: 5106
-          - service: ChatService
-            project: backend/Services/ChatService/ChatService.Api
-            port: 5107
-          - service: NotificationService
-            project: backend/Services/NotificationService/NotificationService.Api
-            port: 5108
-          - service: ReportService
-            project: backend/Services/ReportService/ReportService.Api
-            port: 5109
-          - service: SubscriptionService
-            project: backend/Services/SubscriptionService/SubscriptionService.Api
-            port: 5110
-          - service: AiService
-            project: backend/Services/AiService/AiService.Api
-            port: 5111
-          - service: CallbackService
-            project: backend/Services/CallbackService/CallbackService.Api
-            port: 5112
+          - service: Platform
+            project: backend/Services/PlatformService/Platform.WebApi
+            port: 5201
+          - service: Finance
+            project: backend/Services/FinanceService/Finance.WebApi
+            port: 5202
+          - service: Assist
+            project: backend/Services/AssistService/Assist.WebApi
+            port: 5203
 
     steps:
       - name: Checkout
@@ -613,18 +586,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service:
-          - AuthService
-          - DocumentService
-          - AccountingService
-          - GstService
-          - LoanService
-          - ItrService
-          - ChatService
-          - NotificationService
-          - ReportService
-          - SubscriptionService
-          - AiService
+        composite:
+          - Platform
+          - Finance
+          - Assist
 
     steps:
       - name: Checkout
@@ -635,18 +600,18 @@ jobs:
 
       - name: Lowercase service name (Docker tag rule)
         id: lc
-        run: echo "service=$(echo '${{ matrix.service }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+        run: echo "composite=$(echo '${{ matrix.composite }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Build Docker image (no push)
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          build-args: SERVICE_NAME=${{ matrix.service }}
+          build-args: COMPOSITE_NAME=${{ matrix.composite }}
           push: false
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
-          tags: snapaccount/${{ steps.lc.outputs.service }}:ci-test
+          cache-from: type=gha,scope=${{ matrix.composite }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.composite }}
+          tags: snapaccount/${{ steps.lc.outputs.composite }}-service:ci-test
           load: true   # load into local Docker daemon so subsequent steps can run the image
 
   # ─────────────────────────────────────────────────────────────────────
@@ -672,10 +637,9 @@ jobs:
   #   will activate automatically when GitHub Actions billing is re-enabled.
   # ─────────────────────────────────────────────────────────────────────
   report-font-verify:
-    name: ReportService Font Verification
+    name: Finance QuestPDF Font Verification
     runs-on: ubuntu-latest
-    # Runs independently of docker-smoke-test to avoid the matrix overhead;
-    # only ReportService needs font verification (LoanService uses same font layer).
+    # Report + Loan modules live in Finance composite; fonts bundled at Docker build time.
 
     steps:
       - name: Checkout
@@ -684,18 +648,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # ── (a) Build the ReportService image ─────────────────────────────────
-      - name: Build ReportService Docker image
+      # ── (a) Build the Finance composite image ─────────────────────────────
+      - name: Build Finance Docker image
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          build-args: SERVICE_NAME=ReportService
+          build-args: COMPOSITE_NAME=Finance
           push: false
-          load: true   # load into local Docker daemon for the verify step below
-          cache-from: type=gha,scope=ReportService
-          cache-to: type=gha,mode=max,scope=ReportService
-          tags: snapaccount/report-service:font-verify
+          load: true
+          cache-from: type=gha,scope=Finance
+          cache-to: type=gha,mode=max,scope=Finance
+          tags: snapaccount/finance-service:font-verify
 
       # ── (b) Assert font files exist inside the image ───────────────────────
       - name: Verify font files are present in /app/fonts/
@@ -705,25 +669,40 @@ jobs:
           set -euo pipefail
 
           echo "Verifying Inter fonts..."
-          docker run --rm --entrypoint sh snapaccount/report-service:font-verify -c \
+          docker run --rm --entrypoint sh snapaccount/finance-service:font-verify -c \
             "ls /app/fonts/Inter/Inter-Regular.ttf \
                 /app/fonts/Inter/Inter-Medium.ttf \
                 /app/fonts/Inter/Inter-SemiBold.ttf \
                 /app/fonts/Inter/Inter-Bold.ttf"
 
           echo "Verifying Noto Sans Devanagari fonts..."
-          docker run --rm --entrypoint sh snapaccount/report-service:font-verify -c \
+          docker run --rm --entrypoint sh snapaccount/finance-service:font-verify -c \
             "ls /app/fonts/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf \
                 /app/fonts/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf"
 
           echo "Verifying Noto Sans Bengali fonts..."
-          docker run --rm --entrypoint sh snapaccount/report-service:font-verify -c \
+          docker run --rm --entrypoint sh snapaccount/finance-service:font-verify -c \
             "ls /app/fonts/NotoSansBengali/NotoSansBengali-Regular.ttf \
                 /app/fonts/NotoSansBengali/NotoSansBengali-Bold.ttf"
 
           echo "All expected font files are present in the image."
 
       # ── (c) QuestPDF font-registration smoke test (host dotnet process) ────
+      - name: Download fonts for host smoke test
+        run: |
+          set -euo pipefail
+          FONTS="${{ github.workspace }}/backend/Shared/fonts"
+          mkdir -p "$FONTS/Inter" "$FONTS/NotoSansDevanagari" "$FONTS/NotoSansBengali"
+          curl -fsSL -o /tmp/inter.zip https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
+          unzip -q /tmp/inter.zip extras/ttf/Inter-Regular.ttf extras/ttf/Inter-Medium.ttf extras/ttf/Inter-SemiBold.ttf extras/ttf/Inter-Bold.ttf -d /tmp/inter
+          cp /tmp/inter/extras/ttf/Inter-*.ttf "$FONTS/Inter/"
+          curl -fsSL -o "$FONTS/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf" \
+            "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansdevanagari/NotoSansDevanagari%5Bwdth,wght%5D.ttf"
+          cp "$FONTS/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf" "$FONTS/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf"
+          curl -fsSL -o "$FONTS/NotoSansBengali/NotoSansBengali-Regular.ttf" \
+            "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansbengali/NotoSansBengali%5Bwdth,wght%5D.ttf"
+          cp "$FONTS/NotoSansBengali/NotoSansBengali-Regular.ttf" "$FONTS/NotoSansBengali/NotoSansBengali-Bold.ttf"
+
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
         with:

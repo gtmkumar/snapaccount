@@ -445,6 +445,12 @@ PUBSUB_TOPICS=(
     # Phase 6C: loan domain events — disbursement lifecycle events for downstream consumption
     # Consumers: NotificationService (Loan Approved, Loan Disbursed, EMI Due push + SMS).
     "snapaccount.loan.events"
+    # DG-INFRA-02: DPDP Act 2023 Right-to-Erasure cascade topic.
+    # Publisher: Platform AccountDeletionRequestedEventHandler (account-deletion-events).
+    # Subscribers: 7 background workers across all 3 composites — see create_subscription
+    # calls below. Each module anonymises its own data independently (least-privilege fan-out).
+    # Without this topic + subscriptions the erasure cascade silently never runs in prod.
+    "account-deletion-events"
 )
 
 for topic in "${PUBSUB_TOPICS[@]}"; do
@@ -495,6 +501,31 @@ create_subscription "snapaccount.notification.send" "notification-service-send-s
 create_subscription "snapaccount.callback.events" "notification-service-callback-sub"
 # Phase 6E: recurring jobs topic → NotificationService (Cloud Scheduler fires, service wakes)
 create_subscription "snapaccount.recurring-jobs.due" "notification-service-recurring-jobs-sub"
+
+# ── DG-INFRA-02: DPDP Act 2023 Right-to-Erasure subscriptions ────────────────
+# Topic: account-deletion-events (published by Platform AccountDeletionRequestedEventHandler)
+# Each module owns its own subscription so it can erase independently and at its own pace.
+# Subscription names MUST match the DefaultSubscription/Subscription constants in each
+# AccountDeletionSubscriber.cs. Verified against source on 2026-06-28:
+#
+#   Finance.Loan.Messaging.AccountDeletionSubscriber   : loan-service-account-deletion-sub
+#   Finance.Gst.Messaging.AccountDeletionSubscriber    : gst-service-account-deletion-sub
+#   Finance.Itr.Messaging.AccountDeletionSubscriber    : itr-service-account-deletion-sub
+#   Platform.Notification.AccountDeletionSubscriber    : notification-service-account-deletion-sub
+#   Platform.Subscription.AccountDeletionSubscriber    : subscription-service-account-deletion-sub
+#   Assist.Chat.Messaging.AccountDeletionSubscriber    : chat-service-account-deletion-sub
+#   Assist.Callback.Messaging.AccountDeletionSubscriber: callback-service-account-deletion-sub
+#
+# ack_deadline=300s: DPDP erasure may involve multiple DB operations per module — allow
+# enough time before Pub/Sub redelivers (GCP max per-subscription deadline = 600s).
+# dead-letter after 5 attempts so failed erasures surface in Cloud Monitoring.
+create_subscription "account-deletion-events" "loan-service-account-deletion-sub" 300
+create_subscription "account-deletion-events" "gst-service-account-deletion-sub" 300
+create_subscription "account-deletion-events" "itr-service-account-deletion-sub" 300
+create_subscription "account-deletion-events" "notification-service-account-deletion-sub" 300
+create_subscription "account-deletion-events" "subscription-service-account-deletion-sub" 300
+create_subscription "account-deletion-events" "chat-service-account-deletion-sub" 300
+create_subscription "account-deletion-events" "callback-service-account-deletion-sub" 300
 
 # ─────────────────────────────────────────────
 # Step 9: Secret Manager — create placeholder secrets
@@ -723,6 +754,18 @@ create_service_account "callback-service-sa" "Callback Service"
 # referenced here so it is created in the same SA provisioning pass)
 create_service_account "cloud-scheduler-sa" "Cloud Scheduler — recurring jobs publisher"
 
+# ── Composite service accounts (3-composite refactor) ───────────────────────
+# After the 12→3 consolidation, Cloud Run services run as platform/finance/assist SAs.
+# These are referenced by cloud-run-services.sh and the CD workflows.
+# The old per-module SAs (auth-service-sa, gst-service-sa, etc.) are kept for backward
+# compat / any remaining per-module Cloud SQL IAM bindings, but Cloud Run itself uses
+# the composite SAs below.
+create_service_account "platform-service-sa" "Platform composite (Auth + Subscription + Notification)"
+create_service_account "finance-service-sa" "Finance composite (Document + Accounting + GST + Loan + ITR + Report)"
+create_service_account "assist-service-sa" "Assist composite (Chat + AI + Callback)"
+# DG-INFRA-01: API Gateway service account (YARP proxy — stateless, no DB/Pub/Sub needed)
+create_service_account "api-gateway-sa" "API Gateway (YARP reverse proxy)"
+
 # Grant minimal IAM roles per service account
 grant_role() {
     local sa_email="$1"
@@ -831,6 +874,36 @@ grant_role "${SA}" "roles/secretmanager.secretAccessor"
 # Cloud Scheduler SA — needs pubsub.topics.publish on recurring-jobs topic.
 # Full binding applied in infra/pubsub-scheduler-recurring-jobs.sh (topic-level binding).
 # Project-level role not required — keeping least privilege (topic-level IAM is sufficient).
+
+# ── Composite SAs: IAM role grants (3-composite refactor + DG-INFRA-01) ─────
+# Platform composite — same needs as Auth + Notification + Subscription combined
+SA="platform-service-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+grant_role "${SA}" "roles/secretmanager.secretAccessor"
+grant_role "${SA}" "roles/pubsub.publisher"
+grant_role "${SA}" "roles/pubsub.subscriber"
+grant_role "${SA}" "roles/run.invoker"
+
+# Finance composite — same needs as Document + Accounting + GST + Loan + ITR + Report combined
+SA="finance-service-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+grant_role "${SA}" "roles/secretmanager.secretAccessor"
+grant_role "${SA}" "roles/pubsub.publisher"
+grant_role "${SA}" "roles/pubsub.subscriber"
+grant_role "${SA}" "roles/storage.objectCreator"
+grant_role "${SA}" "roles/storage.objectViewer"
+grant_role "${SA}" "roles/documentai.apiUser"
+grant_role "${SA}" "roles/aiplatform.user"
+
+# Assist composite — same needs as Chat + AI + Callback combined
+SA="assist-service-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+grant_role "${SA}" "roles/secretmanager.secretAccessor"
+grant_role "${SA}" "roles/pubsub.publisher"
+grant_role "${SA}" "roles/pubsub.subscriber"
+grant_role "${SA}" "roles/aiplatform.user"
+
+# DG-INFRA-01: API Gateway SA — stateless YARP proxy; needs only Cloud Run invoker
+# to call downstream composites (which are internal-and-cloud-load-balancing ingress).
+SA="api-gateway-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+grant_role "${SA}" "roles/run.invoker"
 
 # Migration Runner — needs Cloud SQL Client
 SA="migration-runner-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com"

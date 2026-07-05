@@ -24,6 +24,7 @@ import apiClient, { getApiError } from '../../lib/api';
 import { isValidPhone } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import { fetchServerUserType } from '../../lib/onboarding';
+import { registerCurrentDevice } from '../../notifications/pushTokenManager';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
 type NavProp = NativeStackNavigationProp<AuthStackParamList, 'PasswordAuth'>;
@@ -99,11 +100,18 @@ export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
         // Keep the token for onboarding calls; stay in Auth stack until the user
         // picks a persona and completes the matching wizard.
         setSession(token, profile, refreshToken ?? null);
+        // B1.3 device binding (DG-AUTH-01): register this device (first device →
+        // no approval gate). Best-effort — never blocks onboarding.
+        void registerCurrentDevice();
         navigation.replace('PersonaSelection');
         return;
       }
 
       setAuthenticated(token, profile, refreshToken ?? null);
+      // B1.3 device binding (DG-AUTH-01): register this device against the
+      // account. For a 2nd+ device the backend creates a DeviceApprovalRequest +
+      // push to existing devices (GAP-047). Best-effort — never blocks login.
+      void registerCurrentDevice();
       // Returning user — hydrate the real persona so navigation matches their type.
       {
         const serverType = await fetchServerUserType();

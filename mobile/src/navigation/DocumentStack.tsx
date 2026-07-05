@@ -9,7 +9,12 @@ export type DocumentStackParamList = {
   DocumentList: undefined;
   Camera: undefined;
   DocumentDetail: { documentId: string };
-  DocumentCategory: { documentUri: string; isMultiple?: boolean };
+  /**
+   * DG-DOC-05: Category selection after capture/gallery. `documentUri` is the
+   * local file:// of the captured image; `filename` is carried so the upload
+   * queue keeps a stable name (and the auto-classify heuristic can read it).
+   */
+  DocumentCategory: { documentUri: string; filename: string; source?: 'camera' | 'gallery'; isMultiple?: boolean };
 };
 
 const Stack = createNativeStackNavigator<DocumentStackParamList>();

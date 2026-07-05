@@ -3,7 +3,7 @@
  * Clean, focused OTP entry with premium styling
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -28,6 +28,8 @@ import { fetchServerUserType } from '../../lib/onboarding';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 import apiClient, { getApiError } from '../../lib/api';
 import { logger } from '../../lib/logger';
+import { registerCurrentDevice } from '../../notifications/pushTokenManager';
+import { startOtpListener } from '../../services/smsRetriever';
 
 /**
  * Known backend OTP error codes → translation keys (I18N-WIZARD residual #2).
@@ -63,7 +65,10 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [autoDetected] = useState(false);
+  // B1.2 (DG-AUTH-03): set true when the Android SMS Retriever auto-reads the
+  // OTP, surfacing the "OTP auto-detected" banner. iOS uses the keyboard's
+  // QuickType bar instead (OTPInput textContentType="oneTimeCode").
+  const [autoDetected, setAutoDetected] = useState(false);
 
   const formattedPhone = formatPhoneDisplay(phone);
 
@@ -122,6 +127,9 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
           // Keep the token for authenticated onboarding calls, but stay in the
           // Auth stack until the user picks a persona and completes onboarding.
           setSession(firebaseCustomToken, profile, refreshToken ?? null);
+          // B1.3 device binding (DG-AUTH-01): register this device against the
+          // new account (first device → no approval gate). Best-effort.
+          void registerCurrentDevice();
           navigation.replace('PersonaSelection');
           return;
         }
@@ -137,6 +145,11 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
         }
 
         setAuthenticated(firebaseCustomToken, profile, refreshToken ?? null);
+
+        // B1.3 device binding (DG-AUTH-01): register this device against the
+        // account. For a 2nd+ device the backend creates a DeviceApprovalRequest
+        // + push to existing devices (GAP-047). Best-effort — never blocks login.
+        void registerCurrentDevice();
 
         // Returning user — hydrate the real persona so navigation matches their type.
         const serverType = await fetchServerUserType();
@@ -189,12 +202,35 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
     [verifyOTP],
   );
 
+  // Keep the latest verifyOTP in a ref so the SMS-listener effect can fire it
+  // without re-subscribing the native Retriever on every render. The ref is
+  // updated in an effect (never during render — react-hooks/refs).
+  const verifyOTPRef = useRef(verifyOTP);
+  useEffect(() => {
+    verifyOTPRef.current = verifyOTP;
+  }, [verifyOTP]);
+
+  // B1.2 (DG-AUTH-03): Android SMS Retriever auto-read. Starts once on mount;
+  // on a parsed 6-digit code it fills the boxes, shows the auto-detected banner
+  // and auto-verifies. Soft-fail no-op on iOS/web, Expo Go, or any failure.
+  useEffect(() => {
+    const stop = startOtpListener((detectedOtp) => {
+      setOtp(detectedOtp);
+      setAutoDetected(true);
+      setError(false);
+      setErrorMessage('');
+      verifyOTPRef.current(detectedOtp);
+    });
+    return stop;
+  }, []);
+
   const handleResendOTP = async () => {
     try {
       await apiClient.post('/auth/otp/send', { phoneNumber: phone });
       setOtp('');
       setError(false);
       setErrorMessage('');
+      setAutoDetected(false);
     } catch {
       Alert.alert(t('mobile.common.error'), t('mobile.auth.otp.errors.resend'));
     }

@@ -9,7 +9,7 @@
 
 ## ⚠️ Action required before any commit/deploy
 
-1. **Rotate the leaked service-account key** — private key id `34df0854aa…` was printed into a session transcript (a `user-secrets list` dump). Rotate in Firebase Console → Project settings → Service accounts → Manage keys (delete + create new), then reload the new JSON into AuthService.Api user-secrets as `Firebase:ServiceAccountJson`.
+1. **Rotate the leaked service-account key** — private key id `34df0854aa…` was printed into a session transcript (a `user-secrets list` dump). Rotate in Firebase Console → Project settings → Service accounts → Manage keys (delete + create new), then reload the new JSON into Platform.WebApi user-secrets as `Firebase:ServiceAccountJson`.
 2. **Remove stray root files** — `package.json` + `package-lock.json` at the repo root pin `firebase ^12.14.0`. The social flow uses the Firebase **REST** API (`signInWithIdp`) and imports no JS SDK, so these are dead weight. Delete both before committing.
 3. **Prod config** — set `SESSION_JWT_SECRET` (≥32 chars) in Secret Manager for every deployed service. Without it, services fall back to the insecure dev default.
 
@@ -44,7 +44,7 @@ Wired the **`snap-account`** project (note the hyphen; #754356628614, CLI accoun
 
 - `mobile/app.json` — `extra.firebase` web config (apiKey is non-secret) + `extra.googleAuth.webClientId`.
 - `.env.example` — `FIREBASE_PROJECT_ID=snap-account`.
-- Backend service-account JSON loaded into AuthService.Api user-secrets (`Firebase:ServiceAccountJson`).
+- Backend service-account JSON loaded into Platform.WebApi user-secrets (`Firebase:ServiceAccountJson`).
 
 ### Three bugs found by live-testing the "already implemented" flow
 

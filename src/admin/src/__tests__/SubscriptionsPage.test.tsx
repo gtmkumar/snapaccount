@@ -43,11 +43,44 @@ function renderPage() {
 
 const mockMrr: subscriptionApi.MrrDashboard = {
   totalMrr: 1250000,
-  activeCount: 42,
-  trialingCount: 8,
-  pastDueCount: 3,
-  cancelledCount: 12,
+  activeSubscriptions: 42,
+  trialingSubscriptions: 8,
+  pastDueSubscriptions: 3,
+  cancelledThisMonth: 12,
+  byPlan: [
+    { planName: 'Starter Plan', tier: 'Starter', subscriberCount: 30, mrr: 299700 },
+    { planName: 'Growth Plan', tier: 'Growth', subscriberCount: 12, mrr: 299880 },
+  ],
 }
+
+// DG-SUB-10: MRR history fixture for trend chart tests
+const mockMrrHistory: subscriptionApi.MrrHistoryPoint[] = [
+  { month: '2026-01', totalMrr: 450000, activeCount: 18 },
+  { month: '2026-02', totalMrr: 600000, activeCount: 24 },
+  { month: '2026-03', totalMrr: 750000, activeCount: 30 },
+]
+
+// DG-SUB-10: Subscription events fixture for events panel tests
+const mockEvents: subscriptionApi.SubscriptionEvent[] = [
+  {
+    eventId: 'sub-001:created',
+    eventType: 'Subscribed',
+    organizationId: 'org-001',
+    organizationName: 'Acme Corp',
+    planName: 'Starter Plan',
+    mrr: 9990,
+    occurredAt: '2026-06-01T10:00:00Z',
+  },
+  {
+    eventId: 'inv-001:paid',
+    eventType: 'Paid',
+    organizationId: 'org-002',
+    organizationName: 'Beta Ltd',
+    planName: undefined,
+    mrr: 24990,
+    occurredAt: '2026-06-15T14:30:00Z',
+  },
+]
 
 const makePlan = (overrides: Partial<subscriptionApi.Plan> = {}): subscriptionApi.Plan => ({
   planId: 'plan-001',
@@ -77,6 +110,11 @@ beforeEach(() => {
   vi.spyOn(subscriptionApi, 'listPlans').mockResolvedValue(mockPlans)
   vi.spyOn(subscriptionApi, 'createPlan').mockResolvedValue({ planId: 'plan-new', name: 'New Plan', priceInr: 4999 })
   vi.spyOn(subscriptionApi, 'updatePlan').mockResolvedValue(undefined)
+  // DG-SUB-10: Mock the live chart/events endpoints so components render data, not empty states.
+  vi.spyOn(subscriptionApi, 'getMrrHistory').mockResolvedValue(mockMrrHistory)
+  vi.spyOn(subscriptionApi, 'listSubscriptionEvents').mockResolvedValue(mockEvents)
+  // CurrentPlanCard fetches caller's subscription — return 404-equivalent (null-ish rejection handled by retry:false)
+  vi.spyOn(subscriptionApi, 'getMySubscription').mockRejectedValue(Object.assign(new Error('404'), { response: { status: 404 } }))
 })
 
 // ---------------------------------------------------------------------------
@@ -337,6 +375,85 @@ describe('SubscriptionsPage', () => {
         'plan-001',
         expect.objectContaining({ isActive: false })
       )
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // DG-SUB-10: MRR trend chart (live data)
+  // ---------------------------------------------------------------------------
+
+  it('renders MRR Trend heading', async () => {
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('MRR Trend')).toBeInTheDocument()
+    })
+  })
+
+  it('calls getMrrHistory and renders chart when data exists', async () => {
+    renderPage()
+    await waitFor(() => {
+      expect(subscriptionApi.getMrrHistory).toHaveBeenCalledWith(12)
+    })
+    // MrrTrendChart uses recharts which renders SVG — check it does not show the empty state
+    await waitFor(() => {
+      expect(screen.queryByText('No MRR trend data yet')).not.toBeInTheDocument()
+    })
+  })
+
+  it('renders empty state for MRR trend when backend returns empty array', async () => {
+    vi.spyOn(subscriptionApi, 'getMrrHistory').mockResolvedValue([])
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('No MRR trend data yet')).toBeInTheDocument()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // DG-SUB-10: Recent events panel (live data)
+  // ---------------------------------------------------------------------------
+
+  it('renders Recent Events heading', async () => {
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('Recent Events')).toBeInTheDocument()
+    })
+  })
+
+  it('calls listSubscriptionEvents and renders event rows when data exists', async () => {
+    renderPage()
+    await waitFor(() => {
+      expect(subscriptionApi.listSubscriptionEvents).toHaveBeenCalledWith(20)
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Acme Corp')).toBeInTheDocument()
+      expect(screen.getByText('Beta Ltd')).toBeInTheDocument()
+    })
+  })
+
+  it('renders event type badges with correct labels', async () => {
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('Subscribed')).toBeInTheDocument()
+      expect(screen.getByText('Paid')).toBeInTheDocument()
+    })
+  })
+
+  it('renders empty state for events panel when backend returns empty array', async () => {
+    vi.spyOn(subscriptionApi, 'listSubscriptionEvents').mockResolvedValue([])
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('No subscription events yet')).toBeInTheDocument()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // DG-SUB-10: Plan distribution bar (live byPlan data from MRR response)
+  // ---------------------------------------------------------------------------
+
+  it('renders plan distribution section with byPlan data', async () => {
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('Breakdown by Plan')).toBeInTheDocument()
     })
   })
 })

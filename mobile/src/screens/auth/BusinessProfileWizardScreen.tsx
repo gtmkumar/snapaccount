@@ -11,6 +11,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -370,20 +371,65 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
                 {t('mobile.auth.wizard.stepGstinSubtitle')}
               </Text>
 
+              {/* DG-AUTH-05: "I'm not registered for GST" toggle hides the GSTIN
+                  input and surfaces the registration-threshold note (B2.3). */}
               <Controller
                 control={form2.control}
-                name="gstin"
-                render={({ field, fieldState }) => (
-                  <Input
-                    label={t('mobile.auth.wizard.gstinLabel')}
-                    placeholder="27AABCU9603R1ZM"
-                    value={field.value}
-                    onChangeText={(v) => field.onChange(v.toUpperCase())}
-                    error={fieldState.error?.message}
-                    autoCapitalize="characters"
-                    maxLength={15}
-                  />
-                )}
+                name="notGstRegistered"
+                render={({ field }) => {
+                  const notRegistered = field.value ?? false;
+                  return (
+                    <>
+                      <View style={styles.toggleRow}>
+                        <Text style={styles.toggleLabel}>
+                          {t('mobile.auth.wizard.notGstRegisteredLabel')}
+                        </Text>
+                        <Switch
+                          value={notRegistered}
+                          onValueChange={(v) => {
+                            field.onChange(v);
+                            // Clear any entered GSTIN when switching to "not registered"
+                            if (v) form2.setValue('gstin', '');
+                          }}
+                          accessibilityLabel={t('mobile.auth.wizard.notGstRegisteredLabel')}
+                          testID="not-gst-registered-toggle"
+                        />
+                      </View>
+
+                      {notRegistered ? (
+                        <View style={styles.infoBanner}>
+                          <View style={styles.bannerRow}>
+                            <Ionicons
+                              name="information-circle-outline"
+                              size={14}
+                              color={tokens.infoFg}
+                              style={styles.bannerIcon}
+                            />
+                            <Text style={styles.infoBannerText}>
+                              {t('mobile.auth.wizard.gstThresholdNote')}
+                            </Text>
+                          </View>
+                        </View>
+                      ) : (
+                        <Controller
+                          control={form2.control}
+                          name="gstin"
+                          render={({ field: gstinField, fieldState }) => (
+                            <Input
+                              label={t('mobile.auth.wizard.gstinLabel')}
+                              placeholder="27AABCU9603R1ZM"
+                              value={gstinField.value}
+                              onChangeText={(v) => gstinField.onChange(v.toUpperCase())}
+                              error={fieldState.error?.message}
+                              autoCapitalize="characters"
+                              maxLength={15}
+                            />
+                          )}
+                        />
+                      )}
+                    </>
+                  );
+                }}
               />
             </View>
           )}
@@ -614,6 +660,21 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   },
   stepContent: {
     gap: 4,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  toggleLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    color: tk.textPrimary,
+    marginRight: 12,
   },
   trustBanner: {
     flexDirection: 'row',

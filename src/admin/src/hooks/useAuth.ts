@@ -8,7 +8,7 @@ import {
 } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import api from '@/lib/api'
-import { setToken, clearSession, getStoredUser, setStoredUser } from '@/lib/authToken'
+import { setToken, clearSession, getStoredUser, setStoredUser, getToken } from '@/lib/authToken'
 import { revokeAdminSession } from '@/lib/api'
 
 export type AdminRole =
@@ -81,6 +81,12 @@ function readStoredUser(): AdminUser | null {
   }
 }
 
+/** LOCAL_AUTH: only restore a session when a token is present (avoids zombie UI). */
+function resolveLocalAuthUser(): AdminUser | null {
+  if (!getToken()) return null
+  return readStoredUser()
+}
+
 const DEV_MOCK_USER: AdminUser = {
   uid: 'dev-user-001', email: 'dev@snapaccount.in', displayName: 'Dev Admin', photoURL: null, role: DEV_ROLE,
 }
@@ -117,13 +123,47 @@ export function useAuth(): AuthState & {
   twoFaChallenge: TwoFaChallengeState | null
 } {
   const [state, setState] = useState<AuthState>({
-    user: DEV_BYPASS ? DEV_MOCK_USER : LOCAL_AUTH ? readStoredUser() : null,
-    loading: !DEV_BYPASS && !LOCAL_AUTH,
+    user: DEV_BYPASS ? DEV_MOCK_USER : LOCAL_AUTH ? resolveLocalAuthUser() : null,
+    loading: DEV_BYPASS ? false : LOCAL_AUTH ? Boolean(getToken()) : true,
     error: null,
   })
   // Separate piece of state so the login page can render a second step without
   // needing to store it in localStorage or pass it through the router.
   const [twoFaChallenge, setTwoFaChallenge] = useState<TwoFaChallengeState | null>(null)
+
+  // DEV_AUTH_BYPASS: always use the canned backend token (overwrite stale localStorage tokens).
+  useEffect(() => {
+    if (DEV_BYPASS) {
+      setToken('dev-superadmin-token')
+    }
+  }, [])
+
+  // LOCAL_AUTH: validate stored token before rendering protected routes.
+  useEffect(() => {
+    if (!LOCAL_AUTH || DEV_BYPASS) return
+
+    const token = getToken()
+    if (!token) {
+      if (readStoredUser()) clearSession()
+      setState(prev => (prev.user ? { ...prev, user: null, loading: false } : { ...prev, loading: false }))
+      return
+    }
+
+    let cancelled = false
+    void (async () => {
+      try {
+        await api.get('/auth/me')
+        if (!cancelled) setState(prev => ({ ...prev, loading: false }))
+      } catch {
+        if (!cancelled) {
+          clearSession()
+          setState({ user: null, loading: false, error: null })
+        }
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (DEV_BYPASS || LOCAL_AUTH) return // skip Firebase listener in dev/local modes

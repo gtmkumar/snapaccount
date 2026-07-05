@@ -12,7 +12,7 @@
   <!--
     NOTE FOR BACKEND-AGENT (P6-INT-02):
     Before these tests can be run, add the following to
-    backend/Services/ChatService/ChatService.Api/ChatService.Api.csproj:
+    backend/Services/AssistService/Assist.WebApi/Assist.WebApi.csproj:
 
       <ItemGroup>
         <InternalsVisibleTo Include="ChatService.IntegrationTests" />
@@ -44,10 +44,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\backend\Services\ChatService\ChatService.Api\ChatService.Api.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\ChatService\ChatService.Application\ChatService.Application.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\ChatService\ChatService.Domain\ChatService.Domain.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\ChatService\ChatService.Infrastructure\ChatService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.WebApi/Assist.WebApi.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.Application/Assist.Application.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.Domain/Assist.Domain.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.Infrastructure/Assist.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
   </ItemGroup>
 

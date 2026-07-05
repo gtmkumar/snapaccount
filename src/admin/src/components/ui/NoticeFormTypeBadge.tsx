@@ -71,10 +71,10 @@ const FORM_TYPE_CONFIG: Record<NoticeFormType, NoticeFormTypeConfig> = {
 }
 
 const variantClasses: Record<NoticeFormTypeConfig['variant'], string> = {
-  warning: 'bg-amber-50 text-amber-800 border border-amber-200',
-  error:   'bg-red-50 text-red-700 border border-red-200',
-  brand:   'bg-violet-50 text-violet-800 border border-violet-200',
-  info:    'bg-sky-50 text-sky-700 border border-sky-200',
+  warning: 'bg-[var(--semantic-warning-bg)] text-[var(--semantic-warning-fg)] border border-[var(--chip-amber-border)]',
+  error:   'bg-[var(--semantic-error-bg)] text-[var(--semantic-error-fg)] border border-[var(--semantic-error-fg)]/25',
+  brand:   'bg-[var(--chip-violet-bg)] text-[var(--chip-violet-fg)] border border-[var(--chip-violet-border)]',
+  info:    'bg-[var(--semantic-info-bg)] text-[var(--semantic-info-fg)] border border-[var(--semantic-info-fg)]/25',
 }
 
 interface NoticeFormTypeBadgeProps {
@@ -95,7 +95,7 @@ export function NoticeFormTypeBadge({
     return (
       <span className={cn(
         'inline-flex items-center gap-1 rounded font-mono font-medium',
-        'bg-neutral-100 text-neutral-700 border border-neutral-200',
+        'bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)] border border-[var(--border-default)]',
         size === 'sm' ? 'text-xs px-1.5 py-0.5' : 'text-xs px-2 py-0.5',
         className
       )}>

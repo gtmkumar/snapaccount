@@ -7,7 +7,9 @@
 
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   FlatList,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -18,7 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -28,6 +30,7 @@ import { useHaptics } from '../../hooks/useHaptics';
 import { getFinancialYears } from '../../lib/utils';
 import type { HomeStackParamList } from '../../navigation/HomeStack';
 import { getFinancialReport } from '../../api/accounting';
+import { enqueueTallyExport, getReportDownloadUrl } from '../../api/reports';
 import { useAuthStore } from '../../store/authStore';
 
 type NavProp = NativeStackNavigationProp<HomeStackParamList, 'FinancialReportsList'>;
@@ -88,6 +91,29 @@ export function FinancialReportsListScreen({ navigation }: Props) {
   const lastUpdated = plReport?.generatedAt
     ? new Date(plReport.generatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
     : null;
+
+  // DG-DASH-05: Tally/CSV export — POST /reports/tally-export then open the
+  // signed download URL (backend auto-selects XML or CSV via feature flag).
+  const exportMutation = useMutation({
+    mutationFn: async () => {
+      const job = await enqueueTallyExport();
+      if (job.status === 'FAILED') {
+        throw new Error('export-failed');
+      }
+      const dl = await getReportDownloadUrl(job.jobId);
+      return dl.signedUrl;
+    },
+    onSuccess: async (signedUrl) => {
+      try {
+        await Linking.openURL(signedUrl);
+      } catch {
+        Alert.alert(t('mobile.reports.export.errorTitle'), t('mobile.reports.export.errorBody'));
+      }
+    },
+    onError: () => {
+      Alert.alert(t('mobile.reports.export.errorTitle'), t('mobile.reports.export.errorBody'));
+    },
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -247,9 +273,30 @@ export function FinancialReportsListScreen({ navigation }: Props) {
         <Card style={styles.exportCard}>
           <Text style={styles.exportTitle}>{t('mobile.reports.export.title')}</Text>
           <View style={styles.exportButtons}>
-            <Button label={t('mobile.reports.export.tally')} variant="secondary" size="sm" onPress={() => {}} />
-            <Button label={t('mobile.reports.export.csv')} variant="secondary" size="sm" onPress={() => {}} />
+            <Button
+              label={t('mobile.reports.export.tally')}
+              variant="secondary"
+              size="sm"
+              loading={exportMutation.isPending}
+              disabled={exportMutation.isPending}
+              onPress={() => {
+                haptics.lightTap();
+                exportMutation.mutate();
+              }}
+            />
+            <Button
+              label={t('mobile.reports.export.csv')}
+              variant="secondary"
+              size="sm"
+              loading={exportMutation.isPending}
+              disabled={exportMutation.isPending}
+              onPress={() => {
+                haptics.lightTap();
+                exportMutation.mutate();
+              }}
+            />
           </View>
+          <Text style={styles.exportNote}>{t('mobile.reports.export.note')}</Text>
         </Card>
       </ScrollView>
     </SafeAreaView>
@@ -322,5 +369,6 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   exportCard: { marginTop: 8, padding: 16 },
   exportTitle: { fontSize: 16, fontWeight: '600', color: tk.textPrimary, marginBottom: 12 },
   exportButtons: { gap: 10 },
+  exportNote: { fontSize: 11, color: tk.textTertiary, marginTop: 10, lineHeight: 16 },
   }),
 );

@@ -48,7 +48,7 @@
 - **Expected**: HTTP 400 (7% is not a standard Indian GST rate)
 - **Actual**: HTTP 201, rate created
 - **Root cause**: `CreateTaxRateCommandValidator` declares `ValidGstRates = [0,1.5,3,5,7.5,12,18,28]` but never uses it in a `RuleFor` — the comment says "warn but do not block" yet the spec requires 400. The validator only validates `InclusiveBetween(0,100)`.
-- **File**: `/backend/Services/GstService/GstService.Application/TaxRates/Commands/CreateTaxRate/CreateTaxRateCommand.cs` line 40–53
+- **File**: `/backend/Services/FinanceService/Finance.Application/Gst/TaxRates/Commands/CreateTaxRate/CreateTaxRateCommand.cs` line 40–53
 
 ---
 
@@ -71,7 +71,7 @@
 - **Actual**: HTTP 404 (empty body, Kestrel default)
 - **Root cause**: SubscriptionService process (PID 98094) was started at 14:46:51 from the old binary BEFORE the working-tree rebuild at 18:26. The `ListSubscribers` route (`Subscriptions.cs` line 128) and the `ListSubscribersQuery.cs` handler are both in the working tree as uncommitted changes. The running binary has neither. Service needs restart with current binary.
 - **Also affected**: `SubscriberListParams` record not in running binary.
-- **Files**: `backend/Services/SubscriptionService/SubscriptionService.Api/Endpoints/Subscriptions.cs` (uncommitted, line 128) + `backend/Services/SubscriptionService/SubscriptionService.Application/Subscriptions/Queries/ListSubscribers/ListSubscribersQuery.cs` (untracked)
+- **Files**: `backend/Services/PlatformService/Platform.WebApi/Endpoints/Subscription/Subscriptions.cs` (uncommitted, line 128) + `backend/Services/PlatformService/Platform.Application/Subscription/Subscriptions/Queries/ListSubscribers/ListSubscribersQuery.cs` (untracked)
 
 ---
 
@@ -92,8 +92,8 @@
 - **Root cause**: `AggregateHealth.cs` calls `.RequireRateLimiting("standard")` but `AuthService` `Program.cs` only registers `otp`, `password-reset`, and `invite-token-lookup` rate limiters — `standard` is never defined. This bug also affects 4 other AuthService endpoints that use `RequireRateLimiting("standard")`:
   - `/auth/token/refresh-context` (Auth.cs line 90)
   - All endpoints in `Privacy.cs` (Search.cs also affected)
-- **Affected files**: `backend/Services/AuthService/AuthService.Api/Program.cs` (missing `standard` policy) + all 4 endpoint files
-- **Also missing in**: AiService (endpoints using `standard` but no `standard` policy defined in `AiService.Api/Program.cs`)
+- **Affected files**: `backend/Services/PlatformService/Platform.WebApi/Program.cs` (missing `standard` policy) + all 4 endpoint files
+- **Also missing in**: AiService (endpoints using `standard` but no `standard` policy defined in `Assist.WebApi/Program.cs`)
 
 ---
 

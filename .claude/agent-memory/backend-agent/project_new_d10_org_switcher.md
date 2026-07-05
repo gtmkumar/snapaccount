@@ -19,7 +19,7 @@ Implemented in one batch. Migration 079.
 - `LoanService.Infrastructure/Persistence/Configurations/KeyFactsStatementConfiguration.cs` — `HasColumnName("locale").HasMaxLength(10).HasDefaultValue("en")`
 - `LoanService.Application/KeyFacts/Commands/GenerateKfs/GenerateKfsCommand.cs` — `Locale?` param; validator checks against `{"en","hi","bn"}` set; handler resolves locale (caller → "en" fallback); `GenerateKfsResult` includes `Locale`
 - `LoanService.Application/KeyFacts/Queries/GetKfs/GetKfsQuery.cs` — `Locale?` param on query; `KfsDto` includes `Locale`; handler: if locale set → prefer-locale query first, then fallback to any locale; NEVER fails on locale mismatch (RBI statutory)
-- `LoanService.Api/Endpoints/Loans.cs` — `GenerateKfs(Guid id, ISender, CancellationToken, string? locale = null)` and `GetKfs(Guid id, ISender, CancellationToken, Guid? kfsId = null, string? locale = null)`
+- `Finance.WebApi/Endpoints/Loan/Loans.cs` — `GenerateKfs(Guid id, ISender, CancellationToken, string? locale = null)` and `GetKfs(Guid id, ISender, CancellationToken, Guid? kfsId = null, string? locale = null)`
 
 **Consent catalog verified:** `GetConsentCatalogQuery` already filters by locale correctly (pre-existing).
 
@@ -32,7 +32,7 @@ Implemented in one batch. Migration 079.
 **Changed files:**
 - `AuthService.Application/Auth/Commands/RefreshContext/RefreshContextCommand.cs` — `record RefreshContextCommand(Guid? OrganizationId = null)` (backward-compatible); validator rejects `Guid.Empty`; handler queries `db.OrganizationMembers` for active+non-deleted membership before calling `CreateCustomTokenAsync`; returns `Error.Forbidden("Auth.OrgSwitchForbidden", ...)` on failure; `RefreshContextResponse` adds `OrganizationId?` echo; handler now takes `IAuthDbContext db` param
 - `AuthService.Infrastructure/Services/FirebaseAuthService.cs` — `BuildSessionClaimsAsync` accepts `Guid? explicitOrgId` parameter; dev path also reads `explicitOrgId` from claims dict; production path reads `explicitOrgId` from claims dict and passes to `BuildSessionClaimsAsync`
-- `AuthService.Api/Endpoints/Auth.cs` — `RefreshContext(RefreshContextRequest req, ISender)` binds body; `RefreshContextRequest(Guid? OrganizationId = null)` record added; 403 mapped explicitly
+- `Platform.WebApi/Endpoints/Auth/Auth.cs` — `RefreshContext(RefreshContextRequest req, ISender)` binds body; `RefreshContextRequest(Guid? OrganizationId = null)` record added; 403 mapped explicitly
 
 **Security gate pattern:** Membership check (AnyAsync with IsActive && DeletedAt==null) runs BEFORE CreateCustomTokenAsync is called. On failure, verify mock proves CreateCustomTokenAsync is NOT called (Times.Never).
 

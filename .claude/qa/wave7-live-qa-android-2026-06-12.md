@@ -65,7 +65,7 @@ SELECT topic, status, scheduled_at FROM chat.appointments ORDER BY created_at DE
 - The "Upcoming" tab appears to work only because DRAFT appointments may not have been present
 
 **Files affected:**
-- Backend: `backend/Services/ChatService/ChatService.Application/Appointments/Queries/ListAppointments/ListAppointmentsQuery.cs:91`
+- Backend: `backend/Services/AssistService/Assist.Application/Chat/Appointments/Queries/ListAppointments/ListAppointmentsQuery.cs:91`
 - Mobile: `mobile/src/components/appointments/AppointmentCard.tsx:107`
 
 **Fix required (backend-dev scope):** Change `x.a.Status.ToString()` to use `UpperSnakeEnumConverter` or add `.ToUpperSnake()` helper, OR change the mobile switch cases to PascalCase. The pattern already established in the codebase is to use `UpperSnakeEnumConverter` in EF Core entity configuration; the serialization path for query projections should use the same convention.

@@ -20,6 +20,10 @@ import { PrivacyCenterScreen } from '../screens/profile/PrivacyCenterScreen';
 import { BillingScreen } from '../screens/profile/BillingScreen';
 import { HelpScreen } from '../screens/profile/HelpScreen';
 import { EditBusinessScreen } from '../screens/profile/EditBusinessScreen';
+// DG-MOBUX-02: theme picker (System / Light / Dark)
+import { AppearanceScreen } from '../screens/profile/AppearanceScreen';
+// DG-MOBUX-03: Settings (Haptics / Network / Security toggles)
+import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { MyConsentsScreen } from '../screens/profile/MyConsentsScreen';
 // GAP-045: multi-organization switcher (More tab entry)
 import { OrganizationSwitcherScreen } from '../screens/profile/OrganizationSwitcherScreen';
@@ -77,6 +81,10 @@ export type MoreStackParamList = {
   EditBusiness: undefined;
   /** GAP-045: switch between organizations the user belongs to */
   OrganizationSwitcher: undefined;
+  /** DG-MOBUX-02: theme picker (System / Light / Dark) → useTheme().setTheme */
+  Appearance: undefined;
+  /** DG-MOBUX-03: Haptics / Network / Security preference toggles. */
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<MoreStackParamList>();
@@ -95,6 +103,8 @@ const SafeHelpScreen = withScreenErrorBoundary(HelpScreen);
 const SafeEditBusinessScreen = withScreenErrorBoundary(EditBusinessScreen);
 const SafeOrganizationSwitcherScreen = withScreenErrorBoundary(OrganizationSwitcherScreen);
 const SafeDeviceApprovalScreen = withScreenErrorBoundary(DeviceApprovalScreen);
+const SafeAppearanceScreen = withScreenErrorBoundary(AppearanceScreen);
+const SafeSettingsScreen = withScreenErrorBoundary(SettingsScreen);
 
 export function MoreStack() {
   return (
@@ -138,6 +148,10 @@ export function MoreStack() {
       <Stack.Screen name="EditBusiness" component={SafeEditBusinessScreen} />
       {/* GAP-045: multi-organization switcher */}
       <Stack.Screen name="OrganizationSwitcher" component={SafeOrganizationSwitcherScreen} />
+      {/* DG-MOBUX-02: theme picker (System / Light / Dark) */}
+      <Stack.Screen name="Appearance" component={SafeAppearanceScreen} />
+      {/* DG-MOBUX-03: Settings (Haptics / Network / Security) */}
+      <Stack.Screen name="Settings" component={SafeSettingsScreen} />
     </Stack.Navigator>
   );
 }

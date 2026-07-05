@@ -1,5 +1,17 @@
 // Unit tests: B9 — Subscription Service: Razorpay config, usage metering, trial logic.
 //
+// DG-SUB-02 additions (IRazorpayClient wired into handlers):
+//   SubscribeCommandHandler:
+//     23. Paid plan with RazorpayPlanId → calls CreateSubscriptionAsync, persists returned ID
+//     24. Free plan (PriceInr=0) → skips CreateSubscriptionAsync
+//     25. Plan has no RazorpayPlanId → skips CreateSubscriptionAsync
+//     26. Razorpay call throws → subscription still saved locally (non-fatal)
+//
+//   CreatePlanCommandHandler:
+//     27. Paid plan → calls SyncPlanAsync, persists returned RazorpayPlanId on plan
+//     28. Free plan (PriceInr=0) → skips SyncPlanAsync
+//     29. SyncPlanAsync throws → plan saved locally without RazorpayPlanId (non-fatal)
+//
 // Covers:
 //   AesCredentialEncryptionService (AES-256-GCM):
 //     1. Encrypt → Decrypt round-trip returns original plaintext
@@ -39,10 +51,14 @@ using System.Security.Cryptography;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SnapAccount.Shared.Application;
 using SubscriptionService.Application.Common.Interfaces;
 using SubscriptionService.Application.Config.Commands.UpdateRazorpayConfig;
+using SubscriptionService.Application.Plans.Commands.CreatePlan;
+using SubscriptionService.Application.Subscriptions.Commands.Subscribe;
 using SubscriptionService.Application.Usage.Commands.RecordUsage;
 using SubscriptionService.Domain.Entities;
 using SubscriptionService.Domain.Enums;
@@ -404,5 +420,282 @@ public sealed class SubscriptionTrialPeriodTests
 
         sub.Status.Should().Be(SubscriptionStatus.Active);
         sub.CurrentPeriodEnd.Should().Be(nextPeriodEnd);
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 6. DG-SUB-02: SubscribeCommandHandler wires IRazorpayClient
+// ────────────────────────────────────────────────────────────────────────────
+
+[Trait("Category", "Unit")]
+public sealed class SubscribeCommandHandlerRazorpayTests : IDisposable
+{
+    private readonly SubscriptionServiceDbContext _db = SubTestDb.Create();
+
+    public void Dispose() => _db.Dispose();
+
+    private static ICurrentUser MockUser(Guid orgId)
+    {
+        var m = new Mock<ICurrentUser>();
+        m.Setup(x => x.OrganizationId).Returns(orgId);
+        m.Setup(x => x.UserId).Returns(Guid.NewGuid());
+        return m.Object;
+    }
+
+    private SubscribeCommandHandler BuildHandler(IRazorpayClient razorpay)
+        => new(_db, MockUser(Guid.NewGuid()), razorpay,
+               NullLogger<SubscribeCommandHandler>.Instance);
+
+    private async Task<Plan> SeedPaidPlan(decimal price = 999m, string? razorpayPlanId = "rplan_test123")
+    {
+        var plan = Plan.Create("Pro Monthly", PlanTier.Growth, BillingCycle.Monthly, price, 0);
+        if (razorpayPlanId is not null) plan.SetRazorpayPlanId(razorpayPlanId);
+        _db.Plans.Add(plan);
+        await _db.SaveChangesAsync(default);
+        return plan;
+    }
+
+    [Fact]
+    public async Task Handle_PaidPlanWithRazorpayId_CallsCreateSubscriptionAsync_AndPersistsId()
+    {
+        var plan = await SeedPaidPlan();
+
+        var razorpayMock = new Mock<IRazorpayClient>();
+        razorpayMock
+            .Setup(r => r.CreateSubscriptionAsync(
+                plan.RazorpayPlanId!, It.IsAny<int>(),
+                It.IsAny<Dictionary<string, string>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RazorpaySubscriptionResult(
+                "sub_xyz123", "created", 0, 0, "https://rzp.io/xyz"));
+
+        // Wire handler with its own org id
+        var orgId = Guid.NewGuid();
+        var user = new Mock<ICurrentUser>();
+        user.Setup(u => u.OrganizationId).Returns(orgId);
+        user.Setup(u => u.UserId).Returns(Guid.NewGuid());
+
+        var handler = new SubscribeCommandHandler(
+            _db, user.Object, razorpayMock.Object,
+            NullLogger<SubscribeCommandHandler>.Instance);
+
+        var result = await handler.Handle(new SubscribeCommand(plan.Id), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.RazorpaySubscriptionId.Should().Be("sub_xyz123",
+            "the Razorpay subscription ID must be persisted after a successful CreateSubscriptionAsync call");
+
+        razorpayMock.Verify(r => r.CreateSubscriptionAsync(
+            plan.RazorpayPlanId!, 0,
+            It.IsAny<Dictionary<string, string>?>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        var saved = await _db.Subscriptions.FirstOrDefaultAsync(s => s.OrganizationId == orgId);
+        saved!.RazorpaySubscriptionId.Should().Be("sub_xyz123");
+    }
+
+    [Fact]
+    public async Task Handle_FreePlan_SkipsCreateSubscriptionAsync()
+    {
+        var plan = Plan.Create("Free", PlanTier.Free, BillingCycle.Monthly, 0m, 0);
+        _db.Plans.Add(plan);
+        await _db.SaveChangesAsync(default);
+
+        var razorpayMock = new Mock<IRazorpayClient>();
+
+        var orgId = Guid.NewGuid();
+        var user = new Mock<ICurrentUser>();
+        user.Setup(u => u.OrganizationId).Returns(orgId);
+        user.Setup(u => u.UserId).Returns(Guid.NewGuid());
+
+        var handler = new SubscribeCommandHandler(
+            _db, user.Object, razorpayMock.Object,
+            NullLogger<SubscribeCommandHandler>.Instance);
+
+        var result = await handler.Handle(new SubscribeCommand(plan.Id), default);
+
+        result.IsSuccess.Should().BeTrue();
+        razorpayMock.Verify(
+            r => r.CreateSubscriptionAsync(
+                It.IsAny<string>(), It.IsAny<int>(),
+                It.IsAny<Dictionary<string, string>?>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "free plan (PriceInr=0) must NOT call Razorpay API");
+    }
+
+    [Fact]
+    public async Task Handle_PlanWithNoRazorpayPlanId_SkipsCreateSubscriptionAsync()
+    {
+        var plan = await SeedPaidPlan(price: 999m, razorpayPlanId: null);
+
+        var razorpayMock = new Mock<IRazorpayClient>();
+
+        var orgId = Guid.NewGuid();
+        var user = new Mock<ICurrentUser>();
+        user.Setup(u => u.OrganizationId).Returns(orgId);
+        user.Setup(u => u.UserId).Returns(Guid.NewGuid());
+
+        var handler = new SubscribeCommandHandler(
+            _db, user.Object, razorpayMock.Object,
+            NullLogger<SubscribeCommandHandler>.Instance);
+
+        var result = await handler.Handle(new SubscribeCommand(plan.Id), default);
+
+        result.IsSuccess.Should().BeTrue("plan is still subscribable even without a Razorpay plan ID");
+        razorpayMock.Verify(
+            r => r.CreateSubscriptionAsync(
+                It.IsAny<string>(), It.IsAny<int>(),
+                It.IsAny<Dictionary<string, string>?>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "no RazorpayPlanId on the plan → skip Razorpay API call");
+    }
+
+    [Fact]
+    public async Task Handle_RazorpayThrows_SubscriptionStillSavedLocally()
+    {
+        var plan = await SeedPaidPlan();
+
+        var razorpayMock = new Mock<IRazorpayClient>();
+        razorpayMock
+            .Setup(r => r.CreateSubscriptionAsync(
+                It.IsAny<string>(), It.IsAny<int>(),
+                It.IsAny<Dictionary<string, string>?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Razorpay API unreachable"));
+
+        var orgId = Guid.NewGuid();
+        var user = new Mock<ICurrentUser>();
+        user.Setup(u => u.OrganizationId).Returns(orgId);
+        user.Setup(u => u.UserId).Returns(Guid.NewGuid());
+
+        var handler = new SubscribeCommandHandler(
+            _db, user.Object, razorpayMock.Object,
+            NullLogger<SubscribeCommandHandler>.Instance);
+
+        // Should NOT propagate the Razorpay exception
+        var result = await handler.Handle(new SubscribeCommand(plan.Id), default);
+
+        result.IsSuccess.Should().BeTrue(
+            "Razorpay API failure must not prevent local subscription creation");
+
+        var saved = await _db.Subscriptions.FirstOrDefaultAsync(s => s.OrganizationId == orgId);
+        saved.Should().NotBeNull("subscription row must be persisted even when Razorpay call fails");
+        saved!.RazorpaySubscriptionId.Should().BeNull(
+            "no Razorpay ID should be set when the API call failed");
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 7. DG-SUB-02: CreatePlanCommandHandler wires SyncPlanAsync
+// ────────────────────────────────────────────────────────────────────────────
+
+[Trait("Category", "Unit")]
+public sealed class CreatePlanCommandHandlerRazorpayTests : IDisposable
+{
+    private readonly SubscriptionServiceDbContext _db = SubTestDb.Create();
+
+    public void Dispose() => _db.Dispose();
+
+    private CreatePlanCommandHandler BuildHandler(IRazorpayClient razorpay)
+        => new(_db, razorpay, NullLogger<CreatePlanCommandHandler>.Instance);
+
+    [Fact]
+    public async Task Handle_PaidPlan_CallsSyncPlanAsync_AndPersistsRazorpayPlanId()
+    {
+        var razorpayMock = new Mock<IRazorpayClient>();
+        razorpayMock
+            .Setup(r => r.SyncPlanAsync(
+                "Pro Monthly", It.IsAny<long>(), "monthly", 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RazorpayPlanResult("rplan_abc123", "Pro Monthly", 99900L, "monthly", 1));
+
+        var cmd = new CreatePlanCommand("Pro Monthly", PlanTier.Growth, BillingCycle.Monthly, 999m, 0);
+        var result = await BuildHandler(razorpayMock.Object).Handle(cmd, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.RazorpayPlanId.Should().Be("rplan_abc123",
+            "the Razorpay plan ID returned by SyncPlanAsync must be included in the response");
+
+        // Verify it was persisted on the plan entity
+        var plan = await _db.Plans.FirstOrDefaultAsync();
+        plan!.RazorpayPlanId.Should().Be("rplan_abc123",
+            "RazorpayPlanId must be stored on the Plan entity for future subscription creation");
+
+        razorpayMock.Verify(r => r.SyncPlanAsync(
+            "Pro Monthly", 99900L, "monthly", 1, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_FreePlan_SkipsSyncPlanAsync()
+    {
+        var razorpayMock = new Mock<IRazorpayClient>();
+
+        var cmd = new CreatePlanCommand("Free", PlanTier.Free, BillingCycle.Monthly, 0m, 0);
+        var result = await BuildHandler(razorpayMock.Object).Handle(cmd, default);
+
+        result.IsSuccess.Should().BeTrue();
+        razorpayMock.Verify(
+            r => r.SyncPlanAsync(
+                It.IsAny<string>(), It.IsAny<long>(), It.IsAny<string>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "free plan (PriceInr=0) must NOT call Razorpay SyncPlanAsync");
+
+        var plan = await _db.Plans.FirstOrDefaultAsync();
+        plan!.RazorpayPlanId.Should().BeNull(
+            "free plan should have no Razorpay plan ID");
+    }
+
+    [Fact]
+    public async Task Handle_SyncPlanThrows_PlanStillSavedLocally()
+    {
+        var razorpayMock = new Mock<IRazorpayClient>();
+        razorpayMock
+            .Setup(r => r.SyncPlanAsync(
+                It.IsAny<string>(), It.IsAny<long>(), It.IsAny<string>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Razorpay unreachable"));
+
+        var cmd = new CreatePlanCommand("Pro Monthly", PlanTier.Growth, BillingCycle.Monthly, 999m, 0);
+        var result = await BuildHandler(razorpayMock.Object).Handle(cmd, default);
+
+        result.IsSuccess.Should().BeTrue(
+            "Razorpay sync failure must not prevent local plan creation");
+
+        var plan = await _db.Plans.FirstOrDefaultAsync();
+        plan.Should().NotBeNull("plan must be saved locally even when Razorpay sync fails");
+        plan!.Name.Should().Be("Pro Monthly");
+        plan.RazorpayPlanId.Should().BeNull(
+            "no Razorpay plan ID should be set when SyncPlanAsync failed");
+    }
+
+    [Fact]
+    public async Task Handle_QuarterlyPlan_MapsToMonthlyWithInterval3()
+    {
+        var razorpayMock = new Mock<IRazorpayClient>();
+        razorpayMock
+            .Setup(r => r.SyncPlanAsync(
+                It.IsAny<string>(), It.IsAny<long>(), "monthly", 3, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RazorpayPlanResult("rplan_qtr", "Pro Quarterly", 299700L, "monthly", 3));
+
+        var cmd = new CreatePlanCommand("Pro Quarterly", PlanTier.Growth, BillingCycle.Quarterly, 2997m, 0);
+        await BuildHandler(razorpayMock.Object).Handle(cmd, default);
+
+        razorpayMock.Verify(r => r.SyncPlanAsync(
+            "Pro Quarterly", 299700L, "monthly", 3, It.IsAny<CancellationToken>()), Times.Once,
+            "Quarterly billing cycle must map to period='monthly', interval=3 on Razorpay");
+    }
+
+    [Fact]
+    public async Task Handle_AnnualPlan_MapsToYearlyPeriod()
+    {
+        var razorpayMock = new Mock<IRazorpayClient>();
+        razorpayMock
+            .Setup(r => r.SyncPlanAsync(
+                It.IsAny<string>(), It.IsAny<long>(), "yearly", 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RazorpayPlanResult("rplan_annual", "Pro Annual", 999900L, "yearly", 1));
+
+        var cmd = new CreatePlanCommand("Pro Annual", PlanTier.Growth, BillingCycle.Annual, 9999m, 0);
+        await BuildHandler(razorpayMock.Object).Handle(cmd, default);
+
+        razorpayMock.Verify(r => r.SyncPlanAsync(
+            "Pro Annual", 999900L, "yearly", 1, It.IsAny<CancellationToken>()), Times.Once,
+            "Annual billing cycle must map to period='yearly', interval=1 on Razorpay");
     }
 }

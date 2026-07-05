@@ -434,6 +434,31 @@ export function ChatListScreen({ navigation }: Props) {
             /* Wave 7A (GAP-031): CA video-consultation entry (spec §1.1 — primary
                card above the threads) + "My appointments" row. */
             <View style={styles.caEntryWrap}>
+              {/* DG-CHAT-06: "Ask AI" quick-answer banner — instant grounded
+                  answers without opening a human thread. */}
+              <Pressable
+                style={[styles.askAiCard, { backgroundColor: tokens.gstAccent + '12', borderColor: tokens.gstAccent + '33' }]}
+                onPress={() => {
+                  haptics.lightTap();
+                  (navigation.navigate as (route: string) => void)('AskAi');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.ai.entry.cta')}
+                testID="ask-ai-entry"
+              >
+                <View style={[styles.askAiIcon, { backgroundColor: tokens.gstAccent }]}>
+                  <Ionicons name="sparkles" size={20} color={tokens.textOnBrand} />
+                </View>
+                <View style={styles.caEntryBody}>
+                  <Text style={[styles.caEntryTitle, { color: tokens.textPrimary }]}>
+                    {t('mobile.ai.entry.cta')}
+                  </Text>
+                  <Text style={[styles.caEntrySub, { color: tokens.textSecondary }]} numberOfLines={2}>
+                    {t('mobile.ai.entry.subtitle')}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={tokens.gstAccent} />
+              </Pressable>
               <Pressable
                 style={[styles.caEntryCard, { backgroundColor: tokens.brandTint, borderColor: tokens.brandTintBorder }]}
                 onPress={() => {
@@ -538,6 +563,23 @@ const styles = StyleSheet.create({
     minHeight: 64,
   },
   caEntryIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // DG-CHAT-06: Ask AI banner
+  askAiCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    minHeight: 64,
+  },
+  askAiIcon: {
     width: 44,
     height: 44,
     borderRadius: 14,

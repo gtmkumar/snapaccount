@@ -30,7 +30,7 @@ Migration 077 adds `is_reservation BOOLEAN NOT NULL DEFAULT FALSE` to `ai.intera
 
 ### RV-02 (MEDIUM — CLOSED): InternalApi:SharedToken Fail-Fast
 
-Both `AuthService.Api/Program.cs` and `AiService.Api/Program.cs` now throw `InvalidOperationException` at startup in non-Development when `InternalApi:SharedToken` is absent or shorter than 32 chars.
+Both `Platform.WebApi/Program.cs` and `Assist.WebApi/Program.cs` now throw `InvalidOperationException` at startup in non-Development when `InternalApi:SharedToken` is absent or shorter than 32 chars.
 
 ### M-01 (MEDIUM — CLOSED): TextRedactor Tightening
 
