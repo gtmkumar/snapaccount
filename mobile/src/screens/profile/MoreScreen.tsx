@@ -57,6 +57,10 @@ export function MoreScreen({ navigation }: Props) {
     { label: t('mobile.ca.appts.title'), icon: 'calendar-outline', route: 'Chat', color: tokens.itrAccent, desc: t('mobile.ca.appts.moreDesc'), nestedScreen: 'MyAppointments' },
     { label: t('mobile.more.notifications'), icon: 'notifications-outline', route: 'NotificationCenter', color: tokens.loanAccent, desc: t('mobile.more.notificationsDesc') },
     { label: t('mobile.more.privacyData'), icon: 'shield-outline', route: 'PrivacyCenter', color: tokens.brandFg, desc: t('mobile.more.privacyDataDesc') },
+    // DG-MOBUX-02: Appearance (System / Light / Dark theme picker)
+    { label: t('mobile.more.appearance'), icon: 'contrast-outline', route: 'Appearance', color: tokens.gstAccent, desc: t('mobile.more.appearanceDesc') },
+    // DG-MOBUX-03: Settings (Haptics / Network / Security)
+    { label: t('mobile.more.settings'), icon: 'settings-outline', route: 'Settings', color: tokens.brand500, desc: t('mobile.more.settingsDesc') },
     { label: t('mobile.more.profileSettings'), icon: 'person-circle-outline', route: 'Profile', color: tokens.textSecondary, desc: t('mobile.more.profileSettingsDesc') },
   ];
 

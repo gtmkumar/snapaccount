@@ -115,6 +115,67 @@
       "offlineBannerBody": "Will upload when connected.",
       "pendingChip": "{{count}} pending upload"
     },
+    "queue": {
+      "header": {
+        "allSynced": "All synced",
+        "syncing": "Syncing {{count}}",
+        "offlineWaiting": "{{count}} waiting · offline",
+        "failed": "{{count}} failed"
+      },
+      "headerA11y": {
+        "allSynced": "All documents synced",
+        "syncing": "Syncing {{count}} documents, tap for details",
+        "offlineWaiting": "{{count}} documents waiting to upload, you're offline",
+        "failed": "{{count}} documents failed to upload, tap to review"
+      },
+      "firstTimeHint": "No connection — saved locally. We'll upload it when you're back online.",
+      "toastAllSynced": "All documents synced.",
+      "sheet": {
+        "title": "Upload queue",
+        "empty": "Everything is synced.",
+        "retryAll": "Retry all",
+        "deleteAllFailed": "Delete all failed",
+        "deleteAllConfirmTitle": "Delete failed uploads?",
+        "deleteAllConfirmBody": "This removes every failed document from the upload queue. This cannot be undone."
+      }
+    },
+    "docCategory": {
+      "title": "Categorize Document",
+      "subtitle": "Help us process your document faster",
+      "back": "Go back",
+      "queuing": "Adding to upload queue…",
+      "ai": {
+        "detected": "AI detected: {{category}} — is this correct?",
+        "confirm": "Yes, use this",
+        "dismiss": "No, I'll choose"
+      },
+      "options": {
+        "salesBill": {
+          "label": "Sales Bill",
+          "hint": "Bills you've issued to customers"
+        },
+        "purchaseBill": {
+          "label": "Purchase Bill",
+          "hint": "Bills from your suppliers"
+        },
+        "expense": {
+          "label": "Expense Receipt",
+          "hint": "Travel, office, and business expenses"
+        },
+        "bankStatement": {
+          "label": "Bank Statement",
+          "hint": "Monthly bank statements (PDF)"
+        },
+        "salarySlip": {
+          "label": "Salary Slip",
+          "hint": "For employee ITR documents"
+        },
+        "other": {
+          "label": "Other",
+          "hint": "Misc. documents — re-categorize later"
+        }
+      }
+    },
     "callback": {
       "cta": {
         "card": {
@@ -254,6 +315,18 @@
         }
       }
     },
+    "home": {
+      "overview": {
+        "title": "Financial Overview",
+        "period": {
+          "month": "Month",
+          "quarter": "Quarter"
+        },
+        "trendUp": "Sales are {{percent}}% higher than last month",
+        "trendDown": "Sales are {{percent}}% lower than last month",
+        "empty": "Not enough data yet. Upload bills and record transactions to see your sales vs expenses trend."
+      }
+    },
     "reports": {
       "title": "Financial Reports",
       "loading": "Loading report…",
@@ -290,7 +363,22 @@
       "export": {
         "title": "Export for CA / Auditor",
         "tally": "Tally XML Export",
-        "csv": "Standard CSV Export"
+        "csv": "Standard CSV Export",
+        "note": "We will generate the file and open it so you can save or share it.",
+        "errorTitle": "Export failed",
+        "errorBody": "We couldn't generate the export. Please try again."
+      },
+      "preview": {
+        "subtitle": "Report period: {{fy}}",
+        "generating": "Generating your PDF…",
+        "error": "We couldn't generate the PDF. Please try again.",
+        "shareTitle": "Share report",
+        "shareWhatsApp": "Share on WhatsApp",
+        "shareBank": "Share with Bank / CA",
+        "shareOther": "More share options",
+        "shareMessage": "SnapAccount {{report}} report for {{fy}}",
+        "shareLinkError": "Couldn't create a share link. Please try again.",
+        "shareNote": "Bank / CA links are valid for 15 minutes for your security."
       },
       "comparative": {
         "title": "Comparative Analysis",
@@ -304,6 +392,16 @@
         "emptyTitle": "Not enough data yet",
         "emptyBody": "Upload documents and record transactions to see trends.",
         "groupA11y": "{{period}}: revenue {{revenue}}, expenses {{expenses}}, net profit {{profit}}"
+      },
+      "detail": {
+        "fallbackTitle": "Report",
+        "share": "Share",
+        "downloadPdf": "Download PDF",
+        "shareMessage": "SnapAccount {{report}} report for {{fy}}",
+        "periodLine": "Period: {{fy}} (April {{startYear}} – March {{endYear}})",
+        "generated": "Generated: {{date}}",
+        "empty": "No data available for {{fy}}.\nUpload documents to generate this report.",
+        "notAvailable": "This report is not available yet."
       }
     },
     "common": {
@@ -625,7 +723,17 @@
         "step1Title": "Employment Details",
         "step2Title": "Deductions",
         "step3Title": "Other Income",
+        "step4BankTitle": "Bank Account",
         "step4Title": "Review & Confirm",
+        "accountNumber": "Account number",
+        "confirmAccountNumber": "Confirm account number",
+        "ifsc": "IFSC code",
+        "bankName": "Bank",
+        "bankRefundNote": "Bank details are needed to credit your ITR refund. Your account number is masked after entry.",
+        "bankDetected": "Bank: {{bank}}",
+        "bankNotDetected": "Couldn't auto-detect the bank. Please double-check the IFSC code.",
+        "accountMismatch": "Account numbers don't match",
+        "ifscInvalid": "Enter a valid 11-character IFSC code",
         "fullName": "Full name",
         "pan": "PAN Number",
         "email": "Email address",
@@ -1272,6 +1380,26 @@
         "remove": "Remove bookmark",
         "added": "Bookmarked"
       },
+      "attach": {
+        "open": "Add attachment",
+        "sheetHint": "Share a photo, file, or a document from your vault.",
+        "camera": "Take photo",
+        "gallery": "Photo library",
+        "vault": "Share from Document Vault",
+        "vaultTitle": "Document Vault",
+        "vaultEmpty": "No documents in your vault yet. Upload one from the Documents tab first.",
+        "vaultConfirm": "Attach {{count}}",
+        "remove": "Remove {{name}}",
+        "attachmentLabel": "Attachment: {{name}}",
+        "uploadFailedTitle": "Upload failed",
+        "uploadFailedBody": "We couldn't upload that file. Please try again.",
+        "maxTitle": "Attachment limit reached",
+        "maxBody": "You can attach up to {{max}} files per message.",
+        "cameraPermTitle": "Camera permission needed",
+        "cameraPermBody": "Allow camera access in Settings to take a photo.",
+        "galleryPermTitle": "Photo access needed",
+        "galleryPermBody": "Allow photo library access in Settings to attach images."
+      },
       "bookmarks": {
         "title": "Bookmarks",
         "empty": {
@@ -1368,8 +1496,15 @@
         "runDiagnostic": "Run diagnostic",
         "diagnostic": {
           "running": "Pinging…",
-          "done": "Latency: {{latencyMs}}ms"
-        }
+          "done": "Latency: {{latencyMs}}ms",
+          "error": "No internet — check your connection."
+        },
+        "qualityGood": "Good connection",
+        "connection": "Connection",
+        "speed": "Speed",
+        "mbps": "{{mbps}} Mbps",
+        "unknown": "Unknown",
+        "queued": "Queued uploads"
       },
       "toast": {
         "slowDetected": "This is taking longer — slow connection detected."
@@ -1413,7 +1548,8 @@
         "billing": "Subscription & Billing",
         "help": "Help & Support",
         "about": "About SnapAccount",
-        "identityDocuments": "Identity Documents"
+        "identityDocuments": "Identity Documents",
+        "appearance": "Appearance"
       },
       "signOut": {
         "label": "Sign Out",
@@ -1640,6 +1776,8 @@
         "panSafeInfo": "Your PAN is safe. We use it only for government portal verification.",
         "stepGstinTitle": "Link Your GST Number",
         "stepGstinSubtitle": "Optional — link GSTIN to auto-import your filing history",
+        "notGstRegisteredLabel": "I'm not registered for GST",
+        "gstThresholdNote": "GST registration is mandatory only once your annual turnover crosses ₹40 lakh for goods (₹20 lakh in special-category states) or ₹20 lakh for services (₹10 lakh in special-category states). You can add your GSTIN later from your profile when you register.",
         "stepAadhaarTitle": "Add Your Aadhaar",
         "stepAadhaarSubtitle": "Used for loan applications and financial services",
         "aadhaarMaskWarning": "Your Aadhaar number is masked and never stored in full — UIDAI guidelines. You can verify it later from Profile → Identity Documents.",
@@ -1811,7 +1949,11 @@
       "profileSettings": "Profile & Settings",
       "profileSettingsDesc": "Account settings",
       "privacyData": "Privacy & Data",
-      "privacyDataDesc": "Manage consents & your rights"
+      "privacyDataDesc": "Manage consents & your rights",
+      "appearance": "Appearance",
+      "appearanceDesc": "Light, dark, or system theme",
+      "settings": "Settings",
+      "settingsDesc": "Haptics, network & security"
     },
     "orgSwitcher": {
       "title": "Switch Business",
@@ -2067,7 +2209,13 @@
         "confirm": "Confirm",
         "cancel": "Cancel"
       },
-      "error": "Authentication failed. Please try again."
+      "error": "Authentication failed. Please try again.",
+      "refusal": {
+        "title": "Confirmation needed",
+        "body": "We couldn't verify it's you. Try again to continue, or cancel.",
+        "retry": "Try again",
+        "cancel": "Cancel"
+      }
     },
     "pan": {
       "label": "PAN Number",
@@ -2144,9 +2292,40 @@
       "title": "Notifications",
       "markAll": "Mark all read",
       "markAllSoon": "Mark all read is coming soon.",
+      "managePreferences": "Preferences",
+      "filter": {
+        "all": "All",
+        "gst": "GST",
+        "itr": "ITR",
+        "docs": "Docs",
+        "loan": "Loan",
+        "callback": "Callback",
+        "billing": "Billing",
+        "system": "System",
+        "unreadOnly": "Unread only",
+        "clear": "Clear filters"
+      },
+      "group": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "thisWeek": "This week",
+        "earlier": "Earlier"
+      },
+      "swipe": {
+        "markRead": "Mark read",
+        "dismiss": "Dismiss",
+        "undo": "Notification dismissed"
+      },
+      "preview": {
+        "openCta": "Open",
+        "breadcrumb": "Takes you to"
+      },
       "empty": {
         "title": "No notifications yet",
         "body": "GST deadlines, document updates, and expert chat messages will appear here."
+      },
+      "emptyFiltered": {
+        "body": "No notifications match this filter. Try clearing it."
       },
       "error": {
         "loadFailed": "Couldn't load notifications. Check your connection and try again."
@@ -2311,6 +2490,103 @@
       "pendingCardTitle": "New device wants access",
       "pendingCardA11y": "Review sign-in request from {{model}}",
       "softLaunchBanner": "A new device signed in: {{model}}, {{location}}, {{time}}. Not you? Review your devices."
+    },
+    "appearance": {
+      "title": "Appearance",
+      "heading": "Appearance",
+      "subtitle": "Choose how SnapAccount looks on this device.",
+      "footerNote": "Choose System to follow your phone's theme.",
+      "options": {
+        "system": {
+          "label": "System",
+          "desc": "Follow your phone's theme"
+        },
+        "light": {
+          "label": "Light",
+          "desc": "Always use the light theme"
+        },
+        "dark": {
+          "label": "Dark",
+          "desc": "Always use the dark theme"
+        }
+      },
+      "selectedA11y": "{{option}}, selected",
+      "notSelectedA11y": "{{option}}",
+      "quickToggle": {
+        "label": "Theme",
+        "a11y": "Theme: {{current}}. Double-tap to switch theme."
+      }
+    },
+    "ai": {
+      "title": "Ask AI",
+      "subtitle": "Get an instant, grounded answer from your books and tax knowledge. For complex matters, start a chat with an expert.",
+      "startersLabel": "Try asking",
+      "starters": {
+        "gstDue": "When is my next GST return due?",
+        "itc": "How do I claim input tax credit?",
+        "lateFee": "What is the late fee for filing GSTR-3B late?",
+        "itrRegime": "Which ITR regime should I choose?"
+      },
+      "inputPlaceholder": "Ask a question…",
+      "send": "Send",
+      "thinking": "Thinking…",
+      "answerLabel": "AI answer",
+      "sources": {
+        "none": "General answer — not drawn from your data yet.",
+        "count": "Grounded in {{count}} source(s) from your data"
+      },
+      "disclaimer": "AI answers can be imperfect. Verify important figures and consult an expert for filing decisions.",
+      "error": {
+        "rateLimited": "You've reached the AI limit for now. Please try again shortly.",
+        "generic": "Couldn't get an answer. Please try again."
+      },
+      "entry": {
+        "cta": "Ask AI",
+        "subtitle": "Instant grounded answers to your tax & GST questions"
+      }
+    },
+    "settings": {
+      "title": "Settings",
+      "section": {
+        "accessibility": "Accessibility",
+        "network": "Network",
+        "security": "Security"
+      },
+      "haptics": {
+        "label": "Haptic feedback",
+        "desc": "Vibrate on taps, confirmations and celebrations."
+      },
+      "network": {
+        "autoUploadCellular": "Auto-upload on cellular",
+        "autoUploadCellularDesc": "Upload documents over mobile data. Off saves your data plan.",
+        "compress": "Compress before upload",
+        "compressDesc": "Shrink photos on slow or cellular connections to upload faster.",
+        "showChip": "Show network status chip",
+        "showChipDesc": "Display a connection indicator in the top bar."
+      },
+      "security": {
+        "requireBiometric": "Require biometric for sensitive screens",
+        "requireBiometricDesc": "Use Face ID / fingerprint before approving filings, loans and payments.",
+        "graceWindow": "Re-ask after",
+        "graceWindowDesc": "Skip re-asking within this window after a successful unlock. 'Never' asks every time.",
+        "grace": {
+          "5min": "5 min",
+          "1min": "1 min",
+          "never": "Never"
+        }
+      }
+    },
+    "appUpdate": {
+      "required": {
+        "title": "Update required",
+        "message": "This version of SnapAccount is no longer supported. Please update to the latest version to continue."
+      },
+      "available": {
+        "message": "A new version of SnapAccount is available.",
+        "action": "Update"
+      },
+      "cta": "Update now",
+      "dismiss": "Dismiss"
     }
   }
 }

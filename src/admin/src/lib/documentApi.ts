@@ -12,6 +12,7 @@
  *   GET    /documents/admin/dashboard-stats — admin stats
  *   GET    /documents/admin/activity        — daily activity series
  *   GET    /documents/admin/users/{userId}/documents — user docs
+ *   GET    /documents/admin/queue           — DG-DOC-04: admin queue with server SLA fields
  *
  * Review-decision endpoints (B15 — backend now implemented):
  *   POST   /documents/{id}/approve              — approve (requires document.review)
@@ -181,6 +182,95 @@ export async function getDocumentActivity(range: '7D' | '30D' | '90D' = '7D'): P
 export async function getAdminUserDocuments(userId: string, limit = 20): Promise<DocumentListItem[]> {
   const res = await api.get(`/documents/admin/users/${userId}/documents`, { params: { limit } })
   return z.array(DocumentListItemSchema).parse(res.data)
+}
+
+// ---------------------------------------------------------------------------
+// DG-DOC-04: Admin document queue with server-computed SLA fields
+// Endpoint: GET /documents/admin/queue (GetAdminDocumentQueueQuery, document.admin)
+// ---------------------------------------------------------------------------
+
+/**
+ * DG-DOC-04: Admin queue item with server-computed SLA fields.
+ * ocrConfidence is optional — the current backend queue DTO does not project it
+ * (it requires a join to ocr_result). When the backend adds it, this schema will
+ * parse it automatically without any further frontend changes.
+ */
+export const AdminDocumentQueueItemSchema = z.object({
+  id: z.string().uuid(),
+  fileName: z.string(),
+  status: z.string(),
+  categoryCode: z.string().nullable(),
+  categoryName: z.string().nullable(),
+  vendorName: z.string().nullable(),
+  amount: z.number().nullable(),
+  documentDate: z.string().nullable(),
+  uploadedAt: z.string(),
+  /** Server-computed deadline = uploadedAt + category.SlaHours. Null if no category SLA. */
+  slaDeadline: z.string().nullable(),
+  /** Hours remaining until SLA breach. Negative = already overdue. Null if no category SLA. */
+  slaHoursRemaining: z.number().nullable(),
+  /** True when past SLA deadline and document is still pending (not yet APPROVED/REJECTED/ARCHIVED). */
+  isOverdue: z.boolean(),
+  organizationId: z.string().uuid().nullable(),
+  /**
+   * Overall OCR confidence (0-1 scale). Optional — backend queue DTO does not yet project this
+   * field; when added, it will surface here automatically. Frontend passes ocrConfidence filter
+   * params to the backend now so the wire-up is ready.
+   */
+  ocrConfidence: z.number().nullable().optional(),
+})
+export type AdminDocumentQueueItem = z.infer<typeof AdminDocumentQueueItemSchema>
+
+export const AdminDocumentQueuePageSchema = z.object({
+  items: z.array(AdminDocumentQueueItemSchema),
+  totalCount: z.number(),
+  page: z.number(),
+  pageSize: z.number(),
+  totalPages: z.number(),
+  hasNextPage: z.boolean(),
+  hasPreviousPage: z.boolean(),
+})
+export type AdminDocumentQueuePage = z.infer<typeof AdminDocumentQueuePageSchema>
+
+export type AdminQueueSortBy = 'sla_asc' | 'uploaded_desc'
+export type OcrConfidenceBand = 'high' | 'medium' | 'low'
+
+export interface GetAdminDocumentQueueParams {
+  page?: number
+  pageSize?: number
+  status?: string
+  categoryId?: string
+  overdueOnly?: boolean
+  /** Sort order: 'sla_asc' (overdue first) | 'uploaded_desc' (default). */
+  sortBy?: AdminQueueSortBy
+  /**
+   * OCR confidence band filter. Translates to approximate server-side thresholds:
+   *   high   → ocrMinConfidence=0.8
+   *   medium → ocrMinConfidence=0.5 & ocrMaxConfidence=0.8
+   *   low    → ocrMaxConfidence=0.5
+   * Backend ignores unknown params, so this is forward-compatible once the server
+   * implements the filter.
+   */
+  ocrBand?: OcrConfidenceBand
+}
+
+/** GET /documents/admin/queue — DG-DOC-04: admin queue with server-computed SLA / overdue fields. */
+export async function getAdminDocumentQueue(
+  params: GetAdminDocumentQueueParams = {},
+): Promise<AdminDocumentQueuePage> {
+  // Translate ocrBand -> numeric confidence range query params
+  const { ocrBand, ...rest } = params
+  const ocrParams: Record<string, number> = {}
+  if (ocrBand === 'high') {
+    ocrParams.ocrMinConfidence = 0.8
+  } else if (ocrBand === 'medium') {
+    ocrParams.ocrMinConfidence = 0.5
+    ocrParams.ocrMaxConfidence = 0.8
+  } else if (ocrBand === 'low') {
+    ocrParams.ocrMaxConfidence = 0.5
+  }
+  const res = await api.get('/documents/admin/queue', { params: { ...rest, ...ocrParams } })
+  return AdminDocumentQueuePageSchema.parse(res.data)
 }
 
 // ---------------------------------------------------------------------------

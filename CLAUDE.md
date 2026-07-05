@@ -8,7 +8,7 @@ SnapAccount — Mobile-first SME financial platform for accounting, GST filing, 
 
 ## Tech Stack
 
-- Backend: .NET 10, C# 14, Clean Architecture, EF Core 10, .NET Aspire, MediatR, Microservices (12 services)
+- Backend: .NET 10, C# 14, Clean Architecture, EF Core 10, .NET Aspire, MediatR, **3 composite services** (Platform, Finance, Assist — 12 modules merged)
 - Frontend: React 19, TypeScript, TanStack Query, React Router v7, Tailwind CSS v4
 - Mobile: React Native (Expo SDK 52+), TypeScript, React Navigation v7, NativeWind
 - Database: PostgreSQL 17 + pgvector extension, schema-per-service isolation
@@ -26,15 +26,17 @@ SnapAccount — Mobile-first SME financial platform for accounting, GST filing, 
 ### Backend (.NET / Aspire)
 
 ```bash
-# Run all 12 microservices via Aspire (preferred)
-cd backend && dotnet run --project AppHost
-# Aspire dashboard: http://localhost:15888
+# Run all 3 composite services via Aspire (preferred)
+cd backend && dotnet run --project Services/AppHost
+# Aspire dashboard: https://localhost:17241
 
-# Run a single service
-cd backend/Services/AuthService/AuthService.Api && dotnet run
+# Run a single composite
+cd backend/Services/PlatformService/Platform.WebApi && dotnet run   # :5201
+cd backend/Services/FinanceService/Finance.WebApi && dotnet run    # :5202
+cd backend/Services/AssistService/Assist.WebApi && dotnet run     # :5203
 
-# Set DB password secret (required once per service before first run)
-cd backend/Services/<ServiceName>/<ServiceName>.Api
+# Set DB password secret (once per composite WebApi host)
+cd backend/Services/PlatformService/Platform.WebApi
 dotnet user-secrets init && dotnet user-secrets set "DB_PASSWORD" "postgresql"
 
 # Run all backend tests (xUnit)
@@ -45,9 +47,9 @@ cd backend && dotnet test --filter "Category=Unit"  # Unit tests only
 cd tests/unit/AuthService && dotnet test
 cd tests/integration/AuthService && dotnet test
 
-# Add EF Core migration for a service
-cd backend/Services/<ServiceName>/<ServiceName>.Infrastructure
-dotnet ef migrations add <MigrationName> --startup-project ../<ServiceName>.Api
+# Add EF Core migration for a module (example: Auth under Platform)
+cd backend/Services/PlatformService/Platform.Infrastructure
+dotnet ef migrations add <MigrationName> --startup-project ../Platform.WebApi
 ```
 
 ### Admin Frontend (React + Vite)
@@ -90,13 +92,21 @@ docker compose up -d
 
 ## Architecture
 
-### Backend — Clean Architecture per Service
+### Backend — 3 Composite Services (laundryghar-style)
 
-Each microservice (`backend/Services/<Name>Service/`) follows this 4-layer structure:
-- `<Name>Service.Api` — Minimal API endpoints (no MVC controllers), DI wiring in `Program.cs`, Hangfire jobs, request/response DTOs
-- `<Name>Service.Application` — MediatR commands/queries, validators, CQRS handlers
-- `<Name>Service.Domain` — entities, domain events, value objects (no dependencies)
-- `<Name>Service.Infrastructure` — EF Core DbContext, repositories, external service adapters
+Each composite (`PlatformService`, `FinanceService`, `AssistService`) has exactly **4 projects**:
+- `<Composite>.WebApi` — composite host, endpoints, DI wiring in `Program.cs`
+- `<Composite>.Application` — MediatR commands/queries (module subfolders: `Auth/`, `Gst/`, etc.)
+- `<Composite>.Domain` — entities, domain events, value objects
+- `<Composite>.Infrastructure` — EF Core DbContext per module, repositories, adapters
+
+| Composite | Port | Modules |
+|-----------|------|---------|
+| **Platform** | 5201 | Auth, Subscription, Notification |
+| **Finance** | 5202 | Document, Accounting, GST, Loan, ITR, Report |
+| **Assist** | 5203 | Chat, AI, Callback |
+
+Module namespaces are unchanged (`AuthService.Application`, etc.) — only project layout changed.
 
 Shared base types live in `backend/Shared/`:
 - `SnapAccount.Shared.Domain` — `BaseEntity`, `Result<T>`, `Error`, `ValueObject`, `IDomainEvent`, `DomainEvent`
@@ -105,7 +115,40 @@ Shared base types live in `backend/Shared/`:
 - `SnapAccount.Shared.Application/Behaviors/` — MediatR pipeline (order: `LoggingBehavior` → `ValidationBehavior` (FluentValidation) → `PermissionBehavior`). RBAC is enforced by `[RequiresPermission("perm.name")]` on a command/query class
 - `SnapAccount.Shared.Infrastructure` — `BaseDbContext`, `FirebaseAuthMiddleware`, `GoogleCloudStorageService`, `GooglePubSubPublisher`
 
-All services share a single PostgreSQL database with schema-per-service isolation. .NET Aspire (`AppHost`) handles service discovery and wires all services together with named references (`auth-service`, `document-service`, etc.).
+All services share a single PostgreSQL database with schema-per-service isolation. .NET Aspire (`AppHost`) runs **5 runtime processes** (same consolidation *pattern* as LaundryGhar, SnapAccount's own names/ports):
+
+```
+                    ┌──────────────────┐
+                    │  Aspire AppHost  │
+                    └────────┬─────────┘
+                             │
+                    ┌────────▼─────────┐
+                    │   API Gateway    │
+                    │   YARP :5000     │
+                    └────────┬─────────┘
+         ┌───────────────────┼───────────────────┐
+         │                   │                   │
+         ▼                   ▼                   ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│ Platform :5201  │ │ Finance :5202   │ │ Assist :5203    │
+│ Auth            │ │ Document        │ │ Chat            │
+│ Subscription    │ │ Accounting      │ │ AI              │
+│ Notification    │ │ GST, Loan, ITR  │ │ Callback        │
+│                 │ │ Report          │ │                 │
+└────────┬────────┴────────┬──────────┴────────┬──────────┘
+         └─────────────────┼───────────────────┘
+                           ▼
+                 PostgreSQL / Redis
+```
+
+| Process | Port | Absorbed modules |
+|---------|------|------------------|
+| **API Gateway** | 5000 | Single client entry (admin, mobile) |
+| **Platform** | 5201 | Auth, Subscription, Notification |
+| **Finance** | 5202 | Document, Accounting, GST, Loan, ITR, Report |
+| **Assist** | 5203 | Chat, AI, Callback |
+
+Gateway: `backend/Services/Gateway/`. Aspire service names: `platform-service`, `finance-service`, `assist-service`.
 
 For deeper backend conventions (full MediatR pipeline order, `DependencyInjection.cs` patterns, DTO placement) see `backend/CLAUDE.md`.
 
@@ -134,9 +177,13 @@ For deeper backend conventions (full MediatR pipeline order, `DependencyInjectio
 - Minimum touch target: 44x44pt
 - NativeWind (Tailwind for RN) for styling
 
-### Microservices
+### Composites & Modules
 
-Auth, Document, Accounting, GST, Loan, ITR, Chat, Notification, Report, Subscription, AI, Callback — each in `backend/Services/<Name>Service/` with the 4-layer Clean Architecture structure. (Callback added 2026-04-25 in Phase 6E.)
+**3 composites** (Platform, Finance, Assist) each with 4 layer projects. **12 modules** retain their schemas and namespaces:
+
+- **Platform** (:5201): Auth, Subscription, Notification
+- **Finance** (:5202): Document, Accounting, GST, Loan, ITR, Report
+- **Assist** (:5203): Chat, AI, Callback
 
 ## Database
 

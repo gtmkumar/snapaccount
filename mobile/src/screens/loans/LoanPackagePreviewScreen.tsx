@@ -38,6 +38,7 @@ import {
   getLoanPackageDownloadUrl,
   submitLoanApplication,
 } from '../../api/loans';
+import { useBiometricGate } from '../../hooks/useBiometricGate';
 import { PackageMetaStrip } from '../../components/loans/PackageMetaStrip';
 import { PdfViewerMobile } from '../../components/loans/PdfViewerMobile';
 import { DisclaimerCard } from '../../components/loans/DisclaimerCard';
@@ -53,6 +54,7 @@ export function LoanPackagePreviewScreen({ navigation, route }: Props) {
   const styles = useStyles();
   useSensitiveScreen();
   const { t } = useTranslation();
+  const { trigger: triggerBiometric } = useBiometricGate();
   const { applicationId } = route.params;
 
   // View-time biometric gate
@@ -133,27 +135,14 @@ export function LoanPackagePreviewScreen({ navigation, route }: Props) {
 
   const handleSubmitConfirm = async () => {
     setShowSubmitConfirm(false);
-    // SEC-048: Submit-time biometric gate (second challenge) — real LocalAuthentication
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    if (!hasHardware) {
-      Alert.alert(
-        t('mobile.loan.preview.bio.submitPrompt'),
-        t('mobile.common.usePin'),
-        [
-          { text: t('mobile.common.cancel'), style: 'cancel' },
-          { text: t('common.confirm'), onPress: () => submitMutation.mutate() },
-        ],
-      );
-      return;
-    }
-
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: t('mobile.biometric.confirm'),
-      fallbackLabel: t('common.usePin'),
-      disableDeviceFallback: false,
+    // SEC-048 + DG-MOBUX-07: Submit-time biometric gate via the centralized
+    // useBiometricGate hook — gains the 5-min grace window + structured refusal
+    // (first cancel → retry Alert, second → cancel). flowKey 'loan.submit'.
+    const passed = await triggerBiometric({
+      promptMessage: t('mobile.loan.preview.bio.submitPrompt'),
+      flowKey: 'loan.submit',
     });
-
-    if (result.success) {
+    if (passed) {
       submitMutation.mutate();
     }
     // On failure/cancel: do nothing — user can tap submit again

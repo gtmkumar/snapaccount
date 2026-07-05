@@ -2,7 +2,7 @@
  * CA Appointment API — GAP-031 (Wave 7A, ChatService).
  *
  * RECONCILED 2026-06-12 against docs/api/endpoints.md "Wave 7A" (+ addendum)
- * and backend/Services/ChatService/ChatService.Api/Endpoints/Appointments.cs:
+ * and backend/Services/AssistService/Assist.WebApi/Endpoints/Chat/Appointments.cs:
  *  - Base path /appointments (ChatService :5107 — see lib/api SERVICE_PORTS)
  *  - GET  /appointments/ca-profiles                  → { items: CaProfileDto[] }
  *  - GET  /appointments/slots?caProfileId&date       → { slots: AvailableSlotDto[] }
@@ -101,6 +101,12 @@ export interface AppointmentDetail extends Appointment {
   ratedAt?: string | null;
   cancelledByCa?: boolean;
   caCancellationReason?: string | null;
+  /**
+   * Post-call summary note written by the CA after the appointment is COMPLETED.
+   * DG-CHAT-05 (migration 105). Null until the CA submits one via
+   * PUT /appointments/{id}/ca-summary (chat.slots.manage perm).
+   */
+  caSummaryNote?: string | null;
 }
 
 export interface AppointmentListResponse {
@@ -136,6 +142,8 @@ interface AppointmentDetailDto extends AppointmentSummaryDto {
   ratedAt?: string | null;
   cancelledByCa?: boolean;
   caCancellationReason?: string | null;
+  /** DG-CHAT-05: CA post-call summary note (migration 105). */
+  caSummaryNote?: string | null;
 }
 
 function durationMinutes(startIso: string, endIso: string): number {
@@ -281,6 +289,7 @@ export async function getAppointment(id: string): Promise<AppointmentDetail> {
     ratedAt: dto.ratedAt ?? null,
     cancelledByCa: dto.cancelledByCa ?? false,
     caCancellationReason: dto.caCancellationReason ?? null,
+    caSummaryNote: dto.caSummaryNote ?? null,
   };
 }
 

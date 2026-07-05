@@ -53,7 +53,7 @@ public sealed class ItrDpdpErasureTests : IDisposable
     [Fact]
     public void Filing_Anonymize_ClearsComputationJsonb()
     {
-        var filing = Filing.Create(Guid.NewGuid(), "AY2025-26", "ITR-1", "NEW");
+        var filing = Filing.Create(Guid.NewGuid(), "AY2025-26", "ITR-1", "NEW", Guid.NewGuid());
         filing.UpdateIncomeHeads(500000m, 0m, 0m, 0m, 0m);
         filing.PinComputation(Guid.NewGuid(), """{"gross":500000}""", "hash123");
 
@@ -127,7 +127,7 @@ public sealed class ItrDpdpErasureTests : IDisposable
             organizationId: orgId);
         _db.Assessees.Add(assessee);
 
-        var filing = Filing.Create(assessee.Id, "AY2025-26", "ITR-1", "NEW");
+        var filing = Filing.Create(assessee.Id, "AY2025-26", "ITR-1", "NEW", Guid.NewGuid());
         _db.Filings.Add(filing);
         await _db.SaveChangesAsync(CancellationToken.None);
 
@@ -181,8 +181,8 @@ public sealed class ItrDpdpErasureTests : IDisposable
 
         _db.Assessees.AddRange(assesseeToDelete, assesseeToKeep);
 
-        var filingToDelete = Filing.Create(assesseeToDelete.Id, "AY2025-26", "ITR-1", "NEW");
-        var filingToKeep = Filing.Create(assesseeToKeep.Id, "AY2025-26", "ITR-1", "FILED");
+        var filingToDelete = Filing.Create(assesseeToDelete.Id, "AY2025-26", "ITR-1", "NEW", Guid.NewGuid());
+        var filingToKeep = Filing.Create(assesseeToKeep.Id, "AY2025-26", "ITR-1", "FILED", Guid.NewGuid());
         _db.Filings.AddRange(filingToDelete, filingToKeep);
         await _db.SaveChangesAsync(CancellationToken.None);
 

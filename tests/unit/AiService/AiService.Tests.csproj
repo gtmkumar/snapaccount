@@ -28,9 +28,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\backend\Services\AiService\AiService.Domain\AiService.Domain.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\AiService\AiService.Application\AiService.Application.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\AiService\AiService.Infrastructure\AiService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.Domain/Assist.Domain.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.Application/Assist.Application.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.Infrastructure/Assist.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Application\SnapAccount.Shared.Application.csproj" />
   </ItemGroup>

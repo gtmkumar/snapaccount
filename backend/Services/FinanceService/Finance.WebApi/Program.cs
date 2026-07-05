@@ -1,0 +1,173 @@
+using AccountingService.Application;
+using AccountingService.Infrastructure;
+using DocumentService.Application;
+using DocumentService.Infrastructure;
+using DocumentService.Infrastructure.SignalR;
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
+using GstService.Application;
+using GstService.Infrastructure;
+using GstService.Infrastructure.Jobs;
+using Hangfire;
+using Hangfire.PostgreSql;
+using ItrService.Application;
+using ItrService.Infrastructure;
+using LoanService.Infrastructure;
+using LoanService.Infrastructure.Webhooks;
+using Microsoft.AspNetCore.RateLimiting;
+using ReportService.Infrastructure;
+using Scalar.AspNetCore;
+using Serilog;
+using SnapAccount.Shared.Api;
+using SnapAccount.Shared.Infrastructure.Auth;
+using System.Reflection;
+using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+
+// ═══════════════════════════════════════════════════════════════
+// FinanceService.Api — Phase 3 modular monolith composite host
+// Merges: Document + Accounting + GST + Loan + ITR + Report
+// ═══════════════════════════════════════════════════════════════
+
+Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateBootstrapLogger();
+
+try
+{
+    var builder = WebApplication.CreateBuilder(args);
+
+    builder.Services.Configure<HostOptions>(builder.Configuration.GetSection("HostOptions"));
+
+    builder.Host.UseSerilog((ctx, lc) => lc
+        .ReadFrom.Configuration(ctx.Configuration)
+        .WriteTo.Console()
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("Service", "FinanceService"));
+
+    builder.Services.AddDocumentInfrastructure(builder.Configuration);
+    builder.Services.AddDocumentApplicationServices();
+    builder.Services.AddAccountingApplicationServices();
+    builder.Services.AddAccountingInfrastructure(builder.Configuration);
+    builder.Services.AddGstInfrastructure(builder.Configuration);
+    builder.Services.AddGstApplicationServices();
+    builder.Services.AddLoanInfrastructure(builder.Configuration);
+    builder.Services.AddScoped<DisbursementWebhookHandler>();
+    builder.Services.AddItrInfrastructure(builder.Configuration);
+    builder.Services.AddItrApplicationServices();
+    builder.Services.AddReportInfrastructure(builder.Configuration);
+
+    var dbPassword = builder.Configuration["DB_PASSWORD"] ?? "postgresql";
+    var hangfireConnStr = (builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? builder.Configuration.GetConnectionString("snapaccount")
+        ?? "Host=localhost;Port=5432;Database=snapaccount;Username=postgres;Password=#{DB_PASSWORD}#")
+        .Replace("#{DB_PASSWORD}#", dbPassword);
+    builder.Services.AddHangfire(config => config
+        .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(hangfireConnStr)));
+    builder.Services.AddHangfireServer();
+    builder.Services.AddTransient<ImsDeemedAcceptanceJob>();
+
+    builder.Services.ConfigureHttpJsonOptions(opts =>
+        opts.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+    builder.Services.AddOpenApi();
+    builder.Services.AddHealthChecks();
+
+    builder.Services.AddCors(options =>
+        options.AddDefaultPolicy(p =>
+            p.WithOrigins(
+                    builder.Configuration["AllowedOrigins:AdminPanel"] ?? "https://admin.snapaccount.in",
+                    builder.Configuration["AllowedOrigins:Mobile"] ?? "https://snapaccount.in")
+             .AllowAnyMethod()
+             .AllowAnyHeader()
+             .AllowCredentials()));
+
+    builder.Services.AddSnapAuthentication();
+    builder.Services.AddHttpContextAccessor();
+
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.AddFixedWindowLimiter("standard", opt =>
+        {
+            opt.PermitLimit = 100;
+            opt.Window = TimeSpan.FromMinutes(1);
+            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            opt.QueueLimit = 0;
+        });
+
+        options.AddFixedWindowLimiter("ai", opt =>
+        {
+            opt.PermitLimit = 20;
+            opt.Window = TimeSpan.FromMinutes(1);
+            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            opt.QueueLimit = 0;
+        });
+
+        options.AddFixedWindowLimiter("gst-write-strict", opt =>
+        {
+            opt.PermitLimit = 30;
+            opt.Window = TimeSpan.FromMinutes(1);
+            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            opt.QueueLimit = 0;
+        });
+
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    });
+
+    if (SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(builder.Configuration)
+        && FirebaseApp.DefaultInstance == null)
+    {
+        var credentialJson = builder.Configuration["Firebase:ServiceAccountJson"];
+        var credential = string.IsNullOrEmpty(credentialJson)
+            ? GoogleCredential.GetApplicationDefault()
+            : GoogleCredential.FromJson(credentialJson);
+        FirebaseApp.Create(new AppOptions { Credential = credential });
+    }
+
+    // DG-DOC-07: SignalR for real-time document status push (DocumentHub at /hubs/documents).
+    // In production (GCP + Redis) add a Redis backplane via:
+    //   .AddStackExchangeRedis(redisConnStr)
+    // For local dev the in-memory backplane is sufficient.
+    builder.Services.AddSignalR();
+
+    builder.Services.AddExceptionHandler<CustomExceptionHandler>();
+    builder.Services.AddProblemDetails();
+
+    var app = builder.Build();
+
+    if (app.Environment.IsDevelopment())
+    {
+        app.MapOpenApi();
+        app.MapScalarApiReference();
+    }
+
+    app.UseSerilogRequestLogging();
+    app.UseCors();
+    app.UseRateLimiter();
+    app.UseMiddleware<FirebaseAuthMiddleware>();
+    app.UseAuthorization();
+    app.UseExceptionHandler();
+
+    app.MapHealthChecks("/healthz");
+
+    app.MapEndpoints(Assembly.GetExecutingAssembly());
+
+    // DG-DOC-07: Document status change hub for real-time mobile push.
+    app.MapHub<DocumentHub>("/hubs/documents")
+        .RequireAuthorization();
+
+    app.Lifetime.ApplicationStarted.Register(() =>
+    {
+        var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
+        recurringJobs.AddOrUpdate<ImsDeemedAcceptanceJob>(
+            recurringJobId: "ims-deemed-acceptance-monthly",
+            methodCall: job => job.RunAsync(),
+            cronExpression: "30 20 13 * *",
+            options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+        Log.Information("FinanceService: Hangfire recurring job 'ims-deemed-acceptance-monthly' registered.");
+    });
+
+    SessionTokenSecret.ValidateOrThrow(app.Configuration, app.Environment.EnvironmentName);
+
+    app.Run();
+}
+catch (Exception ex) { Log.Fatal(ex, "FinanceService failed to start."); }
+finally { Log.CloseAndFlush(); }

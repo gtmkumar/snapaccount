@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Check, X, Copy, ExternalLink, ChevronDown, ChevronUp, Phone } from 'lucide-react'
+import { ArrowLeft, Check, X, Copy, ExternalLink, ChevronDown, ChevronUp, Phone, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge, Badge } from '@/components/ui/Badge'
@@ -23,9 +23,14 @@ import {
   listReturnInvoices,
   getIrnStatus,
   getEwbStatus,
+  aggregateB2CSummary,
+  aggregateHsnSummary,
+  detectDocumentIssues,
   type GstReturn,
   type AuditEvent,
   type HsnSacCode,
+  type ReturnInvoiceDto,
+  type DocumentIssueType,
 } from '@/lib/gstApi'
 
 // ---------------------------------------------------------------------------
@@ -391,13 +396,447 @@ function ArnCaptureSection({ returnId, existingArn, existingArnSavedAt, existing
 }
 
 // ---------------------------------------------------------------------------
+// GSTR-1 sub-tab: B2B Invoices table
+// ---------------------------------------------------------------------------
+interface Gstr1B2BTabProps {
+  invoices: ReturnInvoiceDto[]
+  isLoading: boolean
+}
+
+function Gstr1B2BTab({ invoices, isLoading }: Gstr1B2BTabProps) {
+  const b2b = invoices.filter(i => i.invoiceType === 'B2B' || i.invoiceType === 'EXPORT')
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 animate-pulse">
+        {[1, 2, 3, 4].map(i => <div key={i} className="h-10 bg-neutral-100 rounded-xl" />)}
+      </div>
+    )
+  }
+
+  return (
+    <Card padding="none">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" aria-label={t('admin.gst.return.tab.b2b')}>
+          <thead>
+            <tr className="bg-neutral-50 border-b border-neutral-200">
+              {[
+                t('admin.gst.return.invoices.col.invoiceNo'),
+                t('admin.gst.return.invoices.col.date'),
+                t('admin.gst.return.invoices.col.buyerGstin'),
+                t('admin.gst.return.invoices.col.taxableValue'),
+                t('admin.gst.return.invoices.col.cgst'),
+                t('admin.gst.return.invoices.col.sgst'),
+                t('admin.gst.return.invoices.col.igst'),
+                t('admin.gst.return.invoices.col.cess'),
+                t('admin.gst.return.invoices.col.irn'),
+              ].map(col => (
+                <th key={col} scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider whitespace-nowrap">
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-100">
+            {b2b.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-4 py-10 text-center text-sm text-neutral-400">
+                  {t('admin.gst.return.invoices.empty')}
+                </td>
+              </tr>
+            ) : b2b.map(inv => (
+              <tr key={inv.invoiceId} className="hover:bg-neutral-50">
+                <td className="px-4 py-3 font-mono text-xs text-neutral-800">{inv.invoiceNumber || '—'}</td>
+                <td className="px-4 py-3 text-xs text-neutral-600">{inv.invoiceDate}</td>
+                <td className="px-4 py-3 font-mono text-xs text-neutral-600">{inv.buyerGstin ?? '—'}</td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={inv.taxableValue} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={inv.cgstAmount} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={inv.sgstAmount} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={inv.igstAmount} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={inv.cessAmount} size="sm" /></td>
+                <td className="px-4 py-3">
+                  {inv.irnStatus === 'GENERATED' ? (
+                    <Badge variant="success" size="sm">IRN</Badge>
+                  ) : (
+                    <Badge variant="neutral" size="sm">{t('admin.gst.return.invoices.irn.pending')}</Badge>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// GSTR-1 sub-tab: B2C Summary
+// ---------------------------------------------------------------------------
+interface Gstr1B2CTabProps {
+  invoices: ReturnInvoiceDto[]
+  isLoading: boolean
+}
+
+function Gstr1B2CTab({ invoices, isLoading }: Gstr1B2CTabProps) {
+  const rows = useMemo(() => aggregateB2CSummary(invoices), [invoices])
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 animate-pulse">
+        {[1, 2, 3].map(i => <div key={i} className="h-10 bg-neutral-100 rounded-xl" />)}
+      </div>
+    )
+  }
+
+  return (
+    <Card padding="none">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" aria-label={t('admin.gst.return.tab.b2c')}>
+          <thead>
+            <tr className="bg-neutral-50 border-b border-neutral-200">
+              {[
+                t('admin.gst.return.b2c.rateCol'),
+                t('admin.gst.return.b2c.taxableCol'),
+                t('admin.gst.return.b2c.igstCol'),
+                t('admin.gst.return.b2c.cgstCol'),
+                t('admin.gst.return.b2c.sgstCol'),
+                t('admin.gst.return.b2c.totalTaxCol'),
+                t('admin.gst.return.b2c.invoiceCountCol'),
+              ].map(col => (
+                <th key={col} scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider whitespace-nowrap">
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-100">
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-neutral-400">
+                  {t('admin.gst.return.b2c.empty')}
+                </td>
+              </tr>
+            ) : rows.map(row => (
+              <tr key={row.gstRate} className="hover:bg-neutral-50">
+                <td className="px-4 py-3 font-medium text-neutral-700">{row.gstRate}%</td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={row.taxableAmount} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={row.igstAmount} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={row.cgstAmount} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={row.sgstAmount} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={row.totalTax} size="sm" /></td>
+                <td className="px-4 py-3 text-neutral-600 text-right">{row.invoiceCount}</td>
+              </tr>
+            ))}
+          </tbody>
+          {rows.length > 0 && (
+            <tfoot>
+              <tr className="bg-neutral-50 border-t-2 border-neutral-300 font-semibold">
+                <td className="px-4 py-3 text-sm font-bold text-neutral-900">Total</td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={rows.reduce((s, r) => s + r.taxableAmount, 0)} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={rows.reduce((s, r) => s + r.igstAmount, 0)} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={rows.reduce((s, r) => s + r.cgstAmount, 0)} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={rows.reduce((s, r) => s + r.sgstAmount, 0)} size="sm" /></td>
+                <td className="px-4 py-3 text-right"><AmountDisplay amount={rows.reduce((s, r) => s + r.totalTax, 0)} size="sm" /></td>
+                <td className="px-4 py-3 text-right text-neutral-600">{rows.reduce((s, r) => s + r.invoiceCount, 0)}</td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// GSTR-1 sub-tab: Credit / Debit Notes
+// ---------------------------------------------------------------------------
+interface Gstr1CreditDebitTabProps {
+  invoices: ReturnInvoiceDto[]
+  isLoading: boolean
+}
+
+function Gstr1CreditDebitTab({ invoices, isLoading }: Gstr1CreditDebitTabProps) {
+  const notes = invoices.filter(i => i.invoiceType === 'CREDIT_NOTE' || i.invoiceType === 'DEBIT_NOTE')
+
+  const noteTypeLabel = (type: ReturnInvoiceDto['invoiceType']) =>
+    type === 'CREDIT_NOTE'
+      ? t('admin.gst.return.creditDebit.type.CREDIT_NOTE')
+      : t('admin.gst.return.creditDebit.type.DEBIT_NOTE')
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 animate-pulse">
+        {[1, 2].map(i => <div key={i} className="h-10 bg-neutral-100 rounded-xl" />)}
+      </div>
+    )
+  }
+
+  return (
+    <Card padding="none">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" aria-label={t('admin.gst.return.tab.creditDebit')}>
+          <thead>
+            <tr className="bg-neutral-50 border-b border-neutral-200">
+              {[
+                t('admin.gst.return.creditDebit.col.noteNo'),
+                t('admin.gst.return.creditDebit.col.date'),
+                t('admin.gst.return.creditDebit.col.type'),
+                t('admin.gst.return.creditDebit.col.buyerGstin'),
+                t('admin.gst.return.creditDebit.col.taxable'),
+                t('admin.gst.return.invoices.col.cgst'),
+                t('admin.gst.return.invoices.col.sgst'),
+                t('admin.gst.return.invoices.col.igst'),
+                t('admin.gst.return.creditDebit.col.tax'),
+              ].map(col => (
+                <th key={col} scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider whitespace-nowrap">
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-100">
+            {notes.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-4 py-10 text-center text-sm text-neutral-400">
+                  {t('admin.gst.return.creditDebit.empty')}
+                </td>
+              </tr>
+            ) : notes.map(note => {
+              const totalTax = note.cgstAmount + note.sgstAmount + note.igstAmount + note.cessAmount
+              return (
+                <tr key={note.invoiceId} className="hover:bg-neutral-50">
+                  <td className="px-4 py-3 font-mono text-xs text-neutral-800">{note.invoiceNumber || '—'}</td>
+                  <td className="px-4 py-3 text-xs text-neutral-600">{note.invoiceDate}</td>
+                  <td className="px-4 py-3">
+                    <Badge
+                      variant={note.invoiceType === 'CREDIT_NOTE' ? 'success' : 'warning'}
+                      size="sm"
+                    >
+                      {noteTypeLabel(note.invoiceType)}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-neutral-600">{note.buyerGstin ?? '—'}</td>
+                  <td className="px-4 py-3 text-right"><AmountDisplay amount={note.taxableValue} size="sm" /></td>
+                  <td className="px-4 py-3 text-right"><AmountDisplay amount={note.cgstAmount} size="sm" /></td>
+                  <td className="px-4 py-3 text-right"><AmountDisplay amount={note.sgstAmount} size="sm" /></td>
+                  <td className="px-4 py-3 text-right"><AmountDisplay amount={note.igstAmount} size="sm" /></td>
+                  <td className="px-4 py-3 text-right"><AmountDisplay amount={totalTax} size="sm" /></td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// GSTR-1 sub-tab: HSN Summary
+// ---------------------------------------------------------------------------
+interface Gstr1HsnSummaryTabProps {
+  invoices: ReturnInvoiceDto[]
+  isLoading: boolean
+}
+
+function Gstr1HsnSummaryTab({ invoices, isLoading }: Gstr1HsnSummaryTabProps) {
+  const rows = useMemo(() => aggregateHsnSummary(invoices), [invoices])
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 animate-pulse">
+        {[1, 2, 3].map(i => <div key={i} className="h-10 bg-neutral-100 rounded-xl" />)}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-neutral-400 px-1">{t('admin.gst.return.hsnSummary.derivedNote')}</p>
+      <Card padding="none">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" aria-label={t('admin.gst.return.tab.hsnSummary')}>
+            <thead>
+              <tr className="bg-neutral-50 border-b border-neutral-200">
+                {[
+                  t('admin.gst.return.hsnSummary.col.description'),
+                  t('admin.gst.return.hsnSummary.col.taxable'),
+                  t('admin.gst.return.hsnSummary.col.cgst'),
+                  t('admin.gst.return.hsnSummary.col.sgst'),
+                  t('admin.gst.return.hsnSummary.col.igst'),
+                  t('admin.gst.return.hsnSummary.col.cess'),
+                ].map(col => (
+                  <th key={col} scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider whitespace-nowrap">
+                    {col}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-neutral-400">
+                    {t('admin.gst.return.hsnSummary.empty')}
+                  </td>
+                </tr>
+              ) : rows.map((row, idx) => (
+                <tr key={idx} className="hover:bg-neutral-50">
+                  <td className="px-4 py-3 text-xs text-neutral-700 max-w-xs truncate" title={row.description}>{row.description}</td>
+                  <td className="px-4 py-3 text-right"><AmountDisplay amount={row.totalTaxableValue} size="sm" /></td>
+                  <td className="px-4 py-3 text-right"><AmountDisplay amount={row.cgstAmount} size="sm" /></td>
+                  <td className="px-4 py-3 text-right"><AmountDisplay amount={row.sgstAmount} size="sm" /></td>
+                  <td className="px-4 py-3 text-right"><AmountDisplay amount={row.igstAmount} size="sm" /></td>
+                  <td className="px-4 py-3 text-right"><AmountDisplay amount={row.cessAmount} size="sm" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// GSTR-1 sub-tab: Document Issues
+// ---------------------------------------------------------------------------
+interface Gstr1DocumentIssuesTabProps {
+  invoices: ReturnInvoiceDto[]
+  isLoading: boolean
+  onReview: (invoiceId: string) => void
+}
+
+const issueLabel: Record<DocumentIssueType, string> = {
+  missingBuyerGstin: 'admin.gst.return.documentIssues.issue.missingBuyerGstin',
+  missingInvoiceNumber: 'admin.gst.return.documentIssues.issue.missingInvoiceNumber',
+  zeroTaxableValue: 'admin.gst.return.documentIssues.issue.zeroTaxableValue',
+  missingHsn: 'admin.gst.return.documentIssues.issue.missingHsn',
+}
+
+function Gstr1DocumentIssuesTab({ invoices, isLoading, onReview }: Gstr1DocumentIssuesTabProps) {
+  const issues = useMemo(() => detectDocumentIssues(invoices), [invoices])
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 animate-pulse">
+        {[1, 2].map(i => <div key={i} className="h-10 bg-neutral-100 rounded-xl" />)}
+      </div>
+    )
+  }
+
+  return (
+    <Card padding="none">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" aria-label={t('admin.gst.return.tab.documentIssues')}>
+          <thead>
+            <tr className="bg-neutral-50 border-b border-neutral-200">
+              {[
+                t('admin.gst.return.documentIssues.col.invoiceNo'),
+                t('admin.gst.return.documentIssues.col.date'),
+                t('admin.gst.return.invoices.col.invoiceType'),
+                t('admin.gst.return.documentIssues.col.issue'),
+                t('admin.gst.return.documentIssues.col.action'),
+              ].map(col => (
+                <th key={col} scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider whitespace-nowrap">
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-100">
+            {issues.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-10 text-center text-sm text-neutral-400">
+                  {t('admin.gst.return.documentIssues.empty')}
+                </td>
+              </tr>
+            ) : issues.map(row => (
+              <tr key={row.invoiceId} className="hover:bg-neutral-50">
+                <td className="px-4 py-3 font-mono text-xs text-neutral-800">{row.invoiceNumber || '—'}</td>
+                <td className="px-4 py-3 text-xs text-neutral-600">{row.invoiceDate}</td>
+                <td className="px-4 py-3">
+                  <Badge variant="neutral" size="sm">{row.invoiceType}</Badge>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    {row.issues.map(issue => (
+                      <span
+                        key={issue}
+                        className="inline-flex items-center gap-1 rounded bg-warning-50 px-2 py-0.5 text-xs text-warning-700 border border-warning-200"
+                      >
+                        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                        {t(issueLabel[issue])}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => onReview(row.invoiceId)}
+                    className="text-xs text-brand-600 hover:underline"
+                  >
+                    {t('admin.gst.return.documentIssues.action.review')}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// GSTR-1 Summary bar
+// ---------------------------------------------------------------------------
+interface Gstr1SummaryBarProps {
+  invoices: ReturnInvoiceDto[]
+}
+
+function Gstr1SummaryBar({ invoices }: Gstr1SummaryBarProps) {
+  const b2bCount = invoices.filter(i => i.invoiceType === 'B2B' || i.invoiceType === 'EXPORT').length
+  const b2cTotal = invoices
+    .filter(i => i.invoiceType === 'B2C')
+    .reduce((s, i) => s + i.totalInvoiceValue, 0)
+  const creditNoteCount = invoices.filter(i => i.invoiceType === 'CREDIT_NOTE' || i.invoiceType === 'DEBIT_NOTE').length
+  const totalTax = invoices.reduce((s, i) => s + i.igstAmount + i.cgstAmount + i.sgstAmount + i.cessAmount, 0)
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-1">
+      {[
+        { label: t('admin.gst.return.summaryBar.b2bCount'), value: String(b2bCount), isAmount: false },
+        { label: t('admin.gst.return.summaryBar.b2cTotal'), value: b2cTotal, isAmount: true },
+        { label: t('admin.gst.return.summaryBar.creditNotes'), value: String(creditNoteCount), isAmount: false },
+        { label: t('admin.gst.return.summaryBar.totalTax'), value: totalTax, isAmount: true },
+      ].map(item => (
+        <div key={item.label} className="rounded-lg bg-neutral-50 border border-neutral-200 px-4 py-3">
+          <p className="text-xs text-neutral-500 mb-1">{item.label}</p>
+          {item.isAmount ? (
+            <AmountDisplay amount={item.value as number} size="md" />
+          ) : (
+            <p className="text-lg font-semibold text-neutral-900">{item.value}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
+
+type Gstr3bTab = 'outward' | 'itc' | 'net' | 'invoices'
+type Gstr1Tab = 'b2b' | 'b2c' | 'creditDebit' | 'hsnSummary' | 'documentIssues'
+
 export default function GstReturnReviewPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'outward' | 'itc' | 'net' | 'invoices'>('outward')
+  const [activeTab3b, setActiveTab3b] = useState<Gstr3bTab>('outward')
+  const [activeTab1, setActiveTab1] = useState<Gstr1Tab>('b2b')
   const [invoicePage, setInvoicePage] = useState(1)
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
   const [invoiceHsnMap, setInvoiceHsnMap] = useState<Record<string, HsnSacCode | null>>({})
@@ -417,12 +856,25 @@ export default function GstReturnReviewPage() {
     staleTime: 30_000,
   })
 
+  const isGstr1 = gstReturn?.returnType === 'GSTR-1'
+
+  // For GSTR-3B: paginated invoices (load only when invoices tab active)
   const { data: invoicesData, isLoading: invoicesLoading } = useQuery({
     queryKey: ['gst-return-invoices', id, invoicePage],
     queryFn: () => listReturnInvoices(id!, { page: invoicePage, pageSize: 15 }),
-    enabled: !!id && activeTab === 'invoices',
+    enabled: !!id && !isGstr1 && activeTab3b === 'invoices',
     staleTime: 60_000,
   })
+
+  // For GSTR-1: load ALL invoices (up to 500) so the sub-tabs can filter/aggregate
+  const { data: gstr1InvoicesData, isLoading: gstr1InvoicesLoading } = useQuery({
+    queryKey: ['gst-return-invoices-all', id],
+    queryFn: () => listReturnInvoices(id!, { page: 1, pageSize: 500 }),
+    enabled: !!id && isGstr1,
+    staleTime: 60_000,
+  })
+
+  const gstr1Invoices = gstr1InvoicesData?.items ?? []
 
   const { data: irnStatus } = useQuery({
     queryKey: ['irn-status', selectedInvoiceId],
@@ -542,273 +994,332 @@ export default function GstReturnReviewPage() {
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         {/* LEFT: Return editor */}
         <div className="xl:col-span-3 space-y-4">
-          {/* Tabs */}
-          <div className="flex border-b border-neutral-200" role="tablist">
-            {[
-              { key: 'outward', label: t('admin.gst.return.tab.outward') },
-              { key: 'itc', label: t('admin.gst.return.tab.itc') },
-              { key: 'net', label: t('admin.gst.return.tab.net') },
-              { key: 'invoices', label: t('admin.gst.return.tab.invoices') },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                role="tab"
-                aria-selected={activeTab === tab.key}
-                onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                className={cn(
-                  'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors',
-                  activeTab === tab.key
-                    ? 'border-brand-500 text-brand-700'
-                    : 'border-transparent text-neutral-500 hover:text-neutral-700'
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
 
-          {/* Outward Supplies Tab */}
-          {activeTab === 'outward' && (
-            <Card padding="none">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm" aria-label="GSTR-3B Section 3.1 Outward Supplies">
-                  <thead>
-                    <tr className="bg-neutral-50 border-b border-neutral-200">
-                      <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">Rate</th>
-                      <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wide">Taxable (₹)</th>
-                      <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wide">CGST (₹)</th>
-                      <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wide">SGST (₹)</th>
-                      <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wide">IGST (₹)</th>
-                      <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wide">Cess (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {taxData.map((row, i) => (
-                      <tr key={row.rate} className="border-b border-neutral-100 hover:bg-neutral-50">
-                        <td className="px-4 py-3">
-                          <span className="font-medium text-neutral-700">{row.rate}</span>
-                        </td>
-                        {(['taxableAmount', 'cgst', 'sgst', 'igst', 'cess'] as const).map((field) => (
-                          <td key={field} className="px-4 py-2 text-right">
-                            <input
-                              type="number"
-                              value={row[field]}
-                              onChange={(e) => {
-                                const updated = [...taxData]
-                                updated[i] = { ...updated[i], [field]: Number(e.target.value) }
-                                setTaxData(updated)
-                              }}
-                              className="w-28 text-right rounded border border-neutral-200 px-2 py-1 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 outline-none font-mono"
-                              aria-label={`${row.rate} ${field}`}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                    <tr className="bg-neutral-50 border-t-2 border-neutral-300 font-semibold">
-                      <td className="px-4 py-3 text-sm font-bold text-neutral-900">Total</td>
-                      <td className="px-4 py-3 text-right"><AmountDisplay amount={totals.taxable} size="sm" /></td>
-                      <td className="px-4 py-3 text-right"><AmountDisplay amount={totals.cgst} size="sm" /></td>
-                      <td className="px-4 py-3 text-right"><AmountDisplay amount={totals.sgst} size="sm" /></td>
-                      <td className="px-4 py-3 text-right"><AmountDisplay amount={totals.igst} size="sm" /></td>
-                      <td className="px-4 py-3 text-right"><AmountDisplay amount={0} size="sm" /></td>
-                    </tr>
-                  </tbody>
-                </table>
+          {/* ── GSTR-1 Review path ── */}
+          {isGstr1 ? (
+            <>
+              {/* Summary stats bar */}
+              <Gstr1SummaryBar invoices={gstr1Invoices} />
+
+              {/* GSTR-1 Sub-tabs */}
+              <div className="flex flex-wrap border-b border-neutral-200 gap-x-1" role="tablist">
+                {(
+                  [
+                    { key: 'b2b', label: t('admin.gst.return.tab.b2b') },
+                    { key: 'b2c', label: t('admin.gst.return.tab.b2c') },
+                    { key: 'creditDebit', label: t('admin.gst.return.tab.creditDebit') },
+                    { key: 'hsnSummary', label: t('admin.gst.return.tab.hsnSummary') },
+                    { key: 'documentIssues', label: t('admin.gst.return.tab.documentIssues') },
+                  ] satisfies { key: Gstr1Tab; label: string }[]
+                ).map(tab => (
+                  <button
+                    key={tab.key}
+                    role="tab"
+                    aria-selected={activeTab1 === tab.key}
+                    onClick={() => setActiveTab1(tab.key)}
+                    className={cn(
+                      'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+                      activeTab1 === tab.key
+                        ? 'border-brand-500 text-brand-700'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-700'
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
-            </Card>
-          )}
 
-          {activeTab === 'itc' && (
-            <Card>
-              <CardHeader title="Section 4 — Input Tax Credit" />
-              <div className="space-y-4">
-                <div className="flex items-center justify-between py-3 border-b border-neutral-100">
-                  <span className="text-sm text-neutral-600">ITC Available (from GSTR-2A/2B)</span>
-                  <AmountDisplay amount={itcAvailable} size="md" />
-                </div>
-                <div className="flex items-center justify-between py-3 border-b border-neutral-100">
-                  <span className="text-sm text-neutral-600">ITC Claimed</span>
-                  <input
-                    type="number"
-                    defaultValue={itcClaimed}
-                    className="w-32 text-right rounded border border-neutral-300 px-3 py-1.5 text-sm focus:border-brand-500 outline-none font-mono"
-                    aria-label="ITC Claimed amount"
-                  />
-                </div>
-                {itcDiff !== 0 && (
-                  <AlertBanner
-                    type="warning"
-                    title="ITC Difference Detected"
-                    description={`₹${itcDiff.toLocaleString('en-IN')} difference between available and claimed ITC. Review GSTR-2A/2B reconciliation.`}
-                  />
-                )}
+              {/* GSTR-1 Tab content */}
+              {activeTab1 === 'b2b' && (
+                <Gstr1B2BTab invoices={gstr1Invoices} isLoading={gstr1InvoicesLoading} />
+              )}
+              {activeTab1 === 'b2c' && (
+                <Gstr1B2CTab invoices={gstr1Invoices} isLoading={gstr1InvoicesLoading} />
+              )}
+              {activeTab1 === 'creditDebit' && (
+                <Gstr1CreditDebitTab invoices={gstr1Invoices} isLoading={gstr1InvoicesLoading} />
+              )}
+              {activeTab1 === 'hsnSummary' && (
+                <Gstr1HsnSummaryTab invoices={gstr1Invoices} isLoading={gstr1InvoicesLoading} />
+              )}
+              {activeTab1 === 'documentIssues' && (
+                <Gstr1DocumentIssuesTab
+                  invoices={gstr1Invoices}
+                  isLoading={gstr1InvoicesLoading}
+                  onReview={(invoiceId) => {
+                    setActiveTab1('b2b')
+                    setSelectedInvoiceId(invoiceId)
+                  }}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              {/* ── GSTR-3B (and other) tabs ── */}
+              <div className="flex border-b border-neutral-200" role="tablist">
+                {[
+                  { key: 'outward' as const, label: t('admin.gst.return.tab.outward') },
+                  { key: 'itc' as const, label: t('admin.gst.return.tab.itc') },
+                  { key: 'net' as const, label: t('admin.gst.return.tab.net') },
+                  { key: 'invoices' as const, label: t('admin.gst.return.tab.invoices') },
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    role="tab"
+                    aria-selected={activeTab3b === tab.key}
+                    onClick={() => setActiveTab3b(tab.key)}
+                    className={cn(
+                      'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors',
+                      activeTab3b === tab.key
+                        ? 'border-brand-500 text-brand-700'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-700'
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
-            </Card>
-          )}
 
-          {activeTab === 'net' && (
-            <Card>
-              <CardHeader title="Section 6 — Net Tax Payable" />
-              <div className="space-y-4">
-                <div className="flex items-center justify-between py-3 border-b border-neutral-100">
-                  <span className="text-sm text-neutral-600">Total Output Tax</span>
-                  <AmountDisplay amount={totals.total} size="md" />
-                </div>
-                <div className="flex items-center justify-between py-3 border-b border-neutral-100">
-                  <span className="text-sm text-neutral-600">Less: ITC Claimed</span>
-                  <AmountDisplay amount={itcClaimed} size="md" colorCode sign="negative" />
-                </div>
-                <div className="flex items-center justify-between py-4 rounded-lg bg-brand-50 px-4">
-                  <span className="text-base font-bold text-brand-800">Net Tax Payable</span>
-                  <AmountDisplay amount={netTaxPayable} size="xl" colorCode />
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* Invoice Detail tab */}
-          {activeTab === 'invoices' && (
-            <div className="space-y-4">
-              {invoicesLoading ? (
-                <div className="space-y-2 animate-pulse">
-                  {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-12 bg-neutral-100 rounded-xl" />)}
-                </div>
-              ) : (
-                <>
-                  <Card padding="none">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm" aria-label={t('admin.gst.return.invoices.tableLabel')}>
-                        <thead>
-                          <tr className="bg-neutral-50 border-b border-neutral-200">
-                            {[
-                              t('admin.gst.return.invoices.col.invoiceNo'),
-                              t('admin.gst.return.invoices.col.buyerGstin'),
-                              t('admin.gst.return.invoices.col.taxableValue'),
-                              t('admin.gst.return.invoices.col.totalTax'),
-                              t('admin.gst.return.invoices.col.irn'),
-                              t('admin.gst.return.invoices.col.ewb'),
-                              t('admin.gst.return.invoices.col.hsnSac'),
-                            ].map(col => (
-                              <th key={col} scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider whitespace-nowrap">
-                                {col}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-100">
-                          {(invoicesData?.items ?? []).length === 0 ? (
-                            <tr>
-                              <td colSpan={7} className="px-4 py-10 text-center text-sm text-neutral-400">
-                                {t('admin.gst.return.invoices.empty')}
-                              </td>
-                            </tr>
-                          ) : (invoicesData?.items ?? []).map(invoice => (
-                            <tr
-                              key={invoice.id}
-                              className={cn(
-                                'hover:bg-neutral-50 cursor-pointer',
-                                selectedInvoiceId === invoice.id && 'bg-brand-50',
-                              )}
-                              onClick={() => setSelectedInvoiceId(
-                                selectedInvoiceId === invoice.id ? null : invoice.id
-                              )}
-                            >
-                              <td className="px-4 py-3 font-mono text-xs text-neutral-800">
-                                {invoice.invoiceNumber ?? '—'}
-                              </td>
-                              <td className="px-4 py-3 font-mono text-xs text-neutral-600">
-                                {invoice.buyerGstin ?? '—'}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <AmountDisplay amount={invoice.totalTaxableValue} size="sm" />
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <AmountDisplay amount={invoice.totalGst} size="sm" />
-                              </td>
-                              <td className="px-4 py-3">
-                                {invoice.irnNumber ? (
-                                  <Badge variant="success" size="sm">IRN</Badge>
-                                ) : (
-                                  <Badge variant="neutral" size="sm">{t('admin.gst.return.invoices.irn.pending')}</Badge>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                {invoice.ewbNumber ? (
-                                  <Badge variant="success" size="sm">EWB</Badge>
-                                ) : (
-                                  <Badge variant="neutral" size="sm">{t('admin.gst.return.invoices.ewb.na')}</Badge>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 min-w-[200px]">
-                                <HsnSacTypeahead
-                                  value={invoiceHsnMap[invoice.id] ?? null}
-                                  onChange={code => setInvoiceHsnMap(prev => ({ ...prev, [invoice.id]: code }))}
-                                  placeholder={t('admin.gst.invoice.hsnSac.placeholder')}
+              {/* Outward Supplies Tab */}
+              {activeTab3b === 'outward' && (
+                <Card padding="none">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm" aria-label="GSTR-3B Section 3.1 Outward Supplies">
+                      <thead>
+                        <tr className="bg-neutral-50 border-b border-neutral-200">
+                          <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wide">Rate</th>
+                          <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wide">Taxable (₹)</th>
+                          <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wide">CGST (₹)</th>
+                          <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wide">SGST (₹)</th>
+                          <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wide">IGST (₹)</th>
+                          <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-neutral-500 uppercase tracking-wide">Cess (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {taxData.map((row, i) => (
+                          <tr key={row.rate} className="border-b border-neutral-100 hover:bg-neutral-50">
+                            <td className="px-4 py-3">
+                              <span className="font-medium text-neutral-700">{row.rate}</span>
+                            </td>
+                            {(['taxableAmount', 'cgst', 'sgst', 'igst', 'cess'] as const).map((field) => (
+                              <td key={field} className="px-4 py-2 text-right">
+                                <input
+                                  type="number"
+                                  value={row[field]}
+                                  onChange={(e) => {
+                                    const updated = [...taxData]
+                                    updated[i] = { ...updated[i], [field]: Number(e.target.value) }
+                                    setTaxData(updated)
+                                  }}
+                                  className="w-28 text-right rounded border border-neutral-200 px-2 py-1 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 outline-none font-mono"
+                                  aria-label={`${row.rate} ${field}`}
                                 />
                               </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </Card>
-
-                  {/* Pagination */}
-                  {(invoicesData?.totalCount ?? 0) > 15 && (
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-sm text-neutral-500">
-                        {t('admin.gst.return.invoices.pagination', {
-                          page: invoicePage,
-                          total: Math.ceil((invoicesData?.totalCount ?? 0) / 15),
-                        })}
-                      </span>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled={invoicePage === 1}
-                          onClick={() => setInvoicePage(p => Math.max(1, p - 1))}
-                        >
-                          {t('common.prev')}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled={(invoicesData?.totalCount ?? 0) <= invoicePage * 15}
-                          onClick={() => setInvoicePage(p => p + 1)}
-                        >
-                          {t('common.next')}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* IRP + EWB status cards for selected invoice */}
-                  {selectedInvoiceId && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        {irnStatus ? (
-                          <IrpStatusCard status={irnStatus} />
-                        ) : (
-                          <div className="h-24 bg-neutral-100 animate-pulse rounded-xl" />
-                        )}
-                      </div>
-                      <div>
-                        {ewbStatus ? (
-                          <EwbStatusCard status={ewbStatus} />
-                        ) : (
-                          <div className="h-24 bg-neutral-100 animate-pulse rounded-xl" />
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </>
+                            ))}
+                          </tr>
+                        ))}
+                        <tr className="bg-neutral-50 border-t-2 border-neutral-300 font-semibold">
+                          <td className="px-4 py-3 text-sm font-bold text-neutral-900">Total</td>
+                          <td className="px-4 py-3 text-right"><AmountDisplay amount={totals.taxable} size="sm" /></td>
+                          <td className="px-4 py-3 text-right"><AmountDisplay amount={totals.cgst} size="sm" /></td>
+                          <td className="px-4 py-3 text-right"><AmountDisplay amount={totals.sgst} size="sm" /></td>
+                          <td className="px-4 py-3 text-right"><AmountDisplay amount={totals.igst} size="sm" /></td>
+                          <td className="px-4 py-3 text-right"><AmountDisplay amount={0} size="sm" /></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
               )}
-            </div>
+
+              {activeTab3b === 'itc' && (
+                <Card>
+                  <CardHeader title="Section 4 — Input Tax Credit" />
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between py-3 border-b border-neutral-100">
+                      <span className="text-sm text-neutral-600">ITC Available (from GSTR-2A/2B)</span>
+                      <AmountDisplay amount={itcAvailable} size="md" />
+                    </div>
+                    <div className="flex items-center justify-between py-3 border-b border-neutral-100">
+                      <span className="text-sm text-neutral-600">ITC Claimed</span>
+                      <input
+                        type="number"
+                        defaultValue={itcClaimed}
+                        className="w-32 text-right rounded border border-neutral-300 px-3 py-1.5 text-sm focus:border-brand-500 outline-none font-mono"
+                        aria-label="ITC Claimed amount"
+                      />
+                    </div>
+                    {itcDiff !== 0 && (
+                      <AlertBanner
+                        type="warning"
+                        title="ITC Difference Detected"
+                        description={`₹${itcDiff.toLocaleString('en-IN')} difference between available and claimed ITC. Review GSTR-2A/2B reconciliation.`}
+                      />
+                    )}
+                  </div>
+                </Card>
+              )}
+
+              {activeTab3b === 'net' && (
+                <Card>
+                  <CardHeader title="Section 6 — Net Tax Payable" />
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between py-3 border-b border-neutral-100">
+                      <span className="text-sm text-neutral-600">Total Output Tax</span>
+                      <AmountDisplay amount={totals.total} size="md" />
+                    </div>
+                    <div className="flex items-center justify-between py-3 border-b border-neutral-100">
+                      <span className="text-sm text-neutral-600">Less: ITC Claimed</span>
+                      <AmountDisplay amount={itcClaimed} size="md" colorCode sign="negative" />
+                    </div>
+                    <div className="flex items-center justify-between py-4 rounded-lg bg-brand-50 px-4">
+                      <span className="text-base font-bold text-brand-800">Net Tax Payable</span>
+                      <AmountDisplay amount={netTaxPayable} size="xl" colorCode />
+                    </div>
+                  </div>
+                </Card>
+              )}
+
+              {/* Invoice Detail tab (GSTR-3B) */}
+              {activeTab3b === 'invoices' && (
+                <div className="space-y-4">
+                  {invoicesLoading ? (
+                    <div className="space-y-2 animate-pulse">
+                      {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-12 bg-neutral-100 rounded-xl" />)}
+                    </div>
+                  ) : (
+                    <>
+                      <Card padding="none">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm" aria-label={t('admin.gst.return.invoices.tableLabel')}>
+                            <thead>
+                              <tr className="bg-neutral-50 border-b border-neutral-200">
+                                {[
+                                  t('admin.gst.return.invoices.col.invoiceNo'),
+                                  t('admin.gst.return.invoices.col.buyerGstin'),
+                                  t('admin.gst.return.invoices.col.taxableValue'),
+                                  t('admin.gst.return.invoices.col.totalTax'),
+                                  t('admin.gst.return.invoices.col.irn'),
+                                  t('admin.gst.return.invoices.col.ewb'),
+                                  t('admin.gst.return.invoices.col.hsnSac'),
+                                ].map(col => (
+                                  <th key={col} scope="col" className="px-4 py-3 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider whitespace-nowrap">
+                                    {col}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-neutral-100">
+                              {(invoicesData?.items ?? []).length === 0 ? (
+                                <tr>
+                                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-neutral-400">
+                                    {t('admin.gst.return.invoices.empty')}
+                                  </td>
+                                </tr>
+                              ) : (invoicesData?.items ?? []).map(invoice => (
+                                <tr
+                                  key={invoice.invoiceId}
+                                  className={cn(
+                                    'hover:bg-neutral-50 cursor-pointer',
+                                    selectedInvoiceId === invoice.invoiceId && 'bg-brand-50',
+                                  )}
+                                  onClick={() => setSelectedInvoiceId(
+                                    selectedInvoiceId === invoice.invoiceId ? null : invoice.invoiceId
+                                  )}
+                                >
+                                  <td className="px-4 py-3 font-mono text-xs text-neutral-800">
+                                    {invoice.invoiceNumber ?? '—'}
+                                  </td>
+                                  <td className="px-4 py-3 font-mono text-xs text-neutral-600">
+                                    {invoice.buyerGstin ?? '—'}
+                                  </td>
+                                  <td className="px-4 py-3 text-right">
+                                    <AmountDisplay amount={invoice.taxableValue} size="sm" />
+                                  </td>
+                                  <td className="px-4 py-3 text-right">
+                                    <AmountDisplay amount={invoice.cgstAmount + invoice.sgstAmount + invoice.igstAmount + invoice.cessAmount} size="sm" />
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {invoice.irnStatus === 'GENERATED' ? (
+                                      <Badge variant="success" size="sm">IRN</Badge>
+                                    ) : (
+                                      <Badge variant="neutral" size="sm">{t('admin.gst.return.invoices.irn.pending')}</Badge>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant="neutral" size="sm">{t('admin.gst.return.invoices.ewb.na')}</Badge>
+                                  </td>
+                                  <td className="px-4 py-3 min-w-[200px]">
+                                    <HsnSacTypeahead
+                                      value={invoiceHsnMap[invoice.invoiceId] ?? null}
+                                      onChange={code => setInvoiceHsnMap(prev => ({ ...prev, [invoice.invoiceId]: code }))}
+                                      placeholder={t('admin.gst.invoice.hsnSac.placeholder')}
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </Card>
+
+                      {/* Pagination */}
+                      {(invoicesData?.totalCount ?? 0) > 15 && (
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-sm text-neutral-500">
+                            {t('admin.gst.return.invoices.pagination', {
+                              page: invoicePage,
+                              total: Math.ceil((invoicesData?.totalCount ?? 0) / 15),
+                            })}
+                          </span>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={invoicePage === 1}
+                              onClick={() => setInvoicePage(p => Math.max(1, p - 1))}
+                            >
+                              {t('common.prev')}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={(invoicesData?.totalCount ?? 0) <= invoicePage * 15}
+                              onClick={() => setInvoicePage(p => p + 1)}
+                            >
+                              {t('common.next')}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* IRP + EWB status cards for selected invoice */}
+                      {selectedInvoiceId && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            {irnStatus ? (
+                              <IrpStatusCard status={irnStatus} />
+                            ) : (
+                              <div className="h-24 bg-neutral-100 animate-pulse rounded-xl" />
+                            )}
+                          </div>
+                          <div>
+                            {ewbStatus ? (
+                              <EwbStatusCard status={ewbStatus} />
+                            ) : (
+                              <div className="h-24 bg-neutral-100 animate-pulse rounded-xl" />
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
-          {/* Audit trail — below ITC section on main column for tablet/mobile */}
+          {/* Audit trail — below tabs on main column for tablet/mobile */}
           <div className="xl:hidden">
             {id && <AuditTrailPanel returnId={id} />}
           </div>

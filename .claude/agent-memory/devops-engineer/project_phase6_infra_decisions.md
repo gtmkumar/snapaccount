@@ -6,7 +6,7 @@ type: project
 
 The repo uses **gcloud CLI shell scripts** (not Terraform). `infra/setup.sh` bootstraps GCP once; `infra/cloud-run-services.sh` deploys all services. No Terraform files exist.
 
-The backend Dockerfile is a **single shared file** at `backend/Dockerfile` using `--build-arg SERVICE_NAME=<Name>`. No per-service Dockerfiles. Do not create per-service Dockerfiles.
+The backend Dockerfile is a **single shared file** at `backend/Dockerfile` using `--build-arg COMPOSITE_NAME=<Name>`. No per-service Dockerfiles. Do not create per-service Dockerfiles.
 
 **Phase 6E adds a 12th microservice: CallbackService.** This breaks the "11-service" count in CLAUDE.md and project-brief.md. Flag to orchestrator — backend-agent and orchestrator must update CLAUDE.md.
 

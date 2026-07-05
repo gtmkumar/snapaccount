@@ -89,7 +89,7 @@ touches SnapAccount data. Each entry records:
 
 | Property | Value |
 |---|---|
-| **Region** | `asia-south1` for all 12 microservices (enforced in `infra/cloud-run-services.sh`: `REGION="asia-south1"`) |
+| **Region** | `asia-south1` for all 3 composite services (enforced in `infra/cloud-run-services.sh`: `REGION="asia-south1"`) |
 | **Data classes processed in memory** | All classes including PAYMENT during request processing |
 | **Persistent storage** | None — Cloud Run is stateless; all state in Cloud SQL / GCS |
 | **RBI stance** | **COMPLIANT** — compute is in India; no data persists on Cloud Run instances |
@@ -152,7 +152,7 @@ touches SnapAccount data. Each entry records:
 | **Physical region** | Razorpay is an Indian company; primary data stored in India. Payment processing complies with RBI PSO regulations. Razorpay is PCI-DSS certified. |
 | **RBI stance** | **COMPLIANT** — Razorpay is a licensed Payment Aggregator under RBI; data stored in India. SnapAccount's role is a "merchant" — we receive order confirmation and webhook events, not raw card data. |
 | **What SnapAccount must NOT do** | Never log raw Razorpay order amounts or customer payment details in Cloud Logging or Crashlytics. Store only: `razorpay_order_id`, `razorpay_payment_id` (opaque references), subscription status (ACTIVE/CANCELLED). |
-| **Action** | Verify `SubscriptionService` webhook handler logs only the opaque payment ID, not amounts. See `SubscriptionService.Api/Endpoints/RazorpayWebhook.cs`. |
+| **Action** | Verify `SubscriptionService` webhook handler logs only the opaque payment ID, not amounts. See `Platform.WebApi/Endpoints/Subscription/RazorpayWebhook.cs`. |
 
 ### 3.4 MSG91 (SMS / OTP)
 

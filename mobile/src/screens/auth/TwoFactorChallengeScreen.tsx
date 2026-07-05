@@ -27,6 +27,7 @@ import { OTPInput } from '../../components/forms/OTPInput';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useAuthStore } from '../../store/authStore';
 import { fetchServerUserType } from '../../lib/onboarding';
+import { registerCurrentDevice } from '../../notifications/pushTokenManager';
 import { complete2faChallenge } from '../../api/auth';
 import { getApiError } from '../../lib/api';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
@@ -75,6 +76,10 @@ export function TwoFactorChallengeScreen({ navigation, route }: Props) {
         };
 
         setAuthenticated(result.token, profile, result.refreshToken ?? null);
+
+        // B1.3 device binding (DG-AUTH-01): register this device against the
+        // account now that the 2FA challenge has produced a session. Best-effort.
+        void registerCurrentDevice();
 
         // Hydrate the real persona so navigation matches their type.
         const serverType = await fetchServerUserType();

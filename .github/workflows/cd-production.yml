@@ -68,28 +68,12 @@ jobs:
       fail-fast: false
       matrix:
         service:
-          - name: AuthService
-            cloud_run_name: auth-service
-          - name: DocumentService
-            cloud_run_name: document-service
-          - name: AccountingService
-            cloud_run_name: accounting-service
-          - name: GstService
-            cloud_run_name: gst-service
-          - name: LoanService
-            cloud_run_name: loan-service
-          - name: ItrService
-            cloud_run_name: itr-service
-          - name: ChatService
-            cloud_run_name: chat-service
-          - name: NotificationService
-            cloud_run_name: notification-service
-          - name: ReportService
-            cloud_run_name: report-service
-          - name: SubscriptionService
-            cloud_run_name: subscription-service
-          - name: AiService
-            cloud_run_name: ai-service
+          - name: Platform
+            cloud_run_name: platform-service
+          - name: Finance
+            cloud_run_name: finance-service
+          - name: Assist
+            cloud_run_name: assist-service
 
     steps:
       - name: Checkout
@@ -115,13 +99,57 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          build-args: SERVICE_NAME=${{ matrix.service.name }}
+          build-args: COMPOSITE_NAME=${{ matrix.service.name }}
           push: true
           tags: |
             ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/${{ matrix.service.cloud_run_name }}:${{ needs.prepare.outputs.image_tag }}
             ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/${{ matrix.service.cloud_run_name }}:latest
           cache-from: type=gha,scope=${{ matrix.service.name }}-prod
           cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}-prod
+          labels: |
+            git.sha=${{ github.sha }}
+            git.ref=${{ github.ref }}
+            build.environment=production
+
+  # ── DG-INFRA-01: API Gateway build + push ──────────────────────────────────
+  # Gateway is a thin YARP host built with a separate Dockerfile (Dockerfile.gateway).
+  # It is NOT part of the composite COMPOSITE_NAME build matrix because it has no
+  # COMPOSITE_NAME argument — it publishes Gateway.csproj directly.
+  build-push-gateway:
+    name: Build & Push — API Gateway
+    runs-on: ubuntu-latest
+    needs: prepare
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.gateway
+          push: true
+          tags: |
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/api-gateway:${{ needs.prepare.outputs.image_tag }}
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/api-gateway:latest
+          cache-from: type=gha,scope=api-gateway-prod
+          cache-to: type=gha,mode=max,scope=api-gateway-prod
           labels: |
             git.sha=${{ github.sha }}
             git.ref=${{ github.ref }}
@@ -183,7 +211,7 @@ jobs:
   approval-gate:
     name: Awaiting Production Approval
     runs-on: ubuntu-latest
-    needs: [build-push, build-push-admin]
+    needs: [build-push, build-push-gateway, build-push-admin]
     environment: production   # <-- triggers approval requirement
 
     steps:
@@ -227,53 +255,24 @@ jobs:
 
     strategy:
       fail-fast: false
-      max-parallel: 4   # rolling deploy — don't restart all 11 at once
+      max-parallel: 3
       matrix:
         service:
-          - cloud_run_name: auth-service
-            sa: auth-service-sa
+          - cloud_run_name: platform-service
+            sa: platform-service-sa
             min_instances: 1
             max_instances: 10
-          - cloud_run_name: document-service
-            sa: document-service-sa
+            memory: 512Mi
+          - cloud_run_name: finance-service
+            sa: finance-service-sa
             min_instances: 1
             max_instances: 10
-          - cloud_run_name: accounting-service
-            sa: accounting-service-sa
-            min_instances: 1
-            max_instances: 8
-          - cloud_run_name: gst-service
-            sa: gst-service-sa
+            memory: 1Gi
+          - cloud_run_name: assist-service
+            sa: assist-service-sa
             min_instances: 1
             max_instances: 10
-          - cloud_run_name: loan-service
-            sa: loan-service-sa
-            min_instances: 1
-            max_instances: 5
-          - cloud_run_name: itr-service
-            sa: itr-service-sa
-            min_instances: 1
-            max_instances: 8
-          - cloud_run_name: chat-service
-            sa: chat-service-sa
-            min_instances: 1
-            max_instances: 10
-          - cloud_run_name: notification-service
-            sa: notification-service-sa
-            min_instances: 1
-            max_instances: 5
-          - cloud_run_name: report-service
-            sa: report-service-sa
-            min_instances: 0
-            max_instances: 5
-          - cloud_run_name: subscription-service
-            sa: subscription-service-sa
-            min_instances: 1
-            max_instances: 5
-          - cloud_run_name: ai-service
-            sa: ai-service-sa
-            min_instances: 0
-            max_instances: 8
+            memory: 1Gi
 
     steps:
       - name: Authenticate to GCP via OIDC
@@ -298,13 +297,54 @@ jobs:
             --max-instances=${{ matrix.service.max_instances }}
             --concurrency=80
             --cpu=1
-            --memory=512Mi
+            --memory=${{ matrix.service.memory }}
             --vpc-connector=snapaccount-vpc-connector
             --vpc-egress=private-ranges-only
             --ingress=internal-and-cloud-load-balancing
             --no-allow-unauthenticated
             --set-secrets=ASPNETCORE_DB_CONNECTION=db-connection-string-prod:latest,ASPNETCORE_REDIS_CONNECTION=redis-connection-string-prod:latest
             --update-labels=environment=production,git-sha=${{ needs.prepare.outputs.short_sha }}
+
+  # ── DG-INFRA-01: Deploy API Gateway to Cloud Run ───────────────────────────
+  # Gateway runs as a public-facing ingress (allow-unauthenticated=false — Cloud Run
+  # IAM auth at the ingress level; internal traffic authenticated via service mesh).
+  # min-instances=1: avoids cold-start latency on the single client entry point.
+  # No DB / Redis secrets needed — gateway is stateless (YARP proxy only).
+  # Upstream composites are addressed via Cloud Run internal DNS (service names).
+  deploy-gateway-production:
+    name: Deploy API Gateway (production)
+    runs-on: ubuntu-latest
+    needs: [prepare, run-migrations]
+
+    steps:
+      - name: Authenticate to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CD_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy API Gateway to Cloud Run (production)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: api-gateway
+          image: ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REGISTRY_REPO }}/api-gateway:${{ needs.prepare.outputs.image_tag }}
+          region: ${{ env.GCP_REGION }}
+          flags: >-
+            --port=8080
+            --min-instances=1
+            --max-instances=5
+            --concurrency=200
+            --cpu=1
+            --memory=256Mi
+            --vpc-connector=snapaccount-vpc-connector
+            --vpc-egress=private-ranges-only
+            --ingress=all
+            --no-allow-unauthenticated
+            --set-env-vars=ASPNETCORE_ENVIRONMENT=Production,ReverseProxy__Clusters__platform__Destinations__platform__Address=https://platform-service,ReverseProxy__Clusters__finance__Destinations__finance__Address=https://finance-service,ReverseProxy__Clusters__assist__Destinations__assist__Address=https://assist-service
+            --update-labels=environment=production,git-sha=${{ needs.prepare.outputs.short_sha }},role=gateway
 
   deploy-admin-production:
     name: Deploy Admin Panel (production)
@@ -344,7 +384,7 @@ jobs:
   post-deploy-verify:
     name: Post-Deploy Health Checks
     runs-on: ubuntu-latest
-    needs: [deploy-production, deploy-admin-production]
+    needs: [deploy-production, deploy-gateway-production, deploy-admin-production]
     if: success()
 
     steps:
@@ -359,7 +399,7 @@ jobs:
 
       - name: Verify Cloud Run services are healthy
         run: |
-          SERVICES=(auth-service document-service accounting-service gst-service loan-service itr-service chat-service notification-service report-service subscription-service ai-service)
+          SERVICES=(platform-service finance-service assist-service api-gateway admin-panel)
           for svc in "${SERVICES[@]}"; do
             STATUS=$(gcloud run services describe "${svc}" \
               --region=${{ env.GCP_REGION }} \

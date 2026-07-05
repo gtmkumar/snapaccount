@@ -3,7 +3,7 @@
  * Premium financial dashboard with refined cards, better hierarchy, modern styling
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -17,16 +17,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import { AmountDisplay } from '../../components/ui/AmountDisplay';
 import { Card } from '../../components/ui/Card';
+import { ComparativeBarChart } from '../../components/shared/ComparativeBarChart';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { formatINR, formatINRCompact, getCurrentFinancialYear, timeAgo } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import apiClient from '../../lib/api';
+import {
+  getSalesExpenseSeries,
+  type OverviewGranularity,
+} from '../../api/accounting';
 import type { HomeStackParamList } from '../../navigation/HomeStack';
 import type { AppTabParamList } from '../../navigation/AppNavigator';
 
@@ -68,9 +74,15 @@ const HERO_GRADIENT = ['#312E81', '#4338CA'] as const;
 export function HomeScreen({ navigation }: Props) {
   const { tokens } = useTheme();
   const styles = useStyles();
+  const { t } = useTranslation();
   const { user, currentOrganization } = useAuthStore();
   const fy = getCurrentFinancialYear();
   const gstr3bLabel = useMemo(() => getGstr3bDeadlineLabel(), []);
+
+  // DG-DASH-04: Financial Overview Sales-vs-Expense chart period selector (D1.2).
+  const [overviewGranularity, setOverviewGranularity] =
+    useState<OverviewGranularity>('month');
+  const organizationId = currentOrganization?.id ?? 'default';
 
   const {
     data: metrics,
@@ -103,9 +115,28 @@ export function HomeScreen({ navigation }: Props) {
     placeholderData: [],
   });
 
+  // DG-DASH-04: monthly/quarterly sales-vs-expense series for the chart (D1.2).
+  const {
+    data: overview,
+    isLoading: overviewLoading,
+    refetch: refetchOverview,
+  } = useQuery({
+    queryKey: ['sales-expense-series', organizationId, overviewGranularity, fy.label],
+    queryFn: () =>
+      getSalesExpenseSeries({
+        organizationId,
+        granularity: overviewGranularity,
+        fiscalYear: String(fy.startYear),
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const overviewPeriods = overview?.periods ?? [];
+  const salesTrend = metrics?.salesTrend ?? 0;
+
   const handleRefresh = useCallback(async () => {
-    await Promise.all([refetchMetrics(), refetchActivities()]);
-  }, [refetchMetrics, refetchActivities]);
+    await Promise.all([refetchMetrics(), refetchActivities(), refetchOverview()]);
+  }, [refetchMetrics, refetchActivities, refetchOverview]);
 
   const isRefreshing = isRefetching;
   const greeting = useMemo(() => {
@@ -219,6 +250,76 @@ export function HomeScreen({ navigation }: Props) {
               onPress={() => {}}
             />
           </ScrollView>
+        </View>
+
+        {/* Financial Overview — Sales vs Expense chart + period selector (D1.2) */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t('mobile.home.overview.title')}</Text>
+            <View style={styles.periodSelector}>
+              {(['month', 'quarter'] as OverviewGranularity[]).map((g) => {
+                const active = overviewGranularity === g;
+                return (
+                  <Pressable
+                    key={g}
+                    style={[styles.periodChip, active && styles.periodChipActive]}
+                    onPress={() => setOverviewGranularity(g)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={t(`mobile.home.overview.period.${g}`)}
+                    testID={`overview-period-${g}`}
+                  >
+                    <Text
+                      style={[styles.periodChipText, active && styles.periodChipTextActive]}
+                    >
+                      {t(`mobile.home.overview.period.${g}`)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Trend label — "Sales are X% higher than last month" */}
+          {!overviewLoading && overviewPeriods.length > 0 && salesTrend !== 0 && (
+            <View style={styles.trendLabelRow}>
+              <Ionicons
+                name={salesTrend >= 0 ? 'trending-up' : 'trending-down'}
+                size={16}
+                color={salesTrend >= 0 ? tokens.successFg : tokens.errorFg}
+              />
+              <Text
+                style={[
+                  styles.trendLabelText,
+                  { color: salesTrend >= 0 ? tokens.successFg : tokens.errorFg },
+                ]}
+              >
+                {t(
+                  salesTrend >= 0
+                    ? 'mobile.home.overview.trendUp'
+                    : 'mobile.home.overview.trendDown',
+                  { percent: Math.abs(salesTrend).toFixed(1) },
+                )}
+              </Text>
+            </View>
+          )}
+
+          {overviewLoading ? (
+            <Card shadow="sm" padding="lg">
+              <View style={styles.overviewSkeleton} />
+            </Card>
+          ) : overviewPeriods.length > 0 ? (
+            <ComparativeBarChart periods={overviewPeriods} testID="home-overview-chart" />
+          ) : (
+            <Card shadow="sm" padding="lg">
+              <View style={styles.overviewEmpty}>
+                <Ionicons name="bar-chart-outline" size={28} color={tokens.textTertiary} />
+                <Text style={styles.overviewEmptyText}>
+                  {t('mobile.home.overview.empty')}
+                </Text>
+              </View>
+            </Card>
+          )}
         </View>
 
         {/* Quick Actions */}
@@ -603,6 +704,59 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
     backgroundColor: tk.sunken,
     borderRadius: 6,
     width: 80,
+  },
+
+  // Financial Overview
+  periodSelector: {
+    flexDirection: 'row',
+    gap: 6,
+    backgroundColor: tk.sunken,
+    borderRadius: 12,
+    padding: 4,
+  },
+  periodChip: {
+    paddingHorizontal: 14,
+    minHeight: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodChipActive: {
+    backgroundColor: tk.raised,
+  },
+  periodChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: tk.textSecondary,
+  },
+  periodChipTextActive: {
+    color: tk.brand500,
+  },
+  trendLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  trendLabelText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  overviewSkeleton: {
+    height: 160,
+    backgroundColor: tk.sunken,
+    borderRadius: 12,
+  },
+  overviewEmpty: {
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+  },
+  overviewEmptyText: {
+    fontSize: 14,
+    color: tk.textTertiary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 
   // Sections

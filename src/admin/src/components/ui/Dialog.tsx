@@ -1,11 +1,13 @@
 /**
- * Dialog — Phase 6F Track F1
+ * Dialog — Phase 6F Track F1 + DG-ADMIN-04
  * Base modal + Destructive confirm variant + Wide + scrollable.
+ * DG-ADMIN-04: uses useFocusTrap for proper Tab cycling + focus restoration.
  */
-import { useState, useEffect, useRef, type ReactNode, type KeyboardEvent } from 'react'
+import { useState, useEffect, type ReactNode, type KeyboardEvent } from 'react'
 import { X, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './Button'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 type DialogSize = 'sm' | 'md' | 'lg' | 'xl'
 
@@ -41,39 +43,31 @@ export function Dialog({
   footer,
   className,
 }: DialogProps) {
-  const dialogRef = useRef<HTMLDivElement>(null)
+  // DG-ADMIN-04: focus trap with focus restoration on close
+  const dialogRef = useFocusTrap<HTMLDivElement>(open)
 
   useEffect(() => {
     if (open) {
-      const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-      firstFocusable?.focus()
       document.body.style.overflow = 'hidden'
+      // Auto-focus the first focusable element after mount
+      requestAnimationFrame(() => {
+        const first = dialogRef.current?.querySelector<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+        first?.focus()
+      })
     } else {
       document.body.style.overflow = ''
     }
     return () => { document.body.style.overflow = '' }
-  }, [open])
+  }, [open, dialogRef])
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && !mandatoryConfirm) {
       e.preventDefault()
       onClose()
     }
-    // Focus trap
-    if (e.key === 'Tab') {
-      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-      if (!focusable?.length) return
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
-        e.preventDefault()
-        ;(e.shiftKey ? last : first).focus()
-      }
-    }
+    // Tab cycling is handled by useFocusTrap via the document keydown listener
   }
 
   if (!open) return null
@@ -99,7 +93,7 @@ export function Dialog({
         <div className="absolute inset-0 bg-[var(--surface-overlay)]" aria-hidden="true" />
       )}
 
-      {/* Panel */}
+      {/* Panel — focus trap container (DG-ADMIN-04) */}
       <div
         ref={dialogRef}
         className={cn(

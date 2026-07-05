@@ -27,9 +27,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\backend\Services\AuthService\AuthService.Api\AuthService.Api.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\AuthService\AuthService.Application\AuthService.Application.csproj" />
-    <ProjectReference Include="..\..\..\backend\Services\AuthService\AuthService.Domain\AuthService.Domain.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.WebApi/Platform.WebApi.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.Application/Platform.Application.csproj" />
+    <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.Domain/Platform.Domain.csproj" />
     <ProjectReference Include="..\..\..\backend\Shared\SnapAccount.Shared.Domain\SnapAccount.Shared.Domain.csproj" />
   </ItemGroup>
 

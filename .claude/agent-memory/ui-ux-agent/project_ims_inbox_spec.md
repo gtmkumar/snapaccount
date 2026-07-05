@@ -7,7 +7,7 @@ metadata:
 
 IMS (Invoice Management System) inbox UI spec — admin web + mobile — at `docs/design/ims-inbox-spec.md`. Regulatory-mandatory from 1 Apr 2026 (taxpayers accept/reject/keep-pending each supplier invoice before GSTR-2B on the 14th; pending = deemed accepted).
 
-**Why:** GAP-101 / board #32 HIGH. Backend already shipped (`GstService.Api/Endpoints/GstIms.cs`, 8 endpoints; entity `ImsInvoice.cs`). frontend-dev + mobile-dev build directly from the spec.
+**Why:** GAP-101 / board #32 HIGH. Backend already shipped (`Finance.WebApi/Endpoints/Gst/GstIms.cs`, 8 endpoints; entity `ImsInvoice.cs`). frontend-dev + mobile-dev build directly from the spec.
 
 **Load-bearing design decisions (reuse, don't re-derive):**
 - EXACT status vocab (verbatim, never relabel in code): `PENDING` / `ACCEPTED` / `REJECTED` / `PENDING_KEPT`. GSTR-1A: `DRAFT`/`SUBMITTED`/`FILED`; types `B2B_AMENDMENT`/`B2BA`/`CDNR_AMENDMENT`/`CDNRA`.

@@ -18,7 +18,7 @@ plaintext. Locally MSG91 is not configured, so two things happen instead:
    `Warning` level on every non-`Production` environment:
 
    ```
-   backend/Services/AuthService/AuthService.Infrastructure/Services/OtpService.cs
+   backend/Services/PlatformService/Platform.Infrastructure/Auth/Services/OtpService.cs
    ```
    ```csharp
    var env = configuration["ASPNETCORE_ENVIRONMENT"];
@@ -55,7 +55,7 @@ OTPVerifyScreen
    ◄────────── 200 { accessToken, ... }
 ```
 
-Endpoints (`backend/.../AuthService.Api/Endpoints/Auth.cs`):
+Endpoints (`backend/.../Platform.WebApi/Endpoints/Auth/Auth.cs`):
 - `POST /auth/otp/send`  — body `{ "phoneNumber": "9876543210" }`
 - `POST /auth/otp/verify` — body `{ "phoneNumber": "9876543210", "otp": "482913", "deviceId": "..." }`
 
@@ -68,7 +68,7 @@ Endpoints (`backend/.../AuthService.Api/Endpoints/Auth.cs`):
 If you started AuthService standalone:
 
 ```bash
-cd backend/Services/AuthService/AuthService.Api
+cd backend/Services/PlatformService/Platform.WebApi
 dotnet run
 ```
 
@@ -152,9 +152,9 @@ curl -s -X POST http://localhost:5101/auth/otp/verify \
 
 | Concern | File |
 |---|---|
-| OTP generation + log line + hashing | `backend/Services/AuthService/AuthService.Infrastructure/Services/OtpService.cs` |
-| Send command + phone validator | `backend/Services/AuthService/AuthService.Application/Otp/Commands/SendOtp/SendOtpCommand.cs` |
-| Verify command | `backend/Services/AuthService/AuthService.Application/Otp/Commands/VerifyOtp/VerifyOtpCommand.cs` |
-| HTTP endpoints | `backend/Services/AuthService/AuthService.Api/Endpoints/Auth.cs` |
-| OTP table mapping (`auth.otp_request`) | `backend/Services/AuthService/AuthService.Infrastructure/Persistence/Configurations/OtpRequestConfiguration.cs` |
+| OTP generation + log line + hashing | `backend/Services/PlatformService/Platform.Infrastructure/Auth/Services/OtpService.cs` |
+| Send command + phone validator | `backend/Services/PlatformService/Platform.Application/Auth/Otp/Commands/SendOtp/SendOtpCommand.cs` |
+| Verify command | `backend/Services/PlatformService/Platform.Application/Auth/Otp/Commands/VerifyOtp/VerifyOtpCommand.cs` |
+| HTTP endpoints | `backend/Services/PlatformService/Platform.WebApi/Endpoints/Auth/Auth.cs` |
+| OTP table mapping (`auth.otp_request`) | `backend/Services/PlatformService/Platform.Infrastructure/Auth/Persistence/Configurations/OtpRequestConfiguration.cs` |
 | Mobile phone entry / verify screens | `mobile/src/screens/auth/PhoneEntryScreen.tsx`, `mobile/src/screens/auth/OTPVerifyScreen.tsx` |

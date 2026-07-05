@@ -9,11 +9,11 @@ metadata:
 
 **Symptom**: `GET /admin/health/aggregate` and `POST /auth/token/refresh-context` return 500 with `InvalidOperationException: This endpoint requires a rate limiting policy with name 'standard', but no such policy exists`.
 
-**Root cause**: AuthService.Api/Program.cs only registered `otp`, `password-reset`, and `invite-token-lookup` policies. AiService.Api/Program.cs only registered `ai`. Both services had endpoints calling `.RequireRateLimiting("standard")`.
+**Root cause**: Platform.WebApi/Program.cs only registered `otp`, `password-reset`, and `invite-token-lookup` policies. Assist.WebApi/Program.cs only registered `ai`. Both services had endpoints calling `.RequireRateLimiting("standard")`.
 
 **Fix**: Added `AddFixedWindowLimiter("standard", opt => { PermitLimit=100, Window=1min })` to both:
-- `backend/Services/AuthService/AuthService.Api/Program.cs`
-- `backend/Services/AiService/AiService.Api/Program.cs`
+- `backend/Services/PlatformService/Platform.WebApi/Program.cs`
+- `backend/Services/AssistService/Assist.WebApi/Program.cs`
 
 **Pattern**: The "standard" policy was already present in the other 10 services (GstService, DocumentService, NotificationService, etc.) — only these two were missing it. This is a systemic check to run on any new service.
 
@@ -35,7 +35,7 @@ metadata:
 
 **Root cause**: `CreateTaxRateCommandValidator` had `ValidGstRates = [0, 1.5, 3, 5, 7.5, 12, 18, 28]` declared as a field but the `RuleFor(x => x.RatePct)` never called `.Must(r => ValidGstRates.Contains(r))`. A comment said "warn but do not block" — incorrect per spec.
 
-**Fix**: Added to `backend/Services/GstService/GstService.Application/TaxRates/Commands/CreateTaxRate/CreateTaxRateCommand.cs`:
+**Fix**: Added to `backend/Services/FinanceService/Finance.Application/Gst/TaxRates/Commands/CreateTaxRate/CreateTaxRateCommand.cs`:
 ```csharp
 .Must(r => ValidGstRates.Contains(r))
 .WithMessage(r => $"GST rate {r.RatePct}% is not a standard Indian GST rate. Valid rates: ...")
@@ -57,12 +57,12 @@ metadata:
 1. Handler had an idempotency check but used case-sensitive comparison (`t.TagName == request.TagName`), so "GST-Invoice" ≠ "gst-invoice".
 2. Even when the idempotency check found an existing tag, the endpoint `Results.Created(...)` was always used regardless.
 
-**Fix (handler)**: `backend/Services/DocumentService/DocumentService.Application/Documents/Commands/AddDocumentTag/AddDocumentTagCommand.cs`:
+**Fix (handler)**: `backend/Services/FinanceService/Finance.Application/Document/Documents/Commands/AddDocumentTag/AddDocumentTagCommand.cs`:
 - Changed comparison to case-insensitive: `t.TagName.ToLower() == normalisedLower`
 - Added `IsNewlyCreated` field to `AddDocumentTagResponse` (defaults `true`)
 - Handler returns `IsNewlyCreated: false` on the idempotent path
 
-**Fix (endpoint)**: `backend/Services/DocumentService/DocumentService.Api/Endpoints/Documents.cs`:
+**Fix (endpoint)**: `backend/Services/FinanceService/Finance.WebApi/Endpoints/Document/Documents.cs`:
 - Changed `Results.Created(...)` to conditional: `result.Value.IsNewlyCreated ? Results.Created(...) : Results.Ok(result.Value)`
 
 **Note on ILike vs ToLower**: `EF.Functions.ILike` requires Npgsql provider — unavailable in the Application layer (no Npgsql reference). Used `t.TagName.ToLower() == normalisedLower` instead (EF Core translates to SQL `lower()` = string literal).

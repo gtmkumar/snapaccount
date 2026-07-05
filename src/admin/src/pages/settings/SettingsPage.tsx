@@ -145,7 +145,7 @@ function SubscriptionTiersSettings() {
           </Card>
           <Card className="text-center py-4">
             <p className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
-              {mrr?.activeCount ?? 0}
+              {mrr?.activeSubscriptions ?? 0}
             </p>
             <p className="text-sm text-[var(--text-secondary)] mt-1">
               {t('settings.subscriptions.activeSubscribers')}

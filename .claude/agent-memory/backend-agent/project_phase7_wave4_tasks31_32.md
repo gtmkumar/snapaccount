@@ -14,8 +14,8 @@ Branch: `2026-06-10-s5t4`, base commit: `87e9ca6`
 **What**: Monthly Hangfire recurring job that auto-accepts IMS invoices still PENDING/PENDING_KEPT for the prior GST return period, matching the GSTN rule that deemed acceptance occurs when GSTR-2B is generated (around the 14th).
 
 **Key files**:
-- `backend/Services/GstService/GstService.Infrastructure/Jobs/ImsDeemedAcceptanceJob.cs` — new job class
-- `backend/Services/GstService/GstService.Api/Program.cs` — Hangfire registration + cron `"30 20 13 * *"` (13th 20:30 UTC = 14th 02:00 IST)
+- `backend/Services/FinanceService/Finance.Infrastructure/Gst/Jobs/ImsDeemedAcceptanceJob.cs` — new job class
+- `backend/Services/FinanceService/Finance.WebApi/Program.cs` — Hangfire registration + cron `"30 20 13 * *"` (13th 20:30 UTC = 14th 02:00 IST)
 
 **Important design decisions**:
 - Cron fires on the 13th at 20:30 UTC to execute the job before GSTR-2B generation on 14th IST
@@ -66,9 +66,9 @@ Branch: `2026-06-10-s5t4`, base commit: `87e9ca6`
 **What**: DPDP Act 2023 requires Indian user data to be processed in India. Vertex AI region must default to `asia-south1` (Mumbai), not `us-central1`.
 
 **Files**:
-- `backend/Services/AiService/AiService.Infrastructure/Providers/VertexAiProvider.cs` — `region` constructor parameter + `Region` property
-- `backend/Services/AiService/AiService.Infrastructure/Providers/AiProviderResolver.cs` — reads `VERTEX_REGION` env var OR `Vertex:Region` appsettings (priority order: env > config > hardcoded default `"asia-south1"`)
-- `backend/Services/AiService/AiService.Api/appsettings.json` — `"Vertex": { "Region": "asia-south1" }` added
+- `backend/Services/AssistService/Assist.Infrastructure/Ai/Providers/VertexAiProvider.cs` — `region` constructor parameter + `Region` property
+- `backend/Services/AssistService/Assist.Infrastructure/Ai/Providers/AiProviderResolver.cs` — reads `VERTEX_REGION` env var OR `Vertex:Region` appsettings (priority order: env > config > hardcoded default `"asia-south1"`)
+- `backend/Services/AiService/Assist.WebApi/appsettings.json` — `"Vertex": { "Region": "asia-south1" }` added
 
 **Config priority**: `configuration["VERTEX_REGION"] ?? configuration["Vertex:Region"] ?? "asia-south1"` — env var wins for GCP Cloud Run, appsettings serves as documented default.
 

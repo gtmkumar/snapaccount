@@ -174,6 +174,36 @@
   --shadow-sm: 0 1px 2px rgba(15,23,42,0.06);
   --shadow-md: 0 4px 12px rgba(15,23,42,0.08);
   --shadow-lg: 0 12px 32px rgba(15,23,42,0.12);
+
+  /* Nav sidebar — always a dark rail (not affected by neutral scale inversion) */
+  --nav-sidebar-bg: #1E293B;
+  --nav-sidebar-border: rgba(255, 255, 255, 0.1);
+  --nav-sidebar-text: #94A3B8;
+  --nav-sidebar-text-muted: #64748B;
+  --nav-sidebar-text-active: #FFFFFF;
+  --nav-sidebar-hover: rgba(255, 255, 255, 0.06);
+  --nav-sidebar-active-bg: rgba(99, 102, 241, 0.22);
+  --nav-sidebar-accent: #818CF8;
+
+  /* Badge / chip tokens (light) */
+  --badge-brand-bg: #E0E7FF;
+  --badge-brand-fg: #4338CA;
+  --badge-neutral-bg: #F1F5F9;
+  --badge-neutral-fg: #475569;
+  --badge-gst-bg: #EDE9FE;
+  --badge-gst-fg: #6D28D9;
+  --badge-itr-bg: #CFFAFE;
+  --badge-itr-fg: #0E7490;
+  --badge-loan-bg: #FFEDD5;
+  --badge-loan-fg: #C2410C;
+  --chip-violet-bg: #EDE9FE;
+  --chip-violet-fg: #5B21B6;
+  --chip-violet-border: #C4B5FD;
+  --chip-amber-bg: #FEF3C7;
+  --chip-amber-fg: #92400E;
+  --chip-amber-border: #FDE68A;
+  --chip-slate-bg: #F1F5F9;
+  --chip-slate-fg: #475569;
 }
 
 :root[data-theme='dark'],
@@ -218,6 +248,36 @@
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
   --shadow-lg: 0 12px 32px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.04);
+
+  /* Nav sidebar stays dark in both themes */
+  --nav-sidebar-bg: #0F172A;
+  --nav-sidebar-border: rgba(255, 255, 255, 0.08);
+  --nav-sidebar-text: #94A3B8;
+  --nav-sidebar-text-muted: #64748B;
+  --nav-sidebar-text-active: #F8FAFC;
+  --nav-sidebar-hover: rgba(255, 255, 255, 0.06);
+  --nav-sidebar-active-bg: rgba(129, 140, 248, 0.2);
+  --nav-sidebar-accent: #A5B4FC;
+
+  /* Badge / chip tokens (dark — high contrast on dark tables) */
+  --badge-brand-bg: rgba(129, 140, 248, 0.18);
+  --badge-brand-fg: #C7D2FE;
+  --badge-neutral-bg: rgba(148, 163, 184, 0.14);
+  --badge-neutral-fg: #CBD5E1;
+  --badge-gst-bg: rgba(167, 139, 250, 0.18);
+  --badge-gst-fg: #DDD6FE;
+  --badge-itr-bg: rgba(34, 211, 238, 0.14);
+  --badge-itr-fg: #A5F3FC;
+  --badge-loan-bg: rgba(251, 146, 60, 0.16);
+  --badge-loan-fg: #FED7AA;
+  --chip-violet-bg: rgba(167, 139, 250, 0.18);
+  --chip-violet-fg: #DDD6FE;
+  --chip-violet-border: rgba(167, 139, 250, 0.35);
+  --chip-amber-bg: rgba(251, 191, 36, 0.16);
+  --chip-amber-fg: #FDE68A;
+  --chip-amber-border: rgba(251, 191, 36, 0.35);
+  --chip-slate-bg: rgba(148, 163, 184, 0.14);
+  --chip-slate-fg: #CBD5E1;
 
   /* Dark bg overrides */
   --color-bg-base: #020617;
@@ -304,6 +364,17 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Native form controls — match theme tokens (fixes blank white selects in dark mode) */
+:root[data-theme='dark'] select,
+.dark select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: var(--surface-raised);
+  color: var(--text-primary);
 }
 
 /* Custom scrollbar */

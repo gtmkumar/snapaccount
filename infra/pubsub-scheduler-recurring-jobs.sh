@@ -128,6 +128,100 @@ else
     log "Subscription ${CALLBACK_SUB_NAME} already exists — skipping"
 fi
 
+# ── DG-INFRA-03: Finance module recurring-job subscriptions ──────────────────
+#
+# The gap analysis (DG-INFRA-03) confirmed that GstRecurringJobsSubscriber and
+# ItrRecurringJobsSubscriber are both registered as hosted services in FinanceService
+# (Finance.Infrastructure/Gst/DependencyInjection.cs:116 and Itr/DependencyInjection.cs:84).
+# Each defaults to its own subscription name on the shared recurring-jobs topic.
+# Without these subscriptions the subscribers call SubscriberClient.CreateAsync, catch the
+# "not found" error, log "running in local/mock mode", and self-disable — so neither the
+# per-org GST deadline detection nor ITR deadline-reminder/refund-polling runs in prod.
+#
+# Subscription names MUST match the defaults in the backend (verified 2026-06-28):
+#   Finance.Infrastructure.Gst.Messaging.GstRecurringJobsSubscriber : gst-service-recurring-jobs-sub
+#   Finance.Infrastructure.Itr.Messaging.ItrRecurringJobsSubscriber : itr-service-recurring-jobs-sub
+#
+# Both can also be overridden via env vars:
+#   PUBSUB_SUBSCRIPTION_RECURRING_JOBS_GST (AppHost.cs:58)
+#   PUBSUB_SUBSCRIPTION_RECURRING_JOBS_ITR (AppHost.cs:59)
+#
+# Design note: NotificationService.RecurringJobsSubscriber ALSO handles GST_DEADLINE_CHECK
+# and ITR_DEADLINE_REMINDERS job types, but it only dispatches a broadcast notification
+# (UserId=Guid.Empty → fails the NotEmpty validator) — it does NOT run the per-org logic
+# in GstDeadlineCheckHandler. The Finance subscribers are the correct consumers for the
+# detailed deadline work. Both subscriber families consume the same topic and the same
+# job_type strings; GCP Pub/Sub fan-out (one message → multiple subscriptions) means
+# both will fire — which is intentional: Notification sends the push; Finance queries
+# returns. If you want to avoid double-dispatch of the notification side, remove the
+# GST_DEADLINE_CHECK / ITR_DEADLINE_REMINDERS handlers from NotificationService and keep
+# them only in the Finance subscribers. That decision is owned by backend-agent.
+
+GST_RECURRING_SUB="gst-service-recurring-jobs-sub"
+if ! gcloud pubsub subscriptions describe "${GST_RECURRING_SUB}" \
+        --project="${GCP_PROJECT_ID}" &>/dev/null; then
+    log "Creating subscription: ${GST_RECURRING_SUB}"
+    gcloud pubsub subscriptions create "${GST_RECURRING_SUB}" \
+        --topic="${TOPIC}" \
+        --project="${GCP_PROJECT_ID}" \
+        --ack-deadline=600 \
+        --max-delivery-attempts=5 \
+        --dead-letter-topic="${DL_TOPIC}" \
+        --message-retention-duration=7d \
+        --labels="app=snapaccount,phase=infra-01,consumer=finance-gst,gap=DG-INFRA-03"
+else
+    log "Subscription ${GST_RECURRING_SUB} already exists — skipping"
+fi
+
+ITR_RECURRING_SUB="itr-service-recurring-jobs-sub"
+if ! gcloud pubsub subscriptions describe "${ITR_RECURRING_SUB}" \
+        --project="${GCP_PROJECT_ID}" &>/dev/null; then
+    log "Creating subscription: ${ITR_RECURRING_SUB}"
+    gcloud pubsub subscriptions create "${ITR_RECURRING_SUB}" \
+        --topic="${TOPIC}" \
+        --project="${GCP_PROJECT_ID}" \
+        --ack-deadline=600 \
+        --max-delivery-attempts=5 \
+        --dead-letter-topic="${DL_TOPIC}" \
+        --message-retention-duration=7d \
+        --labels="app=snapaccount,phase=infra-01,consumer=finance-itr,gap=DG-INFRA-03"
+else
+    log "Subscription ${ITR_RECURRING_SUB} already exists — skipping"
+fi
+
+# Grant the Pub/Sub service account subscriber rights on the new Finance subscriptions
+# (mirrors the binding already done for SUB_NAME above).
+log "Granting Pub/Sub SA subscriber permission on gst/itr recurring-job subscriptions..."
+for FINANCE_SUB in "${GST_RECURRING_SUB}" "${ITR_RECURRING_SUB}"; do
+    gcloud pubsub subscriptions add-iam-policy-binding "${FINANCE_SUB}" \
+        --project="${GCP_PROJECT_ID}" \
+        --member="serviceAccount:${PUBSUB_SA}" \
+        --role="roles/pubsub.subscriber" 2>/dev/null || \
+        log "  (binding on ${FINANCE_SUB} already exists or SA not yet available)"
+done
+
+# GAP-113: dedicated pull subscriptions for monthly partition maintenance.
+# Each composite owns its time-partitioned table and maintains it independently:
+#   finance-partition-maintenance-sub   → Finance:  document.document
+#   platform-partition-maintenance-sub  → Platform: notification.notification
+# Both consume the PARTITION_MAINTENANCE job_type from the shared recurring-jobs topic.
+for PART_SUB in "finance-partition-maintenance-sub" "platform-partition-maintenance-sub"; do
+    if ! gcloud pubsub subscriptions describe "${PART_SUB}" \
+            --project="${GCP_PROJECT_ID}" &>/dev/null; then
+        log "Creating subscription: ${PART_SUB}"
+        gcloud pubsub subscriptions create "${PART_SUB}" \
+            --topic="${TOPIC}" \
+            --project="${GCP_PROJECT_ID}" \
+            --ack-deadline=600 \
+            --max-delivery-attempts=3 \
+            --dead-letter-topic="${DL_TOPIC}" \
+            --message-retention-duration=7d \
+            --labels="app=snapaccount,phase=7,job=partition-maintenance"
+    else
+        log "Subscription ${PART_SUB} already exists — skipping"
+    fi
+done
+
 # Grant Cloud Pub/Sub service account permission to publish to dead-letter
 # (required when dead-letter is configured on a subscription)
 PUBSUB_SA="service-$(gcloud projects describe "${GCP_PROJECT_ID}" \
@@ -332,6 +426,25 @@ create_scheduler_job \
     '{"job_type":"ITR_FORM16_MISSING","source":"cloud-scheduler","days_after_deadline":3}' \
     "Daily 11:00 IST: alert users missing Form 16 more than 3 days after June 15 deadline"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# GAP-113 — Monthly partition maintenance
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Job 8: Partition Maintenance ──────────────────────────────────────────
+# Fires monthly on the 1st at 02:00 IST (off-peak).
+# Finance (document.document) and Platform (notification.notification) each have a
+# dedicated subscription and a PartitionMaintenanceSubscriber that, on this job_type,
+# runs public.create_monthly_partitions(schema, table, 6) — creating the next 6 months
+# of partitions so rows land in proper per-month partitions instead of the DEFAULT one
+# (defeats pruning/retention and later blocks adding the month's partition). Idempotent:
+# the function skips months that already exist. See migration 090_partition_maintenance.sql
+# and docs/devops/recurring-jobs-decision.md (addendum).
+create_scheduler_job \
+    "partition-maintenance" \
+    "0 2 1 * *" \
+    '{"job_type":"PARTITION_MAINTENANCE","source":"cloud-scheduler"}' \
+    "Monthly 1st 02:00 IST: create upcoming monthly partitions for document.document + notification.notification (GAP-113)"
+
 # ─────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────
@@ -356,6 +469,10 @@ echo "                                             ITR_REFUND_POLLING, SUBSCRIPT
 echo "                                             ITR_FORM16_MISSING"
 echo "  callback-service-recurring-jobs-sub     — handles: CALLBACK_KPI_MV_REFRESH,"
 echo "                                             GST_PRE_DEADLINE_CALLBACK (PENDING-B19)"
+echo "  finance-partition-maintenance-sub       — handles: PARTITION_MAINTENANCE (document.document)"
+echo "  platform-partition-maintenance-sub      — handles: PARTITION_MAINTENANCE (notification.notification)"
+echo "  gst-service-recurring-jobs-sub [DG-INFRA-03] — handles: GST_DEADLINE_CHECK (per-org detail)"
+echo "  itr-service-recurring-jobs-sub [DG-INFRA-03] — handles: ITR_DEADLINE_REMINDERS, ITR_REFUND_POLLING"
 echo ""
 echo "PENDING-B19 (backend Wave 3) — backend-agent must implement:"
 echo "  POST /callbacks/internal/refresh-kpi-mv     — REFRESH MV CONCURRENTLY callback.kpi_daily_snapshot"
@@ -369,6 +486,7 @@ echo "  2. Verify CallbackService handles CALLBACK_KPI_MV_REFRESH and GST_PRE_DE
 echo "  3. Test job trigger manually:"
 echo "     gcloud scheduler jobs run gst-deadline-check --location=${SCHEDULER_REGION}"
 echo "     gcloud scheduler jobs run callback-kpi-mv-refresh --location=${SCHEDULER_REGION}"
+echo "     gcloud scheduler jobs run partition-maintenance --location=${SCHEDULER_REGION}   # GAP-113"
 echo "  4. Monitor: Cloud Logging > scheduler.googleapis.com/executions"
 echo "  5. Full matrix documentation: docs/devops/recurring-jobs-decision.md"
 echo ""

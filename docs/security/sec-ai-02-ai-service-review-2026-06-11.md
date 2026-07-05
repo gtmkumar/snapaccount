@@ -13,7 +13,7 @@
 
 ### [HIGH] AES-CBC Used for Provider Key Encryption — No Authenticated Encryption, Padding Oracle Risk
 
-- **File:** `backend/Services/AuthService/AuthService.Infrastructure/Services/AesAiKeyProtector.cs`
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Auth/Services/AesAiKeyProtector.cs`
 - **Lines:** 40–73
 - **Description:** `AesAiKeyProtector` encrypts AI provider API keys (Gemini, Vertex, Sarvam) using AES-256-CBC with PKCS7 padding. CBC mode without a Message Authentication Code (MAC) provides no ciphertext integrity guarantee. An attacker who can submit arbitrary ciphertexts to the decrypt path (e.g. via database row manipulation or a timing oracle on error responses) can execute a padding oracle attack to recover plaintext byte-by-byte. This is the same class of vulnerability found and flagged in SEC-AI-01 review for the PAN encryption path (Phase 5 finding that was upgraded from CBC to GCM). Provider API keys grant full access to Gemini/Vertex AI billed under the organisation's account — compromise leads to cost-exhaustion and potential data exfiltration via the AI model.
   - The comment in the class says "AES-256-CBC protector for AI provider API keys (SEC-013 pattern)" — SEC-013 refers to PAN encryption which was itself already flagged as using CBC in a prior phase. The pattern being "re-used" is the flawed one.
@@ -25,7 +25,7 @@
 
 ### [HIGH] /auth/config/ai/effective Returns Decrypted API Key — No Service-Identity Verification
 
-- **File:** `backend/Services/AuthService/AuthService.Api/Endpoints/AiConfigEndpoints.cs` (line 40–44); `backend/Services/AuthService/AuthService.Application/AiConfig/Queries/GetEffectiveAiConfig/GetEffectiveAiConfigQuery.cs`
+- **File:** `backend/Services/PlatformService/Platform.WebApi/Endpoints/Auth/AiConfigEndpoints.cs` (line 40–44); `backend/Services/PlatformService/Platform.Application/Auth/AiConfig/Queries/GetEffectiveAiConfig/GetEffectiveAiConfigQuery.cs`
 - **Lines:** AiConfigEndpoints.cs:40–44; GetEffectiveAiConfigQuery.cs:26–52
 - **Description:** `GET /auth/config/ai/effective` returns the decrypted plaintext AI provider API key in the HTTP response body. The endpoint is documented as "service-to-service" but its authorization check is a plain `RequireAuthorization()` — any authenticated Firebase user (or any service holding a valid session-JWT) can call this endpoint and receive the production Gemini/Vertex API key in the response body.
   - There is no `[RequiresPermission]` attribute on `GetEffectiveAiConfigQuery`, so `PermissionBehavior` does not block ordinary users.
@@ -42,7 +42,7 @@
 
 ### [HIGH] Token Budget Race Condition — Daily Limit Bypassable Under Concurrent Load
 
-- **File:** `backend/Services/AiService/AiService.Application/Chat/Queries/AiChat/AiChatQueryHandler.cs`
+- **File:** `backend/Services/AssistService/Assist.Application/Ai/Chat/Queries/AiChat/AiChatQueryHandler.cs`
 - **Lines:** 47–68
 - **Description:** The per-organisation daily token budget check is implemented as a read-then-call pattern without any locking or atomic decrement:
   1. Handler reads `SUM(input_tokens + output_tokens)` for today from `ai.interactions` for the org.
@@ -63,7 +63,7 @@
 
 ### [HIGH] RagIngestionSubscriber — No Message Attribute / Schema Validation; OcrText Size Not Bounded Pre-Ingest
 
-- **File:** `backend/Services/AiService/AiService.Infrastructure/Messaging/RagIngestionSubscriber.cs`
+- **File:** `backend/Services/AssistService/Assist.Infrastructure/Ai/Messaging/RagIngestionSubscriber.cs`
 - **Lines:** 68–114
 - **Description:** The Pub/Sub subscriber deserialises the message body and proceeds if `payload.DocumentId != Guid.Empty` and `payload.OcrText` is non-empty. There are two issues:
 
@@ -85,7 +85,7 @@
 
 ### [MEDIUM] TextRedactor: Aadhaar Regex Matches 12-Digit Numbers That Are Not Aadhaar (Over-Broad) and Misses 8-Digit Sub-patterns from Card Redaction
 
-- **File:** `backend/Services/AiService/AiService.Infrastructure/Services/TextRedactor.cs`
+- **File:** `backend/Services/AssistService/Assist.Infrastructure/Ai/Services/TextRedactor.cs`
 - **Lines:** 25–29
 - **Description:** Two regex correctness issues:
 
@@ -107,7 +107,7 @@
 
 ### [MEDIUM] Prompt Injection: User Message and RAG Chunks Concatenated in a Single-Role Prompt Without Structural Isolation
 
-- **File:** `backend/Services/AiService/AiService.Infrastructure/Providers/VertexAiProvider.cs`
+- **File:** `backend/Services/AssistService/Assist.Infrastructure/Ai/Providers/VertexAiProvider.cs`
 - **Lines:** 98–118
 - **Description:** The chat prompt is assembled by concatenating the system instruction, retrieved RAG context chunks, and the user message into a single `contents[0].parts[0].text` field — a single-turn, single-role Gemini API call. This means:
 
@@ -130,7 +130,7 @@
 
 ### [MEDIUM] IDOR on /ai/chat — OrganizationId Accepted from Request Body, JWT Org Not Enforced
 
-- **File:** `backend/Services/AiService/AiService.Api/Endpoints/Ai.cs`
+- **File:** `backend/Services/AssistService/Assist.WebApi/Endpoints/Ai/Ai.cs`
 - **Lines:** 147–151
 - **Description:** The `ChatAsync` handler reads `OrganizationId` with a precedence rule: body value first, JWT claim second.
 
@@ -155,7 +155,7 @@
 
 ### [MEDIUM] /ai/extract Has No Token Budget Enforcement
 
-- **File:** `backend/Services/AiService/AiService.Application/Extraction/Commands/ExtractFieldsCommandHandler.cs`
+- **File:** `backend/Services/AssistService/Assist.Application/Ai/Extraction/Commands/ExtractFieldsCommandHandler.cs`
 - **Lines:** 1–95
 - **Description:** `ExtractFieldsCommandHandler` performs no daily token budget check before calling the AI provider. The `AiChatQueryHandler` implements a 100,000 tokens/org/day cap (`DailyTokenBudgetPerOrg`), but extraction calls are unlimited. An authenticated user can call `POST /ai/extract` continuously, each call consuming approximately 640 tokens (512 prompt + 128 completion per the endpoint's own comment), with no org-level or user-level daily cap. At the API rate limit of 20 req/min, a sustained attack could consume ~768,000 tokens/hour per user — 7× the daily chat budget.
 - **Recommended Fix:** Apply the same `SumAsync` budget check in `ExtractFieldsCommandHandler` before the provider call. Use a separate `feature_code` bucket (`invoice_extract`) so it does not share the chat budget, but enforce an aggregate daily cap. Consider a combined budget across feature codes per org.
@@ -165,7 +165,7 @@
 
 ### [MEDIUM] AES Key Derivation Falls Back to Hardcoded Dev Seed in Staging if Secret Not Configured
 
-- **File:** `backend/Services/AuthService/AuthService.Infrastructure/Services/AesAiKeyProtector.cs`
+- **File:** `backend/Services/PlatformService/Platform.Infrastructure/Auth/Services/AesAiKeyProtector.cs`
 - **Lines:** 30–36
 - **Description:** If `Ai:KeyEncryptionKey` is not configured, the class derives a deterministic 32-byte key from the hardcoded string `"snapaccount-local-dev-ai-key-protector-v1"`. This fallback activates at runtime silently (only a log warning, no exception, no startup gate). If a staging or production deployment fails to set this secret (e.g. a misconfigured Cloud Run revision, a new environment spun up without the Secret Manager binding), the encryption key is the same on all instances and is derived from a publicly known string. Any attacker who reads the encrypted keys from the database can decrypt them offline.
   - There is no equivalent of the `SessionTokenSecret.ValidateOrThrow` pattern (used in AiService's `Program.cs` line 98) for this key.
@@ -176,7 +176,7 @@
 
 ### [LOW] API Key Transmitted in Query String to Gemini API — Logged in HTTP Client Logs
 
-- **File:** `backend/Services/AiService/AiService.Infrastructure/Providers/VertexAiProvider.cs`
+- **File:** `backend/Services/AssistService/Assist.Infrastructure/Ai/Providers/VertexAiProvider.cs`
 - **Lines:** 48, 113, 158
 - **Description:** The Gemini API key is appended as a query parameter: `$"{GeminiBaseUrl}{chatModel}:generateContent?key={apiKey}"`. Query string parameters are:
   1. Logged by default in ASP.NET Core's `HttpClient` diagnostic logs (including any Serilog sink configured to capture them).
@@ -190,7 +190,7 @@
 
 ### [LOW] RagIngestionSubscriber: OcrText Stored in ai.chunks Without TextRedactor — PII Embedded in Vector Index
 
-- **File:** `backend/Services/AiService/AiService.Application/Rag/Commands/IngestDocument/IngestDocumentCommandHandler.cs`
+- **File:** `backend/Services/AssistService/Assist.Application/Ai/Rag/Commands/IngestDocument/IngestDocumentCommandHandler.cs`
 - **Lines:** 48, 62–88
 - **Description:** The `IngestDocumentCommandHandler` chunks `request.OcrText` directly without calling `ITextRedactor.Redact()` first. PAN numbers, Aadhaar numbers, and card numbers that appear in the OCR text of uploaded documents are stored verbatim in `ai.chunks.text` and subsequently embedded into `ai.embeddings`. This means:
   1. PII is at rest in the vector index without redaction.
@@ -203,7 +203,7 @@
 
 ### [LOW] MockAiProvider Registered as Singleton and Shared Across All Requests — Hash-Based Embedding Determinism Leaks Org Data
 
-- **File:** `backend/Services/AiService/AiService.Infrastructure/Providers/MockAiProvider.cs`
+- **File:** `backend/Services/AssistService/Assist.Infrastructure/Ai/Providers/MockAiProvider.cs`
 - **Lines:** 77–97; `DependencyInjection.cs` line 81
 - **Description:** `MockAiProvider.EmbedAsync` generates a deterministic unit vector seeded from `text.GetHashCode()`. Two identical text strings always produce the same embedding vector. In a test or staging environment where multiple orgs share the mock provider, two documents with identical text content would produce identical embedding vectors stored in `ai.embeddings` under different `organization_id` values. While the retrieval query filters by `organization_id`, the deterministic vector means that if an attacker can observe that two queries return similar cosine distances they may infer content similarity across orgs. This is low severity because mock is only for dev/CI, but it represents an information-theoretic leak if mock is accidentally activated in staging alongside real org data.
 - **Recommended Fix:** In staging environments, ensure the `GCP_ENABLED=true` flag or equivalent is set so `AiProviderResolver` uses `VertexAiProvider`. Add a startup assertion that `MockAiProvider` is not used when `ASPNETCORE_ENVIRONMENT=Staging` or `Production`.
@@ -227,7 +227,7 @@
 
 ### [INFO] TextRedactor Tests Have No Catastrophic Backtracking Tests; Regex Patterns Are Safe
 
-- **File:** `tests/unit/AiService/TextRedactorTests.cs`; `backend/Services/AiService/AiService.Infrastructure/Services/TextRedactor.cs`
+- **File:** `tests/unit/AiService/TextRedactorTests.cs`; `backend/Services/AssistService/Assist.Infrastructure/Ai/Services/TextRedactor.cs`
 - **Description:** The three regex patterns use `\b` word-boundary anchors and fixed-length quantifiers (`{4}`, `{5}`, `{4}[\s-]?`, etc.), which prevents catastrophic backtracking (ReDoS). The use of `[GeneratedRegex]` with `RegexOptions.Compiled` further eliminates runtime compilation overhead. The patterns are structurally safe. However, the test suite has no adversarial cases designed to trigger backtracking (e.g. strings of the form `1234 1234 1234 12x` that nearly match but fail at the last character). These are recommended as regression guards.
 - **Reference:** CWE-1333 (Inefficient Regular Expression Complexity), OWASP ReDoS
 
@@ -235,7 +235,7 @@
 
 ### [INFO] GetEffectiveAiConfig Lacks EmbeddingModel Field — AiService Falls Back to Default Silently
 
-- **File:** `backend/Services/AuthService/AuthService.Application/AiConfig/Queries/GetEffectiveAiConfig/GetEffectiveAiConfigQuery.cs`; `backend/Services/AiService/AiService.Infrastructure/Providers/AiProviderResolver.cs`
+- **File:** `backend/Services/PlatformService/Platform.Application/Auth/AiConfig/Queries/GetEffectiveAiConfig/GetEffectiveAiConfigQuery.cs`; `backend/Services/AssistService/Assist.Infrastructure/Ai/Providers/AiProviderResolver.cs`
 - **Lines:** GetEffectiveAiConfigQuery.cs:17–24; AiProviderResolver.cs:58–60
 - **Description:** `EffectiveAiConfigDto` does not include an `EmbeddingModel` field. `AiProviderResolver` accesses `cfg?.EmbeddingModel` but this property does not exist on the DTO type — this would be a compile-time error or a null/default at runtime. The resolver falls back to `"text-embedding-005"` when the field is null/empty, so there is no security impact, but it means the admin-configured embedding model override is silently ignored. In a future upgrade (e.g. if the admin sets a different model for cost/accuracy reasons), this silent fallback could cause confusion.
 - **Reference:** INFO — configuration fidelity
@@ -299,7 +299,7 @@ Four HIGH findings must be resolved before P7a promotes to staging: the decrypte
 
 #### [MEDIUM] RV-01: X-Internal-Token `CryptographicEqual` Not Constant-Time for Mismatched-Length Inputs
 
-- **File:** `backend/Services/AuthService/AuthService.Api/Endpoints/AiConfigEndpoints.cs`
+- **File:** `backend/Services/PlatformService/Platform.WebApi/Endpoints/Auth/AiConfigEndpoints.cs`
 - **Lines:** 140–143
 - **Description:** `CryptographicEqual` wraps `CryptographicOperations.FixedTimeEquals(UTF8.GetBytes(a), UTF8.GetBytes(b))`. The .NET documentation specifies that `FixedTimeEquals` returns `false` immediately if the two span lengths differ — the comparison is NOT constant-time when lengths differ. If an attacker can observe response timing (e.g. via a timing oracle on the 401/403 response latency), they could probe the byte length of `InternalApi:SharedToken` by submitting tokens of incrementally different lengths and measuring which response is marginally slower (indicating the full comparison ran). In practice this attack requires repeated authenticated calls and sub-millisecond timing measurement across a network, making it low practical exploitability; however, the pattern does not meet the constant-time guarantee the comment claims. The correct approach is to HMAC both values under a fixed key and compare the 32-byte HMAC digests, or to pad both inputs to a fixed length before comparison.
 - **Recommended Fix:** Replace the direct UTF-8-bytes comparison with HMAC-SHA256: compute `HMAC-SHA256(key=fixed_secret, data=tokenValue)` for both the configured and supplied tokens and compare the 32-byte digests with `FixedTimeEquals`. This guarantees constant-time comparison regardless of input length. Alternatively, require `InternalApi:SharedToken` to always be exactly 32 bytes (enforced at startup), which makes both byte arrays the same fixed length.
@@ -309,16 +309,16 @@ Four HIGH findings must be resolved before P7a promotes to staging: the decrypte
 
 #### [MEDIUM] RV-02: `InternalApi:SharedToken` Has No Fail-Fast Guard in Non-Development Environments
 
-- **File:** `backend/Services/AuthService/AuthService.Api/Program.cs` (no reference found); `backend/Services/AiService/AiService.Api/Program.cs` (no reference found)
+- **File:** `backend/Services/PlatformService/Platform.WebApi/Program.cs` (no reference found); `backend/Services/AssistService/Assist.WebApi/Program.cs` (no reference found)
 - **Description:** When `InternalApi:SharedToken` is not configured in a staging or production deployment, the `AiConfigEndpoints.cs` endpoint logic evaluates `!string.IsNullOrWhiteSpace(internalToken)` as `false` and `isInternalCall` is set to `false`. This means the internal bypass path silently becomes unavailable — `AiProviderResolver` will not send the `X-Internal-Token` header (it checks `!string.IsNullOrWhiteSpace(internalToken)` on the AiService side too), so the resolver can never obtain a decrypted key and will fall back to `MockAiProvider`. This is fail-closed for the security boundary (the decrypted key is not exposed), but it causes silent operational failure: AiService degrades to mock mode in production without any startup warning. There is no `ValidateOrThrow` equivalent for this secret, unlike `SESSION_JWT_SECRET` and `Ai:KeyEncryptionKey` which both have startup guards.
-- **Recommended Fix:** Add a startup fail-fast guard in both `AuthService.Api/Program.cs` and `AiService.Api/Program.cs` for non-Development environments: if `InternalApi:SharedToken` is absent or shorter than 32 characters, throw `InvalidOperationException`. Apply the same `SessionTokenSecret.ValidateOrThrow` pattern already used for the JWT secret.
+- **Recommended Fix:** Add a startup fail-fast guard in both `Platform.WebApi/Program.cs` and `Assist.WebApi/Program.cs` for non-Development environments: if `InternalApi:SharedToken` is absent or shorter than 32 characters, throw `InvalidOperationException`. Apply the same `SessionTokenSecret.ValidateOrThrow` pattern already used for the JWT secret.
 - **Reference:** OWASP Security Misconfiguration (A05:2021), CWE-321
 
 ---
 
 #### [HIGH] RV-03: Advisory Lock Does NOT Cover the Full Budget-Check-to-Audit-Write Window — Race Condition Remains
 
-- **File:** `backend/Services/AiService/AiService.Infrastructure/Services/TokenBudgetService.cs` (lines 48–85); `backend/Services/AiService/AiService.Application/Chat/Queries/AiChat/AiChatQueryHandler.cs` (lines 50–183); `backend/Services/AiService/AiService.Application/Extraction/Commands/ExtractFields/ExtractFieldsCommandHandler.cs` (lines 41–104)
+- **File:** `backend/Services/AssistService/Assist.Infrastructure/Ai/Services/TokenBudgetService.cs` (lines 48–85); `backend/Services/AssistService/Assist.Application/Ai/Chat/Queries/AiChat/AiChatQueryHandler.cs` (lines 50–183); `backend/Services/AssistService/Assist.Application/Ai/Extraction/Commands/ExtractFields/ExtractFieldsCommandHandler.cs` (lines 41–104)
 - **Description:** `TryAcquireBudgetSlotAsync` opens its own transaction, acquires `pg_advisory_xact_lock(lockKey)`, reads the daily sum, then **commits the transaction** (line 75) — releasing the advisory lock — before returning `true` to the caller. The caller (both `AiChatQueryHandler` and `ExtractFieldsCommandHandler`) then proceeds to:
 
   1. Call `resolver.ResolveAsync` (network: config fetch from AuthService).
@@ -411,7 +411,7 @@ The GCP IAM topic-publish restriction (H-04 infra half) remains a team-lead acti
 |----|----------|-------------|---------------|-------|
 | RV-03 | HIGH | RESERVATION PATTERN: `AiInteraction.Reserve()` inserted inside advisory-lock transaction. `TokenBudgetService` refactored; `AiChatQueryHandler` + `ExtractFieldsCommandHandler` use `TryAcquireBudgetSlotAsync` → `FinaliseReservationAsync` / `AbortReservationAsync`. Migration 077 adds `is_reservation` column. | `AiInteraction.cs`, `ITokenBudgetService.cs`, `TokenBudgetService.cs`, `AiChatQueryHandler.cs`, `ExtractFieldsCommandHandler.cs`, `AiInteractionConfiguration.cs`, `077_ai_interactions_reservation_and_rls_fix.sql` | `TokenBudgetConcurrencyTests.cs` (new): 7 unit + 1 EfSmoke concurrency test; EfSmoke asserts exactly 1 of 2 parallel PG calls passes with tiny budget. |
 | RV-01 | MEDIUM | `CryptographicEqual` replaced: HMAC-SHA256 both inputs under fixed domain key `"snapaccount.internal-token.v1"`, then `FixedTimeEquals` on 32-byte digests. Constant-time for any input length. | `AiConfigEndpoints.cs` | Covered by existing AuthService unit tests (683 pass). |
-| RV-02 | MEDIUM | Startup fail-fast added to both `AuthService.Api/Program.cs` and `AiService.Api/Program.cs`: non-Development environments throw if `InternalApi:SharedToken` is absent or shorter than 32 chars. | `AuthService.Api/Program.cs`, `AiService.Api/Program.cs` | Build smoke-tested; existing tests unaffected. |
+| RV-02 | MEDIUM | Startup fail-fast added to both `Platform.WebApi/Program.cs` and `Assist.WebApi/Program.cs`: non-Development environments throw if `InternalApi:SharedToken` is absent or shorter than 32 chars. | `Platform.WebApi/Program.cs`, `Assist.WebApi/Program.cs` | Build smoke-tested; existing tests unaffected. |
 | M-01 | MEDIUM | Aadhaar regex: two-part pattern (keyword-prefixed OR separator-grouped first-digit 2-9); bare 12-digit numbers without keyword or separators not matched. Phone pattern added: `\b(?:(?:\+91\|0\|91)[\s-]?)?[6-9]\d{9}\b`. Both backtracking-safe. | `TextRedactor.cs`, `TextRedactorTests.cs` | `TextRedactorTests.cs` extended: keyword/separator Aadhaar cases, false-positive guard, phone cases, near-miss ReDoS. |
 | L-04 | LOW | Migration 077 adds `ai_interactions_superadmin_nullorg` RLS policy for `organization_id IS NULL` rows (superadmin audit access). Policy creation guarded by role-existence check for local dev. | `077_ai_interactions_reservation_and_rls_fix.sql` | Migration applied to local PG; EfSmoke passes. |
 | L-03 | LOW | `AiProviderResolver` logs a prominent `LogWarning` when MockAiProvider is resolved outside Development environment. | `AiProviderResolver.cs` | Covered by `ProviderResolutionTests.cs`. |
@@ -453,7 +453,7 @@ Each claim was traced to the specific file and line cited. The following files w
 - `AiService.Application/Chat/Queries/AiChat/AiChatQueryHandler.cs`
 - `AiService.Application/Extraction/Commands/ExtractFields/ExtractFieldsCommandHandler.cs`
 - `AiService.Infrastructure/Services/TextRedactor.cs`
-- `AuthService.Api/Endpoints/AiConfigEndpoints.cs`
+- `Platform.WebApi/Endpoints/Auth/AiConfigEndpoints.cs`
 - `AuthService.Application/AiConfig/Queries/GetEffectiveAiConfig/GetEffectiveAiConfigQuery.cs`
 - `AiService.Infrastructure/Providers/AiProviderResolver.cs`
 - `AiService.Infrastructure/DependencyInjection.cs`
@@ -462,8 +462,8 @@ Each claim was traced to the specific file and line cited. The following files w
 - `Shared.Domain/BaseAuditableEntity.cs`
 - `database/migrations/077_ai_interactions_reservation_and_rls_fix.sql`
 - `tests/unit/AiService/TokenBudgetConcurrencyTests.cs`
-- `AuthService.Api/Program.cs` (grep)
-- `AiService.Api/Program.cs` (grep)
+- `Platform.WebApi/Program.cs` (grep)
+- `Assist.WebApi/Program.cs` (grep)
 
 ---
 
@@ -571,7 +571,7 @@ This correctly resolves the original RV-01 finding. The domain key is not a secr
 
 **VERIFIED — CORRECT IN BOTH SERVICES.**
 
-`AuthService.Api/Program.cs` (grep output lines 143–154):
+`Platform.WebApi/Program.cs` (grep output lines 143–154):
 ```
 // RV-02 (SEC-AI-02): Fail-fast in non-Development when InternalApi:SharedToken is absent.
 if (!string.Equals(app.Environment.EnvironmentName, "Development", ...))
@@ -581,7 +581,7 @@ if (!string.Equals(app.Environment.EnvironmentName, "Development", ...))
 }
 ```
 
-`AiService.Api/Program.cs` (grep output lines 100–111): identical guard structure, same threshold (32 chars), same exception message pattern.
+`Assist.WebApi/Program.cs` (grep output lines 100–111): identical guard structure, same threshold (32 chars), same exception message pattern.
 
 Both guards run after the service is built but before it starts accepting traffic (`app.Run()`), ensuring a failed deployment is immediately observable in Cloud Run health checks.
 
@@ -715,7 +715,7 @@ The following are the only open items after this final gate check. None are bloc
 
 #### [LOW] FG-01: Reservation Row Leaks 1000 Estimated Tokens on Request Cancellation
 
-- **File:** `backend/Services/AiService/AiService.Application/Chat/Queries/AiChat/AiChatQueryHandler.cs`
+- **File:** `backend/Services/AssistService/Assist.Application/Ai/Chat/Queries/AiChat/AiChatQueryHandler.cs`
 - **Lines:** 82–89, 131–138
 - **Description:** If the HTTP request is cancelled (client disconnects, ASP.NET host is shutting down) while the AI provider call is in-flight, `OperationCanceledException` propagates out of `Handle()` without reaching the explicit `AbortReservationAsync` call sites. The reservation row remains with `IsReservation = true` and `InputTokens = 1000` until UTC midnight, permanently consuming that quota for the day. An authenticated user can deliberately cancel 100 consecutive requests to exhaust the full 100,000-token daily org budget without any actual AI compute. The abort calls at lines 87 and 138 pass the original `cancellationToken`, which is already cancelled at the point the exception fires — so those abort paths are also unreachable on cancellation.
 - **Recommended Fix:** Wrap the post-reservation handler body in a `try/finally` block that calls `AbortReservationAsync` with `CancellationToken.None` (not the request token) if the reservation was created and no finalisation has occurred. A simple boolean `finalised` flag achieves this. The same pattern should be applied to `ExtractFieldsCommandHandler`.

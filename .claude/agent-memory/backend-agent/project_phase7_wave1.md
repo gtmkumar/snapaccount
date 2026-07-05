@@ -28,7 +28,7 @@ Phase 7 Wave 1 backend work completed 2026-06-10. All 6 tasks addressed:
 - New `POST /auth/token/refresh-context` endpoint calls `RefreshContextCommand` → `RefreshContextCommandHandler`.
 - Handler re-mints via `IFirebaseAuthService.CreateCustomTokenAsync` — consistent with login flow.
 - Rate-limited via `"standard"` policy (100 req/min).
-- Files: `AuthService.Application/Auth/Commands/RefreshContext/RefreshContextCommand.cs` (new), `AuthService.Api/Endpoints/Auth.cs` (extended).
+- Files: `AuthService.Application/Auth/Commands/RefreshContext/RefreshContextCommand.cs` (new), `Platform.WebApi/Endpoints/Auth/Auth.cs` (extended).
 
 **B5 — GAP-012 / Real Callback KPI endpoint**
 - New keyless EF entity `KpiDailySnapshot` → `callback.kpi_daily_snapshot` MV.

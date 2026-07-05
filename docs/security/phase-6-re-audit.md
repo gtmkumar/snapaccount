@@ -13,40 +13,40 @@
 
 | File | Line(s) of Interest | Finding |
 |------|---------------------|---------|
-| `backend/Services/AccountingService/AccountingService.Application/DependencyInjection.cs` | 25–26 | `cfg.AddOpenBehavior(typeof(PermissionBehavior<,>))` present |
-| `backend/Services/NotificationService/NotificationService.Application/DependencyInjection.cs` | 22–23 | `cfg.AddOpenBehavior(typeof(PermissionBehavior<,>))` present |
-| `backend/Services/CallbackService/CallbackService.Application/DependencyInjection.cs` | 19–20 | `cfg.AddOpenBehavior(typeof(PermissionBehavior<,>))` present |
-| `backend/Services/AccountingService/AccountingService.Application/Behaviors/PermissionBehavior.cs` | 24–48 | Reads `RequiresPermissionAttribute`; checks `IsAuthenticated` then `HasPermission`; returns `Result.Failure(Error.Unauthorized/Forbidden)` — fails closed |
-| `backend/Services/NotificationService/NotificationService.Application/Behaviors/PermissionBehavior.cs` | 24–48 | Identical implementation; fails closed |
-| `backend/Services/CallbackService/CallbackService.Application/Behaviors/PermissionBehavior.cs` | 24–48 | Identical implementation; fails closed |
-| `backend/Services/AccountingService/AccountingService.Application/FiscalYear/Commands/CloseFiscalYear/CloseFiscalYearCommand.cs` | 15 | `[RequiresPermission("accounting.fiscal_year.close")]` present |
-| `backend/Services/CallbackService/CallbackService.Application/Callbacks/Commands/AssignCallback/AssignCallbackCommand.cs` | 14 | `[RequiresPermission("callback.assign")]` present |
+| `backend/Services/FinanceService/Finance.Application/Accounting/DependencyInjection.cs` | 25–26 | `cfg.AddOpenBehavior(typeof(PermissionBehavior<,>))` present |
+| `backend/Services/PlatformService/Platform.Application/Notification/DependencyInjection.cs` | 22–23 | `cfg.AddOpenBehavior(typeof(PermissionBehavior<,>))` present |
+| `backend/Services/AssistService/Assist.Application/Callback/DependencyInjection.cs` | 19–20 | `cfg.AddOpenBehavior(typeof(PermissionBehavior<,>))` present |
+| `backend/Services/FinanceService/Finance.Application/Accounting/Behaviors/PermissionBehavior.cs` | 24–48 | Reads `RequiresPermissionAttribute`; checks `IsAuthenticated` then `HasPermission`; returns `Result.Failure(Error.Unauthorized/Forbidden)` — fails closed |
+| `backend/Services/PlatformService/Platform.Application/Notification/Behaviors/PermissionBehavior.cs` | 24–48 | Identical implementation; fails closed |
+| `backend/Services/AssistService/Assist.Application/Callback/Behaviors/PermissionBehavior.cs` | 24–48 | Identical implementation; fails closed |
+| `backend/Services/FinanceService/Finance.Application/Accounting/FiscalYear/Commands/CloseFiscalYear/CloseFiscalYearCommand.cs` | 15 | `[RequiresPermission("accounting.fiscal_year.close")]` present |
+| `backend/Services/AssistService/Assist.Application/Callback/Callbacks/Commands/AssignCallback/AssignCallbackCommand.cs` | 14 | `[RequiresPermission("callback.assign")]` present |
 
 ### SEC-027 — DPDP AccountDeletionSubscriber
 
 | File | Line(s) of Interest | Finding |
 |------|---------------------|---------|
-| `backend/Services/CallbackService/CallbackService.Infrastructure/Messaging/AccountDeletionSubscriber.cs` | 105–127 | Soft-deletes `call_notes` where `AuthorId == userId`; calls `cb.Anonymize("DPDP_ORG_ERASURE")` setting `UserId=null`, `AnonymizedAt`, `AnonymizationReason` |
-| `backend/Services/NotificationService/NotificationService.Infrastructure/Messaging/AccountDeletionSubscriber.cs` | 103–121 | Soft-deletes `notification_log` and `dlq_items` where `UserId == userId` |
-| `backend/Services/CallbackService/CallbackService.Infrastructure/DependencyInjection.cs` | 44 | `services.AddHostedService<AccountDeletionSubscriber>()` present |
-| `backend/Services/NotificationService/NotificationService.Infrastructure/DependencyInjection.cs` | 60 | `services.AddHostedService<AccountDeletionSubscriber>()` present |
-| `backend/Services/CallbackService/CallbackService.Domain/Entities/Callback.cs` | 20 | `UserId` is `Guid?`; line 185–190 `Anonymize(string reason)` sets `UserId=null`, `AnonymizedAt=DateTime.UtcNow`, `AnonymizationReason=reason` |
+| `backend/Services/AssistService/Assist.Infrastructure/Callback/Messaging/AccountDeletionSubscriber.cs` | 105–127 | Soft-deletes `call_notes` where `AuthorId == userId`; calls `cb.Anonymize("DPDP_ORG_ERASURE")` setting `UserId=null`, `AnonymizedAt`, `AnonymizationReason` |
+| `backend/Services/PlatformService/Platform.Infrastructure/Notification/Messaging/AccountDeletionSubscriber.cs` | 103–121 | Soft-deletes `notification_log` and `dlq_items` where `UserId == userId` |
+| `backend/Services/AssistService/Assist.Infrastructure/Callback/DependencyInjection.cs` | 44 | `services.AddHostedService<AccountDeletionSubscriber>()` present |
+| `backend/Services/PlatformService/Platform.Infrastructure/Notification/DependencyInjection.cs` | 60 | `services.AddHostedService<AccountDeletionSubscriber>()` present |
+| `backend/Services/AssistService/Assist.Domain/Callback/Entities/Callback.cs` | 20 | `UserId` is `Guid?`; line 185–190 `Anonymize(string reason)` sets `UserId=null`, `AnonymizedAt=DateTime.UtcNow`, `AnonymizationReason=reason` |
 
 ### SEC-028 — DLQ Permission Gate
 
 | File | Line(s) of Interest | Finding |
 |------|---------------------|---------|
-| `backend/Services/NotificationService/NotificationService.Application/Notifications/Queries/GetDlq/GetDlqQuery.cs` | 15 | `[RequiresPermission("notification.dlq.manage")]` present |
-| `backend/Services/NotificationService/NotificationService.Application/Notifications/Commands/RetryDlqItem/RetryDlqItemCommand.cs` | 17 | `[RequiresPermission("notification.dlq.manage")]` present |
+| `backend/Services/PlatformService/Platform.Application/Notification/Notifications/Queries/GetDlq/GetDlqQuery.cs` | 15 | `[RequiresPermission("notification.dlq.manage")]` present |
+| `backend/Services/PlatformService/Platform.Application/Notification/Notifications/Commands/RetryDlqItem/RetryDlqItemCommand.cs` | 17 | `[RequiresPermission("notification.dlq.manage")]` present |
 
 ### SEC-029 — Callback IDOR Fix
 
 | File | Line(s) of Interest | Finding |
 |------|---------------------|---------|
-| `backend/Services/CallbackService/CallbackService.Application/Callbacks/Queries/GetCallbackById/GetCallbackByIdQuery.cs` | 62–68 | EF query includes `&& (orgId == null \|\| c.OrganizationId == orgId)` inline — no fetch-then-check; returns `NotFound` on mismatch |
-| `backend/Services/CallbackService/CallbackService.Application/Callbacks/Commands/AssignCallback/AssignCallbackCommand.cs` | 44–45 | Post-fetch: `if (currentUser.OrganizationId.HasValue && callback.OrganizationId != currentUser.OrganizationId)` returns `NotFound` |
-| `backend/Services/CallbackService/CallbackService.Application/Callbacks/Commands/CompleteCallback/CompleteCallbackCommand.cs` | 44–45 | Same post-fetch org ownership check; returns `NotFound` |
-| `backend/Services/CallbackService/CallbackService.Application/Callbacks/Commands/EscalateCallback/EscalateCallbackCommand.cs` | 44–45 | Same post-fetch org ownership check; returns `NotFound` |
+| `backend/Services/AssistService/Assist.Application/Callback/Callbacks/Queries/GetCallbackById/GetCallbackByIdQuery.cs` | 62–68 | EF query includes `&& (orgId == null \|\| c.OrganizationId == orgId)` inline — no fetch-then-check; returns `NotFound` on mismatch |
+| `backend/Services/AssistService/Assist.Application/Callback/Callbacks/Commands/AssignCallback/AssignCallbackCommand.cs` | 44–45 | Post-fetch: `if (currentUser.OrganizationId.HasValue && callback.OrganizationId != currentUser.OrganizationId)` returns `NotFound` |
+| `backend/Services/AssistService/Assist.Application/Callback/Callbacks/Commands/CompleteCallback/CompleteCallbackCommand.cs` | 44–45 | Same post-fetch org ownership check; returns `NotFound` |
+| `backend/Services/AssistService/Assist.Application/Callback/Callbacks/Commands/EscalateCallback/EscalateCallbackCommand.cs` | 44–45 | Same post-fetch org ownership check; returns `NotFound` |
 
 ### SEC-034 — Deep-Link id Validation
 

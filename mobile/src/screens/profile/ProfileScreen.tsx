@@ -10,7 +10,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../../components/ui/Card';
-import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
+import {
+  useTheme,
+  createThemedStyles,
+  type ThemePreference,
+  type ThemeTokens,
+} from '../../contexts/ThemeContext';
 import { useAuthStore } from '../../store/authStore';
 import { FirebaseAuth } from '../../lib/firebase';
 import { deleteAccount } from '../../lib/api';
@@ -28,13 +33,27 @@ function normalizePhone(phone: string | null | undefined): string {
   return phone;
 }
 
+// DG-MOBUX-02: Profile quick-toggle cycles System → Light → Dark → System.
+const THEME_CYCLE: ThemePreference[] = ['system', 'light', 'dark'];
+const THEME_ICON: Record<ThemePreference, React.ComponentProps<typeof Ionicons>['name']> = {
+  system: 'phone-portrait-outline',
+  light: 'sunny-outline',
+  dark: 'moon-outline',
+};
+
 export function ProfileScreen({ navigation }: Props) {
-  const { tokens } = useTheme();
+  const { tokens, preference, setTheme } = useTheme();
   const styles = useStyles();
   const { user, currentOrganization, signOut } = useAuthStore();
   const { t } = useTranslation();
   const { trigger: triggerBiometric } = useBiometricGate();
   const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const currentThemeLabel = t(`mobile.appearance.options.${preference}.label`);
+  const cycleTheme = () => {
+    const next = THEME_CYCLE[(THEME_CYCLE.indexOf(preference) + 1) % THEME_CYCLE.length];
+    setTheme(next);
+  };
 
   const handleSignOut = () => {
     Alert.alert(
@@ -56,8 +75,11 @@ export function ProfileScreen({ navigation }: Props) {
 
   const handleDeleteAccount = async () => {
     // GAP-063 / M4: Biometric step-up before account deletion (destructive action).
+    // DG-MOBUX-07: forcePrompt — destructive flows always re-verify (no grace).
     const passed = await triggerBiometric({
       promptMessage: t('mobile.biometric.prompt'),
+      flowKey: 'account.delete',
+      forcePrompt: true,
     });
     if (!passed) return;
 
@@ -147,6 +169,8 @@ export function ProfileScreen({ navigation }: Props) {
             // Task #18 (GAP-060rem): Edit Business / Billing / Help now route to real screens
             { label: t('mobile.profile.menu.editBusiness'), icon: 'business-outline', color: tokens.brandCta, route: 'EditBusiness' },
             { label: t('mobile.profile.menu.identityDocuments'), icon: 'document-attach-outline', color: tokens.loanAccent, route: 'IdentityDocuments' },
+            // DG-MOBUX-02: full Appearance picker (radio cards). The quick cycle-toggle below is a faster shortcut.
+            { label: t('mobile.profile.menu.appearance'), icon: 'contrast-outline', color: tokens.gstAccent, route: 'Appearance' },
             { label: t('mobile.profile.menu.manageDevices'), icon: 'phone-portrait-outline', color: tokens.infoFg, route: 'Devices' },
             // AND-11: both entries intentionally open the combined
             // language + notification preferences screen (now titled
@@ -183,6 +207,27 @@ export function ProfileScreen({ navigation }: Props) {
             </Pressable>
           ))}
         </Card>
+
+        {/* DG-MOBUX-02: quick theme cycle-toggle (System → Light → Dark). The
+            full radio-card picker lives in the AppearanceScreen menu entry above. */}
+        <Pressable
+          style={styles.themeToggleRow}
+          onPress={cycleTheme}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.appearance.quickToggle.a11y', {
+            current: currentThemeLabel,
+          })}
+          testID="profile-theme-toggle"
+        >
+          <View style={[styles.menuItemIconWrap, { backgroundColor: tokens.gstAccent + '12' }]}>
+            <Ionicons name={THEME_ICON[preference]} size={18} color={tokens.gstAccent} />
+          </View>
+          <Text style={styles.themeToggleLabel}>{t('mobile.appearance.quickToggle.label')}</Text>
+          <View style={styles.themeToggleValueWrap}>
+            <Text style={styles.themeToggleValue}>{currentThemeLabel}</Text>
+            <Ionicons name="sync-outline" size={15} color={tokens.textTertiary} />
+          </View>
+        </Pressable>
 
         {/* Sign out */}
         <Pressable style={styles.signOutRow} onPress={handleSignOut}>
@@ -257,6 +302,12 @@ const useStyles = createThemedStyles((tk: ThemeTokens) =>
   menuItemDisabled: { opacity: 0.4 },
   menuItemIconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   menuItemLabel: { flex: 1, fontSize: 15, color: tk.textPrimary, letterSpacing: -0.1 },
+
+  // DG-MOBUX-02: quick theme cycle-toggle
+  themeToggleRow: { flexDirection: 'row', alignItems: 'center', padding: 16, minHeight: 56, backgroundColor: tk.raised, borderRadius: 18, gap: 12, shadowColor: tk.shadowColor, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+  themeToggleLabel: { flex: 1, fontSize: 15, color: tk.textPrimary, letterSpacing: -0.1 },
+  themeToggleValueWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  themeToggleValue: { fontSize: 14, fontWeight: '600', color: tk.textSecondary },
 
   // Sign out
   signOutRow: { flexDirection: 'row', alignItems: 'center', padding: 16, minHeight: 44, backgroundColor: tk.raised, borderRadius: 18, gap: 12, shadowColor: tk.shadowColor, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },

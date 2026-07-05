@@ -41,7 +41,7 @@ The single most important integration in the product: **"user takes a photo → 
    - Subscribe to Pub/Sub `ocr-results.completed` topic.
    - Parse Document AI response → `ExtractedInvoiceDto` (vendor, GSTIN, date, line items, tax, total).
    - Publish `accounting.post-requested` event → AccountingService handler auto-posts with `source=OCR` and `status=PENDING_REVIEW`.
-   - Clear all `// TODO` markers in `DocumentService.Api/Endpoints/*.cs` related to OCR result handling.
+   - Clear all `// TODO` markers in `Finance.WebApi/Endpoints/Document/*.cs` related to OCR result handling.
 3. **GstService stub reduction:**
    - Convert `list returns`, `list invoices`, `create invoice` from 501 → real handlers reading `gst.invoices` + `accounting.ledger_entries` joined views.
    - Remove 3 of the 6 TODO markers in GST endpoints.

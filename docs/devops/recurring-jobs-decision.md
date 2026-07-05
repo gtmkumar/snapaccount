@@ -248,6 +248,61 @@ Hangfire MUST NOT be used for:
 
 ---
 
+## Addendum (2026-06-28) — Monthly partition maintenance (GAP-113)
+
+`document.document` (uploaded_at) and `notification.notification` (created_at) are
+RANGE-partitioned by month. Migration `090_partition_maintenance.sql` installs
+`public.create_monthly_partitions(schema, table, months_ahead)` (idempotent) and pre-creates
+all of 2027. A **monthly** job must keep partitions ahead of the data so rows land in proper
+per-month partitions instead of the catch-all DEFAULT partition (which would defeat pruning /
+month-granular retention and eventually block adding the month's partition at all).
+
+**Recommended wiring (same Option B pattern):** a Cloud Scheduler job (e.g. `0 2 1 * *`,
+1st of month 02:00 IST) → Pub/Sub topic `partition-maintenance` → a subscriber in the owning
+composite runs:
+
+```sql
+SELECT public.create_monthly_partitions('document', 'document', 6);
+SELECT public.create_monthly_partitions('notification', 'notification', 6);
+```
+
+`document.document` is owned by **Finance**, `notification.notification` by **Platform**. Pair
+with a separate detach+drop job for partitions older than the 7-year financial-retention window
+(DPDP/MCA).
+
+**Status: DELIVERED.** The wiring is implemented exactly as recommended above:
+- Cloud Scheduler job `partition-maintenance` (`0 2 1 * *` IST) + dedicated subscriptions
+  `finance-partition-maintenance-sub` / `platform-partition-maintenance-sub` in
+  `infra/pubsub-scheduler-recurring-jobs.sh`.
+- A shared `PartitionMaintenanceSubscriber` (Shared.Infrastructure) consumed by Finance
+  (document.document) and Platform (notification.notification), each via a per-composite
+  `IPartitionMaintenanceHandler` calling `create_monthly_partitions(schema, table, 6)`.
+- `PartitionMaintenance:MonthsAhead` config (default 6) tunes the look-ahead.
+
+**Retention (detach+drop) — also DELIVERED, but OFF by default.** Migration
+`091_partition_retention.sql` installs `public.drop_old_partitions(schema, table, retain_months)`
+(default 84 months = 7-year DPDP/MCA floor). The same monthly handler calls it **only when**
+`PartitionMaintenance:RetentionEnabled = true` (default `false`); `PartitionMaintenance:RetainMonths`
+sets the window. The function never touches the DEFAULT partition and **skips any partition that
+still has dependent rows** (e.g. an FK) with a NOTICE rather than cascading or aborting — verified
+on a throwaway DB.
+
+⚠️ Before enabling retention: `document.document` is FK-referenced (ocr_result, document_page, …)
+and already has a DocumentArchive/GCS-lifecycle purge path — reconcile partition-drop with that
+first. `notification.notification` is the natural candidate (transient; `notification_log` references
+it by value, no enforced FK).
+
+| Config key | Default | Purpose |
+|---|---|---|
+| `PartitionMaintenance:MonthsAhead` | 6 | months of future partitions to create each run |
+| `PartitionMaintenance:RetentionEnabled` | false | master switch for the destructive drop |
+| `PartitionMaintenance:RetainMonths` | 84 | drop partitions entirely older than this |
+
+Remaining (deploy-time devops): run `infra/pubsub-scheduler-recurring-jobs.sh` against the GCP
+project to create the job + subscriptions; per-table review before flipping `RetentionEnabled` on.
+
+---
+
 ## References
 
 - [Cloud Scheduler pricing](https://cloud.google.com/scheduler/pricing)

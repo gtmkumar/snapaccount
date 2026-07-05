@@ -10,6 +10,8 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ChatListScreen } from '../screens/chat/ChatListScreen';
 import { ChatDetailScreen } from '../screens/chat/ChatDetailScreen';
+// DG-CHAT-06: lightweight "Ask AI" quick-answer surface (POST /ai/chat).
+import { AskAiScreen } from '../screens/chat/AskAiScreen';
 import { ChatBookmarksScreen } from '../screens/chat/ChatBookmarksScreen';
 import { NewChatScreen } from '../screens/chat/NewChatScreen';
 import { CaSelectScreen } from '../screens/appointments/CaSelectScreen';
@@ -29,6 +31,8 @@ export type ChatStackParamList = {
   };
   /** GAP-043: bookmarked messages list. */
   ChatBookmarks: undefined;
+  /** DG-CHAT-06: single-shot "Ask AI" quick answer (org-scoped RAG). */
+  AskAi: undefined;
   /** BUG-W7-002: new-conversation compose sheet (category → first message). */
   NewChat: undefined;
   // ── GAP-031 CA booking (modal flow) ────────────────────────────────────────
@@ -59,6 +63,8 @@ export function ChatStack() {
       <Stack.Screen name="ChatList" component={ChatListScreen} />
       <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
       <Stack.Screen name="ChatBookmarks" component={ChatBookmarksScreen} />
+      {/* DG-CHAT-06: Ask AI quick-answer */}
+      <Stack.Screen name="AskAi" component={AskAiScreen} />
       <Stack.Screen name="NewChat" component={NewChatScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="CaSelect" component={CaSelectScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="SlotPicker" component={SlotPickerScreen} />

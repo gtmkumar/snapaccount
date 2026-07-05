@@ -13,16 +13,16 @@ interface BadgeProps {
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
-  default: 'bg-neutral-50 text-neutral-700',
-  brand: 'bg-brand-50 text-brand-700',
-  success: 'bg-success-50 text-success-700',
-  warning: 'bg-warning-50 text-warning-700',
-  error: 'bg-error-50 text-error-700',
-  info: 'bg-info-50 text-info-700',
-  neutral: 'bg-neutral-50 text-neutral-500',
-  gst: 'bg-purple-50 text-purple-700',
-  itr: 'bg-cyan-50 text-cyan-700',
-  loan: 'bg-amber-50 text-amber-700',
+  default: 'bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)]',
+  brand: 'bg-[var(--badge-brand-bg)] text-[var(--badge-brand-fg)]',
+  success: 'bg-[var(--semantic-success-bg)] text-[var(--semantic-success-fg)]',
+  warning: 'bg-[var(--semantic-warning-bg)] text-[var(--semantic-warning-fg)]',
+  error: 'bg-[var(--semantic-error-bg)] text-[var(--semantic-error-fg)]',
+  info: 'bg-[var(--semantic-info-bg)] text-[var(--semantic-info-fg)]',
+  neutral: 'bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)]',
+  gst: 'bg-[var(--badge-gst-bg)] text-[var(--badge-gst-fg)]',
+  itr: 'bg-[var(--badge-itr-bg)] text-[var(--badge-itr-fg)]',
+  loan: 'bg-[var(--badge-loan-bg)] text-[var(--badge-loan-fg)]',
 }
 
 const dotColors: Record<BadgeVariant, string> = {

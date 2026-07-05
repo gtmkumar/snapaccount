@@ -4,7 +4,7 @@
 
 SnapAccount is a mobile-first SaaS platform for Indian SMEs that simplifies accounting, GST filing, loan processing, and ITR filing. Users photograph bills and invoices; the backend team (humans + AI) processes them into proper accounting entries.
 
-Architecture: 11 microservices (.NET 10), React 19 admin panel, React Native (Expo) mobile app, PostgreSQL 17 with schema-per-service isolation. Cloud: Google Cloud Platform + Firebase (zero-budget friendly).
+Architecture: **3 composite services** (.NET 10) hosting 12 modules, React 19 admin panel, React Native (Expo) mobile app, PostgreSQL 17 with schema-per-service isolation. Cloud: Google Cloud Platform + Firebase (zero-budget friendly).
 
 ## Setup Commands
 
@@ -17,7 +17,7 @@ docker --version    # Docker Desktop
 
 # Backend
 cd backend && dotnet restore && dotnet build
-dotnet run --project AppHost  # Starts all services via .NET Aspire
+dotnet run --project Services/AppHost  # Starts all services via .NET Aspire
 
 # Frontend (Admin Panel)
 cd src/admin && pnpm install && pnpm dev  # http://localhost:5173
@@ -97,21 +97,14 @@ cd tests/e2e && npx playwright test  # Browser E2E (Playwright)
 ```
 snapaccount/
   backend/
-    AppHost/              # .NET Aspire orchestrator
-    ServiceDefaults/      # Shared Aspire defaults (telemetry, health, resilience)
+    ServiceDefaults/      # Shared Aspire defaults
     Services/
-      Auth/               # Auth microservice
-      Document/           # Document processing microservice
-      Accounting/         # Accounting + ledger microservice
-      GST/                # GST filing microservice
-      Loan/               # Loan hub microservice
-      ITR/                # ITR filing microservice
-      Chat/               # Expert chat microservice
-      Notification/       # Notification microservice
-      Report/             # Reporting + analytics microservice
-      Subscription/       # Billing + plans microservice
-      AI/                 # AI/RAG/OCR microservice
-    SharedKernel/         # Shared domain primitives, events, contracts
+      AppHost/            # .NET Aspire orchestrator
+      Gateway/            # YARP API gateway (:5000)
+      PlatformService/    # Platform.{Domain,Application,Infrastructure,WebApi}
+      FinanceService/     # Finance.{Domain,Application,Infrastructure,WebApi}
+      AssistService/      # Assist.{Domain,Application,Infrastructure,WebApi}
+    Shared/               # SnapAccount.Shared.{Domain,Application,Infrastructure,Api}
   src/admin/              # React 19 admin panel (web)
   mobile/                 # React Native (Expo) mobile app
   database/               # SQL migrations per service schema

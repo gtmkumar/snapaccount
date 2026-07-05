@@ -17,7 +17,7 @@ File: `GstService.Application/TaxRates/Commands/CreateTaxRate/CreateTaxRateComma
 **BUG-W6-002** (High): `GET /subscriptions/admin/list` returns 404 — SubscriptionService (PID 98094) was NOT restarted during wave 6 deployment. Started at 14:46, rebuilt at 18:26. The `ListSubscribers` route and `ListSubscribersQuery.cs` are uncommitted working-tree changes not loaded by the running process. Fix: restart SubscriptionService after the working-tree changes are committed.
 
 **BUG-W6-003** (High): `GET /admin/health/aggregate` and `POST /auth/token/refresh-context` return HTTP 500. Root cause: AuthService `Program.cs` registers only `otp`, `password-reset`, and `invite-token-lookup` rate limiter policies — the `standard` policy (100 req/min) is never defined. All 4 AuthService endpoint files that call `.RequireRateLimiting("standard")` crash at runtime.
-Files: `AuthService.Api/Program.cs` (fix: add standard fixed-window limiter) + `AggregateHealth.cs`, `Auth.cs`, `Privacy.cs`, `Search.cs`.
+Files: `Platform.WebApi/Program.cs` (fix: add standard fixed-window limiter) + `AggregateHealth.cs`, `Auth.cs`, `Privacy.cs`, `Search.cs`.
 AiService has the same bug.
 
 **BUG-W6-004** (Low): Document tag re-add is not idempotent — POST of same `tagName` creates a new row with a different `tagId` (returns 201). Expected: return existing tag or 200.

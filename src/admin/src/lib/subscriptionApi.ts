@@ -73,15 +73,16 @@ export const InvoicePageSchema = z.object({
 })
 export type InvoicePage = z.infer<typeof InvoicePageSchema>
 
+/**
+ * DG-SUB-05 fix: field names matched to GetMrrDashboardQuery.MrrDashboardDto
+ * (camelCase JSON serialisation of .NET PascalCase).
+ * Backend emits: activeSubscriptions / pastDueSubscriptions /
+ *                cancelledThisMonth / trialingSubscriptions.
+ * The previous schema accepted the wrong *Count aliases (activeCount etc.) which
+ * always resolved to undefined, causing every KPI card except totalMrr to show 0.
+ */
 export const MrrDashboardSchema = z.object({
   totalMrr: z.number(),
-  // Backend field names: activeCount / trialingCount / pastDueCount / cancelledCount
-  // (from GetMrrDashboardQuery.MrrDashboardDto — camelCase serialised by .NET)
-  activeCount: z.number().optional(),
-  trialingCount: z.number().optional(),
-  pastDueCount: z.number().optional(),
-  cancelledCount: z.number().optional(),
-  // Alternate field names the backend may emit
   activeSubscriptions: z.number().optional(),
   trialingSubscriptions: z.number().optional(),
   pastDueSubscriptions: z.number().optional(),
@@ -199,6 +200,75 @@ export async function generateInvoice(subscriptionId: string): Promise<{ invoice
 export async function getMrrDashboard(): Promise<MrrDashboard> {
   const res = await api.get('/subscriptions/mrr')
   return MrrDashboardSchema.parse(res.data)
+}
+
+/**
+ * DG-SUB-10: MRR monthly history for trend chart.
+ * Backend: GET /subscriptions/mrr/history — GetMrrHistoryQuery (Platform composite :5201).
+ * Returns a monthly time-series of [{month, totalMrr, activeCount}] for up to 24 months.
+ * Requires subscription.plan.create permission (platform-admin only).
+ */
+export const MrrHistoryPointSchema = z.object({
+  month: z.string(),       // ISO 8601 YYYY-MM
+  totalMrr: z.number(),
+  activeCount: z.number(),
+})
+export type MrrHistoryPoint = z.infer<typeof MrrHistoryPointSchema>
+
+export async function getMrrHistory(months = 12): Promise<MrrHistoryPoint[]> {
+  const res = await api.get('/subscriptions/mrr/history', { params: { months } })
+  return z.array(MrrHistoryPointSchema).parse(res.data)
+}
+
+/**
+ * DG-SUB-10: Recent subscription lifecycle events feed.
+ * Backend: GET /subscriptions/events — ListSubscriptionEventsQuery (Platform composite :5201).
+ * Returns up to 100 recent lifecycle events: Subscribed, Upgraded, Cancelled, Paid, etc.
+ * Events are derived from subscription state transitions + invoice status — no separate event log table.
+ * Requires subscription.plan.create permission (platform-admin only).
+ */
+export const SubscriptionEventSchema = z.object({
+  eventId: z.string(),
+  eventType: z.string(),   // e.g. 'Subscribed' | 'Upgraded' | 'Cancelled' | 'PastDue'
+  organizationId: z.string(),
+  organizationName: z.string().optional(),
+  planName: z.string().optional(),
+  mrr: z.number().optional(),
+  occurredAt: z.string(),
+})
+export type SubscriptionEvent = z.infer<typeof SubscriptionEventSchema>
+
+export async function listSubscriptionEvents(limit = 20): Promise<SubscriptionEvent[]> {
+  const res = await api.get('/subscriptions/events', { params: { limit } })
+  return z.array(SubscriptionEventSchema).parse(res.data)
+}
+
+// ── Payment gateway config ────────────────────────────────────────────────────
+
+export interface UpdateRazorpayConfigParams {
+  keyId: string
+  keySecret: string
+  webhookSecret?: string
+  testMode?: boolean
+  isEnabled?: boolean
+}
+
+/**
+ * DG-SUB-06: Persist Razorpay credentials via PATCH /subscriptions/config/razorpay.
+ * Backend: UpdateRazorpayConfigCommand — encrypts keySecret + webhookSecret at rest.
+ * Requires permission: subscription.config.write (platform-admin only).
+ *
+ * NOTE: until DG-SUB-01 is resolved the live RazorpayHttpClient is still not wired,
+ * so persisting credentials enables the DB row but does not activate live billing.
+ */
+export async function updateRazorpayConfig(params: UpdateRazorpayConfigParams): Promise<void> {
+  await api.patch('/subscriptions/config/razorpay', {
+    keyId: params.keyId,
+    keySecret: params.keySecret,
+    webhookSecret: params.webhookSecret ?? null,
+    testMode: params.testMode ?? true,
+    isEnabled: params.isEnabled ?? false,
+  })
 }
 
 /**

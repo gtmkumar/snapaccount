@@ -25,7 +25,7 @@ The headline: **we are building the right system, but the mobile app currently d
 
 ### User types (backend) — `auth.user_profile.user_type`
 `BUSINESS_OWNER` · `EMPLOYEE` · `STAFF` — DB CHECK-constrained.
-- `backend/Services/AuthService/AuthService.Domain/Entities/UserProfile.cs:8`
+- `backend/Services/PlatformService/Platform.Domain/Auth/Entities/UserProfile.cs:8`
 - `database/migrations/001_auth_schema.sql:122`
 
 ### Roles (12 system roles, two seed layers)
@@ -38,7 +38,7 @@ The headline: **we are building the right system, but the mobile app currently d
 
 ### Organization model — fully supports Owner + Employees
 - `Organization.OwnerUserId` + `OrganizationMember(OrganizationId, UserId, RoleId, IsActive)` junction, unique on `(org, user)`.
-- `backend/Services/AuthService/AuthService.Domain/Entities/Organization.cs`, `OrganizationMember.cs`; `database/migrations/001_auth_schema.sql:159,202`
+- `backend/Services/PlatformService/Platform.Domain/Auth/Entities/Organization.cs`, `OrganizationMember.cs`; `database/migrations/001_auth_schema.sql:159,202`
 
 ### Customer vs Staff — relational, not a flag
 A user is **staff** iff they hold an active `auth.user_role` with an operational role; otherwise **customer**.

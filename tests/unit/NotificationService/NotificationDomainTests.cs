@@ -19,10 +19,12 @@ public class NotificationDomainTests
     // ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public void NotificationEventCatalog_Contains29Events()
+    public void NotificationEventCatalog_Contains38Events()
     {
-        // Phase 6C added 3 loan disbursement events: LOAN_DISBURSED, LOAN_DISBURSEMENT_FAILED, LOAN_DISBURSEMENT_REVERSED
-        NotificationEventCatalog.All.Count.Should().Be(29);
+        // 29 base → DG-NOTIF-01 +2 (DOC_CLARIFICATION_REQUESTED, CHAT_NEW_MESSAGE) = 31
+        // → DG-CHAT-03 +4 appointment events = 35
+        // → DG-NOTIF-06 +3 (USER_REGISTERED, ACCT_OTP_REQUESTED, ACCT_PASSWORD_RESET) = 38.
+        NotificationEventCatalog.All.Count.Should().Be(38);
     }
 
     [Fact]

@@ -1,17 +1,31 @@
 /**
  * CaAppointmentsPage — CA appointments calendar + list admin view (GAP-031, Wave 7)
+ * DG-CHAT-09: replaced calendar stub with real month/week/day grid
  * Route: /ca/appointments
  * Perms: ca.appointments.read, ca.appointments.manage [confirm 7A]
  */
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { List, Calendar, ExternalLink, Copy, CheckCircle } from 'lucide-react'
+import { List, Calendar, ExternalLink, Copy, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
-import { format } from 'date-fns'
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  addDays,
+  addMonths,
+  addWeeks,
+  subMonths,
+  subWeeks,
+  isSameMonth,
+  isToday,
+  parseISO,
+} from 'date-fns'
 import { t } from '@/i18n'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Card, CardHeader } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { AlertBanner } from '@/components/shared/AlertBanner'
@@ -25,6 +39,8 @@ import {
   type Appointment,
   type AppointmentStatus,
 } from '@/lib/caApi'
+
+type CalendarView = 'list' | 'month' | 'week' | 'day'
 
 // ---------------------------------------------------------------------------
 // Status badge map (from spec §1.5)
@@ -276,21 +292,302 @@ function AppointmentsList({ appointments, onRowClick }: AppointmentsListProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Status colour for calendar dots
+// ---------------------------------------------------------------------------
+
+const STATUS_DOT: Record<AppointmentStatus, string> = {
+  REQUESTED:   'bg-warning-400',
+  PENDING:     'bg-warning-400',
+  CONFIRMED:   'bg-info-400',
+  SCHEDULED:   'bg-info-400',
+  IN_PROGRESS: 'bg-brand-400',
+  COMPLETED:   'bg-success-400',
+  CANCELLED:   'bg-neutral-300',
+  NO_SHOW:     'bg-error-400',
+}
+
+// ---------------------------------------------------------------------------
+// Month Calendar Grid
+// ---------------------------------------------------------------------------
+
+interface MonthGridProps {
+  appointments: Appointment[]
+  focusDate: Date
+  onDateClick: (d: Date) => void
+  onApptClick: (a: Appointment) => void
+}
+
+function MonthGrid({ appointments, focusDate, onDateClick, onApptClick }: MonthGridProps) {
+  const monthStart = startOfMonth(focusDate)
+  const monthEnd = endOfMonth(focusDate)
+  const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 })
+  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
+
+  const days: Date[] = []
+  let cur = gridStart
+  while (cur <= gridEnd) {
+    days.push(cur)
+    cur = addDays(cur, 1)
+  }
+
+  const apptsByDay = useMemo(() => {
+    const map: Record<string, Appointment[]> = {}
+    for (const appt of appointments) {
+      const key = format(parseISO(appt.slotStart), 'yyyy-MM-dd')
+      if (!map[key]) map[key] = []
+      map[key].push(appt)
+    }
+    return map
+  }, [appointments])
+
+  const DAY_HEADERS = [
+    t('ca.calendar.mon'), t('ca.calendar.tue'), t('ca.calendar.wed'),
+    t('ca.calendar.thu'), t('ca.calendar.fri'), t('ca.calendar.sat'), t('ca.calendar.sun'),
+  ]
+
+  return (
+    <div>
+      {/* Day-of-week headers */}
+      <div className="grid grid-cols-7 mb-1">
+        {DAY_HEADERS.map(d => (
+          <div key={d} className="text-center text-xs font-semibold text-neutral-500 py-1">{d}</div>
+        ))}
+      </div>
+      {/* Day cells */}
+      <div className="grid grid-cols-7 gap-px bg-neutral-200 border border-neutral-200 rounded-lg overflow-hidden">
+        {days.map(day => {
+          const key = format(day, 'yyyy-MM-dd')
+          const dayAppts = apptsByDay[key] ?? []
+          const inMonth = isSameMonth(day, focusDate)
+          const todayFlag = isToday(day)
+
+          return (
+            <div
+              key={key}
+              onClick={() => onDateClick(day)}
+              className={cn(
+                'min-h-[80px] p-1.5 bg-white cursor-pointer hover:bg-neutral-50 transition-colors',
+                !inMonth && 'bg-neutral-50 opacity-40',
+              )}
+              role="gridcell"
+              aria-label={format(day, 'EEEE, d MMMM yyyy')}
+            >
+              <div className={cn(
+                'text-xs font-medium mb-1 h-5 w-5 flex items-center justify-center rounded-full',
+                todayFlag ? 'bg-brand-600 text-white' : inMonth ? 'text-neutral-700' : 'text-neutral-400',
+              )}>
+                {format(day, 'd')}
+              </div>
+              <div className="space-y-px">
+                {dayAppts.slice(0, 3).map(appt => (
+                  <button
+                    key={appt.id}
+                    onClick={e => { e.stopPropagation(); onApptClick(appt) }}
+                    className="w-full text-left text-[10px] leading-tight px-1 py-0.5 rounded bg-brand-50 text-brand-700 hover:bg-brand-100 truncate flex items-center gap-0.5"
+                    title={`${format(parseISO(appt.slotStart), 'HH:mm')} — ${appt.clientName}`}
+                  >
+                    <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', STATUS_DOT[appt.status] ?? 'bg-neutral-300')} />
+                    <span className="truncate">{format(parseISO(appt.slotStart), 'HH:mm')} {appt.clientName}</span>
+                  </button>
+                ))}
+                {dayAppts.length > 3 && (
+                  <p className="text-[10px] text-neutral-400 pl-1">+{dayAppts.length - 3} {t('ca.calendar.more')}</p>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Week Grid
+// ---------------------------------------------------------------------------
+
+const WEEK_HOUR_SLOTS = Array.from({ length: 13 }, (_, i) => i + 8) // 08:00–20:00
+
+interface WeekGridProps {
+  appointments: Appointment[]
+  focusDate: Date
+  onApptClick: (a: Appointment) => void
+}
+
+function WeekGrid({ appointments, focusDate, onApptClick }: WeekGridProps) {
+  const weekStart = startOfWeek(focusDate, { weekStartsOn: 1 })
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+
+  const apptMap = useMemo(() => {
+    const map: Record<string, Record<number, Appointment[]>> = {}
+    for (const appt of appointments) {
+      const dt = parseISO(appt.slotStart)
+      const dayKey = format(dt, 'yyyy-MM-dd')
+      const hour = dt.getHours()
+      if (!map[dayKey]) map[dayKey] = {}
+      if (!map[dayKey][hour]) map[dayKey][hour] = []
+      map[dayKey][hour].push(appt)
+    }
+    return map
+  }, [appointments])
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="min-w-[640px]">
+        {/* Day headers */}
+        <div className="flex border-b border-neutral-200">
+          <div className="w-16 shrink-0" />
+          {weekDays.map(day => (
+            <div
+              key={format(day, 'yyyy-MM-dd')}
+              className={cn(
+                'flex-1 text-center text-xs font-semibold py-2',
+                isToday(day) ? 'text-brand-600' : 'text-neutral-600'
+              )}
+            >
+              <div>{format(day, 'EEE')}</div>
+              <div className={cn(
+                'mx-auto mt-0.5 h-6 w-6 flex items-center justify-center rounded-full text-sm font-bold',
+                isToday(day) ? 'bg-brand-600 text-white' : 'text-neutral-700'
+              )}>
+                {format(day, 'd')}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Time grid */}
+        <div className="relative">
+          {WEEK_HOUR_SLOTS.map(hour => (
+            <div key={hour} className="flex border-b border-neutral-100">
+              <div className="w-16 shrink-0 py-1 pr-2 text-right text-[10px] text-neutral-400 -mt-2">
+                {`${String(hour).padStart(2, '0')}:00`}
+              </div>
+              {weekDays.map(day => {
+                const dayKey = format(day, 'yyyy-MM-dd')
+                const slotAppts = apptMap[dayKey]?.[hour] ?? []
+                return (
+                  <div
+                    key={`${dayKey}-${hour}`}
+                    className={cn(
+                      'flex-1 min-h-[52px] border-l border-neutral-100 p-0.5',
+                      isToday(day) && 'bg-brand-50/30'
+                    )}
+                  >
+                    {slotAppts.map(appt => (
+                      <button
+                        key={appt.id}
+                        onClick={() => onApptClick(appt)}
+                        className="w-full text-left text-[10px] leading-tight px-1.5 py-1 rounded bg-brand-100 text-brand-800 hover:bg-brand-200 mb-px block"
+                        title={`${appt.clientName} — ${t(`ca.confirm.topic.${appt.topic.toLowerCase()}`)}`}
+                      >
+                        <div className="flex items-center gap-0.5">
+                          <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', STATUS_DOT[appt.status] ?? 'bg-neutral-300')} />
+                          <span className="font-medium truncate">{appt.clientName}</span>
+                        </div>
+                        <span className="text-brand-600 ml-2">{format(parseISO(appt.slotStart), 'HH:mm')}</span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Day View
+// ---------------------------------------------------------------------------
+
+interface DayViewProps {
+  appointments: Appointment[]
+  focusDate: Date
+  onApptClick: (a: Appointment) => void
+}
+
+function DayView({ appointments, focusDate, onApptClick }: DayViewProps) {
+  const dayKey = format(focusDate, 'yyyy-MM-dd')
+  const dayAppts = appointments
+    .filter(a => format(parseISO(a.slotStart), 'yyyy-MM-dd') === dayKey)
+    .sort((a, b) => a.slotStart.localeCompare(b.slotStart))
+
+  return (
+    <div>
+      <div className="text-sm font-semibold text-neutral-700 mb-3 flex items-center gap-2">
+        <span>{format(focusDate, 'EEEE, d MMMM yyyy')}</span>
+        {isToday(focusDate) && <span className="text-xs px-2 py-0.5 rounded-full bg-brand-100 text-brand-700">{t('ca.calendar.today')}</span>}
+      </div>
+      {dayAppts.length === 0 ? (
+        <p className="text-sm text-neutral-400 py-6 text-center">{t('ca.admin.appts.empty')}</p>
+      ) : (
+        <div className="space-y-2">
+          {dayAppts.map(appt => (
+            <button
+              key={appt.id}
+              onClick={() => onApptClick(appt)}
+              className="w-full text-left rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 transition-colors p-3 flex items-start gap-3"
+            >
+              <div className="text-xs text-neutral-500 w-14 shrink-0 text-right pt-0.5">
+                {format(parseISO(appt.slotStart), 'HH:mm')}
+              </div>
+              <div className={cn('w-0.5 self-stretch rounded-full shrink-0', STATUS_DOT[appt.status] ?? 'bg-neutral-300')} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-neutral-800">{appt.clientName}</p>
+                <p className="text-xs text-neutral-500">
+                  {t(`ca.confirm.topic.${appt.topic.toLowerCase()}`)} · {appt.durationMinutes}m
+                  {appt.caName ? ` · ${appt.caName}` : ''}
+                </p>
+              </div>
+              <AppointmentStatusBadge status={appt.status} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
 export default function CaAppointmentsPage() {
   const queryClient = useQueryClient()
-  const [view, setView] = useState<'list' | 'calendar'>('list')
+  const [view, setView] = useState<CalendarView>('list')
+  const [calendarSubView, setCalendarSubView] = useState<'month' | 'week' | 'day'>('month')
+  const [focusDate, setFocusDate] = useState<Date>(new Date())
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | ''>('')
   const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null })
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null)
 
+  // For calendar views load a broader date range (full month/week window)
+  const calendarDateFrom = useMemo(() => {
+    if (calendarSubView === 'month') return startOfWeek(startOfMonth(focusDate), { weekStartsOn: 1 })
+    if (calendarSubView === 'week') return startOfWeek(focusDate, { weekStartsOn: 1 })
+    return focusDate
+  }, [calendarSubView, focusDate])
+
+  const calendarDateTo = useMemo(() => {
+    if (calendarSubView === 'month') return endOfWeek(endOfMonth(focusDate), { weekStartsOn: 1 })
+    if (calendarSubView === 'week') return endOfWeek(focusDate, { weekStartsOn: 1 })
+    return focusDate
+  }, [calendarSubView, focusDate])
+
+  const isCalendarView = view !== 'list'
+
   const queryParams = {
-    status: statusFilter || undefined,
-    dateFrom: dateRange.start?.toISOString(),
-    dateTo: dateRange.end?.toISOString(),
-    pageSize: 50,
+    status: (!isCalendarView && statusFilter) ? statusFilter : undefined,
+    dateFrom: isCalendarView
+      ? calendarDateFrom.toISOString()
+      : dateRange.start?.toISOString(),
+    dateTo: isCalendarView
+      ? calendarDateTo.toISOString()
+      : dateRange.end?.toISOString(),
+    pageSize: isCalendarView ? 200 : 50,
   }
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -313,6 +610,35 @@ export default function CaAppointmentsPage() {
   const hasFilters = !!(statusFilter || dateRange.start)
   const isEmpty = !isLoading && !isError && appointments.length === 0
 
+  // Calendar navigation
+  function navigatePrev() {
+    if (calendarSubView === 'month') setFocusDate(d => subMonths(d, 1))
+    else if (calendarSubView === 'week') setFocusDate(d => subWeeks(d, 1))
+    else setFocusDate(d => { const n = new Date(d); n.setDate(n.getDate() - 1); return n })
+  }
+
+  function navigateNext() {
+    if (calendarSubView === 'month') setFocusDate(d => addMonths(d, 1))
+    else if (calendarSubView === 'week') setFocusDate(d => addWeeks(d, 1))
+    else setFocusDate(d => { const n = new Date(d); n.setDate(n.getDate() + 1); return n })
+  }
+
+  function calendarTitle(): string {
+    if (calendarSubView === 'month') return format(focusDate, 'MMMM yyyy')
+    if (calendarSubView === 'week') {
+      const ws = startOfWeek(focusDate, { weekStartsOn: 1 })
+      const we = endOfWeek(focusDate, { weekStartsOn: 1 })
+      return `${format(ws, 'd MMM')} – ${format(we, 'd MMM yyyy')}`
+    }
+    return format(focusDate, 'EEEE, d MMMM yyyy')
+  }
+
+  // Today's appointments for sidebar
+  const todayKey = format(new Date(), 'yyyy-MM-dd')
+  const todayAppts = appointments
+    .filter(a => format(parseISO(a.slotStart), 'yyyy-MM-dd') === todayKey)
+    .sort((a, b) => a.slotStart.localeCompare(b.slotStart))
+
   return (
     <main aria-labelledby="ca-appts-title" className="space-y-4">
       {/* Header */}
@@ -327,7 +653,7 @@ export default function CaAppointmentsPage() {
         </div>
 
         {/* View toggle */}
-        <div className="flex items-center gap-1 border border-neutral-200 rounded-lg p-0.5 bg-white" role="group" aria-label="View">
+        <div className="flex items-center gap-1 border border-neutral-200 rounded-lg p-0.5 bg-white" role="group" aria-label={t('ca.admin.appts.view.aria')}>
           <button
             onClick={() => setView('list')}
             className={cn(
@@ -340,12 +666,12 @@ export default function CaAppointmentsPage() {
             {t('ca.admin.appts.view.list')}
           </button>
           <button
-            onClick={() => setView('calendar')}
+            onClick={() => { if (view === 'list') setView('month') }}
             className={cn(
               'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors',
-              view === 'calendar' ? 'bg-neutral-100 text-neutral-800' : 'text-neutral-500 hover:text-neutral-700'
+              view !== 'list' ? 'bg-neutral-100 text-neutral-800' : 'text-neutral-500 hover:text-neutral-700'
             )}
-            aria-pressed={view === 'calendar'}
+            aria-pressed={view !== 'list'}
           >
             <Calendar className="h-4 w-4" aria-hidden="true" />
             {t('ca.admin.appts.view.calendar')}
@@ -353,29 +679,82 @@ export default function CaAppointmentsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <DateRangePicker value={dateRange} onChange={setDateRange} />
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value as AppointmentStatus | '')}
-          className="text-sm rounded-lg border border-neutral-300 px-2.5 py-1.5 focus:outline-none focus:border-brand-500"
-          aria-label={t('ca.admin.appts.filter.status')}
-        >
-          <option value="">{t('ca.admin.appts.filter.allStatuses')}</option>
-          {Object.keys(STATUS_CONFIG).map(s => (
-            <option key={s} value={s}>{t(STATUS_CONFIG[s as AppointmentStatus].label)}</option>
-          ))}
-        </select>
-        {hasFilters && (
-          <button
-            onClick={() => { setStatusFilter(''); setDateRange({ start: null, end: null }) }}
-            className="text-xs text-brand-600 hover:underline"
+      {/* Filters — only in list view */}
+      {view === 'list' && (
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value as AppointmentStatus | '')}
+            className="text-sm rounded-lg border border-neutral-300 px-2.5 py-1.5 focus:outline-none focus:border-brand-500"
+            aria-label={t('ca.admin.appts.filter.status')}
           >
-            {t('common.clearFilters')}
-          </button>
-        )}
-      </div>
+            <option value="">{t('ca.admin.appts.filter.allStatuses')}</option>
+            {Object.keys(STATUS_CONFIG).map(s => (
+              <option key={s} value={s}>{t(STATUS_CONFIG[s as AppointmentStatus].label)}</option>
+            ))}
+          </select>
+          {hasFilters && (
+            <button
+              onClick={() => { setStatusFilter(''); setDateRange({ start: null, end: null }) }}
+              className="text-xs text-brand-600 hover:underline"
+            >
+              {t('common.clearFilters')}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Calendar sub-view controls */}
+      {view !== 'list' && (
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          {/* Month/Week/Day picker */}
+          <div className="flex items-center gap-1 border border-neutral-200 rounded-lg p-0.5 bg-white" role="group" aria-label={t('ca.admin.appts.calendar.subViewAria')}>
+            {(['month', 'week', 'day'] as const).map(sv => (
+              <button
+                key={sv}
+                onClick={() => setCalendarSubView(sv)}
+                className={cn(
+                  'px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                  calendarSubView === sv ? 'bg-brand-600 text-white' : 'text-neutral-500 hover:text-neutral-700'
+                )}
+                aria-pressed={calendarSubView === sv}
+              >
+                {t(`ca.admin.appts.calendar.${sv}`)}
+              </button>
+            ))}
+          </div>
+
+          {/* Navigation */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setFocusDate(new Date())}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
+            >
+              {t('ca.calendar.today')}
+            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={navigatePrev}
+                className="p-1.5 rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
+                aria-label={t('common.prev')}
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <span className="min-w-[160px] text-center text-sm font-semibold text-neutral-800">
+                {calendarTitle()}
+              </span>
+              <button
+                onClick={navigateNext}
+                className="p-1.5 rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
+                aria-label={t('common.next')}
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Error */}
       {isError && (
@@ -393,8 +772,8 @@ export default function CaAppointmentsPage() {
       {/* Loading */}
       {isLoading && <Skeleton variant="dataTableDense" />}
 
-      {/* Empty */}
-      {isEmpty && (
+      {/* Empty (list view only) */}
+      {!isLoading && !isError && isEmpty && view === 'list' && (
         <EmptyState
           variant="generic"
           size="md"
@@ -406,16 +785,78 @@ export default function CaAppointmentsPage() {
         />
       )}
 
-      {/* Calendar view stub (future full calendar integration [confirm 7A]) */}
-      {!isLoading && !isError && appointments.length > 0 && view === 'calendar' && (
-        <Card>
-          <CardHeader title={t('ca.admin.appts.view.calendar')} />
-          <div className="py-8 text-center text-sm text-neutral-400">
-            {t('ca.admin.appts.calendarComingSoon')}
+      {/* Calendar view — month/week/day grid + today sidebar */}
+      {!isLoading && !isError && view !== 'list' && (
+        <div className="flex gap-4 items-start">
+          {/* Main calendar grid */}
+          <div className="flex-1 min-w-0 bg-white rounded-xl border border-neutral-200 shadow-sm p-4">
+            {calendarSubView === 'month' && (
+              <MonthGrid
+                appointments={appointments}
+                focusDate={focusDate}
+                onDateClick={d => { setFocusDate(d); setCalendarSubView('day') }}
+                onApptClick={setSelectedAppt}
+              />
+            )}
+            {calendarSubView === 'week' && (
+              <WeekGrid
+                appointments={appointments}
+                focusDate={focusDate}
+                onApptClick={setSelectedAppt}
+              />
+            )}
+            {calendarSubView === 'day' && (
+              <DayView
+                appointments={appointments}
+                focusDate={focusDate}
+                onApptClick={setSelectedAppt}
+              />
+            )}
           </div>
-          {/* Fallback: always show list even in calendar mode */}
-          <AppointmentsList appointments={appointments} onRowClick={setSelectedAppt} />
-        </Card>
+
+          {/* Today's sidebar */}
+          <div className="w-64 shrink-0 space-y-3">
+            <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-4">
+              <h2 className="text-sm font-semibold text-neutral-800 mb-3">
+                {t('ca.admin.appts.calendar.todaySidebar')}
+              </h2>
+              {todayAppts.length === 0 ? (
+                <p className="text-xs text-neutral-400">{t('ca.admin.appts.empty')}</p>
+              ) : (
+                <div className="space-y-2">
+                  {todayAppts.map(appt => (
+                    <button
+                      key={appt.id}
+                      onClick={() => setSelectedAppt(appt)}
+                      className="w-full text-left rounded-lg border border-neutral-100 bg-neutral-50 hover:bg-neutral-100 transition-colors p-2 text-xs"
+                    >
+                      <div className="font-medium text-neutral-800">{format(parseISO(appt.slotStart), 'HH:mm')} IST</div>
+                      <div className="text-neutral-600 truncate">{appt.clientName}</div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-neutral-400">{appt.durationMinutes}m</span>
+                        <AppointmentStatusBadge status={appt.status} />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Legend */}
+            <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-4">
+              <h3 className="text-xs font-semibold text-neutral-600 mb-2">{t('ca.admin.appts.calendar.legend')}</h3>
+              {(Object.entries(STATUS_DOT) as [AppointmentStatus, string][])
+                .filter(([s]) => !['PENDING', 'SCHEDULED'].includes(s))
+                .map(([status, dotClass]) => (
+                  <div key={status} className="flex items-center gap-2 mb-1">
+                    <div className={cn('h-2 w-2 rounded-full shrink-0', dotClass)} />
+                    <span className="text-xs text-neutral-600">{t(STATUS_CONFIG[status]?.label ?? status)}</span>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        </div>
       )}
 
       {/* List view */}

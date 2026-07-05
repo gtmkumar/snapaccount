@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { ErrorState } from '../../components/shared/ListStates';
 import { useHaptics } from '../../hooks/useHaptics';
+import { useSensitiveScreen } from '../../hooks/usePreventScreenCapture';
 import {
   getCallback,
   rescheduleCallback,
@@ -228,6 +229,8 @@ export function CallbackStatusScreen({ navigation, route }: Props) {
   const styles = useStyles();
   const { t } = useTranslation();
   const haptics = useHaptics();
+  // SEC-033: prevent screenshot/recording on this sensitive callback status screen
+  useSensitiveScreen();
   const { callbackId } = route.params;
   const queryClient = useQueryClient();
   // Refreshes every 30s so the stale-in-progress banner appears without a refetch.

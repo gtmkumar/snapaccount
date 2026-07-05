@@ -1,9 +1,9 @@
 /**
- * DocumentQueuePage — unit tests (Phase 7 rewrite)
+ * DocumentQueuePage — unit tests (Phase 7 rewrite, DG-DOC-04)
  *
- * All tests mock the `documentApi` module — no inline mock data in the page.
- * The RBAC helper mock from the original tests is preserved so permission-gating
- * tests continue to work.
+ * DG-DOC-04: page was rewritten to use getAdminDocumentQueue
+ * (GET /documents/admin/queue) instead of listDocuments.
+ * Mocks and fixtures updated accordingly.
  */
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -25,43 +25,64 @@ vi.mock('@/hooks/usePermission', () => ({
   }),
 }))
 
-// ── API mock — module-level (no inline data in page) ────────────────────────
+// ── API mock — target getAdminDocumentQueue (DG-DOC-04) ─────────────────────
 import * as documentApi from '@/lib/documentApi'
 
 import DocumentQueuePage from '@/pages/documents/DocumentQueuePage'
 
-// ── Fixtures ────────────────────────────────────────────────────────────────
+// ── Fixtures — AdminDocumentQueueItem shape (has server SLA fields) ─────────
 const recentUpload = new Date(Date.now() - 2 * 3600000).toISOString()
 const overdueUpload = new Date(Date.now() - 30 * 3600000).toISOString() // > 24h ago
 
-const mockDocPage: documentApi.DocumentsPage = {
+const mockQueuePage: documentApi.AdminDocumentQueuePage = {
   items: [
     {
       id: 'aaaaaaaa-0000-0000-0000-000000000001',
       fileName: 'invoice_sharma.pdf',
       status: 'OCR_COMPLETE',
+      categoryCode: 'PURCHASE',
+      categoryName: 'Purchase Bill',
       vendorName: 'Sharma Trading Co.',
       amount: 45000,
       documentDate: '2026-03-31',
       uploadedAt: recentUpload,
+      slaDeadline: new Date(Date.now() + 20 * 3600000).toISOString(), // 20h from now
+      slaHoursRemaining: 20,
+      isOverdue: false,
+      organizationId: 'org-0001-0000-0000-000000000001',
+      ocrConfidence: 0.92,
     },
     {
       id: 'aaaaaaaa-0000-0000-0000-000000000002',
       fileName: 'bank_statement_march.pdf',
       status: 'UPLOADED',
+      categoryCode: null,
+      categoryName: null,
       vendorName: null,
       amount: null,
       documentDate: null,
       uploadedAt: overdueUpload,
+      slaDeadline: new Date(Date.now() - 6 * 3600000).toISOString(), // 6h overdue
+      slaHoursRemaining: -6,
+      isOverdue: true,
+      organizationId: 'org-0001-0000-0000-000000000001',
+      ocrConfidence: null,
     },
     {
       id: 'aaaaaaaa-0000-0000-0000-000000000003',
       fileName: 'expense_receipt.jpg',
       status: 'IN_REVIEW',
+      categoryCode: 'EXPENSE',
+      categoryName: 'Expense Receipt',
       vendorName: 'Patel Textiles',
       amount: 12500,
       documentDate: '2026-03-28',
       uploadedAt: recentUpload,
+      slaDeadline: new Date(Date.now() + 10 * 3600000).toISOString(),
+      slaHoursRemaining: 10,
+      isOverdue: false,
+      organizationId: 'org-0001-0000-0000-000000000001',
+      ocrConfidence: 0.67,
     },
   ],
   totalCount: 3,
@@ -96,7 +117,8 @@ describe('DocumentQueuePage (real API)', () => {
   beforeEach(() => {
     perms.loaded = true
     perms.granted = new Set<string>(['document.read', 'document.update'])
-    vi.spyOn(documentApi, 'listDocuments').mockResolvedValue(mockDocPage)
+    // DG-DOC-04: page calls getAdminDocumentQueue, not listDocuments
+    vi.spyOn(documentApi, 'getAdminDocumentQueue').mockResolvedValue(mockQueuePage)
   })
 
   it('renders the page heading', () => {
@@ -104,10 +126,10 @@ describe('DocumentQueuePage (real API)', () => {
     expect(screen.getByText('Document Queue')).toBeInTheDocument()
   })
 
-  it('calls listDocuments API on mount', async () => {
+  it('calls getAdminDocumentQueue API on mount', async () => {
     renderPage()
     await waitFor(() => {
-      expect(documentApi.listDocuments).toHaveBeenCalled()
+      expect(documentApi.getAdminDocumentQueue).toHaveBeenCalled()
     })
   })
 
@@ -129,12 +151,12 @@ describe('DocumentQueuePage (real API)', () => {
     expect(statuses.length).toBeGreaterThan(0)
   })
 
-  it('shows SLA overdue badge for documents uploaded > 24h ago', async () => {
+  it('shows SLA overdue badge for documents with isOverdue=true', async () => {
     renderPage()
     await waitFor(() => {
       expect(screen.getByText('Sharma Trading Co.')).toBeInTheDocument()
     })
-    // overdueUpload is 30h ago so SLA chip should show "Overdue"
+    // Item 2 has isOverdue=true — server sets the flag, SlaChip renders "Overdue"
     expect(screen.getByText('Overdue')).toBeInTheDocument()
   })
 
@@ -212,8 +234,8 @@ describe('DocumentQueuePage (real API)', () => {
     expect(screen.queryByRole('button', { name: 'Assign' })).not.toBeInTheDocument()
   })
 
-  it('shows an error banner and retry when listDocuments rejects', async () => {
-    vi.spyOn(documentApi, 'listDocuments').mockRejectedValue(new Error('Network error'))
+  it('shows an error banner and retry when getAdminDocumentQueue rejects', async () => {
+    vi.spyOn(documentApi, 'getAdminDocumentQueue').mockRejectedValue(new Error('Network error'))
     renderPage()
     await waitFor(() => {
       expect(screen.getByText('Failed to load document queue')).toBeInTheDocument()
@@ -221,7 +243,7 @@ describe('DocumentQueuePage (real API)', () => {
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
   })
 
-  it('re-calls listDocuments with status param when filter changes', async () => {
+  it('re-calls getAdminDocumentQueue with status param when filter changes', async () => {
     renderPage()
     // Wait for initial data to appear before changing filter
     await waitFor(() => {
@@ -230,7 +252,7 @@ describe('DocumentQueuePage (real API)', () => {
     const statusSelect = screen.getByRole('combobox', { name: /status/i })
     fireEvent.change(statusSelect, { target: { value: 'UPLOADED' } })
     await waitFor(() => {
-      expect(documentApi.listDocuments).toHaveBeenCalledWith(
+      expect(documentApi.getAdminDocumentQueue).toHaveBeenCalledWith(
         expect.objectContaining({ status: 'UPLOADED' }),
       )
     })

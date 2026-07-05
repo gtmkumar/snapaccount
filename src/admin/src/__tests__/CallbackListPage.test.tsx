@@ -112,10 +112,12 @@ describe('CallbackListPage', () => {
   })
 
   it('renders density toggle buttons', async () => {
+    // DG-ADMIN-10: density vocabulary migrated from 'dense' to 'compact'
+    // aligned with shared DataTable pattern (dataTable.density.roomy / .compact keys)
     renderPage()
     await screen.findAllByText('Rajesh M')
     expect(screen.getAllByText('Roomy').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Dense').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Compact').length).toBeGreaterThan(0)
   })
 
   it('renders KPI button', async () => {

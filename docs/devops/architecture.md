@@ -1,12 +1,16 @@
 # SnapAccount — DevOps & GCP Architecture
 
 > Produced by: devops-engineer
-> Date: 2026-04-04
+> Date: 2026-04-04 · Updated: 2026-06-28 (3-composite + YARP gateway topology)
 > Region: asia-south1 (Mumbai) — DPDP Act 2023 data localization compliance
 
 ---
 
 ## GCP Architecture Diagram (ASCII)
+
+The codebase consolidates 12 modules into **3 composite .NET services** behind a **YARP API
+gateway**. Each composite hosts multiple modules in a single process; module namespaces are
+unchanged (e.g. `AuthService.Application`, `GstService.Application`).
 
 ```
   ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -25,45 +29,49 @@
   │  ┌─────────────────────────────────────────────────┐  │                        │
   │  │        Cloud Armor WAF + Cloud Load Balancer    │  │                        │
   │  │   (rate limiting, DDoS protection, SSL offload) │  │                        │
-  │  └──────────────────────┬──────────────────────────┘  │                        │
-  │                         │                             │                        │
-  │  ┌──────────────────────▼──────────────────────────┐  │                        │
-  │  │              admin-panel (Cloud Run)             │  │                        │
-  │  │              React 19 + nginx                    │  │                        │
-  │  │              min=1, max=5, public                │  │                        │
-  │  └──────────────────────┬──────────────────────────┘  │                        │
-  │                         │ (API calls, JWT from Firebase)                       │
-  │  ┌──────────────────────▼──────────────────────────────────────────────────┐   │
+  │  └──────┬──────────────────────┬────────────────────┘  │                       │
+  │         │ (API traffic)        │ (admin SPA)            │                       │
+  │         ▼                      ▼                        │                       │
+  │  ┌──────────────────┐  ┌─────────────────────────────┐ │                       │
+  │  │  api-gateway     │  │  admin-panel (Cloud Run)    │ │                       │
+  │  │  YARP :8080      │  │  React 19 + nginx           │ │                       │
+  │  │  min=1, max=5    │  │  min=1, max=5, public       │ │                       │
+  │  │  ingress=all     │  │  ingress=all (SPA only)     │ │                       │
+  │  │  /healthz        │  │  health: GET /              │ │                       │
+  │  └──────┬───────────┘  └─────────────────────────────┘ │                       │
+  │         │ (routes to composites via Cloud Run internal DNS)                    │
+  │  ┌──────▼──────────────────────────────────────────────────────────────────┐   │
   │  │                 VPC: snapaccount-vpc (10.0.0.0/20)                      │   │
   │  │              Serverless VPC Access Connector                             │   │
   │  │                                                                          │   │
   │  │  ┌──────────────────────────────────────────────────────────────────┐   │   │
-  │  │  │                  Cloud Run Services (internal)                   │   │   │
+  │  │  │          Cloud Run Services (internal-and-cloud-load-balancing)  │   │   │
   │  │  │                                                                  │   │   │
-  │  │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │   │   │
-  │  │  │  │ auth-service│  │doc-service  │  │   accounting-service    │ │   │   │
-  │  │  │  │ min=1 max=10│  │ min=1 max=10│  │    min=1 max=8          │ │   │   │
-  │  │  │  └─────────────┘  └─────────────┘  └─────────────────────────┘ │   │   │
-  │  │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │   │   │
-  │  │  │  │  gst-service│  │ loan-service│  │     itr-service         │ │   │   │
-  │  │  │  │ min=1 max=10│  │ min=1 max=5 │  │    min=1 max=8          │ │   │   │
-  │  │  │  └─────────────┘  └─────────────┘  └─────────────────────────┘ │   │   │
-  │  │  │  ┌─────────────┐  ┌─────────────────┐  ┌────────────────────┐  │   │   │
-  │  │  │  │ chat-service│  │notif-service    │  │  report-service    │  │   │   │
-  │  │  │  │ min=1 max=10│  │ min=1 max=5     │  │  min=0 max=5       │  │   │   │
-  │  │  │  └─────────────┘  └─────────────────┘  └────────────────────┘  │   │   │
-  │  │  │  ┌───────────────────┐  ┌─────────────────────────────────────┐ │   │   │
-  │  │  │  │subscription-svc   │  │          ai-service                 │ │   │   │
-  │  │  │  │ min=1 max=5       │  │  min=0 max=8 (GPU-ready)            │ │   │   │
-  │  │  │  └───────────────────┘  └─────────────────────────────────────┘ │   │   │
+  │  │  │  ┌──────────────────────────────────────────────────────────┐   │   │   │
+  │  │  │  │  platform-service (:8080)  min=1 max=10  512Mi           │   │   │   │
+  │  │  │  │  Modules: Auth · Subscription · Notification             │   │   │   │
+  │  │  │  │  SA: platform-service-sa   health: /healthz              │   │   │   │
+  │  │  │  └──────────────────────────────────────────────────────────┘   │   │   │
+  │  │  │  ┌──────────────────────────────────────────────────────────┐   │   │   │
+  │  │  │  │  finance-service  (:8080)  min=1 max=10  1Gi             │   │   │   │
+  │  │  │  │  Modules: Document · Accounting · GST · Loan · ITR ·    │   │   │   │
+  │  │  │  │           Report                                         │   │   │   │
+  │  │  │  │  SA: finance-service-sa    health: /healthz              │   │   │   │
+  │  │  │  └──────────────────────────────────────────────────────────┘   │   │   │
+  │  │  │  ┌──────────────────────────────────────────────────────────┐   │   │   │
+  │  │  │  │  assist-service   (:8080)  min=1 max=10  1Gi             │   │   │   │
+  │  │  │  │  Modules: Chat (SignalR) · AI · Callback                 │   │   │   │
+  │  │  │  │  SA: assist-service-sa     health: /healthz              │   │   │   │
+  │  │  │  │  session-affinity=ON  (required for SignalR WebSocket)   │   │   │   │
+  │  │  │  └──────────────────────────────────────────────────────────┘   │   │   │
   │  │  └──────────────────────────────────────────────────────────────────┘   │   │
   │  │                                                                          │   │
   │  │  ┌─────────────────────────────┐  ┌──────────────────────────────────┐  │   │
   │  │  │  Cloud SQL PostgreSQL 17    │  │  Cloud Memorystore Redis 7.2     │  │   │
   │  │  │  (private IP, no public EP) │  │  (private IP, VPC-attached)      │  │   │
-  │  │  │  db-f1-micro → db-g1-small  │  │  Basic 1GB → upgrade as needed   │  │   │
+  │  │  │  db-f1-micro → db-g1-small  │  │  Basic 1GB → STANDARD_HA prod   │  │   │
   │  │  │  auto-backup 02:00 daily    │  │  Used for: session cache,         │  │   │
-  │  │  │  11 schemas (one per svc)   │  │  SignalR backplane, rate limits   │  │   │
+  │  │  │  12 schemas (one per module)│  │  SignalR backplane, rate limits   │  │   │
   │  │  └─────────────────────────────┘  └──────────────────────────────────┘  │   │
   │  └──────────────────────────────────────────────────────────────────────────┘   │
   │                                                                                 │
@@ -72,19 +80,19 @@
   │  │                                                                          │   │
   │  │  ┌────────────────────┐  ┌──────────────────┐  ┌──────────────────────┐ │   │
   │  │  │  Cloud Pub/Sub     │  │  Secret Manager  │  │  Artifact Registry   │ │   │
-  │  │  │  10 topics         │  │  ~20 secrets     │  │  asia-south1         │ │   │
-  │  │  │  dead-letter queues│  │  CMEK encrypted  │  │  Docker images       │ │   │
+  │  │  │  15+ topics        │  │  ~25 secrets     │  │  asia-south1         │ │   │
+  │  │  │  dead-letter queues│  │  regional replica │  │  5 Docker images     │ │   │
   │  │  └────────────────────┘  └──────────────────┘  └──────────────────────┘ │   │
   │  │  ┌────────────────────┐  ┌──────────────────┐  ┌──────────────────────┐ │   │
   │  │  │  Cloud Storage     │  │  Google Document │  │  Vertex AI           │ │   │
-  │  │  │  3 buckets         │  │  AI (OCR)        │  │  Gemini 1.5 Pro      │ │   │
-  │  │  │  7-yr lifecycle    │  │                  │  │  asia-south1         │ │   │
+  │  │  │  4 buckets         │  │  AI (OCR)        │  │  Gemini 1.5 Pro      │ │   │
+  │  │  │  7-yr lifecycle    │  │  asia-south1     │  │  asia-south1         │ │   │
   │  │  └────────────────────┘  └──────────────────┘  └──────────────────────┘ │   │
-  │  │  ┌────────────────────┐  ┌──────────────────┐                            │   │
-  │  │  │  Cloud Monitoring  │  │  Firebase Auth   │                            │   │
-  │  │  │  + Cloud Logging   │  │  Phone OTP       │                            │   │
-  │  │  │  + Alerting        │  │  Google/Apple    │                            │   │
-  │  │  └────────────────────┘  └──────────────────┘                            │   │
+  │  │  ┌────────────────────┐  ┌──────────────────┐  ┌──────────────────────┐ │   │
+  │  │  │  Cloud Monitoring  │  │  Firebase Auth   │  │  Cloud Scheduler     │ │   │
+  │  │  │  + Cloud Logging   │  │  Phone OTP       │  │  recurring jobs      │ │   │
+  │  │  │  + Alerting        │  │  Google/Apple    │  │  trigger             │ │   │
+  │  │  └────────────────────┘  └──────────────────┘  └──────────────────────┘ │   │
   │  └──────────────────────────────────────────────────────────────────────────┘   │
   └─────────────────────────────────────────────────────────────────────────────────┘
 
@@ -95,15 +103,28 @@
     Razorpay (payments)
     Sarvam AI (Indian NLP)
     GST Portal API / NIC E-Invoice / IT Portal (government APIs)
+
+  Artifact Registry images (5 total):
+    platform-service   — Platform.WebApi (.NET 10, modules: Auth/Subscription/Notification)
+    finance-service    — Finance.WebApi  (.NET 10, modules: Document/Accounting/GST/Loan/ITR/Report)
+    assist-service     — Assist.WebApi   (.NET 10, modules: Chat/AI/Callback)
+    api-gateway        — Gateway         (.NET 10, YARP reverse proxy)
+    admin-panel        — React 19 + nginx (SPA)
 ```
 
 ---
 
 ## Service-to-Service Communication Map
 
+With 3 composites, modules that previously called each other across HTTP boundaries now
+call each other **in-process** within the same composite. Cross-composite calls still
+traverse VPC. The API gateway (YARP) is the single external entry point.
+
 ### Synchronous (HTTP, internal VPC)
 
-All inter-service HTTP calls go via internal VPC using .NET Aspire service discovery. Cloud Run services are **not** publicly accessible to each other — calls route through private VPC.
+External clients call only `api-gateway`. The gateway proxies to composites via Cloud Run
+internal DNS. Composites are `ingress=internal-and-cloud-load-balancing` — not directly
+reachable from the public internet.
 
 ```
 Mobile App / Admin Panel
@@ -112,35 +133,44 @@ Mobile App / Admin Panel
    Cloud Load Balancer
         │
         ▼
-  [Each microservice endpoint — ingress=internal-and-cloud-load-balancing]
+  api-gateway (YARP, ingress=all, :8080)
+   ├─── /auth/* /subscription/* /notifications/*  ──► platform-service (internal)
+   ├─── /documents/* /accounting/* /gst/*          ──► finance-service  (internal)
+   │    /loans/* /itr/* /reports/*
+   └─── /chat/* /ai/* /callbacks/*                 ──► assist-service   (internal)
 
-Service-to-service sync calls (HTTP/gRPC over VPC):
-  auth-service         ←── all services (JWT validation helper calls)
-  accounting-service   ←── report-service (pull financial data for reports)
-  document-service     ←── accounting-service (fetch document metadata)
-  gst-service          ←── accounting-service (pull ledger data)
-  itr-service          ←── accounting-service (pull P&L for tax computation)
-  loan-service         ←── accounting-service (pull financials for loan package)
-  loan-service         ←── gst-service (pull GSTR-3B data)
-  ai-service           ←── document-service (fetch document content for RAG)
-  ai-service           ←── accounting-service (pull data for cash flow forecasting)
+Cross-composite sync calls (HTTP over VPC — rare; prefer in-process within composite):
+  finance-service  ←── finance-service  (Loan module → GST module: GSTR-3B data)
+                       (Report module → Accounting module: ledger for PDF)
+  Note: modules within the same composite call each other directly in-process
+        (MediatR dispatch within the same DI container), not via HTTP.
 ```
 
 ### Asynchronous (Cloud Pub/Sub)
 
+Module publishers/subscribers remain the same; the physical process sending/receiving
+the message is now the composite that hosts the module.
+
 ```
-Publisher                 Topic                            Subscriber(s)
-──────────────────────    ───────────────────────────────  ──────────────────────────
-document-service    ──►  snapaccount.document.ocr.completed ──► accounting-service
-                                                              ──► gst-service
-document-service    ──►  snapaccount.document.uploaded       ──► notification-service
-gst-service         ──►  snapaccount.gst.return.filed        ──► notification-service
-itr-service         ──►  snapaccount.itr.filed               ──► notification-service
-auth-service        ──►  snapaccount.user.registered         ──► notification-service
-loan-service        ──►  snapaccount.loan.status.changed     ──► notification-service
-chat-service        ──►  snapaccount.chat.message.received   ──► notification-service
-subscription-service──►  snapaccount.subscription.expired    ──► notification-service
-subscription-service──►  snapaccount.subscription.changed    ──► auth-service
+Publisher (module → composite)             Topic                              Subscriber (module → composite)
+────────────────────────────────────────   ─────────────────────────────────  ─────────────────────────────────
+Document (finance-service)  ──►  snapaccount.document.ocr.completed  ──►  Accounting (finance-service)
+                                                                       ──►  Gst        (finance-service)
+                                                                       ──►  AI         (assist-service)
+Document (finance-service)  ──►  snapaccount.document.uploaded        ──►  Notification (platform-service)
+Gst      (finance-service)  ──►  snapaccount.gst.return.filed         ──►  Notification (platform-service)
+Itr      (finance-service)  ──►  snapaccount.itr.filed                ──►  Notification (platform-service)
+Auth     (platform-service) ──►  snapaccount.user.registered          ──►  Notification (platform-service)
+Loan     (finance-service)  ──►  snapaccount.loan.status.changed      ──►  Notification (platform-service)
+Loan     (finance-service)  ──►  snapaccount.loan.events              ──►  Notification (platform-service)
+Chat     (assist-service)   ──►  snapaccount.chat.message.received    ──►  Notification (platform-service)
+Subscription (platform-svc) ──►  snapaccount.subscription.expired     ──►  Notification (platform-service)
+Subscription (platform-svc) ──►  snapaccount.subscription.changed     ──►  Auth         (platform-service)
+Platform-service            ──►  snapaccount.notification.send        ──►  Notification (platform-service)
+Assist-service              ──►  snapaccount.callback.events          ──►  Notification (platform-service)
+Cloud Scheduler             ──►  snapaccount.recurring-jobs.due       ──►  platform-service + finance-service
+Auth     (platform-service) ──►  account-deletion-events              ──►  Loan/Gst/Itr/Notification/
+                                                                            Subscription/Chat/Callback modules
 ```
 
 All Pub/Sub topics have:
@@ -169,23 +199,22 @@ All Pub/Sub topics have:
 
 ### IAM Roles — Principle of Least Privilege
 
-| Service Account | Granted Roles |
-|----------------|--------------|
-| auth-service-sa | secretmanager.secretAccessor, pubsub.publisher, pubsub.subscriber, run.invoker |
-| document-service-sa | storage.objectAdmin, documentai.apiUser, pubsub.publisher, pubsub.subscriber, secretmanager.secretAccessor |
-| accounting-service-sa | pubsub.publisher, pubsub.subscriber, secretmanager.secretAccessor |
-| gst-service-sa | pubsub.publisher, pubsub.subscriber, secretmanager.secretAccessor |
-| loan-service-sa | pubsub.publisher, pubsub.subscriber, secretmanager.secretAccessor |
-| itr-service-sa | pubsub.publisher, pubsub.subscriber, secretmanager.secretAccessor |
-| chat-service-sa | pubsub.publisher, pubsub.subscriber, secretmanager.secretAccessor |
-| notification-service-sa | pubsub.publisher, pubsub.subscriber, secretmanager.secretAccessor |
-| report-service-sa | storage.objectCreator, pubsub.subscriber, secretmanager.secretAccessor |
-| subscription-service-sa | pubsub.publisher, pubsub.subscriber, secretmanager.secretAccessor |
-| ai-service-sa | aiplatform.user, pubsub.subscriber, secretmanager.secretAccessor |
-| migration-runner-sa | cloudsql.client, secretmanager.secretAccessor |
-| github-ci-sa | artifactregistry.writer, run.developer, run.jobs.executor, iam.serviceAccountUser, secretmanager.secretAccessor |
+The 3-composite consolidation replaced 11 per-module service accounts with 3 composite SAs
+plus the gateway SA. Per-module SAs still exist in the project (created by `infra/setup.sh`
+for backward compatibility) but are no longer assigned to any running Cloud Run service.
+
+| Service Account | Cloud Run Service | Granted Roles |
+|----------------|-------------------|--------------|
+| platform-service-sa | platform-service | secretmanager.secretAccessor, pubsub.publisher, pubsub.subscriber, run.invoker |
+| finance-service-sa | finance-service | secretmanager.secretAccessor, pubsub.publisher, pubsub.subscriber, storage.objectCreator, storage.objectViewer, documentai.apiUser, aiplatform.user |
+| assist-service-sa | assist-service | secretmanager.secretAccessor, pubsub.publisher, pubsub.subscriber, aiplatform.user |
+| api-gateway-sa | api-gateway | run.invoker (to call internal composites) |
+| migration-runner-sa | db-migrate job | cloudsql.client, secretmanager.secretAccessor |
+| github-ci-sa | CI/CD (GitHub Actions) | artifactregistry.writer, run.developer, run.jobs.executor, iam.serviceAccountUser, secretmanager.secretAccessor |
+| cloud-scheduler-sa | Cloud Scheduler | pubsub.publisher (recurring-jobs topic only) |
 
 Note: No service account has `owner`, `editor`, or `viewer` project-level roles.
+Note: `admin-panel` Cloud Run service uses the default compute SA (nginx SPA — no GCP API access needed).
 
 ### Secret Manager
 
@@ -244,18 +273,16 @@ gcs-documents-bucket             → GCS bucket name for documents
 
 | Service | Min Instances | Max Instances | CPU | Memory | Concurrency | Notes |
 |---------|:---:|:---:|-----|--------|:-----------:|-------|
-| auth-service | 1 | 10 | 1 | 512Mi | 80 | Always warm — cold start unacceptable for login |
-| document-service | 1 | 10 | 1 | 1Gi | 80 | Extra memory for OCR payload handling |
-| accounting-service | 1 | 8 | 1 | 512Mi | 80 | |
-| gst-service | 1 | 10 | 1 | 512Mi | 80 | Peaks at GST filing deadlines (20th/10th of month) |
-| loan-service | 1 | 5 | 1 | 512Mi | 80 | |
-| itr-service | 1 | 8 | 1 | 512Mi | 80 | Peaks Jul–Aug ITR season |
-| chat-service | 1 | 10 | 1 | 512Mi | 80 | SignalR WebSocket — long-lived connections |
-| notification-service | 1 | 5 | 1 | 512Mi | 80 | |
-| report-service | 0 | 5 | 1 | 1Gi | 80 | Scale-to-zero OK; reports are async |
-| subscription-service | 1 | 5 | 1 | 512Mi | 80 | |
-| ai-service | 0 | 8 | 1 | 1Gi | 80 | Scale-to-zero OK; AI calls tolerate startup latency |
-| admin-panel | 1 | 5 | 1 | 256Mi | 100 | Nginx — very lightweight |
+| platform-service | 1 | 10 | 1 | 512Mi | 80 | Hosts Auth + Subscription + Notification; warm — cold start unacceptable for login |
+| finance-service | 1 | 10 | 1 | 1Gi | 80 | Hosts Document/Accounting/GST/Loan/ITR/Report; 1Gi for OCR + QuestPDF payloads |
+| assist-service | 1 | 10 | 1 | 1Gi | 80 | Hosts Chat/AI/Callback; 1Gi for SignalR + Vertex AI; session-affinity=ON |
+| api-gateway | 1 | 5 | 1 | 256Mi | 200 | YARP is stateless; higher concurrency (200) and lighter memory |
+| admin-panel | 1 | 5 | 1 | 256Mi | 100 | nginx SPA — very lightweight |
+
+**Peak load notes (inherited from per-module analysis):**
+- `finance-service` peaks at GST filing deadlines (20th/10th of month) and Jul–Aug ITR season.
+- `assist-service` holds long-lived WebSocket connections — min=1 avoids cold-start on chat.
+- `platform-service` peaks at login spikes (OTP SMS volumes) — min=1 keeps it always warm.
 
 ### Cloud Run — Staging
 
@@ -282,7 +309,7 @@ All services: min=0, max=3 (scale-to-zero to minimize cost)
 
 | Resource | Config | Cost/Month (USD) | Cost/Month (INR) |
 |----------|--------|:----------------:|:----------------:|
-| Cloud Run (all 11 services + admin) | Scale-to-zero, ~100K req/mo | ~$0 (free tier) | ~0 |
+| Cloud Run (3 composites + gateway + admin) | Scale-to-zero staging; min=1 prod; ~100K req/mo | ~$0 (free tier) | ~0 |
 | Cloud SQL PostgreSQL 17 | db-f1-micro, 20GB SSD | ~$10 | ~830 |
 | Cloud Memorystore Redis | Basic 1GB | ~$36 | ~3,000 |
 | Artifact Registry | ~5GB storage | ~$0.50 | ~42 |
@@ -333,9 +360,16 @@ Cloud Logging captures all Cloud Run stdout/stderr. Key log-based metrics:
 
 Configure in Cloud Monitoring:
 ```
-auth-service health: https://api.snapaccount.in/auth/healthz
-admin panel:         https://admin.snapaccount.in/health
+API Gateway (entry point):  https://api.snapaccount.in/healthz
+Platform composite:         https://platform-service/healthz  (internal; check via LB path)
+Finance composite:          https://finance-service/healthz   (internal; check via LB path)
+Assist composite:           https://assist-service/healthz    (internal; check via LB path)
+Admin panel:                https://admin.snapaccount.in/     (nginx root → 200)
 ```
+
+Note: the 3 composite health endpoints are not publicly routed — monitor them via Cloud Run
+health checks (`gcloud run services describe`) or route a dedicated `/internal/healthz` path
+through the gateway for external uptime monitoring.
 
 ---
 
@@ -349,23 +383,29 @@ Developer push to feature branch
         │
         ▼
   ci.yml: Build + Test + Lint + Migrations Dry-Run
+    (3 composite .NET builds + admin npm build + mobile expo check)
         │ (all checks must pass)
         ▼
   Merge to develop
         │
         ▼
   cd-staging.yml:
-    Build Docker images (11 services + admin)
+    Build 5 Docker images in parallel:
+      platform-service  (backend/Dockerfile, COMPOSITE_NAME=Platform)
+      finance-service   (backend/Dockerfile, COMPOSITE_NAME=Finance)
+      assist-service    (backend/Dockerfile, COMPOSITE_NAME=Assist)
+      api-gateway       (backend/Dockerfile.gateway)
+      admin-panel       (src/admin/Dockerfile)
     Push to Artifact Registry (asia-south1)
-    Run DB migrations (Cloud Run Job)
-    Deploy to Cloud Run staging (min=0)
+    Run DB migrations (Cloud Run Job: snapaccount-db-migrate-staging)
+    Deploy to Cloud Run staging (min=0, max=3 — scale-to-zero)
         │
         ▼
   Merge to main
         │
         ▼
   cd-production.yml:
-    Build Docker images
+    Build same 5 Docker images
     Push to Artifact Registry
     ┌──────────────────────┐
     │  MANUAL APPROVAL     │  ← GitHub Environment "production" reviewers
@@ -373,9 +413,10 @@ Developer push to feature branch
     └──────────────────────┘
         │ (approved)
         ▼
-    Run DB migrations (Cloud Run Job, prod)
-    Deploy to Cloud Run production (rolling, max 4 parallel)
-    Post-deploy health checks
+    Run DB migrations (Cloud Run Job: snapaccount-db-migrate-prod)
+    Deploy 3 composites + gateway to Cloud Run production (max-parallel=3)
+    Deploy admin-panel (separate job)
+    Post-deploy /healthz checks on all services
 ```
 
 All GCP authentication uses **GitHub OIDC → Workload Identity Federation**.
@@ -387,15 +428,18 @@ Zero service account keys are stored in GitHub.
 
 Migrations run as **Cloud Run Jobs** (one-shot, not a long-running service):
 - Job name: `snapaccount-db-migrate-prod` / `snapaccount-db-migrate-staging`
-- EF Core `database update` with `--idempotent` scripts
-- All 11 service migrations run sequentially in the same job
+- Raw SQL files in `database/migrations/*.sql` applied in numeric order (authoritative source)
+- All 12 module schemas (`auth.*`, `document.*`, `accounting.*`, `gst.*`, `loan.*`, `itr.*`,
+  `chat.*`, `notification.*`, `report.*`, `subscription.*`, `ai.*`, `callback.*`) run in the
+  same job — single DB instance, schema-per-module isolation
 - Max retries: 0 (fail fast — DBA reviews failed migration before retry)
 - Timeout: 600 seconds
 - VPC-attached (connects to Cloud SQL via private IP)
+- Current migration sequence: through `database/migrations/098_*.sql`
 
 Migration rollback:
-- EF Core supports `database update <PreviousMigration>` for rollback
-- Run manually via `db-migrate.yml` workflow_dispatch with a rollback script
+- Run the rollback SQL manually via `db-migrate.yml` workflow_dispatch
+- For PITR after data corruption: see `docs/devops/backup-restore-runbook.md` Section 1
 
 ---
 

@@ -25,6 +25,7 @@ import { isValidPhone } from '../../lib/utils';
 import { useAuthMethods } from '../../hooks/useAuthMethods';
 import { useAuthStore } from '../../store/authStore';
 import { fetchServerUserType } from '../../lib/onboarding';
+import { registerCurrentDevice } from '../../notifications/pushTokenManager';
 import {
   isFirebaseConfigured,
   signInWithGoogle,
@@ -77,6 +78,12 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
     // "no org" can't be used to detect a new user. Token must be set first so the
     // /auth/me call is authenticated.
     setSession(result.token, profile, result.refreshToken ?? null);
+
+    // B1.3 device binding (DG-AUTH-01): register this device for the social
+    // sign-in too — covers Google/Apple logins. For a 2nd+ device the backend
+    // creates a DeviceApprovalRequest + push (GAP-047). Best-effort.
+    void registerCurrentDevice();
+
     const serverType = await fetchServerUserType();
 
     if (!serverType) {

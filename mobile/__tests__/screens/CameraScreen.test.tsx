@@ -127,8 +127,8 @@ describe('CameraScreen', () => {
     await findByText('mobile.camera.offlineBannerTitle');
   });
 
-  it('calls enqueue after capture button press then "Use Photo" confirmation', async () => {
-    const { getAllByRole, findByText, getByText } = render(
+  it('navigates to DocumentCategory after capture then "Use Photo" (DG-DOC-05)', async () => {
+    const { getAllByRole, findByText } = render(
       <CameraScreen navigation={mockNavigation} />,
     );
 
@@ -144,10 +144,16 @@ describe('CameraScreen', () => {
     const usePhotoBtn = await findByText('Use Photo');
     fireEvent.press(usePhotoBtn);
 
+    // DG-DOC-05: capture now routes through the category screen (no blind enqueue).
     await waitFor(() => {
-      expect(mockEnqueue).toHaveBeenCalledWith(
-        expect.objectContaining({ localUri: 'file:///photos/test.jpg' }),
+      expect(mockNavigation.navigate).toHaveBeenCalledWith(
+        'DocumentCategory',
+        expect.objectContaining({
+          documentUri: 'file:///photos/test.jpg',
+          source: 'camera',
+        }),
       );
     });
+    expect(mockEnqueue).not.toHaveBeenCalled();
   });
 });

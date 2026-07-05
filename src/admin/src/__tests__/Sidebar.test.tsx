@@ -8,7 +8,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router'
 import * as menuApi from '@/lib/menuApi'
-import { Sidebar } from '@/components/layout/Sidebar'
+import { Sidebar, resolveActiveNavHref } from '@/components/layout/Sidebar'
 
 // Stable auth + permission context (SUPER_ADMIN so the static fallback is broad).
 vi.mock('@/hooks/useAuth', () => ({
@@ -52,6 +52,26 @@ const menuTree: menuApi.MenuNode[] = [
 ]
 
 beforeEach(() => vi.clearAllMocks())
+
+describe('resolveActiveNavHref', () => {
+  const hrefs = ['/dashboard', '/gst', '/gst/notices', '/gst/ims', '/loans', '/loans/bank-communications']
+
+  it('highlights only the child on nested GST routes', () => {
+    expect(resolveActiveNavHref('/gst/notices', hrefs)).toBe('/gst/notices')
+  })
+
+  it('highlights parent when on the parent route exactly', () => {
+    expect(resolveActiveNavHref('/gst', hrefs)).toBe('/gst')
+  })
+
+  it('highlights the longest matching loans sub-route', () => {
+    expect(resolveActiveNavHref('/loans/bank-communications', hrefs)).toBe('/loans/bank-communications')
+  })
+
+  it('returns null when no nav item matches', () => {
+    expect(resolveActiveNavHref('/settings', hrefs)).toBeNull()
+  })
+})
 
 describe('Sidebar — data-driven menu', () => {
   it('renders the menu tree from /auth/me/menu (incl. nested children)', async () => {

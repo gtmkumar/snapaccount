@@ -187,6 +187,120 @@ export const GstNoticesListSchema = z.object({
   pageSize: z.number(),
 })
 
+/** Backend list DTO from GET /gst/notices (Finance ListNoticesQuery). */
+const GstNoticeListItemBackendSchema = z.object({
+  id: z.string(),
+  noticeNumber: z.string(),
+  noticeType: z.string(),
+  formType: z.string().optional(),
+  status: z.string(),
+  issuedDate: z.string(),
+  statutoryDeadline: z.string().nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+  deadlineOverridden: z.boolean().optional(),
+  description: z.string().nullable().optional(),
+  assignedCaId: z.string().nullable().optional(),
+  respondedAt: z.string().nullable().optional(),
+  appealStage: z.string().optional(),
+  appealDeadline: z.string().nullable().optional(),
+  isGstatBacklogFlagged: z.boolean().optional(),
+})
+
+const GstNoticesListBackendSchema = z.object({
+  items: z.array(GstNoticeListItemBackendSchema),
+  totalCount: z.number(),
+  page: z.number(),
+  pageSize: z.number(),
+})
+
+/** Backend detail DTO from GET /gst/notices/{id}. */
+const GstNoticeDetailBackendSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  noticeNumber: z.string(),
+  noticeType: z.string(),
+  formType: z.string().optional(),
+  issuedBy: z.string().nullable().optional(),
+  status: z.string(),
+  issuedDate: z.string(),
+  statutoryDeadline: z.string().nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+  deadlineOverridden: z.boolean().optional(),
+  daysRemaining: z.number().nullable().optional(),
+  isOverdue: z.boolean().optional(),
+  description: z.string().nullable().optional(),
+  assignedCaId: z.string().nullable().optional(),
+  respondedAt: z.string().nullable().optional(),
+  respondedBy: z.string().nullable().optional(),
+  attachmentsJson: z.string().nullable().optional(),
+  responseAttachmentsJson: z.string().nullable().optional(),
+  appealStage: z.string().optional(),
+  appealDeadline: z.string().nullable().optional(),
+  appealDaysRemaining: z.number().nullable().optional(),
+  isGstatBacklogFlagged: z.boolean().optional(),
+})
+
+function normalizeNoticeType(raw: string): string {
+  return raw.trim().replace(/_/g, '-').toUpperCase()
+}
+
+function parseNoticeType(raw: string): GstNoticeType {
+  const normalized = normalizeNoticeType(raw)
+  const parsed = GstNoticeTypeSchema.safeParse(normalized)
+  return parsed.success ? parsed.data : 'OTHER'
+}
+
+function parseNoticeStatus(raw: string): GstNoticeStatus {
+  const parsed = GstNoticeStatusSchema.safeParse(raw)
+  return parsed.success ? parsed.data : 'RECEIVED'
+}
+
+function mapBackendListItem(
+  item: z.infer<typeof GstNoticeListItemBackendSchema>,
+): GstNotice {
+  return {
+    id: String(item.id),
+    organizationId: '',
+    gstin: '',
+    noticeNumber: item.noticeNumber,
+    noticeType: parseNoticeType(item.noticeType),
+    noticeDate: item.issuedDate,
+    dueDate: item.dueDate ?? null,
+    statutoryDeadline: item.statutoryDeadline ?? null,
+    status: parseNoticeStatus(item.status),
+    description: item.description ?? null,
+    assignedCaId: item.assignedCaId ? String(item.assignedCaId) : null,
+    gstatStage: item.appealStage as GstatStageType,
+    isGstatBacklogEligible: item.isGstatBacklogFlagged,
+    createdAt: item.issuedDate,
+    updatedAt: item.respondedAt ?? item.issuedDate,
+  }
+}
+
+function mapBackendDetail(
+  item: z.infer<typeof GstNoticeDetailBackendSchema>,
+): GstNotice {
+  return {
+    id: String(item.id),
+    organizationId: String(item.organizationId),
+    gstin: '',
+    noticeNumber: item.noticeNumber,
+    noticeType: parseNoticeType(item.noticeType),
+    noticeDate: item.issuedDate,
+    dueDate: item.dueDate ?? null,
+    statutoryDeadline: item.statutoryDeadline ?? null,
+    status: parseNoticeStatus(item.status),
+    description: item.description ?? null,
+    assignedCaId: item.assignedCaId ? String(item.assignedCaId) : null,
+    respondedAt: item.respondedAt ?? null,
+    respondedBy: item.respondedBy ? String(item.respondedBy) : null,
+    gstatStage: item.appealStage as GstatStageType,
+    isGstatBacklogEligible: item.isGstatBacklogFlagged,
+    createdAt: item.issuedDate,
+    updatedAt: item.respondedAt ?? item.issuedDate,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Phase 6B: E-Invoice (IRP)
 // ---------------------------------------------------------------------------
@@ -257,6 +371,190 @@ export const HsnSacListSchema = z.object({
 })
 
 // ---------------------------------------------------------------------------
+// GSTR-1 return invoices — matches backend ReturnInvoiceDto
+// (different field names from the generic GstInvoiceSchema which targets
+//  the /gst/invoices list endpoint)
+// ---------------------------------------------------------------------------
+
+export const ReturnInvoiceDtoSchema = z.object({
+  invoiceId: z.string(),
+  invoiceType: z.enum(['B2B', 'B2C', 'CREDIT_NOTE', 'DEBIT_NOTE', 'EXPORT']),
+  invoiceNumber: z.string(),
+  invoiceDate: z.string(),          // DateOnly serialised as "YYYY-MM-DD"
+  supplierGstin: z.string(),
+  supplierName: z.string(),
+  buyerGstin: z.string().nullable(),
+  taxableValue: z.number(),
+  igstAmount: z.number(),
+  cgstAmount: z.number(),
+  sgstAmount: z.number(),
+  cessAmount: z.number(),
+  totalInvoiceValue: z.number(),
+  irnStatus: z.string().nullable(),
+})
+
+export type ReturnInvoiceDto = z.infer<typeof ReturnInvoiceDtoSchema>
+
+export const ReturnInvoicesListSchema = z.object({
+  items: z.array(ReturnInvoiceDtoSchema),
+  totalCount: z.number(),
+  page: z.number(),
+  pageSize: z.number(),
+})
+
+export type ReturnInvoicesList = z.infer<typeof ReturnInvoicesListSchema>
+
+// ---------------------------------------------------------------------------
+// B2C summary row — derived client-side by aggregating B2C invoices by tax rate
+// ---------------------------------------------------------------------------
+
+export interface B2CSummaryRow {
+  /** e.g. "5", "12", "18", "28" */
+  gstRate: string
+  taxableAmount: number
+  igstAmount: number
+  cgstAmount: number
+  sgstAmount: number
+  totalTax: number
+  invoiceCount: number
+}
+
+/** Aggregate B2C invoices into per-rate summary rows. */
+export function aggregateB2CSummary(invoices: ReturnInvoiceDto[]): B2CSummaryRow[] {
+  const b2c = invoices.filter(i => i.invoiceType === 'B2C')
+  const rateMap = new Map<string, B2CSummaryRow>()
+
+  for (const inv of b2c) {
+    // Derive effective GST rate from tax amounts
+    const totalTax = inv.igstAmount + inv.cgstAmount + inv.sgstAmount + inv.cessAmount
+    const effectiveRate = inv.taxableValue > 0
+      ? Math.round((totalTax / inv.taxableValue) * 100)
+      : 0
+    const rateKey = String(effectiveRate)
+
+    const existing = rateMap.get(rateKey)
+    if (existing) {
+      existing.taxableAmount += inv.taxableValue
+      existing.igstAmount += inv.igstAmount
+      existing.cgstAmount += inv.cgstAmount
+      existing.sgstAmount += inv.sgstAmount
+      existing.totalTax += totalTax
+      existing.invoiceCount += 1
+    } else {
+      rateMap.set(rateKey, {
+        gstRate: rateKey,
+        taxableAmount: inv.taxableValue,
+        igstAmount: inv.igstAmount,
+        cgstAmount: inv.cgstAmount,
+        sgstAmount: inv.sgstAmount,
+        totalTax,
+        invoiceCount: 1,
+      })
+    }
+  }
+
+  return Array.from(rateMap.values()).sort((a, b) => Number(a.gstRate) - Number(b.gstRate))
+}
+
+// ---------------------------------------------------------------------------
+// HSN summary row — derived client-side (no backend HSN-summary endpoint yet)
+// ---------------------------------------------------------------------------
+
+export interface HsnSummaryRow {
+  hsnCode: string
+  description: string
+  totalTaxableValue: number
+  cgstAmount: number
+  sgstAmount: number
+  igstAmount: number
+  cessAmount: number
+  invoiceCount: number
+}
+
+/**
+ * Aggregate all invoices by their HSN/SAC code (uses supplierName as a fallback
+ * description since ReturnInvoiceDto does not carry a per-line HSN — this is a
+ * placeholder until a backend HSN-summary endpoint is added).
+ * Groups by supplierGstin when hsnCode is unknown (empty group).
+ */
+export function aggregateHsnSummary(invoices: ReturnInvoiceDto[]): HsnSummaryRow[] {
+  // Group by supplierGstin as a coarse proxy until per-line HSN data is available
+  const map = new Map<string, HsnSummaryRow>()
+
+  for (const inv of invoices) {
+    if (inv.invoiceType === 'CREDIT_NOTE' || inv.invoiceType === 'DEBIT_NOTE') continue
+    // We don't have HSN at the invoice level, group under supplierGstin
+    const key = inv.supplierGstin || 'UNKNOWN'
+    const existing = map.get(key)
+    if (existing) {
+      existing.totalTaxableValue += inv.taxableValue
+      existing.cgstAmount += inv.cgstAmount
+      existing.sgstAmount += inv.sgstAmount
+      existing.igstAmount += inv.igstAmount
+      existing.cessAmount += inv.cessAmount
+      existing.invoiceCount += 1
+    } else {
+      map.set(key, {
+        hsnCode: '',
+        description: inv.supplierName,
+        totalTaxableValue: inv.taxableValue,
+        cgstAmount: inv.cgstAmount,
+        sgstAmount: inv.sgstAmount,
+        igstAmount: inv.igstAmount,
+        cessAmount: inv.cessAmount,
+        invoiceCount: 1,
+      })
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => b.totalTaxableValue - a.totalTaxableValue)
+}
+
+// ---------------------------------------------------------------------------
+// Document issue detection — client-side from invoice data
+// ---------------------------------------------------------------------------
+
+export type DocumentIssueType =
+  | 'missingBuyerGstin'
+  | 'missingInvoiceNumber'
+  | 'zeroTaxableValue'
+  | 'missingHsn'
+
+export interface DocumentIssueRow {
+  invoiceId: string
+  invoiceNumber: string
+  invoiceDate: string
+  invoiceType: ReturnInvoiceDto['invoiceType']
+  issues: DocumentIssueType[]
+}
+
+export function detectDocumentIssues(invoices: ReturnInvoiceDto[]): DocumentIssueRow[] {
+  const result: DocumentIssueRow[] = []
+  for (const inv of invoices) {
+    const issues: DocumentIssueType[] = []
+    if (!inv.buyerGstin && inv.invoiceType === 'B2B') {
+      issues.push('missingBuyerGstin')
+    }
+    if (!inv.invoiceNumber || inv.invoiceNumber.trim() === '') {
+      issues.push('missingInvoiceNumber')
+    }
+    if (inv.taxableValue === 0) {
+      issues.push('zeroTaxableValue')
+    }
+    if (issues.length > 0) {
+      result.push({
+        invoiceId: inv.invoiceId,
+        invoiceNumber: inv.invoiceNumber,
+        invoiceDate: inv.invoiceDate,
+        invoiceType: inv.invoiceType,
+        issues,
+      })
+    }
+  }
+  return result
+}
+
+// ---------------------------------------------------------------------------
 // API functions — existing
 // ---------------------------------------------------------------------------
 
@@ -296,7 +594,7 @@ export async function listGstInvoices(params: ListInvoicesParams = {}) {
 
 export async function listReturnInvoices(returnId: string, params: ListInvoicesParams = {}) {
   const res = await api.get(`/gst/returns/${returnId}/invoices`, { params })
-  return GstInvoicesListSchema.parse(res.data)
+  return ReturnInvoicesListSchema.parse(res.data)
 }
 
 export interface CreateInvoiceRequest {
@@ -373,13 +671,25 @@ export interface ListNoticesParams {
 }
 
 export async function listGstNotices(params: ListNoticesParams = {}) {
-  const res = await api.get('/gst/notices', { params })
-  return GstNoticesListSchema.parse(res.data)
+  const { orgId, ...rest } = params
+  const res = await api.get('/gst/notices', {
+    params: {
+      ...rest,
+      ...(orgId ? { organizationId: orgId } : {}),
+    },
+  })
+  const parsed = GstNoticesListBackendSchema.parse(res.data)
+  return {
+    items: parsed.items.map(mapBackendListItem),
+    totalCount: parsed.totalCount,
+    page: parsed.page,
+    pageSize: parsed.pageSize,
+  }
 }
 
 export async function getGstNotice(id: string) {
   const res = await api.get(`/gst/notices/${id}`)
-  return GstNoticeSchema.parse(res.data)
+  return mapBackendDetail(GstNoticeDetailBackendSchema.parse(res.data))
 }
 
 export interface CreateNoticeRequest {

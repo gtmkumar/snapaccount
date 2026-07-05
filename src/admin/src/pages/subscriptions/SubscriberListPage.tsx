@@ -123,7 +123,7 @@ function KpiStrip() {
   const kpis = [
     {
       label: t('subscriptions.active'),
-      value: String(mrr?.activeCount ?? mrr?.activeSubscriptions ?? 0),
+      value: String(mrr?.activeSubscriptions ?? 0),
       icon: Users,
       color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400',
     },
@@ -135,13 +135,13 @@ function KpiStrip() {
     },
     {
       label: t('subscriptions.pastDue'),
-      value: String(mrr?.pastDueCount ?? mrr?.pastDueSubscriptions ?? 0),
+      value: String(mrr?.pastDueSubscriptions ?? 0),
       icon: AlertCircle,
       color: 'bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400',
     },
     {
       label: t('subscriptions.cancelled'),
-      value: String(mrr?.cancelledCount ?? mrr?.cancelledThisMonth ?? 0),
+      value: String(mrr?.cancelledThisMonth ?? 0),
       icon: XCircle,
       color: 'bg-rose-100 text-rose-600 dark:bg-rose-950 dark:text-rose-400',
     },
