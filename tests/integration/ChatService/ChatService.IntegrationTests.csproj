@@ -44,6 +44,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\_shared\MigrationSupport.cs" Link="_shared\MigrationSupport.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.WebApi/Assist.WebApi.csproj" />
     <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.Application/Assist.Application.csproj" />
     <ProjectReference Include="..\..\..\backend/Services/AssistService/Assist.Domain/Assist.Domain.csproj" />

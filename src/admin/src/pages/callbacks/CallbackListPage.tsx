@@ -6,7 +6,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Search, BarChart3, PhoneCall, CheckCircle, Clock, Calendar, RotateCcw, ArrowUpCircle, X } from 'lucide-react'
+import { Search, BarChart3, PhoneCall, CheckCircle, Clock, Calendar, RotateCcw, ArrowUpCircle, X, Download } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/Input'
 import { Can } from '@/components/shared/Can'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime, formatDateTime } from '@/lib/utils'
+import { toCsv, downloadCsv, csvFilename } from '@/lib/csv'
 import { t } from '@/i18n'
 import {
   listCallbacks,
@@ -222,12 +223,36 @@ export default function CallbackListPage() {
 
   const rowHeight = density === 'compact' ? 'py-2' : 'py-4'
 
+  // Export the current filtered page to CSV (P-35).
+  function handleExport() {
+    const rows = data?.items ?? []
+    const csv = toCsv(rows, [
+      { header: t('admin.callbacks.column.user'), value: c => c.userName },
+      { header: t('admin.callbacks.export.col.phone'), value: c => c.userPhone },
+      { header: t('admin.callbacks.filter.category'), value: c => c.category },
+      { header: t('admin.callbacks.column.priority'), value: c => c.priority },
+      { header: t('admin.callbacks.filter.status'), value: c => c.status },
+      { header: t('admin.callbacks.column.requested'), value: c => formatDateTime(c.requestedAt) },
+      { header: t('admin.callbacks.column.assigned'), value: c => c.assignedAgentName ?? '' },
+    ])
+    downloadCsv(csvFilename('callbacks'), csv)
+  }
+
   return (
     <div className="space-y-5">
       <PageHeader
         title={t('admin.callbacks.title')}
         actions={
           <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<Download className="h-4 w-4" />}
+              onClick={handleExport}
+              disabled={(data?.items?.length ?? 0) === 0}
+            >
+              {t('admin.callbacks.export')}
+            </Button>
             {/* KPI page is Admin/Ops only — CAs can view list but not KPI */}
             <Can anyOf={['callback.kpi.read', 'admin.dashboard.read']}>
               <Button variant="secondary" size="sm" leftIcon={<BarChart3 className="h-4 w-4" />} onClick={() => void navigate('/callbacks/kpi')}>

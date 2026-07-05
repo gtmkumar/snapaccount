@@ -17,7 +17,9 @@ public record CreatePlanCommand(
     BillingCycle BillingCycle,
     decimal PriceInr,
     int TrialDays = 0,
-    string? Description = null) : ICommand<CreatePlanResponse>;
+    string? Description = null,
+    // BUG-SUB-PLAN-CODE-MISSING: optional stable machine code; derived from Name when omitted.
+    string? Code = null) : ICommand<CreatePlanResponse>;
 
 /// <summary>Response after creating a plan.</summary>
 public record CreatePlanResponse(Guid PlanId, string Name, decimal PriceInr, string? RazorpayPlanId = null);
@@ -47,9 +49,24 @@ public sealed class CreatePlanCommandHandler(
         CreatePlanCommand request,
         CancellationToken cancellationToken)
     {
+        // BUG-SUB-PLAN-CODE-MISSING: subscription_plan.code is NOT NULL UNIQUE. Use the caller's code
+        // when supplied, else derive a slug from the name plus a short suffix to guarantee uniqueness
+        // against the UNIQUE constraint (and the seeded FREE/BASIC/PRO/ENTERPRISE codes).
+        string code;
+        if (!string.IsNullOrWhiteSpace(request.Code))
+        {
+            code = request.Code.Trim().ToUpperInvariant();
+        }
+        else
+        {
+            var slug = Plan.DeriveCode(request.Name);
+            if (slug.Length > 41) slug = slug[..41];
+            code = $"{slug}_{Guid.NewGuid():N}"[..(slug.Length + 9)]; // slug + '_' + 8 hex ≤ 50
+        }
+
         var plan = Plan.Create(
             request.Name, request.Tier, request.BillingCycle,
-            request.PriceInr, request.TrialDays, request.Description);
+            request.PriceInr, request.TrialDays, request.Description, code);
 
         db.Plans.Add(plan);
         await db.SaveChangesAsync(cancellationToken);

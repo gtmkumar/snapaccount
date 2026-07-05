@@ -44,3 +44,36 @@ export async function fetchServerUserType(): Promise<UserType | undefined> {
     return undefined; // network/parse failure — let the caller decide
   }
 }
+
+/** The subset of GET /auth/me the mobile client hydrates into the auth store. */
+export interface ServerProfile {
+  /** Mobile persona union (null for STAFF / no-profile-yet). */
+  userType: UserType;
+  /** Display name captured at onboarding (auth.user.full_name). */
+  fullName?: string;
+  email?: string;
+}
+
+/**
+ * Fetch the authenticated user's profile from the backend (GET /auth/me).
+ * Superset of {@link fetchServerUserType} — also returns the display name so a
+ * returning user's real name (not the "SnapAccount User" fallback) shows on the
+ * profile/More screen (AND-LIVE-06). Returns undefined on any failure so callers
+ * can fall back to their existing new/returning hint.
+ */
+export async function fetchServerProfile(): Promise<ServerProfile | undefined> {
+  try {
+    const res = await apiClient.get<{
+      userType?: string | null;
+      fullName?: string | null;
+      email?: string | null;
+    }>('/auth/me');
+    return {
+      userType: mapServerUserType(res.data?.userType),
+      fullName: res.data?.fullName ?? undefined,
+      email: res.data?.email ?? undefined,
+    };
+  } catch {
+    return undefined; // network/parse failure — let the caller decide
+  }
+}

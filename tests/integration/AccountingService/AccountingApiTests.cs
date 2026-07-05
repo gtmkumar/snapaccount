@@ -14,10 +14,10 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using SnapAccount.IntegrationTests.Shared;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Testcontainers.PostgreSql;
 using Xunit;
 
 namespace AccountingService.IntegrationTests;
@@ -32,53 +32,53 @@ namespace AccountingService.IntegrationTests;
 /// Uses real PostgreSQL via Testcontainers. No mocked DB per CLAUDE.md.
 /// Phase 6A.
 /// </summary>
-[Collection("AccountingApi")]
-public class AccountingApiTests : IAsyncLifetime
+[Collection("migrated")]
+public class AccountingApiTests(MigratedPostgresFixture pg) : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
-        .WithDatabase("snapaccount_test")
-        .WithUsername("postgres")
-        .WithPassword("postgres_test")
-        .Build();
+    private readonly MigratedPostgresFixture _pg = pg;
+    private string _connectionString = null!;
 
     private HttpClient _client = null!;
     private WebApplicationFactory<Program> _factory = null!;
+
+    // Org-scoped endpoints check currentUser.OrganizationId == request org. The dev-superadmin
+    // canned token maps to this org, so requests must target it (not a random GUID).
+    private static readonly Guid DevOrgId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
     // ──────────────────────────────────────────────────────────────
     // IAsyncLifetime
     // ──────────────────────────────────────────────────────────────
 
-    public async Task InitializeAsync()
+    public Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        // Fresh DB cloned from the migrated template — full production schema.
+        _connectionString = _pg.NewDatabaseConnectionString();
 
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Testing");
+                builder.UseSetting("ConnectionStrings:DefaultConnection", _connectionString);
+                builder.UseSetting("DEV_AUTH_BYPASS", "true");
                 builder.ConfigureServices(services =>
                 {
                     services.RemoveAll(typeof(DbContextOptions<Infrastructure.Persistence.AccountingDbContext>));
                     services.AddDbContext<Infrastructure.Persistence.AccountingDbContext>(opts =>
-                        opts.UseNpgsql(_postgres.GetConnectionString()));
-
-                    services.RemoveAll(typeof(SnapAccount.Shared.Infrastructure.Auth.FirebaseAuthMiddleware));
+                        opts.UseNpgsql(_connectionString));
                 });
             });
 
         _client = _factory.CreateClient();
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "dev-superadmin-token");
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.AccountingDbContext>();
-        await db.Database.MigrateAsync();
+        return Task.CompletedTask;
     }
 
     public async Task DisposeAsync()
     {
         _client.Dispose();
         await _factory.DisposeAsync();
-        await _postgres.DisposeAsync();
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -88,11 +88,12 @@ public class AccountingApiTests : IAsyncLifetime
     [Fact]
     public async Task BootstrapCoa_ValidOrgId_Returns201WithAccountCount()
     {
-        var orgId = Guid.NewGuid();
+        var orgId = DevOrgId;
 
         var response = await _client.PostAsync($"/accounting/organizations/{orgId}/bootstrap-coa", null);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        // CONTRACT: docs/api/endpoints.md documents bootstrap-coa as 200 with { accountsCreated }.
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("accountsCreated").GetInt32().Should().BeGreaterThan(0);
     }
@@ -132,7 +133,7 @@ public class AccountingApiTests : IAsyncLifetime
     [Fact]
     public async Task PostJournalBatch_EmptyEntries_Returns400ValidationError()
     {
-        var orgId = Guid.NewGuid();
+        var orgId = DevOrgId;
 
         var response = await _client.PostAsJsonAsync("/accounting/journal-entries", new
         {
@@ -206,7 +207,7 @@ public class AccountingApiTests : IAsyncLifetime
     [Fact]
     public async Task GetTrialBalance_EmptyLedger_ReturnsIsBalancedTrue()
     {
-        var orgId = Guid.NewGuid();
+        var orgId = DevOrgId;
         await _client.PostAsync($"/accounting/organizations/{orgId}/bootstrap-coa", null);
 
         var response = await _client.GetAsync($"/accounting/trial-balance?orgId={orgId}&fyYear=2026");
@@ -222,7 +223,7 @@ public class AccountingApiTests : IAsyncLifetime
     [Fact]
     public async Task GetTrialBalance_InvalidFyYear_Returns400()
     {
-        var response = await _client.GetAsync($"/accounting/trial-balance?orgId={Guid.NewGuid()}&fyYear=1999");
+        var response = await _client.GetAsync($"/accounting/trial-balance?orgId={DevOrgId}&fyYear=1999");
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -238,7 +239,7 @@ public class AccountingApiTests : IAsyncLifetime
     [InlineData("tax-liability")]
     public async Task GetReport_ValidOrgAndFy_DoesNotReturn501(string reportType)
     {
-        var orgId = Guid.NewGuid();
+        var orgId = DevOrgId;
         await _client.PostAsync($"/accounting/organizations/{orgId}/bootstrap-coa", null);
 
         var response = await _client.GetAsync($"/accounting/reports/{reportType}?orgId={orgId}&fyYear=2026");
@@ -294,7 +295,7 @@ public class AccountingApiTests : IAsyncLifetime
     [Fact]
     public async Task CloseFiscalYear_ValidRequest_Returns200()
     {
-        var orgId = Guid.NewGuid();
+        var orgId = DevOrgId;
         await _client.PostAsync($"/accounting/organizations/{orgId}/bootstrap-coa", null);
 
         var response = await _client.PostAsJsonAsync("/accounting/fiscal-year/close", new
@@ -315,21 +316,25 @@ public class AccountingApiTests : IAsyncLifetime
 
     private async Task<(Guid orgId, Guid debitAccountId, Guid creditAccountId)> SetupOrgWithAccounts()
     {
-        var orgId = Guid.NewGuid();
+        var orgId = DevOrgId;
         var coaResponse = await _client.PostAsync($"/accounting/organizations/{orgId}/bootstrap-coa", null);
         coaResponse.EnsureSuccessStatusCode();
 
-        // Get accounts from the seeded COA
-        var ledgerResponse = await _client.GetAsync($"/accounting/reports/balance-sheet?orgId={orgId}&fyYear=2026");
-        // We need two account IDs — fetch COA list or use a ledger endpoint
-        // For simplicity use the bootstrap response which includes the first two account IDs
-        var coaBody = await coaResponse.Content.ReadFromJsonAsync<JsonElement>();
-        var accounts = coaBody.GetProperty("accounts").EnumerateArray().ToList();
+        // The bootstrap-coa response is { orgId, accountsCreated } (a count) — it does NOT return the
+        // materialised account rows. There is no COA-list endpoint, so read two postable account IDs
+        // directly from the DB (the accounts the bootstrap just created for this org).
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.AccountingDbContext>();
+        var accountIds = await db.ChartOfAccounts
+            .Where(a => a.OrgId == orgId && a.DeletedAt == null)
+            .OrderBy(a => a.AccountCode)
+            .Select(a => a.Id)
+            .Take(2)
+            .ToListAsync();
 
-        // Pick first asset and first expense account for debit/credit
-        var debitId = Guid.Parse(accounts[0].GetProperty("id").GetString()!);
-        var creditId = Guid.Parse(accounts[1].GetProperty("id").GetString()!);
+        accountIds.Should().HaveCountGreaterThanOrEqualTo(2,
+            "bootstrap-coa must have materialised the org's chart of accounts");
 
-        return (orgId, debitId, creditId);
+        return (orgId, accountIds[0], accountIds[1]);
     }
 }

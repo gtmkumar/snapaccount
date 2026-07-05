@@ -1,5 +1,9 @@
 # Backend Agent Memory Index
 
+- [Integration migration fixture (how it works + adopt)](reference_integration_migration_fixture.md) — MigratedPostgresFixture: pgvector container, replays 111 migrations to `snapaccount` template, TEMPLATE-clone per test, keep-list + session_replication_role=replica seed mode; recipe to convert a suite; all 9 suites green (175 pass/30 skip/0 fail).
+
+- [Integration suite migration-fixture conversion (2026-07-05)](project_integration_suite_migration_fixture_conversion.md) — Loan/Gst/Itr suites converted to MigratedPostgresFixture; found 6 confirmed backend bugs (loan consent_type enum, application_status_log columns, gst.notices.gstin, CRITICAL itr.assessee_profiles column mismatch) + 1 doc/code mismatch; 11 passed/13 documented-skip/0 failed.
+- [Integration suite conversion: Notif/Sub/Callback/Chat/Acct (2026-07-05)](project_integration_suite_notif_sub_callback_chat_acct.md) — 51 passed/16 skipped/0 failed; 3 new confirmed bugs (notif dedupe LINQ, subscription plan.code missing, accounting coa_template.template_code missing) + Assist.WebApi missing JsonStringEnumConverter + reusable WebApplicationFactory header-based ICurrentUser test pattern (ThreadStatic/AsyncLocal don't cross the TestServer boundary).
 - [DG-INFRA-04 Callback Recurring Jobs + KPI MV refresh (2026-06-28)](project_dg_infra_04.md) — CallbackRecurringJobsSubscriber (CALLBACK_KPI_MV_REFRESH/GST_PRE_DEADLINE_CALLBACK), POST /callbacks/internal/refresh-kpi-mv, Infrastructure handler pattern for raw SQL.
 - [DG-GST-02/03 ARN audit + deadline broadcast fix (2026-06-28)](project_dg_gst_02_03.md) — GstReturnAudit entity, 3 new commands, 1 new query, 2 endpoints, migration 096, Guid.Empty broadcast fixed.
 

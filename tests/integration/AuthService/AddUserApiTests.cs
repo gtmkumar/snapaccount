@@ -131,11 +131,19 @@ public class AddUserApiTests(PostgresFixture pg) : IAsyncLifetime
         // Use EF Core entities directly to avoid raw-SQL schema-prefix issues.
         // EF Core tracks all inserts via the DbContext and saves to the mapped schema.
 
+        // -- Org FIRST: the real schema enforces auth.role.organization_id → auth.organization(id),
+        // so any org-scoped (custom) role must reference an organization that already exists.
+        await db.Database.ExecuteSqlRawAsync(
+            "INSERT INTO auth.organization " +
+            "(id,owner_user_id,business_name,country,is_gst_registered,is_msme_registered,is_active,created_at,updated_at) " +
+            "VALUES ({0},{1},'AddUser Test Org','India',false,false,true,now(),now()) ON CONFLICT(id) DO NOTHING",
+            _testOrgId, Guid.NewGuid());
+
         // -- Roles
         _systemAdminRoleId   = AddRole(db, "SUPER_ADMIN",   "System Admin",    isSystem: true);
         _businessOwnerRoleId = AddRole(db, "BUSINESS_OWNER", "Business Owner",  isSystem: true);
         _orgAdminRoleId      = AddRole(db, "ORG_ADMIN",       "Org Admin",       isSystem: true);
-        var mgrCustomRole    = AddRoleEntity(db, "MANAGER_ADDUSER_TEST", "Manager AddUser Test", isSystem: false);
+        var mgrCustomRole    = AddRoleEntity(db, "MANAGER_ADDUSER_TEST", "Manager AddUser Test", isSystem: false, orgId: _testOrgId);
         _mgrCustomRoleId     = mgrCustomRole.Id;
 
         // -- Permissions
@@ -155,13 +163,6 @@ public class AddUserApiTests(PostgresFixture pg) : IAsyncLifetime
             mgrCustomRole.Id, _orgRolesReadPermId));
 
         await db.SaveChangesAsync(CancellationToken.None);
-
-        // -- Org (for scope=org tests) via raw SQL (organization has no factory method due to private setters)
-        await db.Database.ExecuteSqlRawAsync(
-            "INSERT INTO auth.organization " +
-            "(id,owner_user_id,business_name,country,is_gst_registered,is_msme_registered,is_active,created_at,updated_at) " +
-            "VALUES ({0},{1},'AddUser Test Org','India',false,false,true,now(),now()) ON CONFLICT(id) DO NOTHING",
-            _testOrgId, Guid.NewGuid());
 
         // -- Caller users: hash passwords via the static PasswordHasher (no DI needed)
         var superHash = AuthService.Infrastructure.Auth.PasswordHasher.Hash("SuperAdmin!123");
@@ -186,12 +187,13 @@ public class AddUserApiTests(PostgresFixture pg) : IAsyncLifetime
 
     private static AuthService.Domain.Entities.Role AddRoleEntity(
         AuthService.Infrastructure.Persistence.AuthDbContext db,
-        string name, string displayName, bool isSystem)
+        string name, string displayName, bool isSystem, Guid orgId = default)
     {
         var role = isSystem
             ? AuthService.Domain.Entities.Role.Create(name, displayName, isSystemRole: isSystem)
             : AuthService.Domain.Entities.Role.CreateOrgRole(
-                organizationId: Guid.Empty,   // platform custom — null org not needed for tests
+                // Must reference an existing org (FK auth.role.organization_id → auth.organization).
+                organizationId: orgId,
                 createdByUserId: Guid.NewGuid(),
                 name: name, displayName: displayName);
         db.Roles.Add(role);
@@ -224,7 +226,7 @@ public class AddUserApiTests(PostgresFixture pg) : IAsyncLifetime
             "INSERT INTO auth.user_preference " +
             "(id,user_id,preferred_language,theme,push_notifications_enabled," +
             "sms_notifications_enabled,email_notifications_enabled,whatsapp_notifications_enabled,created_at,updated_at) " +
-            "VALUES (gen_random_uuid(),{0},'en','light',true,true,true,true,now(),now()) ON CONFLICT DO NOTHING",
+            "VALUES (gen_random_uuid(),{0},'en','LIGHT',true,true,true,true,now(),now()) ON CONFLICT DO NOTHING",
             userId);
     }
 

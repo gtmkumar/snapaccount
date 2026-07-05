@@ -67,9 +67,32 @@ const VALID_ROLES: AdminRole[] = [
   'SUPER_ADMIN', 'OPERATIONS_MANAGER', 'CA', 'SUPPORT_EXECUTIVE', 'DATA_ENTRY_OPERATOR', 'PARTNER_BANK_REP',
 ]
 
-function pickRole(roles: string[]): AdminRole {
-  const match = roles.find(r => VALID_ROLES.includes(r as AdminRole))
-  return (match as AdminRole) ?? 'SUPER_ADMIN'
+/**
+ * Least-privilege fallback for the client-side `role`. Roles that this admin panel
+ * does not model as staff roles (e.g. the org-member roles ORG_ADMIN / MANAGER /
+ * HR / REVIEWER, or any future/unknown role) map here rather than to a staff role.
+ *
+ * NEVER default to SUPER_ADMIN: `role` gates the /settings AuthGuard and the legacy
+ * static permission map, and a fail-open default let org-member accounts reach the
+ * platform-admin surface (ACM-01/02/06). Mirrors getRoleFromToken's default.
+ *
+ * Actual authorization is enforced server-side via /auth/me/permissions
+ * (see usePermission / RoutePermissionGuard); this value is display + coarse gating only.
+ */
+const FALLBACK_ROLE: AdminRole = 'DATA_ENTRY_OPERATOR'
+
+/**
+ * Map the server's role list to the single AdminRole this UI uses. Picks the
+ * most-privileged *known* staff role present, and fails CLOSED to the
+ * least-privilege role when none of the caller's roles are staff roles.
+ */
+export function pickRole(roles: string[]): AdminRole {
+  const known = roles.filter((r): r is AdminRole => VALID_ROLES.includes(r as AdminRole))
+  if (known.length === 0) return FALLBACK_ROLE
+  // Prefer the highest-privilege staff role the caller actually holds.
+  return known.sort(
+    (a, b) => VALID_ROLES.indexOf(a) - VALID_ROLES.indexOf(b),
+  )[0]
 }
 
 function readStoredUser(): AdminUser | null {
@@ -262,7 +285,8 @@ export function useAuth(): AuthState & {
         email: null,
         displayName: null,
         photoURL: null,
-        role: 'SUPER_ADMIN',
+        // Fail closed: never assume SUPER_ADMIN for the minimal post-2FA user.
+        role: FALLBACK_ROLE,
       }
       setStoredUser({ ...user, uid: data.userId })
       setTwoFaChallenge(null)

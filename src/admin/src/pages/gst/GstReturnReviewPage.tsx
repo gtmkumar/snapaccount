@@ -11,6 +11,9 @@ import { AlertBanner } from '@/components/shared/AlertBanner'
 import { IrpStatusCard } from '@/components/ui/IrpStatusCard'
 import { EwbStatusCard } from '@/components/ui/EwbStatusCard'
 import { HsnSacTypeahead } from '@/components/ui/HsnSacTypeahead'
+import { Modal } from '@/components/ui/Modal'
+import { NativeSelect } from '@/components/ui/NativeSelect'
+import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/lib/utils'
 import { t } from '@/i18n'
@@ -21,6 +24,7 @@ import {
   submitGstReturnForFiling,
   flagGstReturnRevision,
   listReturnInvoices,
+  addReturnInvoice,
   getIrnStatus,
   getEwbStatus,
   aggregateB2CSummary,
@@ -825,6 +829,139 @@ function Gstr1SummaryBar({ invoices }: Gstr1SummaryBarProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Add-invoice modal (GSTR-1 / GSTR-1A line-item editor entry point)
+// ---------------------------------------------------------------------------
+
+const RETURN_INVOICE_TYPES: ReturnInvoiceDto['invoiceType'][] = ['B2B', 'B2C', 'EXPORT', 'CREDIT_NOTE', 'DEBIT_NOTE']
+
+function AddReturnInvoiceModal({ returnId, onClose, onAdded }: { returnId: string; onClose: () => void; onAdded: () => void }) {
+  const [form, setForm] = useState({
+    invoiceNumber: '',
+    invoiceType: 'B2B' as ReturnInvoiceDto['invoiceType'],
+    invoiceDate: '',
+    buyerGstin: '',
+    taxableValue: '',
+    igstAmount: '',
+    cgstAmount: '',
+    sgstAmount: '',
+    cessAmount: '',
+  })
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const num = (v: string) => (v.trim() === '' ? 0 : Number(v))
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      addReturnInvoice(returnId, {
+        invoiceNumber: form.invoiceNumber.trim(),
+        invoiceType: form.invoiceType,
+        invoiceDate: form.invoiceDate,
+        buyerGstin: form.buyerGstin.trim() || undefined,
+        taxableValue: num(form.taxableValue),
+        igstAmount: num(form.igstAmount),
+        cgstAmount: num(form.cgstAmount),
+        sgstAmount: num(form.sgstAmount),
+        cessAmount: num(form.cessAmount),
+      }),
+    onSuccess: () => {
+      toast.success(t('admin.gst.return.addInvoice.success'))
+      onAdded()
+    },
+    onError: () => toast.error(t('admin.gst.return.addInvoice.error')),
+  })
+
+  function validate(): boolean {
+    const e: Record<string, string> = {}
+    if (!form.invoiceNumber.trim()) e.invoiceNumber = t('admin.gst.return.addInvoice.required')
+    if (!form.invoiceDate) e.invoiceDate = t('admin.gst.return.addInvoice.required')
+    if (num(form.taxableValue) <= 0) e.taxableValue = t('admin.gst.return.addInvoice.taxableRequired')
+    // B2B / exports require a buyer GSTIN
+    if ((form.invoiceType === 'B2B' || form.invoiceType === 'DEBIT_NOTE' || form.invoiceType === 'CREDIT_NOTE') && !form.buyerGstin.trim()) {
+      e.buyerGstin = t('admin.gst.return.addInvoice.buyerRequired')
+    }
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
+
+  const inputCls = 'w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none'
+
+  const totalTax = num(form.igstAmount) + num(form.cgstAmount) + num(form.sgstAmount) + num(form.cessAmount)
+  const totalValue = num(form.taxableValue) + totalTax
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={t('admin.gst.return.addInvoice.title')}
+      size="lg"
+      footer={
+        <div className="flex gap-2 justify-end w-full">
+          <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button
+            type="submit"
+            form="add-return-invoice-form"
+            variant="primary"
+            disabled={mutation.isPending}
+            loading={mutation.isPending}
+          >
+            {t('admin.gst.return.addInvoice.submit')}
+          </Button>
+        </div>
+      }
+    >
+      <form
+        id="add-return-invoice-form"
+        onSubmit={ev => { ev.preventDefault(); if (validate()) mutation.mutate() }}
+        className="space-y-3"
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-neutral-600 mb-1">{t('admin.gst.return.addInvoice.invoiceNo')} *</label>
+            <input value={form.invoiceNumber} onChange={e => setForm(f => ({ ...f, invoiceNumber: e.target.value }))} className={cn(inputCls, errors.invoiceNumber && 'border-error-500')} />
+            {errors.invoiceNumber && <p className="text-xs text-error-600 mt-0.5">{errors.invoiceNumber}</p>}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-neutral-600 mb-1">{t('admin.gst.return.addInvoice.type')} *</label>
+            <NativeSelect value={form.invoiceType} onChange={e => setForm(f => ({ ...f, invoiceType: e.target.value as ReturnInvoiceDto['invoiceType'] }))}>
+              {RETURN_INVOICE_TYPES.map(ty => <option key={ty} value={ty}>{ty}</option>)}
+            </NativeSelect>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-neutral-600 mb-1">{t('admin.gst.return.addInvoice.date')} *</label>
+            <input type="date" value={form.invoiceDate} onChange={e => setForm(f => ({ ...f, invoiceDate: e.target.value }))} className={cn(inputCls, errors.invoiceDate && 'border-error-500')} />
+            {errors.invoiceDate && <p className="text-xs text-error-600 mt-0.5">{errors.invoiceDate}</p>}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-neutral-600 mb-1">{t('admin.gst.return.addInvoice.buyerGstin')}</label>
+            <input value={form.buyerGstin} onChange={e => setForm(f => ({ ...f, buyerGstin: e.target.value.toUpperCase() }))} maxLength={15} className={cn(inputCls, 'font-mono', errors.buyerGstin && 'border-error-500')} />
+            {errors.buyerGstin && <p className="text-xs text-error-600 mt-0.5">{errors.buyerGstin}</p>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 border-t border-neutral-100">
+          <div>
+            <label className="block text-xs font-medium text-neutral-600 mb-1">{t('admin.gst.return.addInvoice.taxable')} *</label>
+            <input type="number" step="0.01" value={form.taxableValue} onChange={e => setForm(f => ({ ...f, taxableValue: e.target.value }))} className={cn(inputCls, 'text-right tabular-nums', errors.taxableValue && 'border-error-500')} />
+            {errors.taxableValue && <p className="text-xs text-error-600 mt-0.5">{errors.taxableValue}</p>}
+          </div>
+          {(['igstAmount', 'cgstAmount', 'sgstAmount', 'cessAmount'] as const).map(field => (
+            <div key={field}>
+              <label className="block text-xs font-medium text-neutral-600 mb-1">{t(`admin.gst.return.addInvoice.${field}`)}</label>
+              <input type="number" step="0.01" value={form[field]} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))} className={cn(inputCls, 'text-right tabular-nums')} />
+            </div>
+          ))}
+        </div>
+
+        <div className="flex justify-end gap-6 pt-2 border-t border-neutral-100 text-sm">
+          <span className="text-neutral-500">{t('admin.gst.return.addInvoice.totalTax')}: <span className="font-semibold text-neutral-900 tabular-nums">₹{totalTax.toLocaleString('en-IN')}</span></span>
+          <span className="text-neutral-500">{t('admin.gst.return.addInvoice.totalValue')}: <span className="font-semibold text-neutral-900 tabular-nums">₹{totalValue.toLocaleString('en-IN')}</span></span>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -840,6 +977,7 @@ export default function GstReturnReviewPage() {
   const [invoicePage, setInvoicePage] = useState(1)
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
   const [invoiceHsnMap, setInvoiceHsnMap] = useState<Record<string, HsnSacCode | null>>({})
+  const [addInvoiceOpen, setAddInvoiceOpen] = useState(false)
 
   const [taxData, setTaxData] = useState<TaxRow[]>(defaultTaxData)
   const [checklist, setChecklist] = useState({
@@ -998,6 +1136,20 @@ export default function GstReturnReviewPage() {
           {/* ── GSTR-1 Review path ── */}
           {isGstr1 ? (
             <>
+              {/* Toolbar — Add invoice (editable statuses only) */}
+              {gstReturn && (gstReturn.status === 'DRAFT' || gstReturn.status === 'PENDING_APPROVAL' || gstReturn.status === 'REVISION_NEEDED') && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<Plus className="h-4 w-4" />}
+                    onClick={() => setAddInvoiceOpen(true)}
+                  >
+                    {t('admin.gst.return.addInvoice.cta')}
+                  </Button>
+                </div>
+              )}
+
               {/* Summary stats bar */}
               <Gstr1SummaryBar invoices={gstr1Invoices} />
 
@@ -1422,6 +1574,17 @@ export default function GstReturnReviewPage() {
           </div>
         </div>
       </div>
+
+      {addInvoiceOpen && id && (
+        <AddReturnInvoiceModal
+          returnId={id}
+          onClose={() => setAddInvoiceOpen(false)}
+          onAdded={() => {
+            setAddInvoiceOpen(false)
+            void queryClient.invalidateQueries({ queryKey: ['gst-return-invoices-all', id] })
+          }}
+        />
+      )}
     </div>
   )
 }

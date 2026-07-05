@@ -974,9 +974,11 @@
           "tenureRange": "{{min}}–{{max}} mo",
           "interestRange": "{{min}}% – {{max}}% p.a.",
           "indicative": "(indicative)",
+          "bank": "Lending partner",
           "qualified": "Likely qualify",
           "nearMatch": "Near match",
           "notQualified": "May not qualify",
+          "unchecked": "Not checked",
           "cta": {
             "viewDetails": "View details",
             "apply": "Apply"

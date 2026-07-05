@@ -10,4 +10,5 @@
 - [GST IMS + GSTR-1A schema](schema_gst_ims_gstr1a.md) — migration 074 tables; RLS house-style (organization_id + app.current_user_id, NOT handoff's app.current_org_id); append-only ims_action_logs; mirror grants.
 - [AI RAG tables](schema_ai_rag_tables.md) — migration 075 ai.chunks/embeddings/interactions; FLOAT4[] vector (pgvector deferred to P7b w/ in-migration upgrade DDL); append-only ai.interactions; EF nullability parity lesson.
 - [Auth/security log-table RLS](schema_auth_security_log_tables.md) — append-only telemetry logs (otp_request, ai_usage_log, fraud_checks, 089 device_integrity_checks) intentionally NO RLS; system-writes-for-admin vs customer-reads-own.
+- [EF reverse-divergence sentinel](schema_ef_reverse_divergence_sentinel.md) — unmapped live NOT-NULL cols break EF inserts; sentinel DEFAULT vs DROP NOT NULL (the UNIQUE-index NULL-distinct trap); migration 111 `ay='_PROFILE_'`.
 - [Dev seed reconciliation](schema_dev_seed_reconciliation.md) — GAP-072: LOCAL_AUTH logins backend-runtime-seeded (not SQL); SQL dev-seed database/dev-seed/ (100→200); self-sufficiency guard; CI/docker path drift owed to devops.

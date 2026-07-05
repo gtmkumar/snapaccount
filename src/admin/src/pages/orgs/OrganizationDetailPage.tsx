@@ -119,6 +119,8 @@ export default function OrganizationDetailPage() {
         <TabList>
           <TabTrigger id="overview">{t('orgs.tab.overview')}</TabTrigger>
           <TabTrigger id="members" badge={org.memberCount}>{t('orgs.tab.members')}</TabTrigger>
+          <TabTrigger id="roles">{t('orgs.tab.roles')}</TabTrigger>
+          <TabTrigger id="invites">{t('orgs.tab.invites')}</TabTrigger>
           <TabTrigger id="settings">{t('orgs.tab.settings')}</TabTrigger>
         </TabList>
 
@@ -137,7 +139,21 @@ export default function OrganizationDetailPage() {
             </ErrorBoundary>
           </TabPanel>
 
-          {/* Settings tab — pending invites + editable metadata */}
+          {/* Roles tab — roles in use, derived from the org's members */}
+          <TabPanel id="roles">
+            <ErrorBoundary scope="pane">
+              <OrgRolesTab orgId={orgId!} />
+            </ErrorBoundary>
+          </TabPanel>
+
+          {/* Invites tab — pending / historical invitations */}
+          <TabPanel id="invites">
+            <ErrorBoundary scope="pane">
+              <OrgInvitesPanel orgId={orgId!} />
+            </ErrorBoundary>
+          </TabPanel>
+
+          {/* Settings tab — gov verification + editable metadata */}
           <TabPanel id="settings">
             <ErrorBoundary scope="pane">
               <OrgSettingsTab orgId={orgId!} org={org} />
@@ -398,6 +414,81 @@ function MemberRow({ member }: { member: OrgMember }) {
   )
 }
 
+// ── Roles tab ───────────────────────────────────────────────────────────────
+// A per-org role catalog endpoint does not exist for a platform admin viewing an
+// arbitrary org (GET /auth/org/roles is caller-org-scoped). To avoid showing
+// another org's roles from the wrong scope, this tab derives the roles actually
+// IN USE in this org from its members (real, org-scoped data via listOrgMembers),
+// with a per-role member count. A full editable role catalog is a backend follow-up.
+
+function OrgRolesTab({ orgId }: { orgId: string }) {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['platform', 'organizations', orgId, 'members', 'rolesAgg'],
+    queryFn: () => listOrgMembers(orgId, { page: 1, pageSize: 200 }),
+    staleTime: 30_000,
+  })
+
+  if (isLoading) return <Skeleton variant="list" />
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-12">
+        <AlertCircle className="h-8 w-8 text-[var(--text-tertiary)]" />
+        <p className="text-sm text-[var(--text-secondary)]">{t('orgs.roles.error')}</p>
+        <Button variant="ghost" onClick={() => void refetch()}>{t('common.retry')}</Button>
+      </div>
+    )
+  }
+
+  const members = data?.items ?? []
+  const counts = new Map<string, number>()
+  for (const m of members) counts.set(m.role, (counts.get(m.role) ?? 0) + 1)
+  const roles = Array.from(counts.entries())
+    .map(([role, count]) => ({ role, count }))
+    .sort((a, b) => b.count - a.count || a.role.localeCompare(b.role))
+
+  if (roles.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16">
+        <Shield className="h-10 w-10 text-[var(--text-tertiary)]" />
+        <p className="text-sm text-[var(--text-secondary)]">{t('orgs.roles.empty')}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-[var(--text-tertiary)]">{t('orgs.roles.desc')}</p>
+      <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+        <table className="w-full text-sm" aria-label={t('orgs.roles.tableLabel')}>
+          <thead>
+            <tr className="bg-[var(--surface-raised)] border-b border-[var(--border-subtle)]">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
+                {t('orgs.roles.col.role')}
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">
+                {t('orgs.roles.col.members')}
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border-subtle)]">
+            {roles.map(r => (
+              <tr key={r.role} className="bg-[var(--surface-default)] hover:bg-[var(--surface-raised)] transition-colors">
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+                    {r.role}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-[var(--text-primary)] tabular-nums">{r.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ── Settings tab ───────────────────────────────────────────────────────────────
 
 function OrgSettingsTab({ orgId, org }: { orgId: string; org: OrgListItem }) {
@@ -409,14 +500,6 @@ function OrgSettingsTab({ orgId, org }: { orgId: string; org: OrgListItem }) {
           {t('orgs.settings.govVerification.title')}
         </h3>
         <GovVerificationSection orgId={orgId} org={org} />
-      </section>
-
-      {/* Pending invites */}
-      <section>
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">
-          {t('orgs.settings.pendingInvites')}
-        </h3>
-        <OrgInvitesPanel orgId={orgId} />
       </section>
 
       {/* Editable org metadata */}

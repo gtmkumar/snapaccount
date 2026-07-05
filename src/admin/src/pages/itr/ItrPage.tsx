@@ -570,8 +570,39 @@ const TABS: { key: TabKey; labelKey: string }[] = [
 export default function ItrPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('verificationQueue')
   const [ay, setAy] = useState(CURRENT_AY)
+  const queryClient = useQueryClient()
 
   const AY_OPTIONS = ['AY2026-27', 'AY2025-26', 'AY2024-25']
+
+  // Per-tab count badges. Each queue is one lightweight totalCount probe (pageSize 1).
+  // Notices probe is resilient: a 403/failure leaves the badge absent rather than
+  // failing the whole strip.
+  const { data: tabCounts } = useQuery({
+    queryKey: ['itr-tab-counts', ay],
+    queryFn: async () => {
+      const [ver, fil, notices] = await Promise.all([
+        listFilings({ status: 'UNDER_CA_REVIEW', assessmentYear: ay, pageSize: 1 }),
+        listFilings({ status: 'USER_APPROVED', assessmentYear: ay, pageSize: 1 }),
+        listItrNotices({ assessmentYear: ay, pageSize: 1 }).catch(() => ({ totalCount: 0 })),
+      ])
+      return {
+        verificationQueue: ver.totalCount,
+        computationPanel: ver.totalCount,
+        filingQueue: fil.totalCount,
+        noticeTracker: notices.totalCount ?? 0,
+      } as Record<TabKey, number>
+    },
+    staleTime: 30_000,
+  })
+
+  function refreshAll() {
+    void queryClient.invalidateQueries({ queryKey: ['itr-tab-counts'] })
+    void queryClient.invalidateQueries({ queryKey: ['itr-filings-verification'] })
+    void queryClient.invalidateQueries({ queryKey: ['itr-filings-queue'] })
+    void queryClient.invalidateQueries({ queryKey: ['itr-filings-top3'] })
+    void queryClient.invalidateQueries({ queryKey: ['itr-notices'] })
+    void queryClient.invalidateQueries({ queryKey: ['itr-kpi'] })
+  }
 
   return (
     <main aria-labelledby="itr-page-title" className="space-y-4">
@@ -581,6 +612,9 @@ export default function ItrPage() {
           {t('itr.admin.page.title')}
         </h1>
         <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={refreshAll}>
+            {t('common.refresh')}
+          </Button>
           <label htmlFor="ay-select" className="text-sm text-neutral-500">
             {t('itr.admin.ayFilter.label')}
           </label>
@@ -613,13 +647,26 @@ export default function ItrPage() {
             aria-controls={`tabpanel-${tab.key}`}
             onClick={() => setActiveTab(tab.key)}
             className={cn(
-              'flex-shrink-0 px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+              'flex-shrink-0 px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap inline-flex items-center gap-2',
               activeTab === tab.key
                 ? 'border-brand-500 text-brand-700'
                 : 'border-transparent text-neutral-500 hover:text-neutral-700'
             )}
           >
             {t(tab.labelKey)}
+            {tabCounts && tabCounts[tab.key] > 0 && (
+              <span
+                className={cn(
+                  'inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-xs font-semibold tabular-nums',
+                  activeTab === tab.key
+                    ? 'bg-brand-100 text-brand-700'
+                    : 'bg-neutral-100 text-neutral-500'
+                )}
+                aria-label={t('itr.admin.tabs.count', { count: tabCounts[tab.key] })}
+              >
+                {tabCounts[tab.key]}
+              </span>
+            )}
           </button>
         ))}
       </div>

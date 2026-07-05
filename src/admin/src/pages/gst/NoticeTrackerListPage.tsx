@@ -22,7 +22,9 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Modal } from '@/components/ui/Modal'
 import { cn, formatDate } from '@/lib/utils'
+import { isForbiddenError } from '@/lib/apiError'
 import { t } from '@/i18n'
+import { listOrganizations } from '@/lib/rbacApi'
 import {
   listGstNotices,
   createGstNotice,
@@ -75,6 +77,20 @@ function UploadNoticeModal({ open, onClose, onCreated }: UploadNoticeModalProps)
   })
   const [errors, setErrors] = useState<Partial<typeof form>>({})
 
+  // Org selector — sourced from the platform org list. Reachable for uploaders who
+  // hold platform.orgs.read; roles without it (e.g. a pure CA) get a 403, in which
+  // case we surface a clear message rather than posting an empty/fabricated orgId.
+  // A notice-scoped org-list endpoint reachable by CA/GST-reviewer roles is a
+  // backend follow-up (flagged in the gap report).
+  const { data: orgsData, error: orgsError, isLoading: orgsLoading } = useQuery({
+    queryKey: ['platform', 'organizations', { pageSize: 200 }],
+    queryFn: () => listOrganizations({ pageSize: 200 }),
+    enabled: open,
+    retry: 1,
+  })
+  const orgsForbidden = isForbiddenError(orgsError)
+  const orgs = orgsData?.items ?? []
+
   const mutation = useMutation({
     mutationFn: () => createGstNotice({
       orgId: form.orgId,
@@ -94,6 +110,7 @@ function UploadNoticeModal({ open, onClose, onCreated }: UploadNoticeModalProps)
 
   function validate() {
     const e: Partial<typeof form> = {}
+    if (!form.orgId.trim()) e.orgId = t('admin.gst.notice.field.orgRequired')
     if (!form.gstin.trim()) e.gstin = 'GSTIN is required'
     if (!form.noticeNumber.trim()) e.noticeNumber = 'Notice number is required'
     if (!form.noticeDate) e.noticeDate = 'Notice date is required'
@@ -124,6 +141,32 @@ function UploadNoticeModal({ open, onClose, onCreated }: UploadNoticeModalProps)
       }
     >
       <form id="upload-notice-form" onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+            {t('admin.gst.notice.field.org')} *
+          </label>
+          {orgsForbidden ? (
+            <p className="text-xs text-error-600">{t('admin.gst.notice.field.orgForbidden')}</p>
+          ) : (
+            <NativeSelect
+              value={form.orgId}
+              onChange={e => {
+                const orgId = e.target.value
+                const org = orgs.find(o => o.id === orgId)
+                setForm(f => ({ ...f, orgId, gstin: org?.gstin ? org.gstin.toUpperCase() : f.gstin }))
+              }}
+              disabled={orgsLoading}
+              aria-label={t('admin.gst.notice.field.org')}
+              className={cn(errors.orgId && 'border-error-500')}
+            >
+              <option value="">{orgsLoading ? t('common.loading') : t('admin.gst.notice.field.selectOrg')}</option>
+              {orgs.map(o => (
+                <option key={o.id} value={o.id}>{o.businessName}{o.gstin ? ` · ${o.gstin}` : ''}</option>
+              ))}
+            </NativeSelect>
+          )}
+          {errors.orgId && <p className="text-xs text-error-600 mt-0.5">{errors.orgId}</p>}
+        </div>
         <div>
           <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
             {t('admin.gst.notice.field.gstin')} *

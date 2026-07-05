@@ -493,6 +493,20 @@ export async function registerPartnerBank(req: RegisterPartnerBankRequest): Prom
   return res.data as { bankId: string }
 }
 
+// Partial update of an existing bank. All fields optional — only the provided
+// ones change; secrets in apiConfigJson are write-only and never echoed back.
+export interface UpdatePartnerBankRequest {
+  name?: string
+  logoUrl?: string
+  contactEmail?: string
+  apiConfigJson?: string
+  isActive?: boolean
+}
+
+export async function updatePartnerBank(bankId: string, req: UpdatePartnerBankRequest): Promise<void> {
+  await api.patch(`/loans/partner-banks/${bankId}`, req)
+}
+
 // ---------------------------------------------------------------------------
 // API Functions — Bank Communications
 // ---------------------------------------------------------------------------

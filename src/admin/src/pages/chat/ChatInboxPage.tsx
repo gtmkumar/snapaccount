@@ -10,21 +10,29 @@ import {
   MessageSquare, RefreshCw, Search,
   CheckCheck,
   Pencil,
+  UserPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Modal } from '@/components/ui/Modal'
+import { NativeSelect } from '@/components/ui/NativeSelect'
 import { useChatHub } from '@/hooks/useChatHub'
 import {
-  listThreads, markThreadRead, resolveThread,
+  listThreads, markThreadRead, resolveThread, assignThread, createThread,
   type ThreadSummary, type ChatCategory, type ThreadStatus,
 } from '@/lib/chatApi'
+import { getStaffList } from '@/lib/staffApi'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 
 // ── Filter types ─────────────────────────────────────────────────────────────
 
-type AssignmentFilter = 'all' | 'me' | 'unassigned' | 'team'
+// Assignment buckets that are reliably computable from ThreadSummary.assignedToUserId
+// alone (no backend current-user id is exposed client-side, so a per-agent "assigned
+// to me" bucket can't be computed without silently matching nothing).
+type AssignmentFilter = 'all' | 'assigned' | 'unassigned'
+const ASSIGNMENT_OPTIONS: AssignmentFilter[] = ['all', 'assigned', 'unassigned']
 const STATUS_OPTIONS: ThreadStatus[] = ['open', 'pending-user', 'resolved', 'escalated']
 const CATEGORY_OPTIONS: ChatCategory[] = ['tax-query', 'gst-notice', 'loan', 'general', 'feature-request', 'bug']
 
@@ -39,12 +47,14 @@ export default function ChatInboxPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const [_assignment, _setAssignment] = useState<AssignmentFilter>('all')
+  const [assignment, setAssignment] = useState<AssignmentFilter>('all')
   const [statusFilter, setStatusFilter] = useState<ThreadStatus | undefined>(undefined)
   const [categoryFilter, setCategoryFilter] = useState<ChatCategory[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [typingThreads, setTypingThreads] = useState<Set<string>>(new Set())
+  const [composeOpen, setComposeOpen] = useState(false)
+  const [assignOpen, setAssignOpen] = useState(false)
 
   // Real-time chat hub
   useChatHub({
@@ -72,11 +82,13 @@ export default function ChatInboxPage() {
   const threads = data?.items ?? []
 
   // Apply client-side filters
-  const filtered = threads.filter(t => {
-    if (categoryFilter.length > 0 && !categoryFilter.includes(t.category)) return false
+  const filtered = threads.filter(th => {
+    if (categoryFilter.length > 0 && !categoryFilter.includes(th.category)) return false
+    if (assignment === 'assigned' && !th.assignedToUserId) return false
+    if (assignment === 'unassigned' && th.assignedToUserId) return false
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
-      if (!t.subject?.toLowerCase().includes(q)) return false
+      if (!th.subject?.toLowerCase().includes(q)) return false
     }
     return true
   })
@@ -101,11 +113,11 @@ export default function ChatInboxPage() {
     }
   }
 
-  const _handleSelectAll = useCallback(() => {
-    if (selectedIds.size === filtered.length) {
+  const handleSelectAll = useCallback(() => {
+    if (filtered.length > 0 && selectedIds.size === filtered.length) {
       setSelectedIds(new Set())
     } else {
-      setSelectedIds(new Set(filtered.map(t => t.threadId)))
+      setSelectedIds(new Set(filtered.map(th => th.threadId)))
     }
   }, [filtered, selectedIds.size])
 
@@ -137,7 +149,7 @@ export default function ChatInboxPage() {
           <Button variant="ghost" size="sm" onClick={() => refetch()}>
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button variant="primary" size="sm">
+          <Button variant="primary" size="sm" onClick={() => setComposeOpen(true)}>
             <Pencil className="h-4 w-4 mr-1" />
             {t('chat.inbox.compose')}
           </Button>
@@ -161,6 +173,21 @@ export default function ChatInboxPage() {
 
           {/* Filter region */}
           <div role="region" aria-label={t('chat.inbox.filter.aria')} className="mb-3 space-y-2">
+            {/* Assignment filter */}
+            <div className="flex flex-wrap gap-1.5">
+              {ASSIGNMENT_OPTIONS.map(a => (
+                <button
+                  key={a}
+                  onClick={() => setAssignment(a)}
+                  className={cn('px-2.5 py-1 rounded-full text-xs font-medium transition-colors',
+                    assignment === a ? 'bg-[var(--brand-primary)] text-white' : 'bg-[var(--surface-sunken)] text-[var(--text-secondary)] hover:bg-[var(--border-subtle)]'
+                  )}
+                >
+                  {t(`chat.inbox.filter.assignment.${a}`)}
+                </button>
+              ))}
+            </div>
+
             {/* Status filters */}
             <div className="flex flex-wrap gap-1.5">
               <button
@@ -204,17 +231,36 @@ export default function ChatInboxPage() {
             </div>
           </div>
 
+          {/* Select-all row */}
+          {filtered.length > 0 && (
+            <div className="mb-2 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={selectedIds.size === filtered.length && filtered.length > 0}
+                ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filtered.length }}
+                onChange={handleSelectAll}
+                aria-label={t('chat.inbox.selectAll')}
+                className="rounded border-[var(--border-default)]"
+              />
+              <span className="text-xs text-[var(--text-tertiary)]">{t('chat.inbox.selectAll')}</span>
+            </div>
+          )}
+
           {/* Bulk toolbar */}
           {selectedIds.size > 0 && (
             <div className="mb-2 p-2 rounded-lg bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 flex items-center justify-between gap-2">
-              <span className="text-xs text-[var(--brand-primary)] font-medium">{selectedIds.size} selected</span>
+              <span className="text-xs text-[var(--brand-primary)] font-medium">{t('chat.inbox.bulk.selected', { count: selectedIds.size })}</span>
               <div className="flex gap-1.5">
+                <Button size="sm" variant="ghost" onClick={() => setAssignOpen(true)}>
+                  <UserPlus className="h-3.5 w-3.5 mr-1" />
+                  {t('chat.inbox.bulk.assign')}
+                </Button>
                 <Button size="sm" variant="ghost" onClick={handleBulkResolve}>
                   <CheckCheck className="h-3.5 w-3.5 mr-1" />
                   {t('chat.inbox.bulk.markResolved')}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
-                  Clear
+                  {t('common.clear')}
                 </Button>
               </div>
             </div>
@@ -237,10 +283,10 @@ export default function ChatInboxPage() {
               <EmptyState
                 variant="chat.inbox"
                 size="sm"
-                title={searchQuery || statusFilter ? t('chat.inbox.empty.filtered') : undefined}
-                primaryCta={searchQuery || statusFilter ? {
-                  label: 'Clear filters',
-                  onPress: () => { setSearchQuery(''); setStatusFilter(undefined); setCategoryFilter([]) }
+                title={searchQuery || statusFilter || categoryFilter.length > 0 || assignment !== 'all' ? t('chat.inbox.empty.filtered') : undefined}
+                primaryCta={searchQuery || statusFilter || categoryFilter.length > 0 || assignment !== 'all' ? {
+                  label: t('admin.loans.clearFilters'),
+                  onPress: () => { setSearchQuery(''); setStatusFilter(undefined); setCategoryFilter([]); setAssignment('all') }
                 } : undefined}
               />
             ) : (
@@ -268,7 +314,148 @@ export default function ChatInboxPage() {
           </div>
         </div>
       </div>
+
+      {composeOpen && (
+        <ComposeThreadModal
+          onClose={() => setComposeOpen(false)}
+          onCreated={(threadId) => {
+            setComposeOpen(false)
+            void queryClient.invalidateQueries({ queryKey: ['chat', 'threads'] })
+            navigate(`/chat/${threadId}`)
+          }}
+        />
+      )}
+
+      {assignOpen && (
+        <BulkAssignThreadModal
+          threadIds={Array.from(selectedIds)}
+          onClose={() => setAssignOpen(false)}
+          onDone={() => {
+            setAssignOpen(false)
+            setSelectedIds(new Set())
+            void queryClient.invalidateQueries({ queryKey: ['chat', 'threads'] })
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+// ── Compose thread modal ───────────────────────────────────────────────────────
+
+function ComposeThreadModal({ onClose, onCreated }: { onClose: () => void; onCreated: (threadId: string) => void }) {
+  const [category, setCategory] = useState<ChatCategory>('general')
+  const [subject, setSubject] = useState('')
+  const [message, setMessage] = useState('')
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      createThread({ category, subject: subject.trim() || undefined, initialMessage: message.trim() }),
+    onSuccess: (res) => {
+      toast.success(t('chat.inbox.compose.success'))
+      onCreated(res.threadId)
+    },
+    onError: () => toast.error(t('chat.inbox.compose.error')),
+  })
+
+  return (
+    <Modal open onClose={onClose} title={t('chat.inbox.compose.title')} size="sm">
+      <div className="space-y-3">
+        <div>
+          <label htmlFor="compose-category" className="text-sm font-medium text-[var(--text-primary)] block mb-1">
+            {t('chat.inbox.compose.category')}
+          </label>
+          <NativeSelect id="compose-category" value={category} onChange={e => setCategory(e.target.value as ChatCategory)}>
+            {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+          </NativeSelect>
+        </div>
+        <div>
+          <label htmlFor="compose-subject" className="text-sm font-medium text-[var(--text-primary)] block mb-1">
+            {t('chat.inbox.compose.subject')}
+          </label>
+          <input
+            id="compose-subject"
+            value={subject}
+            onChange={e => setSubject(e.target.value)}
+            className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] text-[var(--text-primary)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+          />
+        </div>
+        <div>
+          <label htmlFor="compose-message" className="text-sm font-medium text-[var(--text-primary)] block mb-1">
+            {t('chat.inbox.compose.message')}
+          </label>
+          <textarea
+            id="compose-message"
+            rows={4}
+            value={message}
+            onChange={e => setMessage(e.target.value)}
+            className="w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] text-[var(--text-primary)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)] resize-none"
+          />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <Button variant="secondary" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={message.trim().length < 2 || mutation.isPending}
+          onClick={() => void mutation.mutate()}
+        >
+          {mutation.isPending ? t('common.saving') : t('chat.inbox.compose.send')}
+        </Button>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Bulk assign modal ──────────────────────────────────────────────────────────
+
+function BulkAssignThreadModal({ threadIds, onClose, onDone }: { threadIds: string[]; onClose: () => void; onDone: () => void }) {
+  const [agentId, setAgentId] = useState('')
+
+  const { data: staff, isLoading, isError } = useQuery({
+    queryKey: ['staffList'],
+    queryFn: () => getStaffList(),
+  })
+
+  const selectedRole = (staff ?? []).find(s => s.userId === agentId)?.role ?? 'agent'
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      await Promise.all(threadIds.map(id => assignThread(id, { assignedToUserId: agentId, role: selectedRole })))
+    },
+    onSuccess: () => {
+      toast.success(t('chat.inbox.bulk.assign.success', { count: threadIds.length }))
+      onDone()
+    },
+    onError: () => toast.error(t('chat.inbox.bulk.assign.error')),
+  })
+
+  return (
+    <Modal open onClose={onClose} title={t('chat.inbox.bulk.assign.title')} size="sm">
+      <div className="space-y-3">
+        <p className="text-sm text-[var(--text-secondary)]">{t('chat.inbox.bulk.assign.desc', { count: threadIds.length })}</p>
+        <label htmlFor="bulk-assign-agent" className="text-sm font-medium text-[var(--text-primary)] block mb-1">
+          {t('chat.inbox.bulk.assign.agent')}
+        </label>
+        {isError ? (
+          <p className="text-sm text-error-600">{t('chat.inbox.bulk.assign.loadError')}</p>
+        ) : (
+          <NativeSelect id="bulk-assign-agent" value={agentId} onChange={e => setAgentId(e.target.value)} disabled={isLoading}>
+            <option value="">{t('chat.inbox.bulk.assign.selectAgent')}</option>
+            {(staff ?? []).map(s => (
+              <option key={s.userId} value={s.userId}>{s.name} · {s.roleDisplayName}</option>
+            ))}
+          </NativeSelect>
+        )}
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <Button variant="secondary" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="primary" size="sm" disabled={!agentId || mutation.isPending} onClick={() => void mutation.mutate()}>
+          {mutation.isPending ? t('common.saving') : t('chat.inbox.bulk.assign.confirm')}
+        </Button>
+      </div>
+    </Modal>
   )
 }
 

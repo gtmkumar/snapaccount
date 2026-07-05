@@ -26,6 +26,7 @@ import { NativeSelect } from '@/components/ui/NativeSelect'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { MetricCard } from '@/components/shared/MetricCard'
+import { isForbiddenError } from '@/lib/apiError'
 import { AmountDisplay } from '@/components/ui/AmountDisplay'
 import { BankAdapterTypeBadge } from '@/components/ui/BankAdapterTypeBadge'
 import { SelectionToolbar } from '@/components/ui/SelectionToolbar'
@@ -34,6 +35,7 @@ import { t } from '@/i18n'
 import {
   listLoanApplications,
   assignBank,
+  closeLoanApplication,
   listPartnerBanks,
   getLoanKpi,
   type LoanApplicationSummary,
@@ -81,7 +83,7 @@ function DaysInStageCell({ days }: { days: number | null | undefined }) {
 // KPI strip
 // ---------------------------------------------------------------------------
 
-function KpiStrip({ kpi, loading }: { kpi: LoanKpi | undefined; loading: boolean }) {
+function KpiStrip({ kpi, loading, forbidden }: { kpi: LoanKpi | undefined; loading: boolean; forbidden?: boolean }) {
   if (loading) {
     return (
       <div
@@ -96,13 +98,17 @@ function KpiStrip({ kpi, loading }: { kpi: LoanKpi | undefined; loading: boolean
     )
   }
 
+  // On a 403 the KPI endpoint returns no counts. Render an em-dash rather than a
+  // hard 0, which would contradict the (separately-authorized) list below (ACM-08).
+  const cell = (value: number): string | number => (forbidden ? '—' : value)
+
   const tiles = [
-    { label: t('admin.loans.kpi.total'), value: kpi?.totalApps ?? 0 },
-    { label: t('admin.loans.kpi.submitted'), value: kpi?.submitted ?? 0 },
-    { label: t('admin.loans.kpi.underReview'), value: kpi?.underReview ?? 0 },
-    { label: t('admin.loans.kpi.awaitingDocs'), value: kpi?.awaitingDocs ?? 0 },
-    { label: t('admin.loans.kpi.approved'), value: kpi?.approved ?? 0 },
-    { label: t('admin.loans.kpi.disbursed'), value: kpi?.disbursed ?? 0 },
+    { label: t('admin.loans.kpi.total'), value: cell(kpi?.totalApps ?? 0) },
+    { label: t('admin.loans.kpi.submitted'), value: cell(kpi?.submitted ?? 0) },
+    { label: t('admin.loans.kpi.underReview'), value: cell(kpi?.underReview ?? 0) },
+    { label: t('admin.loans.kpi.awaitingDocs'), value: cell(kpi?.awaitingDocs ?? 0) },
+    { label: t('admin.loans.kpi.approved'), value: cell(kpi?.approved ?? 0) },
+    { label: t('admin.loans.kpi.disbursed'), value: cell(kpi?.disbursed ?? 0) },
   ]
 
   return (
@@ -220,22 +226,37 @@ function exportCsv(data: LoanApplicationSummary[]) {
 export default function LoansListPage() {
   const navigate = useNavigate()
 
+  const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<LoanApplicationStatus | ''>('')
+  const [bankFilter, setBankFilter] = useState('')
+  const [minAmount, setMinAmount] = useState('')
+  const [maxAmount, setMaxAmount] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const [ownerFilter, setOwnerFilter] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
+  const [bulkCloseOpen, setBulkCloseOpen] = useState(false)
 
-  const { data: kpiData, isLoading: kpiLoading } = useQuery({
+  const { data: kpiData, isLoading: kpiLoading, error: kpiError } = useQuery({
     queryKey: ['loanKpi'],
     queryFn: getLoanKpi,
     retry: 1,
   })
 
+  const { data: banksData } = useQuery({
+    queryKey: ['partnerBanks'],
+    queryFn: () => listPartnerBanks({ pageSize: 100 }),
+    retry: 1,
+  })
+
   const { data: applicationsData, isLoading, isError, refetch } = useQuery({
-    queryKey: ['loanApplications', { status: statusFilter, search }],
+    queryKey: ['loanApplications', { status: statusFilter, bankId: bankFilter, search }],
     queryFn: () =>
       listLoanApplications({
         ...(statusFilter ? { status: statusFilter } : {}),
+        ...(bankFilter ? { bankId: bankFilter } : {}),
         ...(search ? { search } : {}),
         pageSize: 100,
       }),
@@ -244,20 +265,79 @@ export default function LoansListPage() {
 
   const applications = applicationsData?.items ?? []
 
+  // Distinct owners present in the current result set (for the owner filter).
+  const ownerOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const a of applications) if (a.assignedOfficer) set.add(a.assignedOfficer)
+    return Array.from(set).sort()
+  }, [applications])
+
   const filteredApplications = useMemo(() => {
-    if (!search) return applications
-    const q = search.toLowerCase()
-    return applications.filter(
-      a =>
-        a.applicationId.toLowerCase().includes(q) ||
-        (a.orgName ?? '').toLowerCase().includes(q) ||
-        (a.pan ?? '').toLowerCase().includes(q) ||
-        (a.gstin ?? '').toLowerCase().includes(q) ||
-        (a.bankReferenceNo ?? '').toLowerCase().includes(q)
-    )
-  }, [applications, search])
+    const q = search.trim().toLowerCase()
+    const min = minAmount ? Number(minAmount) : null
+    const max = maxAmount ? Number(maxAmount) : null
+    const from = fromDate ? new Date(fromDate).getTime() : null
+    // Inclusive of the whole "to" day.
+    const to = toDate ? new Date(toDate).getTime() + 86_399_999 : null
+    return applications.filter(a => {
+      if (q) {
+        const hit =
+          a.applicationId.toLowerCase().includes(q) ||
+          (a.orgName ?? '').toLowerCase().includes(q) ||
+          (a.pan ?? '').toLowerCase().includes(q) ||
+          (a.gstin ?? '').toLowerCase().includes(q) ||
+          (a.bankReferenceNo ?? '').toLowerCase().includes(q)
+        if (!hit) return false
+      }
+      if (min != null && a.requestedAmount < min) return false
+      if (max != null && a.requestedAmount > max) return false
+      if (from != null || to != null) {
+        const ts = a.submittedAt ? new Date(a.submittedAt).getTime() : null
+        if (ts == null) return false
+        if (from != null && ts < from) return false
+        if (to != null && ts > to) return false
+      }
+      if (ownerFilter) {
+        if (ownerFilter === '__unassigned__') {
+          if (a.assignedOfficer) return false
+        } else if (a.assignedOfficer !== ownerFilter) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [applications, search, minAmount, maxAmount, fromDate, toDate, ownerFilter])
 
   const selectedItems = filteredApplications.filter(a => selectedIds.has(a.applicationId))
+
+  const hasActiveFilters = !!(
+    search || statusFilter || bankFilter || minAmount || maxAmount || fromDate || toDate || ownerFilter
+  )
+
+  function clearFilters() {
+    setSearch('')
+    setStatusFilter('')
+    setBankFilter('')
+    setMinAmount('')
+    setMaxAmount('')
+    setFromDate('')
+    setToDate('')
+    setOwnerFilter('')
+  }
+
+  const bulkCloseMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map(id => closeLoanApplication(id)))
+    },
+    onSuccess: (_data, ids) => {
+      toast.success(t('admin.loans.bulkClose.success', { count: ids.length }))
+      void qc.invalidateQueries({ queryKey: ['loanApplications'] })
+      void qc.invalidateQueries({ queryKey: ['loanKpi'] })
+      setBulkCloseOpen(false)
+      setSelectedIds(new Set())
+    },
+    onError: () => toast.error(t('admin.loans.bulkClose.error')),
+  })
 
   const columns = useMemo<ColumnDef<LoanApplicationSummary>[]>(() => [
     {
@@ -419,15 +499,15 @@ export default function LoansListPage() {
     <div className="py-16 text-center space-y-3">
       <CreditCard className="h-10 w-10 mx-auto text-[var(--text-disabled)]" aria-hidden="true" />
       <p className="text-[var(--text-secondary)] font-medium">
-        {search || statusFilter
+        {hasActiveFilters
           ? t('admin.loans.emptyFiltered')
           : t('admin.loans.empty')}
       </p>
-      {(search || statusFilter) && (
+      {hasActiveFilters && (
         <button
           type="button"
           className="text-sm text-brand-600 hover:underline"
-          onClick={() => { setSearch(''); setStatusFilter('') }}
+          onClick={clearFilters}
         >
           {t('admin.loans.clearFilters')}
         </button>
@@ -443,7 +523,7 @@ export default function LoansListPage() {
       />
 
       {/* KPI strip */}
-      <KpiStrip kpi={kpiData} loading={kpiLoading} />
+      <KpiStrip kpi={kpiData} loading={kpiLoading} forbidden={isForbiddenError(kpiError)} />
 
       {/* Error banner */}
       {isError && (
@@ -484,6 +564,72 @@ export default function LoansListPage() {
           ))}
         </NativeSelect>
 
+        <NativeSelect
+          value={bankFilter}
+          onChange={e => setBankFilter(e.target.value)}
+          aria-label={t('admin.loans.filter.bank')}
+          className="min-w-[11rem]"
+        >
+          <option value="">{t('admin.loans.filter.allBanks')}</option>
+          {banksData?.items.map(b => (
+            <option key={b.bankId} value={b.bankId}>{b.name}</option>
+          ))}
+        </NativeSelect>
+
+        <NativeSelect
+          value={ownerFilter}
+          onChange={e => setOwnerFilter(e.target.value)}
+          aria-label={t('admin.loans.filter.owner')}
+          className="min-w-[11rem]"
+        >
+          <option value="">{t('admin.loans.filter.allOwners')}</option>
+          <option value="__unassigned__">{t('admin.loans.filter.unassigned')}</option>
+          {ownerOptions.map(o => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </NativeSelect>
+
+        <Input
+          type="number"
+          value={minAmount}
+          onChange={e => setMinAmount(e.target.value)}
+          placeholder={t('admin.loans.filter.minAmount')}
+          size="sm"
+          aria-label={t('admin.loans.filter.minAmount')}
+          className="w-28"
+        />
+        <Input
+          type="number"
+          value={maxAmount}
+          onChange={e => setMaxAmount(e.target.value)}
+          placeholder={t('admin.loans.filter.maxAmount')}
+          size="sm"
+          aria-label={t('admin.loans.filter.maxAmount')}
+          className="w-28"
+        />
+        <Input
+          type="date"
+          value={fromDate}
+          onChange={e => setFromDate(e.target.value)}
+          size="sm"
+          aria-label={t('admin.loans.filter.from')}
+          className="w-40"
+        />
+        <Input
+          type="date"
+          value={toDate}
+          onChange={e => setToDate(e.target.value)}
+          size="sm"
+          aria-label={t('admin.loans.filter.to')}
+          className="w-40"
+        />
+
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            {t('admin.loans.clearFilters')}
+          </Button>
+        )}
+
         <Button
           variant="secondary"
           size="sm"
@@ -515,6 +661,12 @@ export default function LoansListPage() {
               variant: 'primary',
             },
             {
+              label: t('admin.loans.bulkClose.cta'),
+              onClick: () => setBulkCloseOpen(true),
+              variant: 'ghost',
+              pending: bulkCloseMutation.isPending,
+            },
+            {
               label: t('admin.loans.bulkExport'),
               onClick: () => exportCsv(selectedItems),
               variant: 'ghost',
@@ -541,6 +693,37 @@ export default function LoansListPage() {
           onDone={() => { setBulkAssignOpen(false); setSelectedIds(new Set()) }}
           onClose={() => setBulkAssignOpen(false)}
         />
+      )}
+
+      {/* Bulk close confirm */}
+      {bulkCloseOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('admin.loans.bulkClose.title')}
+        >
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-5 space-y-4">
+            <h2 className="text-base font-semibold text-neutral-900">
+              {t('admin.loans.bulkClose.title')}
+            </h2>
+            <p className="text-sm text-neutral-600">
+              {t('admin.loans.bulkClose.confirm', { count: selectedIds.size })}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setBulkCloseOpen(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                variant="danger"
+                loading={bulkCloseMutation.isPending}
+                onClick={() => bulkCloseMutation.mutate(Array.from(selectedIds))}
+              >
+                {t('admin.loans.bulkClose.cta')}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

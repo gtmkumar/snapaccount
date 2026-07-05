@@ -11,6 +11,7 @@ using ChatService.Application.Appointments.Commands.RateAppointment;
 using ChatService.Application.Appointments.Commands.RescheduleAppointment;
 using ChatService.Application.Appointments.Commands.WriteCaSummary;
 using ChatService.Application.Appointments.Queries.GetAppointment;
+using ChatService.Application.Appointments.Queries.GetMyCaProfile;
 using ChatService.Application.Appointments.Queries.GetSlotDayMap;
 using ChatService.Application.Appointments.Queries.ListAppointments;
 using ChatService.Application.Appointments.Queries.ListAvailableSlots;
@@ -50,7 +51,19 @@ public sealed class Appointments : EndpointGroupBase
             .RequireRateLimiting("standard")
             .WithName("ListCaProfiles")
             .WithSummary("List CA profiles (active by default) for the booking UI. Replaces the team-members workaround.")
-            .WithDescription("Requires chat.appointments.book permission. Paginated; default activeOnly=true.");
+            .WithDescription("Requires chat.appointments.book permission. Paginated; default activeOnly=true. " +
+                "This is the platform-wide booking directory — for a CA to load their OWN profile use GET /ca-profiles/me.");
+
+        /// <summary>GET /appointments/ca-profiles/me — the calling CA's own profile (self-scoped).</summary>
+        g.MapGet("/ca-profiles/me", GetMyCaProfile)
+            .RequireAuthorization()
+            .RequireRateLimiting("standard")
+            .WithName("GetMyCaProfile")
+            .WithSummary("Return the calling user's own CA profile for availability self-management.")
+            .WithDescription(
+                "Requires chat.slots.manage. Strictly scoped to the caller's identity — returns 404 when the " +
+                "caller has no CA profile and can never return another CA's profile (ACM-04/ACM-10). " +
+                "The availability/appointments management pages should use this instead of the booking directory.");
 
         // ── CA-initiated cancel (Wave 7A addendum) ────────────────────────────
 
@@ -241,6 +254,12 @@ public sealed class Appointments : EndpointGroupBase
     {
         var result = await sender.Send(
             new ListCaProfilesQuery(activeOnly ?? true, page <= 0 ? 1 : page, pageSize <= 0 ? 20 : pageSize), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetMyCaProfile(ISender sender, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetMyCaProfileQuery(), ct);
         return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToHttpResult();
     }
 

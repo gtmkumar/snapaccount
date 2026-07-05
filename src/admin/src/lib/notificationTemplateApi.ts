@@ -247,6 +247,8 @@ export interface UpdateTemplateRequest {
   subject?: string | null
   dltTemplateId?: string | null
   senderName?: string | null
+  /** Toggle the template active/inactive (CG-11). Omit to leave unchanged. */
+  isActive?: boolean
 }
 
 export interface TestSendRequest {

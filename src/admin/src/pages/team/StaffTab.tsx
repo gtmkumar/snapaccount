@@ -21,7 +21,9 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Dialog } from '@/components/ui/Dialog'
 import { RoleChip } from '@/components/ui/RoleChip'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
+import { AccessDeniedState } from '@/components/shared/AccessDeniedState'
 import { EditUserDialog } from '@/components/shared/EditUserDialog'
+import { isForbiddenError } from '@/lib/apiError'
 import { getStaffWorkloadGrid, loadLevel, type StaffWorkloadRow } from '@/lib/staffApi'
 import { setAdminUserActive, type AdminUserApiErrorCode } from '@/lib/userAdminApi'
 import { usePermission } from '@/hooks/usePermission'
@@ -51,12 +53,14 @@ export function StaffTab({ onInvite }: StaffTabProps) {
 
   const canManage = hasServerPermission('platform.admins.invite')
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['staff', 'workload-grid'],
     queryFn: getStaffWorkloadGrid,
     staleTime: 30_000,
     refetchInterval: 60_000,
   })
+
+  const forbidden = isForbiddenError(error)
 
   const setActiveMutation = useMutation({
     mutationFn: ({ userId, nextActive }: ActiveTarget) => setAdminUserActive(userId, nextActive),
@@ -223,6 +227,8 @@ export function StaffTab({ onInvite }: StaffTabProps) {
       <ErrorBoundary scope="pane">
         {isLoading ? (
           <Skeleton variant="list" />
+        ) : forbidden ? (
+          <AccessDeniedState description={t('team.staff.forbidden')} />
         ) : filtered.length === 0 ? (
           <EmptyState
             variant="team"

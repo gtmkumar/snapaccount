@@ -32,6 +32,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { formatDate, cn } from '@/lib/utils'
 import { t } from '@/i18n'
+import { NativeSelect } from '@/components/ui/NativeSelect'
 import {
   getLoanApplication,
   listApplicationDocuments,
@@ -44,6 +45,8 @@ import {
   recordDisbursement,
   closeLoanApplication,
   requestDocuments,
+  assignBank,
+  listPartnerBanks,
   type LoanApplicationStatus,
   type StatusLogEntry,
   type ConsentRecord,
@@ -92,7 +95,15 @@ const TABS: { id: TabId; labelKey: string }[] = [
 // Application tab
 // ---------------------------------------------------------------------------
 
-function ApplicationTab({ application }: { application: ReturnType<typeof getLoanApplication> extends Promise<infer T> ? T : never }) {
+function ApplicationTab({
+  application,
+  canReassign,
+  onReassignBank,
+}: {
+  application: ReturnType<typeof getLoanApplication> extends Promise<infer T> ? T : never
+  canReassign: boolean
+  onReassignBank: () => void
+}) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -167,10 +178,19 @@ function ApplicationTab({ application }: { application: ReturnType<typeof getLoa
       {/* Right column */}
       <div className="space-y-4">
         <Card padding="md">
-          <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-3 flex items-center gap-2">
-            <FileText className="h-4 w-4" aria-hidden="true" />
-            {t('admin.loanDetail.section.bankAssignment')}
-          </h3>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="font-semibold text-sm text-[var(--text-primary)] flex items-center gap-2">
+              <FileText className="h-4 w-4" aria-hidden="true" />
+              {t('admin.loanDetail.section.bankAssignment')}
+            </h3>
+            {canReassign && (
+              <Button size="sm" variant="secondary" onClick={onReassignBank}>
+                {application.bankName
+                  ? t('admin.loanDetail.reassignBank.reassignCta')
+                  : t('admin.loanDetail.reassignBank.assignCta')}
+              </Button>
+            )}
+          </div>
           {application.bankName ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
@@ -665,6 +685,78 @@ function DisbursementTab({ application }: { application: { applicationId: string
 }
 
 // ---------------------------------------------------------------------------
+// Reassign / assign bank modal
+// ---------------------------------------------------------------------------
+
+function ReassignBankModal({
+  applicationId,
+  currentBankId,
+  onClose,
+}: {
+  applicationId: string
+  currentBankId?: string | null
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [bankId, setBankId] = useState('')
+
+  const { data: banksData } = useQuery({
+    queryKey: ['partnerBanks'],
+    queryFn: () => listPartnerBanks({ pageSize: 100 }),
+  })
+
+  const mutation = useMutation({
+    mutationFn: () => assignBank(applicationId, { bankId }),
+    onSuccess: () => {
+      toast.success(t('admin.loanDetail.reassignBank.success'))
+      void qc.invalidateQueries({ queryKey: ['loanApplication', applicationId] })
+      void qc.invalidateQueries({ queryKey: ['loanBankComms', applicationId] })
+      onClose()
+    },
+    onError: () => toast.error(t('admin.loanDetail.reassignBank.error')),
+  })
+
+  return (
+    <Modal
+      open
+      title={t('admin.loanDetail.reassignBank.title')}
+      onClose={onClose}
+      size="sm"
+    >
+      <div className="p-4 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
+            {t('admin.loanDetail.reassignBank.bank')}
+          </label>
+          <NativeSelect
+            value={bankId}
+            onChange={e => setBankId(e.target.value)}
+            aria-label={t('admin.loanDetail.reassignBank.bank')}
+          >
+            <option value="">{t('admin.loanDetail.reassignBank.selectBank')}</option>
+            {banksData?.items.map(b => (
+              <option key={b.bankId} value={b.bankId} disabled={b.bankId === currentBankId}>
+                {b.name}{b.bankId === currentBankId ? ` (${t('admin.loanDetail.reassignBank.current')})` : ''}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button
+            disabled={!bankId || bankId === currentBankId || mutation.isPending}
+            loading={mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
+            {t('admin.loanDetail.reassignBank.confirm')}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -674,6 +766,7 @@ export default function LoanDetailPage() {
   const [activeTab, setActiveTab] = useState<TabId>('application')
   const [approveModal, setApproveModal] = useState(false)
   const [rejectModal, setRejectModal] = useState(false)
+  const [reassignModal, setReassignModal] = useState(false)
   const [bankRef, setBankRef] = useState('')
   const [rejectReason, setRejectReason] = useState('')
 
@@ -746,6 +839,12 @@ export default function LoanDetailPage() {
   }
 
   const isClosed = application.status === 'CLOSED' || application.status === 'REJECTED' || application.status === 'DISBURSED'
+  // A bank can be (re)assigned while the application is live and pre-disbursement.
+  const canReassign =
+    application.status === 'SUBMITTED' ||
+    application.status === 'UNDER_REVIEW' ||
+    application.status === 'DOCS_REQUESTED' ||
+    application.status === 'APPROVED'
 
   return (
     <div className="space-y-4">
@@ -868,7 +967,11 @@ export default function LoanDetailPage() {
         <div className="pt-5">
           {activeTab === 'application' && (
             <div role="tabpanel" id="panel-application" aria-labelledby="tab-application">
-              <ApplicationTab application={application} />
+              <ApplicationTab
+                application={application}
+                canReassign={canReassign}
+                onReassignBank={() => setReassignModal(true)}
+              />
             </div>
           )}
           {activeTab === 'documents' && (
@@ -927,6 +1030,15 @@ export default function LoanDetailPage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Reassign bank modal */}
+      {reassignModal && (
+        <ReassignBankModal
+          applicationId={applicationId!}
+          currentBankId={application.bankId}
+          onClose={() => setReassignModal(false)}
+        />
       )}
 
       {/* Reject modal */}

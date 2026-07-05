@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router'
+import { useNavigate, useLocation, Link } from 'react-router'
 import { useAuth } from '@/hooks/useAuth'
+import { t } from '@/i18n'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
@@ -218,6 +219,14 @@ export default function LoginPage() {
               <Button type="submit" variant="primary" size="lg" fullWidth loading={loading}>
                 Sign in
               </Button>
+              <div className="text-center">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline"
+                >
+                  {t('auth.login.forgotPassword')}
+                </Link>
+              </div>
               <p className="text-xs text-neutral-400 text-center mt-2">
                 Local dev mode — seeded admin: <code>admin@snapaccount.local</code> / <code>Admin@12345</code>
               </p>

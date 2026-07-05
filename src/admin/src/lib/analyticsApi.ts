@@ -147,44 +147,14 @@ export const MrrDashboardSchema = z.object({
 })
 export type MrrDashboard = z.infer<typeof MrrDashboardSchema>
 
+// CG-ANALYTICS: only REAL, backend-sourced figures. The former synthetic sections
+// (MoM growth, net/YTD revenue, refund/recovery rates, payment counts, Razorpay
+// fees, cohort retention, revenue forecast, GST-on-revenue) were computed from
+// hardcoded multipliers with no backing endpoint — removed rather than displayed
+// as real financials. MRR + plan-mix come from GET /subscriptions/mrr; ARR = MRR×12.
 export const PlatformRevenueSchema = z.object({
   mrr: z.number(),
   arr: z.number(),
-  totalRevenueYtd: z.number(),
-  revenueMomGrowthPct: z.number(),
-  netRevenue: z.number(),
-  refundRatePct: z.number(),
-  totalPaymentsReceived: z.number(),
-  failedPaymentsCount: z.number(),
-  failedPaymentsValue: z.number(),
-  recoveryRatePct: z.number(),
-  razorpayFees: z.number(),
-  /** [{month, planRevenues: {planName, amount}[]}] */
-  revenueByPlanTrend: z.array(z.object({
-    month: z.string(),
-    byPlan: z.record(z.string(), z.number()),
-  })),
-  /** [{cohort, retentionByMonth: {[m]: pct}}] */
-  cohortRetention: z.array(z.object({
-    cohort: z.string(),
-    m1: z.number().nullable(),
-    m2: z.number().nullable(),
-    m3: z.number().nullable(),
-    m6: z.number().nullable(),
-  })),
-  /** [{date, actual, projected}] */
-  revenueForecast: z.array(z.object({
-    date: z.string(),
-    actual: z.number().nullable(),
-    projected: z.number().nullable(),
-    low: z.number().nullable(),
-    high: z.number().nullable(),
-  })),
-  gstOnRevenue: z.object({
-    taxableRevenue: z.number(),
-    gstRate: z.number(),
-    gstPayable: z.number(),
-  }),
   byPlan: z.array(PlanMrrRowSchema),
 })
 export type PlatformRevenue = z.infer<typeof PlatformRevenueSchema>
@@ -421,69 +391,25 @@ export async function getOperationalReport(params: AnalyticsParams): Promise<Ope
 }
 
 /**
- * GET /subscriptions/mrr — real endpoint via Platform service.
- * Extended with additional mock metrics for the Platform Revenue screen.
+ * GET /subscriptions/mrr — real MRR/plan-mix from the Platform service.
+ *
+ * ACM-12 / CG-ANALYTICS: this used to swallow a failed /subscriptions/mrr and
+ * fall back to a hardcoded ₹8.23L mock, and padded the response with ~a dozen
+ * synthetic metrics (YTD/growth/refunds/fees/cohort/forecast/GST) computed from
+ * made-up multipliers. All of that is removed — a failure now throws (the page
+ * renders its error state) and only the REAL MRR + plan-mix are returned. ARR is
+ * a plain MRR×12 derivation.
  */
 export async function getPlatformRevenue(_params: AnalyticsParams): Promise<PlatformRevenue> {
-  // Call the real MRR endpoint
-  let mrrData: MrrDashboard | null = null
-  try {
-    const res = await api.get('/subscriptions/mrr')
-    mrrData = MrrDashboardSchema.parse(res.data)
-  } catch {
-    // fall through to mock
-  }
-
-  const totalMrr = mrrData?.totalMrr ?? 823000
-  const arr = totalMrr * 12
-  const planNames = mrrData?.byPlan.map(p => p.planName) ?? ['Free', 'Starter', 'Growth', 'Enterprise']
+  // Real MRR endpoint — a failure (e.g. 403 for non-platform roles) must surface
+  // as an error, not a fabricated fallback.
+  const res = await api.get('/subscriptions/mrr')
+  const mrrData = MrrDashboardSchema.parse(res.data)
 
   return PlatformRevenueSchema.parse({
-    mrr: totalMrr,
-    arr,
-    totalRevenueYtd: totalMrr * 4.3,
-    revenueMomGrowthPct: 8.2,
-    netRevenue: totalMrr * 4.3 * 0.97,
-    refundRatePct: 3.0,
-    totalPaymentsReceived: Math.round(totalMrr * 4.2),
-    failedPaymentsCount: 12,
-    failedPaymentsValue: 24000,
-    recoveryRatePct: 67.0,
-    razorpayFees: Math.round(totalMrr * 4.3 * 0.02),
-    revenueByPlanTrend: Array.from({ length: 6 }, (_, i) => ({
-      month: new Date(Date.now() - (5 - i) * 30 * 86400000).toISOString().slice(0, 7),
-      byPlan: Object.fromEntries(planNames.map((p, j) => [p, Math.round((j + 1) * 50000 + i * 5000)])),
-    })),
-    cohortRetention: [
-      { cohort: '2024-01', m1: 88, m2: 76, m3: 71, m6: 62 },
-      { cohort: '2024-04', m1: 91, m2: 80, m3: 74, m6: 65 },
-      { cohort: '2024-07', m1: 89, m2: 78, m3: null, m6: null },
-      { cohort: '2024-10', m1: 93, m2: null, m3: null, m6: null },
-    ],
-    revenueForecast: Array.from({ length: 9 }, (_, i) => {
-      const d = new Date()
-      d.setMonth(d.getMonth() - 5 + i)
-      const isActual = i < 6
-      const base = totalMrr + i * 45000
-      return {
-        date: d.toISOString().slice(0, 7),
-        actual: isActual ? base : null,
-        projected: isActual ? null : base * 1.05,
-        low: isActual ? null : base * 0.92,
-        high: isActual ? null : base * 1.18,
-      }
-    }),
-    gstOnRevenue: {
-      taxableRevenue: totalMrr * 4.3,
-      gstRate: 18,
-      gstPayable: Math.round(totalMrr * 4.3 * 0.18),
-    },
-    byPlan: mrrData?.byPlan ?? [
-      { planName: 'Free', tier: 'Free', subscriberCount: 340, mrr: 0 },
-      { planName: 'Starter', tier: 'Starter', subscriberCount: 125, mrr: 187500 },
-      { planName: 'Growth', tier: 'Growth', subscriberCount: 48, mrr: 480000 },
-      { planName: 'Enterprise', tier: 'Enterprise', subscriberCount: 8, mrr: 240000 },
-    ],
+    mrr: mrrData.totalMrr,
+    arr: mrrData.totalMrr * 12,
+    byPlan: mrrData.byPlan,
   })
 }
 

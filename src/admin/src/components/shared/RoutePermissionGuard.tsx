@@ -31,12 +31,18 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   '/subscriptions': 'menu.subscriptions.view',
   '/reports': 'menu.reports.view',
   '/callbacks': 'menu.callbacks.view',
+  '/notifications/templates': 'notification.templates.read',
+  '/ca/availability': 'chat.slots.manage',
+  '/ca/appointments': 'chat.slots.manage',
   '/admin/audit-log': 'admin.dashboard.read',
   '/admin/system-health': 'admin.dashboard.read',
   '/admin/organizations': 'platform.orgs.read',
   '/subscriptions/subscribers': 'subscription.plan.create',
   '/subscriptions/invoices': 'menu.subscriptions.view',
-  '/settings/roles': 'org.roles.read',
+  // The roles/permissions matrix exposes the FULL PLATFORM catalog (incl. platform.*
+  // grants) — gate it on a platform-level permission, NOT the org-scoped org.roles.read
+  // which is granted to org-member roles (ACM-02).
+  '/settings/roles': 'platform.roles.manage',
   '/settings/permissions': 'platform.permissions.manage',
   '/settings/navigation': 'platform.permissions.manage',
   '/settings/reference-data': 'platform.refdata.manage',

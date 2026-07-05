@@ -113,7 +113,9 @@ public sealed class SubscribeCommandHandler(
             plan.Id,
             plan.TrialDays,
             razorpaySubId,
-            request.RazorpayCustomerId);
+            request.RazorpayCustomerId,
+            // BUG-SUB-SUBSCRIBE-WRITE: user_id is NOT NULL — record the purchasing user.
+            userId: currentUser.UserId);
 
         db.Subscriptions.Add(subscription);
         await db.SaveChangesAsync(cancellationToken);

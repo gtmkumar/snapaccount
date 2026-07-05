@@ -13,6 +13,12 @@ public class Subscription : BaseAuditableEntity
     /// <summary>Organisation that holds this subscription.</summary>
     public Guid OrganizationId { get; private set; }
 
+    /// <summary>
+    /// User who purchased the subscription. subscription.subscription.user_id is NOT NULL
+    /// (migration 010) — BUG-SUB-SUBSCRIBE-WRITE: was never on the entity, so every subscribe 500'd.
+    /// </summary>
+    public Guid UserId { get; private set; }
+
     /// <summary>Subscribed plan.</summary>
     public Guid PlanId { get; private set; }
 
@@ -44,12 +50,18 @@ public class Subscription : BaseAuditableEntity
     private Subscription() { }
 
     /// <summary>Creates a new subscription (starts as TRIALING if trial days > 0, else ACTIVE).</summary>
+    /// <remarks>
+    /// BUG-SUB-SUBSCRIBE-WRITE: <paramref name="userId"/> is trailing-optional to preserve the
+    /// existing call sites; the SubscribeCommandHandler always supplies the purchasing user's id
+    /// (the DB column user_id is NOT NULL).
+    /// </remarks>
     public static Subscription Create(
         Guid organizationId,
         Guid planId,
         int trialDays,
         string? razorpaySubscriptionId = null,
-        string? razorpayCustomerId = null)
+        string? razorpayCustomerId = null,
+        Guid userId = default)
     {
         var now = DateTime.UtcNow;
         var status = trialDays > 0 ? SubscriptionStatus.Trialing : SubscriptionStatus.Active;
@@ -57,6 +69,7 @@ public class Subscription : BaseAuditableEntity
         var sub = new Subscription
         {
             OrganizationId = organizationId,
+            UserId = userId,
             PlanId = planId,
             Status = status,
             CurrentPeriodStart = now,

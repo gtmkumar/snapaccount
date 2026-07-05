@@ -81,11 +81,13 @@ public sealed class SendNotificationCommandHandler(
             if (prefs?.DoNotDisturb == true) { suppressed++; continue; }
             if (IsQuietHours(prefs)) { suppressed++; continue; }
 
-            // Dedupe check
+            // Dedupe check — compute the cutoff client-side; EF/Npgsql cannot translate
+            // DateTime.Subtract inside the LINQ predicate (throws at query translation time).
             var dedupeKey = ComputeDedupeKey(request.UserId, request.EventCode, channelEnum);
+            var dedupeCutoff = DateTime.UtcNow.Subtract(DedupeWindow);
             var recentlySent = await dbContext.NotificationLog
                 .AnyAsync(l => l.DedupeKey == dedupeKey
-                             && l.CreatedAt > DateTime.UtcNow.Subtract(DedupeWindow)
+                             && l.CreatedAt > dedupeCutoff
                              && l.Status == DispatchStatus.Sent, cancellationToken);
 
             if (recentlySent)

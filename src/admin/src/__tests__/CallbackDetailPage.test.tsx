@@ -14,7 +14,7 @@
  * - Timeline events render when present
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -309,5 +309,31 @@ describe('CallbackDetailPage', () => {
     renderPage()
     const noteText = await screen.findByText('CustomerWasNotAvailableOnFirstAttempt')
     expect(noteText).toBeTruthy()
+  })
+
+  // P-36: Reschedule + Reassign actions
+  it('renders Reschedule and Reassign actions for an open callback', async () => {
+    vi.spyOn(callbackApi, 'getCallback').mockResolvedValue(makeCallback({ status: 'SCHEDULED' }))
+    renderPage()
+    await screen.findByText(/PriyaSingh/)
+    expect(screen.getByRole('button', { name: /reschedule/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reassign/i })).toBeInTheDocument()
+  })
+
+  it('Reschedule modal submits new window to rescheduleCallback', async () => {
+    const rescheduleSpy = vi.spyOn(callbackApi, 'rescheduleCallback').mockResolvedValue(undefined)
+    vi.spyOn(callbackApi, 'getCallback').mockResolvedValue(makeCallback({ status: 'SCHEDULED' }))
+    renderPage()
+    await screen.findByText(/PriyaSingh/)
+    fireEvent.click(screen.getByRole('button', { name: /reschedule/i }))
+
+    const dialog = await screen.findByRole('dialog')
+    const dts = dialog.querySelectorAll('input[type="datetime-local"]')
+    fireEvent.change(dts[0], { target: { value: '2026-07-10T10:00' } })
+    fireEvent.change(dts[1], { target: { value: '2026-07-10T11:00' } })
+    const confirmBtn = Array.from(dialog.querySelectorAll('button')).find(b => /reschedule/i.test(b.textContent ?? '')) as HTMLButtonElement
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => expect(rescheduleSpy).toHaveBeenCalled())
   })
 })

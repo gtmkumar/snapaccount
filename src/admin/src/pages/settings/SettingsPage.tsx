@@ -30,7 +30,6 @@ import { PaymentGatewaySettings } from './sections/PaymentGatewaySettings'
 import { WhatsAppSettings } from './sections/WhatsAppSettings'
 import { AiModelSettings } from './sections/AiModelSettings'
 import { LanguageSettings } from './sections/LanguageSettings'
-import { PartnerBanksSettings } from './sections/PartnerBanksSettings'
 import { TallySettings } from './sections/TallySettings'
 import { FeatureFlagsSettings } from './sections/FeatureFlagsSettings'
 import { NotificationSettings } from './sections/NotificationSettings'
@@ -82,7 +81,7 @@ const SECTION_COMPONENT_MAP: Record<SettingSection, () => ReactNode> = {
   'whatsapp': () => <WhatsAppSettings />,
   'ai-model': () => <AiModelSettings />,
   'language': () => <LanguageSettings />,
-  'partner-banks': () => <PartnerBanksSettings />,
+  'partner-banks': () => <PartnerBanksRedirect />,
   'tally': () => <TallySettings />,
   'preferences': () => <UserPreferencesSettings />,
   'devices': () => <DevicesSettings />,
@@ -91,6 +90,32 @@ const SECTION_COMPONENT_MAP: Record<SettingSection, () => ReactNode> = {
   'subscriptions': () => <SubscriptionTiersSettings />,
   'feature-flags': () => <FeatureFlagsSettings />,
   'notifications': () => <NotificationSettings />,
+}
+
+// ── Partner Banks (redirect to the dedicated CRUD page) ─────────────────────
+// The full partner-bank manager is a routed page (/settings/partner-banks). The
+// old inline section here was a divergent UI-only placeholder (non-spec adapter
+// types, dead Save) — collapsed into a redirect so there is one source of truth (CG-7).
+function PartnerBanksRedirect() {
+  const navigate = useNavigate()
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-[var(--text-primary)]">
+            {t('admin.partnerBanks.title')}
+          </h2>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">
+            {t('admin.partnerBanks.help')}
+          </p>
+        </div>
+        <Button variant="primary" onClick={() => void navigate('/loans/partner-banks')}>
+          <ExternalLink className="h-4 w-4 mr-1.5" aria-hidden="true" />
+          {t('settings.partnerBanks.cta')}
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 // ── Subscription Tiers Settings (wired to real backend) ─────────────────────

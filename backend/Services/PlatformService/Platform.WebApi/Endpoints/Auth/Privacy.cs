@@ -1,4 +1,5 @@
 using AuthService.Application.Privacy.Commands.EnqueueDataExport;
+using AuthService.Application.Privacy.Commands.GrantConsent;
 using AuthService.Application.Privacy.Commands.SubmitDataCorrectionRequest;
 using AuthService.Application.Privacy.Commands.WithdrawConsent;
 using AuthService.Application.Privacy.Queries.GetDataExportStatus;
@@ -35,6 +36,10 @@ public sealed class Privacy : EndpointGroupBase
             .RequireAuthorization()
             .WithSummary("Get current consent status per processing purpose.");
 
+        groupBuilder.MapPost("/me/consents/{purpose}/grant", GrantConsent)
+            .RequireAuthorization()
+            .WithSummary("Record affirmative consent for a specific processing purpose (DPDP).");
+
         groupBuilder.MapPost("/me/consents/{purpose}/withdraw", WithdrawConsent)
             .RequireAuthorization()
             .WithSummary("Withdraw consent for a specific processing purpose.");
@@ -61,19 +66,59 @@ public sealed class Privacy : EndpointGroupBase
 
     // ── Handlers ─────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Best-effort client IP for the consent audit record. Behind the YARP gateway the
+    /// direct <c>RemoteIpAddress</c> is the gateway's IP, so the originating client IP is
+    /// taken from the first <c>X-Forwarded-For</c> hop when present, falling back to the
+    /// socket peer. This is audit metadata for the user's own action, not an authz signal.
+    /// </summary>
+    private static string? ResolveClientIp(HttpContext httpContext)
+    {
+        var forwarded = httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(forwarded))
+            return forwarded.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault() ?? httpContext.Connection.RemoteIpAddress?.ToString();
+
+        return httpContext.Connection.RemoteIpAddress?.ToString();
+    }
+
     private static async Task<IResult> GetMyConsents(IMediator mediator)
     {
         var result = await mediator.Send(new GetMyConsentsQuery());
         return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
     }
 
+    private static async Task<IResult> GrantConsent(
+        string purpose,
+        ISender mediator,
+        HttpContext httpContext,
+        ConsentActionRequest body)
+    {
+        var ip        = ResolveClientIp(httpContext);
+        var userAgent = httpContext.Request.Headers["User-Agent"].FirstOrDefault();
+
+        var cmd = new GrantConsentCommand(
+            purpose,
+            body.NoticeVersion,
+            ip,
+            userAgent,
+            body.Locale ?? "en");
+
+        var result = await mediator.Send(cmd);
+        return result.IsSuccess
+            ? Results.Ok()
+            : result.Error.Type == ErrorType.Validation
+                ? Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code })
+                : Results.Problem(result.Error.Message);
+    }
+
     private static async Task<IResult> WithdrawConsent(
         string purpose,
         ISender mediator,
         HttpContext httpContext,
-        WithdrawConsentRequest body)
+        ConsentActionRequest body)
     {
-        var ip        = httpContext.Connection.RemoteIpAddress?.ToString();
+        var ip        = ResolveClientIp(httpContext);
         var userAgent = httpContext.Request.Headers["User-Agent"].FirstOrDefault();
 
         var cmd = new WithdrawConsentCommand(
@@ -84,7 +129,11 @@ public sealed class Privacy : EndpointGroupBase
             body.Locale ?? "en");
 
         var result = await mediator.Send(cmd);
-        return result.IsSuccess ? Results.NoContent() : Results.Problem(result.Error.Message);
+        return result.IsSuccess
+            ? Results.NoContent()
+            : result.Error.Type == ErrorType.Validation
+                ? Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code })
+                : Results.Problem(result.Error.Message);
     }
 
     private static async Task<IResult> EnqueueDataExport(ISender mediator)
@@ -125,8 +174,8 @@ public sealed class Privacy : EndpointGroupBase
 
 // ── Request DTOs (endpoint-layer only) ────────────────────────────────────────
 
-/// <summary>Body for POST /auth/me/consents/{purpose}/withdraw.</summary>
-public sealed record WithdrawConsentRequest(string NoticeVersion, string? Locale);
+/// <summary>Body for POST /auth/me/consents/{purpose}/grant and .../withdraw.</summary>
+public sealed record ConsentActionRequest(string NoticeVersion, string? Locale);
 
 /// <summary>Body for POST /auth/me/data-correction.</summary>
 public sealed record DataCorrectionRequestBody(string DataCategory, string Description);

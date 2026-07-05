@@ -267,11 +267,17 @@ public sealed class TaxComputationEngine(
 
     private async Task<ItrService.Domain.Entities.TaxSlabVersion?> FindSlabVersion(
         string ay, string regime, string actVersion, CancellationToken ct)
+        // BUG-ITR-SLAB-EFFECTIVE: do NOT filter by EffectiveUntil >= today. The query is already
+        // scoped to an exact assessment year, so effective_from/effective_to only distinguish
+        // amendments WITHIN that AY (effective_to = end of the AY's financial year). A "still
+        // effective today" guard excludes every CLOSED assessment year — i.e. all the AYs people
+        // actually file (AY2025-26 is filed through mid-2026 but its effective_to is 2025-03-31),
+        // 404-ing compute for them. Selecting the latest amendment by effective_from is correct
+        // for both the current and historical assessment years.
         => await dbContext.TaxSlabVersions
             .Where(v => v.AssessmentYear == ay
                      && v.Regime == regime
-                     && v.ActVersion == actVersion
-                     && (v.EffectiveUntil == null || v.EffectiveUntil >= DateOnly.FromDateTime(DateTime.UtcNow)))
+                     && v.ActVersion == actVersion)
             .OrderByDescending(v => v.EffectiveFrom)
             .FirstOrDefaultAsync(ct);
 

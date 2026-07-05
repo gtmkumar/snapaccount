@@ -1,5 +1,9 @@
 # Memory Index
 
+- [Admin UI patterns/constraints](project_admin_ui_patterns.md) — DataTable has no row-selection (bulk = filter-scoped); CSV via lib/csv; 403 via isForbiddenError+AccessDeniedState; flat i18n parity; never-fabricate rule; partner-banks route is /loans/partner-banks
+- [Gap wave 2 (task #21)](project_gap_wave2.md) — CG-9/12/13/15 + P-33/34/36/37/39 closed; the list of backend endpoints STILL MISSING that block full closure (route to backend, don't re-attempt client-side)
+- [Admin infra facts](reference_admin_infra_facts.md) — no backend user id client-side (only Firebase uid → no "assigned to me" filter); getStaffList=/auth/admin/staff is the assign picker; per-page checkbox bulk-select pattern
+
 - [Phase 5 test coverage fix](project_phase5_test_fix.md) — vitest per-file thresholds used to pass coverage check with 56/56 tests; why global 70% threshold was unworkable
 - [Self-test fixes 2026-04-05](project_selftest_fixes.md) — dev server on port 3000; DEV_AUTH_BYPASS env needed; mobile sidebar fix; ESLint setup; 20 unused-import warnings fixed
 - [Toast system and alert() removal](project_toast_system.md) — sonner added; 5 files fixed; column builder callback pattern; --legacy-peer-deps required for npm installs
@@ -10,6 +14,7 @@
 - [Phase 6F Completion](project_phase6F_completion.md) — FINAL phase: settings API wiring (6 sections), Dialog fix, StubPage cleanup, test fixes; 485/485 tests, 0 lint errors
 - [SEC-045 PayloadViewer OAuth hotfix](project_sec045_fix.md) — Bearer ***{last6} masking; 4 new tests; 34 pre-existing lint warnings also fixed
 - [Auth/RBAC Module 1 Completion](project_rbac_module1.md) — roles matrix, orgs list/detail, invite acceptance, permission-gated nav; 699 tests, 0 lint errors
+- [Admin RBAC enforcement model](project_admin_rbac_enforcement_model.md) — serverPermissions (RoutePermissionGuard) is the real gate; user.role is display/coarse only; pickRole must fail closed to DATA_ENTRY_OPERATOR; 403≠empty via isForbiddenError+AccessDeniedState
 - [Task #20 Auth Features](project_task20_auth_features.md) — user prefs, devices, forgot/reset password, 2FA TOTP; qrcode.react QRCodeSVG; Badge uses variant not color; 864 tests
 - [i18n pattern — @/i18n not react-i18next](feedback_i18n_pattern.md) — use custom t() from @/i18n; react-i18next not initialized in tests; status enums need .toLowerCase() for key lookup
 - [Test QueryClient staleTime:Infinity](feedback_test_queryclient.md) — React 19 double-mount causes 2 fetches; staleTime:Infinity prevents; prefer toHaveBeenCalled() over CalledTimes(1)

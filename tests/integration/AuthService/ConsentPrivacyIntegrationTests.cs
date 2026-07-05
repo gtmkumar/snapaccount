@@ -77,6 +77,7 @@ public class ConsentPrivacyIntegrationTests(PostgresFixture pg) : IAsyncLifetime
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Testing");
+                builder.UseSetting("ConnectionStrings:DefaultConnection", _connectionString);
                 // GAP-005 fail-fast: Testing is not "Development" so must supply a test secret.
                 builder.UseSetting("Auth:SessionSecret", "it-session-secret-for-testing-min32!!");
                 builder.UseSetting("DEV_AUTH_BYPASS", "true");
@@ -118,10 +119,33 @@ public class ConsentPrivacyIntegrationTests(PostgresFixture pg) : IAsyncLifetime
 
     private HttpClient BuildAuthenticatedClient(Guid userId)
     {
-        // DEV_AUTH_BYPASS=true means the middleware sets CurrentUser from X-Dev-User-Id header.
-        var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Dev-User-Id", userId.ToString());
-        client.DefaultRequestHeaders.Add("X-Dev-Org-Id", TestOrgId.ToString());
+        // A canned dev bearer token satisfies the middleware's RequireAuthorization gate;
+        // the per-user ICurrentUser mock then supplies the specific identity the handlers
+        // scope on (own-consent / own-request isolation). The X-Dev-User-Id header contract
+        // this test originally used no longer exists — the middleware maps canned tokens only.
+        var factory = _factory.WithWebHostBuilder(b =>
+        {
+            b.ConfigureServices(services =>
+            {
+                services.RemoveAll<ICurrentUser>();
+                var mock = new Mock<ICurrentUser>();
+                mock.Setup(u => u.IsAuthenticated).Returns(true);
+                mock.Setup(u => u.UserId).Returns(userId);
+                mock.Setup(u => u.OrganizationId).Returns(TestOrgId);
+                mock.Setup(u => u.Roles).Returns(new List<string> { "BUSINESS_OWNER" }.AsReadOnly());
+                mock.Setup(u => u.Permissions).Returns(new List<string> { "*" }.AsReadOnly());
+                mock.Setup(u => u.HasPermission(It.IsAny<string>())).Returns(true);
+                mock.Setup(u => u.IsInRole(It.IsAny<string>())).Returns<string>(r => r == "BUSINESS_OWNER");
+                services.AddScoped(_ => mock.Object);
+            });
+        });
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "dev-superadmin-token");
+        // TestServer leaves Connection.RemoteIpAddress null; the consent endpoints read the
+        // originating client IP from X-Forwarded-For (gateway-forwarded), so supply one here
+        // to exercise the audit-IP capture path deterministically.
+        client.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.10");
         return client;
     }
 
@@ -129,10 +153,10 @@ public class ConsentPrivacyIntegrationTests(PostgresFixture pg) : IAsyncLifetime
     {
         // Insert minimal user rows for FK constraints
         await db.Database.ExecuteSqlRawAsync($$"""
-            INSERT INTO auth.users (id, full_name, is_active, preferred_language, created_at, updated_at)
+            INSERT INTO auth.user (id, full_name, is_active, is_phone_verified, is_email_verified, is_deleted, preferred_language, created_at, updated_at)
             VALUES
-              ('{{UserAId}}', 'User A', true, 'en', NOW(), NOW()),
-              ('{{UserBId}}', 'User B', true, 'en', NOW(), NOW())
+              ('{{UserAId}}', 'User A', true, false, false, false, 'en', NOW(), NOW()),
+              ('{{UserBId}}', 'User B', true, false, false, false, 'en', NOW(), NOW())
             ON CONFLICT (id) DO NOTHING;
             """);
     }
@@ -177,12 +201,12 @@ public class ConsentPrivacyIntegrationTests(PostgresFixture pg) : IAsyncLifetime
             "/auth/me/consents/analytics.usage/grant",
             new { noticeVersion = "v1.0", locale = "en" });
 
-        // Then withdraw
+        // Then withdraw — withdraw returns 204 No Content (contract: endpoints.md, mobile privacy.ts).
         var response = await _userA.PostAsJsonAsync(
             "/auth/me/consents/analytics.usage/withdraw",
             new { noticeVersion = "v1.0" });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         await using var db = GetDb();
         var rows = await db.UserConsents
@@ -233,7 +257,8 @@ public class ConsentPrivacyIntegrationTests(PostgresFixture pg) : IAsyncLifetime
     public async Task EnqueueDataExport_Post_CreatesPendingRow()
     {
         var response = await _userA.PostAsync("/auth/me/data-export", null);
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        // Async enqueue → 202 Accepted (DPDP export runs as a background job).
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         await using var db = GetDb();
         var row = await db.DataExportRequests
@@ -252,7 +277,8 @@ public class ConsentPrivacyIntegrationTests(PostgresFixture pg) : IAsyncLifetime
             "/auth/me/data-correction",
             new { dataCategory = "pan_number", description = "My PAN is incorrectly stored." });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        // Async submit → 202 Accepted (correction request queued for review).
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         await using var db = GetDb();
         var row = await db.DataCorrectionRequests

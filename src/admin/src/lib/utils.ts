@@ -66,6 +66,10 @@ export function formatRelativeTime(date: Date | string | null | undefined): stri
   if (!date) return ''
   const d = typeof date === 'string' ? new Date(date) : date
   if (isNaN(d.getTime())) return ''
+  // Guard against default/sentinel timestamps (e.g. DateTime.MinValue "0001-01-01"
+  // or a Unix epoch 0) that would otherwise render as "over 2025 years ago" (ACM-15).
+  // SnapAccount has no legitimate data before 2000, so treat such values as absent.
+  if (d.getFullYear() < 2000) return ''
   return formatDistanceToNow(d, { addSuffix: true })
 }
 

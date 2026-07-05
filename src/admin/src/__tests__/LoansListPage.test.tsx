@@ -220,6 +220,42 @@ describe('LoansListPage — bulk assign modal', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Bulk close (P-33)
+// ---------------------------------------------------------------------------
+
+describe('LoansListPage — bulk close', () => {
+  it('bulk close confirm calls closeLoanApplication for each selected id', async () => {
+    const closeSpy = vi.spyOn(loanApi, 'closeLoanApplication').mockResolvedValue(undefined)
+    renderPage()
+    const rowCheckboxes = await screen.findAllByRole('checkbox', { name: /select row/i })
+    fireEvent.click(rowCheckboxes[0])
+
+    // Toolbar "Close" action opens the confirm dialog
+    const toolbarClose = await screen.findByRole('button', { name: /^close$/i })
+    fireEvent.click(toolbarClose)
+
+    // Confirm dialog is labelled "Close applications"
+    const dialog = await screen.findByRole('dialog', { name: /close applications/i })
+    const dangerBtn = Array.from(dialog.querySelectorAll('button')).find(
+      b => b.textContent?.toLowerCase().includes('close')
+    ) as HTMLButtonElement
+    fireEvent.click(dangerBtn)
+
+    await waitFor(() => {
+      expect(closeSpy).toHaveBeenCalledWith('app-001-uuid')
+    })
+  })
+
+  it('owner filter dropdown lists the assigned officer', async () => {
+    renderPage()
+    await screen.findByText('Sunrise Textiles Pvt Ltd')
+    // The owner filter <select> should contain the mock officer as an option
+    const options = Array.from(document.querySelectorAll('option'))
+    expect(options.some(o => o.textContent === 'Priya Sharma')).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // CSV export
 // ---------------------------------------------------------------------------
 

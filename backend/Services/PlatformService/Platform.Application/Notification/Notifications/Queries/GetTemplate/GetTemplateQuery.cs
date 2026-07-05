@@ -29,7 +29,11 @@ public record TemplateDetailDto(
     DateOnly? EffectiveTo,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    IReadOnlyList<string> PlaceholderNames);
+    IReadOnlyList<string> PlaceholderNames)
+{
+    /// <summary>Alias of <see cref="IsCurrent"/> — the admin UI's active/inactive toggle field (CG-11).</summary>
+    public bool IsActive => IsCurrent;
+}
 
 /// <summary>Validates GetTemplateQuery.</summary>
 public sealed class GetTemplateQueryValidator : AbstractValidator<GetTemplateQuery>

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { NavLink, useLocation } from 'react-router'
+import { NavLink, useLocation, useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { usePermission } from '@/hooks/usePermission'
@@ -317,6 +317,15 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const { user, signOut } = useAuth()
   const { canAccess, hasServerPermission, serverPermissions } = usePermission()
   const location = useLocation()
+  const navigate = useNavigate()
+
+  // Sign out clears the session, but each useAuth() call owns independent state,
+  // so the AuthGuard mounted elsewhere won't re-render to null on its own. Force a
+  // navigation to /login so the stale (still-rendered) page can't linger (ACM-13).
+  const handleSignOut = async () => {
+    await signOut()
+    void navigate('/login', { replace: true })
+  }
 
   // Backend-driven menu (already permission-filtered server-side). The frontend
   // is a pure consumer of this tree — gap #1 of the enhanced authz model.
@@ -448,7 +457,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
 
         {/* Sign out */}
         <button
-          onClick={() => void signOut()}
+          onClick={() => void handleSignOut()}
           className={cn(
             'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-[var(--nav-sidebar-text)]',
             'hover:bg-[var(--nav-sidebar-hover)] hover:text-[var(--nav-sidebar-text-active)] transition-colors duration-150',

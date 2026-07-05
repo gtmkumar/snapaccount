@@ -32,7 +32,12 @@ public sealed class FiscalYearCloseConfiguration : IEntityTypeConfiguration<Fisc
                 v => $"{v - 1}-{v % 100:D2}",           // 2026 → "2025-26"
                 s => ParseFyYear(s));                    // "2025-26" → 2026
 
-        builder.Property(e => e.Status).HasMaxLength(50).IsRequired().HasColumnName("status");
+        // BUG-ACCT-COA-TEMPLATE-CODE (related write-path divergence): financial_year_close.status
+        // has a CHECK (PENDING/IN_PROGRESS/COMPLETED/ROLLED_BACK), but the FiscalYearClose entity
+        // uses "OPEN"/"CLOSED" in its domain logic, which 23514'd on write. Convert at the DB
+        // boundary (OPEN↔PENDING, CLOSED↔COMPLETED) so the domain vocabulary is preserved in memory.
+        builder.Property(e => e.Status).HasMaxLength(50).IsRequired().HasColumnName("status")
+            .HasConversion(v => FyStatusToDb(v), v => FyStatusFromDb(v));
 
         // SWEEP-FIX: ClosedBy → initiated_by; ClosedAt → completed_at; Notes → closing_notes
         builder.Property(e => e.ClosedBy).HasColumnName("initiated_by");
@@ -46,6 +51,20 @@ public sealed class FiscalYearCloseConfiguration : IEntityTypeConfiguration<Fisc
 
         builder.HasIndex(e => new { e.OrgId, e.FyYear }).IsUnique();
     }
+
+    // Domain "OPEN"/"CLOSED" ↔ DB CHECK vocabulary. Static so converter lambdas stay method-call
+    // expressions. Unknown DB values map to "OPEN" (safe read default).
+    private static string FyStatusToDb(string v) => v switch
+    {
+        "CLOSED" => "COMPLETED",
+        _ => "PENDING"
+    };
+
+    private static string FyStatusFromDb(string v) => v switch
+    {
+        "COMPLETED" => "CLOSED",
+        _ => "OPEN"
+    };
 
     /// <summary>
     /// Converts a financial_year string (e.g. "2025-26") to an int FY year (2026).

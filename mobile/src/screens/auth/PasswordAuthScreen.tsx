@@ -23,7 +23,7 @@ import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/T
 import apiClient, { getApiError } from '../../lib/api';
 import { isValidPhone } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
-import { fetchServerUserType } from '../../lib/onboarding';
+import { fetchServerProfile } from '../../lib/onboarding';
 import { registerCurrentDevice } from '../../notifications/pushTokenManager';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 
@@ -114,8 +114,13 @@ export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
       void registerCurrentDevice();
       // Returning user — hydrate the real persona so navigation matches their type.
       {
-        const serverType = await fetchServerUserType();
-        if (serverType) updateProfile({ userType: serverType });
+        const serverProfile = await fetchServerProfile();
+        if (serverProfile) {
+          updateProfile({
+            ...(serverProfile.userType ? { userType: serverProfile.userType } : {}),
+            ...(serverProfile.fullName ? { name: serverProfile.fullName } : {}),
+          });
+        }
       }
       try {
         const orgsRes = await apiClient.get<

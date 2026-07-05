@@ -13,8 +13,11 @@ public interface ICoaTemplateRepository
 }
 
 /// <summary>Flat DTO representing one row from <c>accounting.coa_template</c>.</summary>
+/// <remarks>
+/// BUG-ACCT-COA-TEMPLATE-CODE: the real table has no template_code column (only one seeded
+/// template exists); the account_code is the natural template identifier used for traceability.
+/// </remarks>
 public record CoaTemplateRow(
-    string TemplateCode,
     string AccountCode,
     string AccountName,
     string AccountType,

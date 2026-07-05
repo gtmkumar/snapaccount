@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { AlertBanner } from '@/components/shared/AlertBanner'
+import { AccessDeniedState } from '@/components/shared/AccessDeniedState'
+import { isForbiddenError } from '@/lib/apiError'
 import { AvailabilityRuleEditor } from '@/components/ui/AvailabilityRuleEditor'
 import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker'
 import { cn } from '@/lib/utils'
@@ -182,11 +184,13 @@ export default function CaAvailabilityPage() {
   const [selectedCaId, setSelectedCaId] = useState<string>('')
 
   // CA profiles (for multi-CA orgs) — real endpoint: GET /appointments/ca-profiles
-  const { data: caProfiles, isLoading: caLoading } = useQuery({
+  const { data: caProfiles, isLoading: caLoading, error: caError } = useQuery({
     queryKey: ['ca-profiles'],
     queryFn: () => listCaProfiles(true),
     staleTime: 300_000,
   })
+
+  const caForbidden = isForbiddenError(caError)
 
   // effectiveCaId is the caProfileId (UUID) used as key for the ChatService endpoints
   const effectiveCaId = selectedCaId || caProfiles?.[0]?.caId || ''
@@ -271,7 +275,9 @@ export default function CaAvailabilityPage() {
         )}
       </div>
 
-      {!effectiveCaId && !caLoading && (
+      {caForbidden && <AccessDeniedState description={t('ca.admin.availability.forbidden')} />}
+
+      {!caForbidden && !effectiveCaId && !caLoading && (
         <AlertBanner type="info" description={t('ca.admin.availability.noCa')} />
       )}
 

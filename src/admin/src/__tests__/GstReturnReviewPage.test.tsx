@@ -3,7 +3,7 @@
  * Tests: ARN capture section, audit trail panel, real data wiring
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -88,6 +88,53 @@ describe('GstReturnReviewPage', () => {
     renderPage()
     const titles = await screen.findAllByText(/Sharma Trading Co\./)
     expect(titles.length).toBeGreaterThan(0)
+  })
+
+  // CG-9: GSTR-1 Add-invoice line-item editor
+  it('shows Add invoice button for an editable GSTR-1 return and adds an invoice', async () => {
+    vi.spyOn(gstApi, 'getGstReturn').mockResolvedValue({
+      ...mockReturn,
+      returnType: 'GSTR-1',
+      status: 'DRAFT',
+    })
+    vi.spyOn(gstApi, 'listReturnInvoices').mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 500 })
+    const addSpy = vi.spyOn(gstApi, 'addReturnInvoice').mockResolvedValue(undefined)
+
+    renderPage()
+    const addBtn = await screen.findByRole('button', { name: /add invoice/i })
+    fireEvent.click(addBtn)
+
+    const dialog = await screen.findByRole('dialog', { name: /add invoice to return/i })
+    // Use a B2C invoice so no buyer GSTIN is required.
+    const typeSelect = dialog.querySelector('select') as HTMLSelectElement
+    fireEvent.change(typeSelect, { target: { value: 'B2C' } })
+    const numberInput = dialog.querySelectorAll('input[type="text"], input:not([type])')[0] as HTMLInputElement
+    fireEvent.change(numberInput, { target: { value: 'INV-99' } })
+    const dateInput = dialog.querySelector('input[type="date"]') as HTMLInputElement
+    fireEvent.change(dateInput, { target: { value: '2026-03-15' } })
+    const numberFields = dialog.querySelectorAll('input[type="number"]')
+    fireEvent.change(numberFields[0], { target: { value: '1000' } }) // taxable
+
+    const submitBtn = dialog.querySelector('button[type="submit"]') as HTMLButtonElement
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(addSpy).toHaveBeenCalled()
+      expect(addSpy.mock.calls[0][1].invoiceNumber).toBe('INV-99')
+      expect(addSpy.mock.calls[0][1].invoiceType).toBe('B2C')
+    })
+  })
+
+  it('hides Add invoice button for a filed (non-editable) GSTR-1 return', async () => {
+    vi.spyOn(gstApi, 'getGstReturn').mockResolvedValue({
+      ...mockReturn,
+      returnType: 'GSTR-1',
+      status: 'FILED',
+    })
+    vi.spyOn(gstApi, 'listReturnInvoices').mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 500 })
+    renderPage()
+    await screen.findAllByText('Sharma Trading Co.')
+    expect(screen.queryByRole('button', { name: /add invoice/i })).toBeNull()
   })
 
   it('renders GSTIN from real API data', async () => {

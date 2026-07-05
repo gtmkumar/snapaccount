@@ -24,6 +24,7 @@ import { t } from '@/i18n'
 import {
   listPartnerBanks,
   registerPartnerBank,
+  updatePartnerBank,
   type PartnerBank,
   type BankAdapterType,
 } from '@/lib/loanApi'
@@ -158,17 +159,22 @@ function BankDrawer({ initial, onClose, onSaved }: BankDrawerProps) {
   function validate(): boolean {
     const newErrors: Partial<Record<keyof BankFormState, string>> = {}
     if (!form.name.trim()) newErrors.name = t('admin.partnerBanks.error.required')
-    if (form.adapterType === 'EMAIL' && !form.recipientEmail) {
+    // On EDIT the server-stored adapter config (endpoints, recipient, secrets) is
+    // never echoed back, so the config fields start empty. Don't force re-entry —
+    // required-field checks apply only when creating. Format checks still run on any
+    // value the user did type.
+    const isEdit = !!initial
+    if (!isEdit && form.adapterType === 'EMAIL' && !form.recipientEmail) {
       newErrors.recipientEmail = t('admin.partnerBanks.error.required')
     }
     if (form.adapterType === 'REST' || form.adapterType === 'OAUTH') {
-      if (!form.endpoint) newErrors.endpoint = t('admin.partnerBanks.error.required')
+      if (!isEdit && !form.endpoint) newErrors.endpoint = t('admin.partnerBanks.error.required')
       if (form.endpoint && !form.endpoint.startsWith('https://')) {
         newErrors.endpoint = t('admin.partnerBanks.error.urlMustBeHttps')
       }
     }
     if (form.adapterType === 'OAUTH') {
-      if (!form.tokenUrl) newErrors.tokenUrl = t('admin.partnerBanks.error.required')
+      if (!isEdit && !form.tokenUrl) newErrors.tokenUrl = t('admin.partnerBanks.error.required')
       if (form.tokenUrl && !form.tokenUrl.startsWith('https://')) {
         newErrors.tokenUrl = t('admin.partnerBanks.error.urlMustBeHttps')
       }
@@ -178,26 +184,46 @@ function BankDrawer({ initial, onClose, onSaved }: BankDrawerProps) {
   }
 
   const mutation = useMutation({
-    mutationFn: () => {
-      // Build configJson from form fields — secrets sent write-only, never read back
+    mutationFn: async () => {
+      // Build configJson from form fields — secrets sent write-only, never read back.
+      // Only NON-EMPTY fields are included, so on edit an untouched config stays empty
+      // (→ apiConfigJson omitted below → server keeps the stored config + secrets).
       const config: Record<string, string> = {}
       if (form.adapterType === 'EMAIL') {
-        config['recipientEmail'] = form.recipientEmail
+        if (form.recipientEmail) config['recipientEmail'] = form.recipientEmail
         if (form.ccEmail) config['cc'] = form.ccEmail
         if (form.replyTo) config['replyTo'] = form.replyTo
       } else if (form.adapterType === 'REST') {
-        config['endpoint'] = form.endpoint
-        config['method'] = form.method
+        if (form.endpoint) {
+          config['endpoint'] = form.endpoint
+          config['method'] = form.method
+        }
         if (form.apiKey) config['apiKey'] = form.apiKey // write-only to server
       } else if (form.adapterType === 'OAUTH') {
-        config['tokenUrl'] = form.tokenUrl
-        config['clientId'] = form.clientId
+        if (form.tokenUrl) config['tokenUrl'] = form.tokenUrl
+        if (form.clientId) config['clientId'] = form.clientId
         if (form.clientSecret) config['clientSecret'] = form.clientSecret // write-only
-        config['scopes'] = form.scopes
-        config['endpoint'] = form.endpoint
+        if (form.scopes) config['scopes'] = form.scopes
+        if (form.endpoint) config['endpoint'] = form.endpoint
       }
 
-      return registerPartnerBank({
+      // Edit → PATCH the existing bank (was previously always POST, which created a
+      // DUPLICATE on every edit — CG-7). Create → POST a new bank.
+      if (initial) {
+        // Only send apiConfigJson when the user actually entered adapter config;
+        // otherwise omit it so the server keeps the stored config + secrets.
+        const enteredConfig = Object.keys(config).length > 0
+        await updatePartnerBank(initial.bankId, {
+          name: form.name,
+          contactEmail: form.contactEmail || undefined,
+          logoUrl: form.logoUrl || undefined,
+          ...(enteredConfig ? { apiConfigJson: JSON.stringify(config) } : {}),
+          isActive: form.isActive,
+        })
+        return
+      }
+
+      await registerPartnerBank({
         name: form.name,
         adapterType: form.adapterType,
         contactEmail: form.contactEmail || undefined,

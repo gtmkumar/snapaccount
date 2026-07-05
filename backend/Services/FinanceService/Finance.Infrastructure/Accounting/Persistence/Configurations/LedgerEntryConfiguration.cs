@@ -25,9 +25,17 @@ public sealed class LedgerEntryConfiguration : IEntityTypeConfiguration<LedgerEn
         builder.Property(e => e.Amount).HasColumnType("numeric(18,2)").IsRequired();
         builder.Property(e => e.Currency).HasMaxLength(3).IsRequired().HasDefaultValue("INR");
         builder.Property(e => e.Narration).HasMaxLength(1000).IsRequired();
-        builder.Property(e => e.Source).HasConversion<string>().HasMaxLength(20).IsRequired();
-        builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
+        // BUG-ACCT-COA-TEMPLATE-CODE (related write-path divergence): ledger_entries.source CHECK is
+        // ('OCR','MANUAL','IMPORT','SYSTEM') and status CHECK is
+        // ('PENDING_REVIEW','POSTED','REVERSED','REJECTED'). The enum member names under
+        // .HasConversion<string>() ("Ocr"/"PendingReview"/…) don't match, so every posting 23514'd.
+        builder.Property(e => e.Source).HasMaxLength(20).IsRequired()
+            .HasConversion(v => SourceToDb(v), v => SourceFromDb(v));
+        builder.Property(e => e.Status).HasMaxLength(30).IsRequired()
+            .HasConversion(v => StatusToDb(v), v => StatusFromDb(v));
         builder.Property(e => e.PostedAt).IsRequired();
+        // BUG-ACCT-COA-TEMPLATE-CODE (related write-path divergence): entry_date DATE NOT NULL (no default).
+        builder.Property(e => e.EntryDate).HasColumnName("entry_date").IsRequired();
         // SWEEP-FIX: ReviewedBy → reviewer_user_id (convention would generate reviewed_by)
         builder.Property(e => e.ReviewedBy).HasColumnName("reviewer_user_id");
         builder.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
@@ -50,4 +58,40 @@ public sealed class LedgerEntryConfiguration : IEntityTypeConfiguration<LedgerEn
             .HasFilter("dedupe_hash IS NOT NULL")
             .IsUnique();
     }
+
+    // Static so converter lambdas stay method-call expressions (no switch expressions in trees).
+    private static string SourceToDb(PostingSource v) => v switch
+    {
+        PostingSource.Ocr => "OCR",
+        PostingSource.Manual => "MANUAL",
+        PostingSource.Import => "IMPORT",
+        PostingSource.System => "SYSTEM",
+        _ => "MANUAL"
+    };
+
+    private static PostingSource SourceFromDb(string v) => v switch
+    {
+        "OCR" => PostingSource.Ocr,
+        "MANUAL" => PostingSource.Manual,
+        "IMPORT" => PostingSource.Import,
+        "SYSTEM" => PostingSource.System,
+        _ => PostingSource.Manual
+    };
+
+    private static string StatusToDb(PostingStatus v) => v switch
+    {
+        PostingStatus.PendingReview => "PENDING_REVIEW",
+        PostingStatus.Approved => "POSTED",
+        PostingStatus.Reversed => "REVERSED",
+        _ => "PENDING_REVIEW"
+    };
+
+    private static PostingStatus StatusFromDb(string v) => v switch
+    {
+        "PENDING_REVIEW" => PostingStatus.PendingReview,
+        "POSTED" => PostingStatus.Approved,
+        "REVERSED" => PostingStatus.Reversed,
+        "REJECTED" => PostingStatus.Reversed,
+        _ => PostingStatus.PendingReview
+    };
 }

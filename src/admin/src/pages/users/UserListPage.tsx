@@ -18,6 +18,8 @@ import {
 } from '@/lib/userAdminApi'
 import { AddUserDialog } from '@/components/shared/AddUserDialog'
 import { EditUserDialog } from '@/components/shared/EditUserDialog'
+import { AccessDeniedState } from '@/components/shared/AccessDeniedState'
+import { isForbiddenError } from '@/lib/apiError'
 import { usePermission } from '@/hooks/usePermission'
 import { t } from '@/i18n'
 
@@ -206,7 +208,7 @@ export default function UserListPage() {
 
   // Server-side search + status filter; debounce omitted for simplicity (fires on every keystroke,
   // 5-min staleTime + keepPreviousData masks the latency).
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['admin-users', { page, pageSize, search: globalFilter, statusFilter, userTypeFilter }],
     queryFn: () => listAdminUsers({
       page,
@@ -219,6 +221,7 @@ export default function UserListPage() {
     staleTime: 30_000,
   })
 
+  const forbidden = isForbiddenError(error)
   const items = data?.items ?? []
   const totalCount = data?.totalCount ?? 0
 
@@ -344,15 +347,19 @@ export default function UserListPage() {
         </div>
       </Card>
 
-      <DataTable
-        data={items}
-        columns={columns}
-        loading={isLoading}
-        onRowClick={(row) => void navigate(`/users/${row.id}`)}
-      />
+      {forbidden ? (
+        <AccessDeniedState description={t('users.list.forbidden')} />
+      ) : (
+        <DataTable
+          data={items}
+          columns={columns}
+          loading={isLoading}
+          onRowClick={(row) => void navigate(`/users/${row.id}`)}
+        />
+      )}
 
       {/* Pagination */}
-      {data && data.totalPages > 1 && (
+      {!forbidden && data && data.totalPages > 1 && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-neutral-500">
             Page {data.page} of {data.totalPages} · {totalCount} users

@@ -33,7 +33,11 @@ public record TemplateSummaryDto(
     bool IsCurrent,
     DateOnly EffectiveFrom,
     DateOnly? EffectiveTo,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt)
+{
+    /// <summary>Alias of <see cref="IsCurrent"/> — the admin UI's active/inactive toggle field (CG-11).</summary>
+    public bool IsActive => IsCurrent;
+}
 
 /// <summary>Paginated templates response.</summary>
 public record ListTemplatesResponse(

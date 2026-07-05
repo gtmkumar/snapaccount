@@ -26,7 +26,7 @@ import { Button } from '../../components/ui/Button';
 import { OTPInput } from '../../components/forms/OTPInput';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { useAuthStore } from '../../store/authStore';
-import { fetchServerUserType } from '../../lib/onboarding';
+import { fetchServerProfile } from '../../lib/onboarding';
 import { registerCurrentDevice } from '../../notifications/pushTokenManager';
 import { complete2faChallenge } from '../../api/auth';
 import { getApiError } from '../../lib/api';
@@ -81,9 +81,15 @@ export function TwoFactorChallengeScreen({ navigation, route }: Props) {
         // account now that the 2FA challenge has produced a session. Best-effort.
         void registerCurrentDevice();
 
-        // Hydrate the real persona so navigation matches their type.
-        const serverType = await fetchServerUserType();
-        if (serverType) updateProfile({ userType: serverType });
+        // Hydrate the real persona + display name so navigation matches their
+        // type and the profile shows their onboarding name (AND-LIVE-06).
+        const serverProfile = await fetchServerProfile();
+        if (serverProfile) {
+          updateProfile({
+            ...(serverProfile.userType ? { userType: serverProfile.userType } : {}),
+            ...(serverProfile.fullName ? { name: serverProfile.fullName } : {}),
+          });
+        }
 
         // Enrich organizations, then let RootNavigator swap to the app.
         try {

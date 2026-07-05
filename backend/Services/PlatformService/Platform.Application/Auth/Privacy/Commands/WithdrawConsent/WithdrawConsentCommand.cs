@@ -1,4 +1,5 @@
 using AuthService.Application.Common.Interfaces;
+using AuthService.Application.Privacy.Common;
 using AuthService.Domain.Entities;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -33,7 +34,7 @@ public sealed class WithdrawConsentCommandValidator : AbstractValidator<Withdraw
     {
         RuleFor(x => x.Purpose)
             .NotEmpty().MaximumLength(200)
-            .Matches(@"^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)*$")
+            .Matches(ConsentPurposes.CodePattern)
             .WithMessage("Purpose must be a dot-separated lowercase code, e.g. 'marketing.sms'.");
 
         RuleFor(x => x.NoticeVersion)
@@ -50,16 +51,6 @@ public sealed class WithdrawConsentCommandHandler(
     ICurrentUser currentUser)
     : ICommandHandler<WithdrawConsentCommand>
 {
-    private static readonly Dictionary<string, string> PurposeDescriptions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["marketing.sms"]          = "SMS marketing messages about new features and offers.",
-        ["analytics.usage"]        = "Platform usage analytics to improve the product.",
-        ["data.sharing.partner"]   = "Sharing your data with authorised partner service providers.",
-        ["loan.creditbureau"]      = "Sharing your credit information with credit bureaus for loan assessment.",
-        ["communication.whatsapp"] = "WhatsApp messages for transactional and service communications.",
-        ["communication.email"]    = "Email communications for platform updates and alerts.",
-    };
-
     /// <inheritdoc />
     public async Task<Result> Handle(
         WithdrawConsentCommand request,
@@ -76,7 +67,7 @@ public sealed class WithdrawConsentCommandHandler(
         if (latest is not null && latest.Status == "withdrawn")
             return Result.Success();   // already withdrawn — idempotent
 
-        var description = PurposeDescriptions.GetValueOrDefault(request.Purpose, request.Purpose);
+        var description = ConsentPurposes.DescriptionFor(request.Purpose);
 
         var withdrawal = UserConsent.Withdraw(
             userId,

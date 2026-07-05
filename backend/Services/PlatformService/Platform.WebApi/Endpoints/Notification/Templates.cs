@@ -123,7 +123,7 @@ public sealed class Templates : EndpointGroupBase
     private static async Task<IResult> UpdateTemplate(Guid id, UpdateTemplateRequest req, ISender sender, CancellationToken ct)
     {
         var result = await sender.Send(
-            new UpdateTemplateCommand(id, req.Body, req.Subject, req.DltTemplateId, req.SenderName),
+            new UpdateTemplateCommand(id, req.Body, req.Subject, req.DltTemplateId, req.SenderName, req.IsActive),
             ct);
         return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToHttpResult();
     }
@@ -165,12 +165,13 @@ public record CreateTemplateRequest(
     string? DltTemplateId = null,
     string? SenderName = null);
 
-/// <summary>Request for updating a notification template.</summary>
+/// <summary>Request for updating a notification template. IsActive toggles the template active/inactive (CG-11); omit to leave unchanged.</summary>
 public record UpdateTemplateRequest(
     string Body,
     string? Subject = null,
     string? DltTemplateId = null,
-    string? SenderName = null);
+    string? SenderName = null,
+    bool? IsActive = null);
 
 /// <summary>Request for test-sending a template.</summary>
 public record TestSendRequest(

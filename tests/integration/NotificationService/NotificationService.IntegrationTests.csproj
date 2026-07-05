@@ -27,6 +27,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\_shared\MigrationSupport.cs" Link="_shared\MigrationSupport.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- NotificationService.Api transitively pulls in Application, Domain, Infrastructure -->
     <ProjectReference Include="..\..\..\backend/Services/PlatformService/Platform.WebApi/Platform.WebApi.csproj" />
     <!-- AccountingService.Application and CallbackService.Infrastructure needed for SEC-026/027 attribute/type assertions -->

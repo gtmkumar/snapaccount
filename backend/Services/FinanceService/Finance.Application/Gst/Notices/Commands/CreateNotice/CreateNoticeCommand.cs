@@ -3,9 +3,11 @@ using GstService.Application.Common.Interfaces;
 using GstService.Application.Interfaces;
 using GstService.Domain.Entities;
 using GstService.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 using SnapAccount.Shared.Application;
 using SnapAccount.Shared.Application.Behaviors;
 using SnapAccount.Shared.Domain;
+using SnapAccount.Shared.Domain.ValueObjects;
 
 namespace GstService.Application.Notices.Commands.CreateNotice;
 
@@ -24,7 +26,10 @@ public record CreateNoticeCommand(
     DateOnly IssuedDate,
     DateOnly? DueDate,
     string? Description,
-    GstNoticeFormType FormType = GstNoticeFormType.OTHER) : ICommand<CreateNoticeResponse>;
+    GstNoticeFormType FormType = GstNoticeFormType.OTHER,
+    // BUG-GST-NOTICE-GSTIN: gst.notices.gstin is NOT NULL (migration 021). Optional here —
+    // when omitted, the handler resolves the org's GSTIN from its latest GST return on file.
+    string? Gstin = null) : ICommand<CreateNoticeResponse>;
 
 /// <summary>Response after creating a notice.</summary>
 public record CreateNoticeResponse(
@@ -59,6 +64,29 @@ public sealed class CreateNoticeCommandHandler(
         CreateNoticeCommand request,
         CancellationToken cancellationToken)
     {
+        // BUG-GST-NOTICE-GSTIN: gst.notices.gstin is NOT NULL (migration 021). Source the GSTIN in
+        // priority order: (1) explicit request.Gstin; (2) resolved from the org's most recent GST
+        // return on file (org→GSTIN — aligns with admin P-37/BE-GST-01). Validate the 15-char format
+        // before persisting so the DB CHECK constraint can never 23514.
+        var gstinRaw = request.Gstin;
+        if (string.IsNullOrWhiteSpace(gstinRaw))
+        {
+            gstinRaw = await dbContext.GstReturns
+                .Where(r => r.OrganizationId == request.OrganizationId && r.Gstin != "")
+                .OrderByDescending(r => r.CreatedAt)
+                .Select(r => r.Gstin)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (string.IsNullOrWhiteSpace(gstinRaw))
+            return Error.Validation("Notice.GstinRequired",
+                "GSTIN is required to create a notice and none could be resolved for the organisation. " +
+                "Supply a gstin in the request.");
+
+        var gstinResult = GstinNumber.Create(gstinRaw);
+        if (gstinResult.IsFailure)
+            return Result<CreateNoticeResponse>.Failure(gstinResult.Error);
+
         var notice = GstNotice.Create(
             request.OrganizationId,
             request.NoticeNumber,
@@ -66,7 +94,8 @@ public sealed class CreateNoticeCommandHandler(
             request.IssuedDate,
             request.DueDate,
             request.Description,
-            request.FormType);
+            request.FormType,
+            gstin: gstinResult.Value.Value);
 
         notice.SetIssuedBy(request.IssuedBy);
 

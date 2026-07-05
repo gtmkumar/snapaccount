@@ -63,7 +63,9 @@ public sealed class BootstrapOrganizationChartOfAccountsCommandHandler(
                 template.AccountName,
                 template.AccountType,
                 template.AccountSubtype,
-                templateCode: template.TemplateCode);
+                // BUG-ACCT-COA-TEMPLATE-CODE: no separate template_code column exists; the source
+                // account_code is the traceability identifier (ChartOfAccount.TemplateCode is EF-ignored).
+                templateCode: template.AccountCode);
 
             await coaRepository.AddAsync(account, cancellationToken);
             created++;

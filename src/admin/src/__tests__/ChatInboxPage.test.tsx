@@ -247,7 +247,7 @@ describe('ChatInboxPage', () => {
     // Make the checkbox visible via hover isn't possible in jsdom — use aria-label
     const checkboxes = screen.getAllByRole('checkbox')
     expect(checkboxes.length).toBeGreaterThan(0)
-    fireEvent.click(checkboxes[0]!)
+    fireEvent.click(checkboxes.find(c => c.getAttribute('aria-label')?.startsWith('Select thread'))!)
 
     await waitFor(() => {
       expect(screen.getByText(/1 selected/)).toBeInTheDocument()
@@ -260,7 +260,7 @@ describe('ChatInboxPage', () => {
     await waitFor(() => screen.getByText('GST query'))
 
     const checkboxes = screen.getAllByRole('checkbox')
-    fireEvent.click(checkboxes[0]!)
+    fireEvent.click(checkboxes.find(c => c.getAttribute('aria-label')?.startsWith('Select thread'))!)
 
     await waitFor(() => screen.getByText('Resolve'))
     fireEvent.click(screen.getByText('Resolve'))
@@ -278,7 +278,7 @@ describe('ChatInboxPage', () => {
     await waitFor(() => screen.getByText('GST query'))
 
     const checkboxes = screen.getAllByRole('checkbox')
-    fireEvent.click(checkboxes[0]!)
+    fireEvent.click(checkboxes.find(c => c.getAttribute('aria-label')?.startsWith('Select thread'))!)
     await waitFor(() => screen.getByText('Clear'))
 
     fireEvent.click(screen.getByText('Clear'))

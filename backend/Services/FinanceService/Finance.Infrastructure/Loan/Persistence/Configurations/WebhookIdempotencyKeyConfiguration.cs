@@ -30,6 +30,11 @@ public sealed class WebhookIdempotencyKeyConfiguration : IEntityTypeConfiguratio
         builder.Property(x => x.BankId).IsRequired();
         builder.Property(x => x.ReceivedAt).IsRequired();
         builder.Property(x => x.ExpiresAt).IsRequired();
+        // BUG-LOAN-STATUSLOG-COLS (related webhook write-path divergence): loan.webhook_idempotency_keys
+        // (migration 066) has NO application_id column — the convention mapping generated
+        // `w.application_id` and 42703'd on every dedup SELECT. ApplicationId is entity-only metadata;
+        // dedup keys on (bank_id, idempotency_key). Exclude it from the model.
+        builder.Ignore(x => x.ApplicationId);
 
         // Unique constraint on (bank_id, idempotency_key) for deduplication
         builder.HasIndex(x => new { x.BankId, x.IdempotencyKey }).IsUnique();

@@ -59,7 +59,10 @@ public sealed class FilingConfiguration : IEntityTypeConfiguration<Filing>
 
         // Shadow properties for DB-only fields not on the entity
         builder.Property<Guid?>("TaxSlabVersionId").HasColumnName("tax_slab_version_id");
-        builder.Property<decimal?>("GrossTotalIncome").HasColumnName("gross_total_income").HasColumnType("numeric(18,2)");
+        // BUG-ITR-ASSESSEE-MAPPING (related filing write-path divergence): gross_total_income is
+        // NOT NULL DEFAULT 0 (migration 024). The old shadow property was never set, so EF sent an
+        // explicit NULL and 23502'd on every filing insert. It is vestigial — the computation is
+        // persisted in computation_jsonb — so drop it and let the DB default (0) apply.
 
         builder.HasIndex(f => f.AssesseeId);
         builder.HasIndex(f => new { f.AssesseeId, f.AssessmentYear }).IsUnique();

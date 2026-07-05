@@ -597,6 +597,25 @@ export async function listReturnInvoices(returnId: string, params: ListInvoicesP
   return ReturnInvoicesListSchema.parse(res.data)
 }
 
+// Add a line-item invoice to a GSTR-1 / GSTR-1A return.
+// POST /gst/returns/{id}/invoices — supplier GSTIN/name are resolved server-side
+// from the return's organization; the client supplies the buyer + tax breakdown.
+export interface AddReturnInvoiceRequest {
+  invoiceNumber: string
+  invoiceType: ReturnInvoiceDto['invoiceType']
+  invoiceDate: string
+  buyerGstin?: string
+  taxableValue: number
+  igstAmount: number
+  cgstAmount: number
+  sgstAmount: number
+  cessAmount: number
+}
+
+export async function addReturnInvoice(returnId: string, body: AddReturnInvoiceRequest): Promise<void> {
+  await api.post(`/gst/returns/${returnId}/invoices`, body)
+}
+
 export interface CreateInvoiceRequest {
   organizationId: string
   gstin: string

@@ -64,6 +64,21 @@ public sealed class GenerateSlotsFromRulesCommandHandler(
 
         if (request.CaProfileId.HasValue)
         {
+            // ACM-04 (IDOR): a non-super caller may only generate slots for their OWN
+            // CA profile. Without this check any holder of chat.slots.manage could
+            // materialise slots on another CA's schedule by passing that CA's profile id.
+            if (!currentUser.HasPermission("*"))
+            {
+                var ownsProfile = await db.CaProfiles.AnyAsync(
+                    p => p.Id == request.CaProfileId.Value && p.UserId == currentUser.UserId,
+                    cancellationToken);
+
+                if (!ownsProfile)
+                    return Result<GenerateSlotsFromRulesResponse>.Failure(
+                        Error.Forbidden("CaProfile.NotOwner",
+                            "You may only generate slots for your own CA profile."));
+            }
+
             targetProfileId = request.CaProfileId.Value;
         }
         else

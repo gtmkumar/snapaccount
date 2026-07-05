@@ -99,6 +99,25 @@ export async function listThreads(params?: ListThreadsParams): Promise<{ items: 
   return ThreadListSchema.parse(res.data)
 }
 
+export interface CreateThreadParams {
+  category: ChatCategory
+  subject?: string
+  initialMessage: string
+  clientMessageId?: string
+}
+
+export const CreateThreadResultSchema = z.object({
+  threadId: z.string(),
+  status: ThreadStatusSchema.optional(),
+  category: ChatCategorySchema.optional(),
+  messageId: z.string().optional(),
+})
+
+export async function createThread(params: CreateThreadParams): Promise<{ threadId: string }> {
+  const res = await api.post('/chat/threads', params)
+  return CreateThreadResultSchema.parse(res.data)
+}
+
 export async function getThread(threadId: string): Promise<ThreadDetail> {
   const res = await api.get(`/chat/threads/${threadId}`)
   return ThreadDetailSchema.parse(res.data)

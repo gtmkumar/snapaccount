@@ -18,7 +18,8 @@ public record UpdateTemplateCommand(
     string Body,
     string? Subject = null,
     string? DltTemplateId = null,
-    string? SenderName = null) : ICommand<UpdateTemplateResponse>;
+    string? SenderName = null,
+    bool? IsActive = null) : ICommand<UpdateTemplateResponse>;
 
 /// <summary>Response after updating.</summary>
 public record UpdateTemplateResponse(Guid TemplateId, DateTime UpdatedAt);
@@ -52,6 +53,12 @@ public sealed class UpdateTemplateCommandHandler(
             return Result<UpdateTemplateResponse>.Failure(Error.NotFound("Template.NotFound", "Notification template not found."));
 
         template.Update(request.Body, request.Subject, request.DltTemplateId, request.SenderName);
+
+        // CG-11: an admin can flip a template active/inactive. Only applied when the
+        // caller supplies IsActive, so body-only updates leave the active state untouched.
+        if (request.IsActive.HasValue)
+            template.SetActive(request.IsActive.Value);
+
         await db.SaveChangesAsync(cancellationToken);
 
         return Result<UpdateTemplateResponse>.Success(new UpdateTemplateResponse(template.Id, template.UpdatedAt));

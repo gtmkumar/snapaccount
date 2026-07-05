@@ -24,7 +24,7 @@ import { OTPInput, OTPResendTimer } from '../../components/forms/OTPInput';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { formatPhoneDisplay } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
-import { fetchServerUserType } from '../../lib/onboarding';
+import { fetchServerProfile } from '../../lib/onboarding';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 import apiClient, { getApiError } from '../../lib/api';
 import { logger } from '../../lib/logger';
@@ -151,9 +151,16 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
         // + push to existing devices (GAP-047). Best-effort — never blocks login.
         void registerCurrentDevice();
 
-        // Returning user — hydrate the real persona so navigation matches their type.
-        const serverType = await fetchServerUserType();
-        if (serverType) updateProfile({ userType: serverType });
+        // Returning user — hydrate the real persona + display name so navigation
+        // matches their type and the profile shows their onboarding name
+        // (AND-LIVE-06), not the "SnapAccount User" fallback.
+        const serverProfile = await fetchServerProfile();
+        if (serverProfile) {
+          updateProfile({
+            ...(serverProfile.userType ? { userType: serverProfile.userType } : {}),
+            ...(serverProfile.fullName ? { name: serverProfile.fullName } : {}),
+          });
+        }
 
         // Returning user — enrich profile + organizations, then enter the app.
         try {

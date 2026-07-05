@@ -14,9 +14,10 @@ public sealed class ConsentConfiguration : IEntityTypeConfiguration<Consent>
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.ApplicationId).IsRequired();
+        // BUG-LOAN-CONSENT-ENUM: consent_type is a native PG enum (loan.consent_type), mapped
+        // via npgsql.MapEnum<ConsentType> in DependencyInjection. Do NOT add .HasConversion<string>()
+        // here — that would send a character varying parameter and 500 (42804) against the enum column.
         builder.Property(x => x.ConsentType)
-            .HasConversion<string>()
-            .HasMaxLength(30)
             .IsRequired();
         builder.Property(x => x.ConsentTextVersion).HasMaxLength(50).IsRequired();
 
@@ -24,7 +25,14 @@ public sealed class ConsentConfiguration : IEntityTypeConfiguration<Consent>
         // Migration 066: consent_locale VARCHAR(10) NOT NULL DEFAULT 'en' confirmed in DB.
         builder.Property(x => x.ConsentLocale).HasColumnName("consent_locale").HasMaxLength(10).IsRequired();
         builder.Property(x => x.SignedAt).IsRequired();
-        builder.Property(x => x.IpAddress).HasMaxLength(45);
+        // BUG-LOAN-CONSENT-ENUM (related write-path divergence): loan.consents.ip_address is INET
+        // (migration 027), not varchar. EF cannot map a string directly to inet, so convert the
+        // string ↔ System.Net.IPAddress (which Npgsql maps to inet). Null bypasses the converter.
+        builder.Property(x => x.IpAddress)
+            .HasColumnType("inet")
+            .HasConversion(
+                s => System.Net.IPAddress.Parse(s),
+                ip => ip.ToString());
         builder.Property(x => x.UserAgent).HasMaxLength(512);
         builder.Property(x => x.AnonymizationReason).HasMaxLength(100);
 

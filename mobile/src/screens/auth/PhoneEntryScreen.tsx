@@ -24,7 +24,7 @@ import apiClient, { getApiError } from '../../lib/api';
 import { isValidPhone } from '../../lib/utils';
 import { useAuthMethods } from '../../hooks/useAuthMethods';
 import { useAuthStore } from '../../store/authStore';
-import { fetchServerUserType } from '../../lib/onboarding';
+import { fetchServerProfile } from '../../lib/onboarding';
 import { registerCurrentDevice } from '../../notifications/pushTokenManager';
 import {
   isFirebaseConfigured,
@@ -84,7 +84,8 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
     // creates a DeviceApprovalRequest + push (GAP-047). Best-effort.
     void registerCurrentDevice();
 
-    const serverType = await fetchServerUserType();
+    const serverProfile = await fetchServerProfile();
+    const serverType = serverProfile?.userType;
 
     if (!serverType) {
       // No persona yet → brand-new user → pick a persona, then onboard.
@@ -92,8 +93,18 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
       return;
     }
 
-    // Returning user — enter the app with their real persona.
-    setAuthenticated(result.token, { ...profile, userType: serverType, profileComplete: true }, result.refreshToken ?? null);
+    // Returning user — enter the app with their real persona + onboarding name
+    // (AND-LIVE-06: hydrate the display name so profile shows it, not the fallback).
+    setAuthenticated(
+      result.token,
+      {
+        ...profile,
+        userType: serverType,
+        name: serverProfile?.fullName,
+        profileComplete: true,
+      },
+      result.refreshToken ?? null,
+    );
     if (serverType === 'business_owner') {
       try {
         const orgsRes = await apiClient.get<

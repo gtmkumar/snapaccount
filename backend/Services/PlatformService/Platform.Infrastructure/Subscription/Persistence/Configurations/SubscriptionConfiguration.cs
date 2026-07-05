@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SubscriptionService.Domain.Entities;
+using SubscriptionService.Domain.Enums;
 
 namespace SubscriptionService.Infrastructure.Persistence.Configurations;
 
@@ -15,8 +16,18 @@ public class SubscriptionConfiguration : IEntityTypeConfiguration<Subscription>
         builder.ToTable("subscription");
         builder.HasKey(s => s.Id);
         builder.Property(s => s.OrganizationId).HasColumnName("organization_id").IsRequired();
+        // BUG-SUB-SUBSCRIBE-WRITE: user_id is NOT NULL (migration 010) — map + persist it.
+        builder.Property(s => s.UserId).HasColumnName("user_id").IsRequired();
         builder.Property(s => s.PlanId).HasColumnName("plan_id").IsRequired();
-        builder.Property(s => s.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20).IsRequired();
+        // BUG-SUB-SUBSCRIBE-WRITE: the DB CHECK constrains status to TRIAL/ACTIVE/PAST_DUE/
+        // CANCELLED/EXPIRED/PAUSED/PENDING, but the C# enum members are Trialing/Active/PastDue/
+        // Cancelled/Paused — .HasConversion<string>() ("Trialing"/"PastDue"/…) violated the CHECK.
+        // Map to the DB vocabulary.
+        builder.Property(s => s.Status)
+            .HasColumnName("status")
+            .HasMaxLength(30)
+            .HasConversion(v => StatusToDb(v), v => StatusFromDb(v))
+            .IsRequired();
         builder.Property(s => s.CurrentPeriodStart).HasColumnName("current_period_start").IsRequired();
         builder.Property(s => s.CurrentPeriodEnd).HasColumnName("current_period_end").IsRequired();
         builder.Property(s => s.RazorpaySubscriptionId).HasColumnName("razorpay_subscription_id").HasMaxLength(100);
@@ -50,4 +61,27 @@ public class SubscriptionConfiguration : IEntityTypeConfiguration<Subscription>
         builder.HasIndex(s => s.RazorpaySubscriptionId).HasDatabaseName("ix_subscriptions_razorpay_id");
         builder.HasQueryFilter(s => s.DeletedAt == null);
     }
+
+    // Static so the converter lambdas remain method-call expressions (switch expressions are not
+    // allowed directly inside EF's Expression-tree converter arguments).
+    private static string StatusToDb(SubscriptionStatus v) => v switch
+    {
+        SubscriptionStatus.Trialing => "TRIAL",
+        SubscriptionStatus.Active => "ACTIVE",
+        SubscriptionStatus.PastDue => "PAST_DUE",
+        SubscriptionStatus.Cancelled => "CANCELLED",
+        SubscriptionStatus.Paused => "PAUSED",
+        _ => "PENDING"
+    };
+
+    private static SubscriptionStatus StatusFromDb(string v) => v switch
+    {
+        "TRIAL" => SubscriptionStatus.Trialing,
+        "ACTIVE" => SubscriptionStatus.Active,
+        "PAST_DUE" => SubscriptionStatus.PastDue,
+        "CANCELLED" => SubscriptionStatus.Cancelled,
+        "PAUSED" => SubscriptionStatus.Paused,
+        "EXPIRED" => SubscriptionStatus.Cancelled,
+        _ => SubscriptionStatus.Trialing
+    };
 }

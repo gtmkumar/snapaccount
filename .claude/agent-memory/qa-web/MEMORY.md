@@ -9,3 +9,4 @@
 - [Stale bundle false positives](feedback_stale_bundle_false_positives.md) — Always verify frontend behaviour via source code, not browser alone; BUG-MCA-ETYPE-005 was stale HMR bundle artifact
 - [Wave 6 Live Test State](project_wave6_state.md) — Wave 6 live QA (2026-06-11): 4 bugs found; AuthService missing "standard" rate limiter (BUG-W6-003) blocks health aggregate + refresh-context; SubscriptionService stale (BUG-W6-002); 2564 regression tests green
 - [Wave 7 QA Patterns](wave7_qa_patterns.md) — 6 bugs: string enum → 500 (N.Channel + GstFormType), notification_log NOT NULL, Tally export wrong table names, ChatPDF validator blocks UUID, device approval UI missing
+- [Access Control Matrix 2026-07-05](project_access_control_matrix_2026_07_05.md) — 11-role x 37-route sweep, 15 bugs (ACM-01..15); /settings + /settings/roles have no guard, Manager/Reviewer over-granted admin routes, ca-profiles IDOR

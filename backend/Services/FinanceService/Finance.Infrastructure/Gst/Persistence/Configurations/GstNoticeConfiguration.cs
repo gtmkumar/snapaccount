@@ -27,6 +27,8 @@ public sealed class GstNoticeConfiguration : IEntityTypeConfiguration<GstNotice>
 
         // WEB-01: DB column is org_id, not organization_id.
         builder.Property(n => n.OrganizationId).IsRequired().HasColumnName("org_id");
+        // BUG-GST-NOTICE-GSTIN: gstin is NOT NULL with a 15-char GSTIN-format CHECK (migration 021).
+        builder.Property(n => n.Gstin).IsRequired().HasMaxLength(15).HasColumnName("gstin");
         builder.Property(n => n.NoticeNumber).IsRequired().HasMaxLength(100).HasColumnName("notice_number");
         builder.Property(n => n.NoticeType).IsRequired().HasMaxLength(100).HasColumnName("notice_type");
 
@@ -82,8 +84,13 @@ public sealed class GstNoticeConfiguration : IEntityTypeConfiguration<GstNotice>
             .HasColumnName("is_gstat_backlog_flagged");
 
         // P6-HANDOFF-14: jsonb columns for GCS URI metadata.
-        builder.Property(n => n.AttachmentsJson).HasColumnType("jsonb").HasColumnName("attachments_jsonb");
-        builder.Property(n => n.ResponseAttachmentsJson).HasColumnType("jsonb").HasColumnName("response_attachments_jsonb");
+        // BUG-GST-NOTICE-GSTIN (related write-path divergence): both columns are NOT NULL DEFAULT
+        // '[]'::jsonb (migration 021). The entity leaves them null on create, so EF must OMIT them
+        // from the INSERT (via a configured store default) rather than send NULL and 23502.
+        builder.Property(n => n.AttachmentsJson).HasColumnType("jsonb").HasColumnName("attachments_jsonb")
+            .HasDefaultValueSql("'[]'::jsonb");
+        builder.Property(n => n.ResponseAttachmentsJson).HasColumnType("jsonb").HasColumnName("response_attachments_jsonb")
+            .HasDefaultValueSql("'[]'::jsonb");
 
         // Audit columns (snake_case convention handles created_at / updated_at / deleted_at).
         builder.Property(n => n.CreatedAt).HasColumnName("created_at");

@@ -41,6 +41,17 @@ declare module 'expo-screen-capture' {
   export function usePreventScreenCapture(): void;
 
   /**
+   * Imperatively activate screenshot prevention. Optional `key` ref-counts
+   * concurrent callers so protection lifts only when the last caller releases it.
+   */
+  export function preventScreenCaptureAsync(key?: string): Promise<void>;
+
+  /**
+   * Imperatively release the screenshot prevention held under `key`.
+   */
+  export function allowScreenCaptureAsync(key?: string): Promise<void>;
+
+  /**
    * Imperatively activate screenshot prevention.
    */
   export function activateKeepAwake(tag?: string): void;

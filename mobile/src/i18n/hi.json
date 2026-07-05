@@ -974,9 +974,11 @@
           "tenureRange": "{{min}}–{{max}} माह",
           "interestRange": "{{min}}% – {{max}}% प्रति वर्ष",
           "indicative": "(संकेतात्मक)",
+          "bank": "ऋण भागीदार",
           "qualified": "संभवतः योग्य",
           "nearMatch": "लगभग योग्य",
           "notQualified": "योग्य नहीं हो सकते",
+          "unchecked": "जांच नहीं की गई",
           "cta": {
             "viewDetails": "विवरण देखें",
             "apply": "आवेदन करें"

@@ -6,9 +6,10 @@
  */
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Search, RefreshCw, MessageSquare } from 'lucide-react'
+import { Search, RefreshCw, MessageSquare, Download, RotateCw } from 'lucide-react'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { FilterBar } from '@/components/layout/FilterBar'
 import { DetailPanePlaceholder } from '@/components/shared/DetailPanePlaceholder'
@@ -24,13 +25,21 @@ import { BankCommStatusBadge } from '@/components/ui/BankCommStatusBadge'
 import { PayloadViewer } from '@/components/ui/PayloadViewer'
 import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils'
+import { toCsv, downloadCsv, csvFilename } from '@/lib/csv'
 import { t } from '@/i18n'
 import {
   listBankCommunications,
   getBankCommKpi,
+  resendBankMessage,
+  listPartnerBanks,
   type BankCommMessage,
   type BankCommStatus,
 } from '@/lib/loanApi'
+
+// A message is resendable when an OUTBOUND attempt failed or bounced.
+function isResendable(m: BankCommMessage): boolean {
+  return m.direction === 'outbound' && (m.status === 'FAILED' || m.status === 'BOUNCED')
+}
 
 // ---------------------------------------------------------------------------
 // KPI strip
@@ -80,7 +89,15 @@ function BankCommKpiStrip() {
 // Detail pane
 // ---------------------------------------------------------------------------
 
-function DetailPane({ message }: { message: BankCommMessage | null }) {
+function DetailPane({
+  message,
+  onResend,
+  resending,
+}: {
+  message: BankCommMessage | null
+  onResend: (m: BankCommMessage) => void
+  resending: boolean
+}) {
   const navigate = useNavigate()
 
   if (!message) {
@@ -102,16 +119,29 @@ function DetailPane({ message }: { message: BankCommMessage | null }) {
           </div>
           <BankCommStatusBadge status={message.status} />
         </div>
-        {message.applicationId && (
-          <Button
-            size="sm"
-            variant="ghost"
-            rightIcon={<span className="text-xs">→</span>}
-            onClick={() => void navigate(`/loans/${message.applicationId}`)}
-          >
-            {t('admin.bankComms.action.openApp')}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isResendable(message) && (
+            <Button
+              size="sm"
+              variant="secondary"
+              leftIcon={<RotateCw className="h-3.5 w-3.5" />}
+              loading={resending}
+              onClick={() => onResend(message)}
+            >
+              {t('admin.bankComms.action.resend')}
+            </Button>
+          )}
+          {message.applicationId && (
+            <Button
+              size="sm"
+              variant="ghost"
+              rightIcon={<span className="text-xs">→</span>}
+              onClick={() => void navigate(`/loans/${message.applicationId}`)}
+            >
+              {t('admin.bankComms.action.openApp')}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Metadata */}
@@ -185,20 +215,35 @@ type FilterState = {
   status: BankCommStatus | ''
   direction: 'outbound' | 'inbound' | ''
   channel: 'email' | 'rest' | 'oauth' | ''
+  bankId: string
+  from: string
+  to: string
 }
 
 export default function BankCommunicationsPage() {
+  const queryClient = useQueryClient()
   const [selected, setSelected] = useState<BankCommMessage | null>(null)
   const [filters, setFilters] = useState<FilterState>({
     search: '',
     status: '',
     direction: '',
     channel: '',
+    bankId: '',
+    from: '',
+    to: '',
   })
 
   function setFilter<K extends keyof FilterState>(key: K, value: FilterState[K]) {
     setFilters(prev => ({ ...prev, [key]: value }))
   }
+
+  // Bank options for the filter dropdown.
+  const { data: banksData } = useQuery({
+    queryKey: ['partnerBanks', { forFilter: true }],
+    queryFn: () => listPartnerBanks({ pageSize: 100 }),
+    staleTime: 300_000,
+  })
+  const bankOptions = banksData?.items ?? []
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['bankCommunications', filters],
@@ -208,6 +253,9 @@ export default function BankCommunicationsPage() {
         ...(filters.direction ? { direction: filters.direction } : {}),
         ...(filters.channel ? { channel: filters.channel } : {}),
         ...(filters.search ? { search: filters.search } : {}),
+        ...(filters.bankId ? { bankId: filters.bankId } : {}),
+        ...(filters.from ? { from: filters.from } : {}),
+        ...(filters.to ? { to: filters.to } : {}),
         pageSize: 200,
       }),
     retry: 1,
@@ -228,6 +276,47 @@ export default function BankCommunicationsPage() {
         (m.endpoint ?? '').toLowerCase().includes(q)
     )
   }, [messages, filters.search])
+
+  // Resend a single failed/bounced outbound message.
+  const resendMutation = useMutation({
+    mutationFn: (m: BankCommMessage) => resendBankMessage(m.messageId, t('admin.bankComms.resend.reason')),
+    onSuccess: () => {
+      toast.success(t('admin.bankComms.resend.success'))
+      void queryClient.invalidateQueries({ queryKey: ['bankCommunications'] })
+      void queryClient.invalidateQueries({ queryKey: ['bankCommKpi'] })
+    },
+    onError: () => toast.error(t('admin.bankComms.resend.error')),
+  })
+
+  // Bulk "Retry all failed" over the currently-filtered view. (DataTable has no
+  // per-row multi-select, so the bulk scope is the active filter, not hand-picked rows.)
+  const failedInView = useMemo(() => filtered.filter(isResendable), [filtered])
+  const bulkRetryMutation = useMutation({
+    mutationFn: () => Promise.all(
+      failedInView.map(m => resendBankMessage(m.messageId, t('admin.bankComms.resend.reason'))),
+    ),
+    onSuccess: () => {
+      toast.success(t('admin.bankComms.retryAll.success', { count: failedInView.length }))
+      void queryClient.invalidateQueries({ queryKey: ['bankCommunications'] })
+      void queryClient.invalidateQueries({ queryKey: ['bankCommKpi'] })
+    },
+    onError: () => toast.error(t('admin.bankComms.resend.error')),
+  })
+
+  function handleExport() {
+    const csv = toCsv(filtered, [
+      { header: t('admin.bankComms.col.ts'), value: m => formatDate(m.timestamp) },
+      { header: t('admin.bankComms.col.direction'), value: m => m.direction },
+      { header: t('admin.bankComms.col.bank'), value: m => m.bankName ?? '' },
+      { header: t('admin.bankComms.col.channel'), value: m => m.adapterType ?? '' },
+      { header: t('admin.bankComms.col.app'), value: m => m.applicationId ?? '' },
+      { header: t('admin.bankComms.col.subject'), value: m => m.subject ?? m.endpoint ?? '' },
+      { header: t('admin.bankComms.col.status'), value: m => m.status },
+      { header: t('admin.bankComms.responseCode'), value: m => m.responseStatus ?? '' },
+      { header: t('admin.bankComms.col.messageId'), value: m => m.messageId },
+    ])
+    downloadCsv(csvFilename('bank-communications'), csv)
+  }
 
   const columns = useMemo<ColumnDef<BankCommMessage>[]>(() => [
     {
@@ -371,6 +460,36 @@ export default function BankCommunicationsPage() {
           <option value="oauth">OAuth2</option>
         </NativeSelect>
 
+        <NativeSelect
+          label={t('admin.bankComms.filter.bank')}
+          value={filters.bankId}
+          onChange={e => setFilter('bankId', e.target.value)}
+          aria-label={t('admin.bankComms.filter.bank')}
+          className="min-w-[160px]"
+        >
+          <option value="">{t('admin.bankComms.filter.allBanks')}</option>
+          {bankOptions.map(b => (
+            <option key={b.bankId} value={b.bankId}>{b.name}</option>
+          ))}
+        </NativeSelect>
+
+        <Input
+          type="date"
+          label={t('admin.bankComms.filter.from')}
+          value={filters.from}
+          onChange={e => setFilter('from', e.target.value)}
+          size="sm"
+          className="min-w-[150px]"
+        />
+        <Input
+          type="date"
+          label={t('admin.bankComms.filter.to')}
+          value={filters.to}
+          onChange={e => setFilter('to', e.target.value)}
+          size="sm"
+          className="min-w-[150px]"
+        />
+
         <Button
           variant="ghost"
           size="sm"
@@ -381,6 +500,30 @@ export default function BankCommunicationsPage() {
           {t('common.refresh')}
         </Button>
       </FilterBar>
+
+      {/* Bulk toolbar — export the filtered view + retry every failed message in it */}
+      <div className="flex items-center justify-end gap-2">
+        {failedInView.length > 0 && (
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<RotateCw className="h-4 w-4" />}
+            loading={bulkRetryMutation.isPending}
+            onClick={() => void bulkRetryMutation.mutate()}
+          >
+            {t('admin.bankComms.retryAll', { count: failedInView.length })}
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={<Download className="h-4 w-4" />}
+          onClick={handleExport}
+          disabled={filtered.length === 0}
+        >
+          {t('admin.bankComms.export')}
+        </Button>
+      </div>
 
       {/* SplitView */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
@@ -405,7 +548,11 @@ export default function BankCommunicationsPage() {
 
         {/* Detail pane — 40% */}
         <div className="lg:col-span-2">
-          <DetailPane message={selected} />
+          <DetailPane
+            message={selected}
+            onResend={(m) => resendMutation.mutate(m)}
+            resending={resendMutation.isPending}
+          />
         </div>
       </div>
     </div>

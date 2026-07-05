@@ -36,10 +36,13 @@ import {
   escalateCallback,
   cancelCallback,
   addCallbackNote,
+  rescheduleCallback,
+  assignCallback,
   type CallbackStatus,
   type CallbackTimelineEvent,
   type CallNote,
 } from '@/lib/callbackApi'
+import { getStaffList } from '@/lib/staffApi'
 
 // ---------------------------------------------------------------------------
 // State machine — allowed transitions
@@ -318,7 +321,178 @@ function CallbackStepper({ status }: { status: CallbackStatus }) {
     }
   })
 
-  return <StatusTimeline steps={steps} orientation="horizontal" />
+  const offPathLabels: Partial<Record<CallbackStatus, string>> = {
+    FOLLOW_UP_NEEDED: t('admin.callbacks.status.followUpNeeded'),
+    ESCALATED_TO_CA: t('admin.callbacks.status.escalatedToCa'),
+    CANCELLED: t('admin.callbacks.status.cancelled'),
+  }
+
+  return (
+    <div className="space-y-2">
+      <StatusTimeline steps={steps} orientation="horizontal" />
+      {offPathLabels[status] && (
+        <div className="flex justify-center">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-50 text-accent-700 px-3 py-1 text-xs font-medium">
+            {t('admin.callback.stepper.currentlyAt')}: {offPathLabels[status]}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Reschedule modal
+// ---------------------------------------------------------------------------
+function RescheduleModal({
+  callbackId,
+  isOpen,
+  onClose,
+  onSuccess,
+}: {
+  callbackId: string
+  isOpen: boolean
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      rescheduleCallback(
+        callbackId,
+        new Date(start).toISOString(),
+        new Date(end).toISOString(),
+      ),
+    onSuccess: () => {
+      toast.success(t('admin.callback.reschedule.success'))
+      setStart('')
+      setEnd('')
+      onSuccess()
+      onClose()
+    },
+    onError: () => toast.error(t('admin.callback.reschedule.error')),
+  })
+
+  const invalid = !start || !end || new Date(end).getTime() <= new Date(start).getTime()
+
+  return (
+    <Modal open={isOpen} onClose={onClose} title={t('admin.callback.reschedule.title')} size="sm">
+      <div className="space-y-3">
+        <div>
+          <label htmlFor="reschedule-start" className="text-sm font-medium text-neutral-700 block mb-1">
+            {t('admin.callback.reschedule.windowStart')}
+          </label>
+          <input
+            id="reschedule-start"
+            type="datetime-local"
+            value={start}
+            onChange={e => setStart(e.target.value)}
+            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-brand-500 outline-none"
+          />
+        </div>
+        <div>
+          <label htmlFor="reschedule-end" className="text-sm font-medium text-neutral-700 block mb-1">
+            {t('admin.callback.reschedule.windowEnd')}
+          </label>
+          <input
+            id="reschedule-end"
+            type="datetime-local"
+            value={end}
+            onChange={e => setEnd(e.target.value)}
+            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-brand-500 outline-none"
+          />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <Button variant="secondary" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => void mutation.mutate()}
+          disabled={invalid || mutation.isPending}
+        >
+          {mutation.isPending ? t('common.saving') : t('admin.callback.reschedule.confirm')}
+        </Button>
+      </div>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Reassign modal
+// ---------------------------------------------------------------------------
+function ReassignModal({
+  callbackId,
+  currentAgentId,
+  isOpen,
+  onClose,
+  onSuccess,
+}: {
+  callbackId: string
+  currentAgentId?: string | null
+  isOpen: boolean
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [agentId, setAgentId] = useState('')
+
+  const { data: staff, isLoading, isError } = useQuery({
+    queryKey: ['staffList'],
+    queryFn: () => getStaffList(),
+    enabled: isOpen,
+  })
+
+  const mutation = useMutation({
+    mutationFn: () => assignCallback(callbackId, agentId),
+    onSuccess: () => {
+      toast.success(t('admin.callback.reassign.success'))
+      setAgentId('')
+      onSuccess()
+      onClose()
+    },
+    onError: () => toast.error(t('admin.callback.reassign.error')),
+  })
+
+  return (
+    <Modal open={isOpen} onClose={onClose} title={t('admin.callback.reassign.title')} size="sm">
+      <div className="space-y-3">
+        <label htmlFor="reassign-agent" className="text-sm font-medium text-neutral-700 block mb-1">
+          {t('admin.callback.reassign.agent')}
+        </label>
+        {isError ? (
+          <p className="text-sm text-error-600">{t('admin.callback.reassign.loadError')}</p>
+        ) : (
+          <select
+            id="reassign-agent"
+            value={agentId}
+            onChange={e => setAgentId(e.target.value)}
+            disabled={isLoading}
+            className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm focus:border-brand-500 outline-none disabled:opacity-60"
+          >
+            <option value="">{t('admin.callback.reassign.selectAgent')}</option>
+            {(staff ?? []).map(s => (
+              <option key={s.userId} value={s.userId} disabled={s.userId === currentAgentId}>
+                {s.name} · {s.roleDisplayName}{s.userId === currentAgentId ? ` (${t('admin.callback.reassign.current')})` : ''}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <Button variant="secondary" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => void mutation.mutate()}
+          disabled={!agentId || agentId === currentAgentId || mutation.isPending}
+        >
+          {mutation.isPending ? t('common.saving') : t('admin.callback.reassign.confirm')}
+        </Button>
+      </div>
+    </Modal>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -332,6 +506,8 @@ export default function CallbackDetailPage() {
   const [confirmModal, setConfirmModal] = useState<{
     type: 'cancel' | 'escalate' | null
   }>({ type: null })
+  const [rescheduleOpen, setRescheduleOpen] = useState(false)
+  const [reassignOpen, setReassignOpen] = useState(false)
 
   const { data: cb, isLoading, isError } = useQuery({
     queryKey: ['callback', id],
@@ -400,6 +576,10 @@ export default function CallbackDetailPage() {
   const canEscalate = canTransition(cb.status, 'ESCALATED_TO_CA')
   const canCancel = canTransition(cb.status, 'CANCELLED')
   const canStartCall = cb.status === 'SCHEDULED'
+  // Reschedule is meaningful while the callback is still open and pre-completion.
+  const canReschedule = cb.status === 'PENDING' || cb.status === 'SCHEDULED' || cb.status === 'FOLLOW_UP_NEEDED'
+  // Reassign an open (not terminal) callback to a different agent.
+  const canReassign = cb.status !== 'COMPLETED' && cb.status !== 'CANCELLED'
 
   const timeline = cb.timeline ?? []
   const notes = cb.notes ?? []
@@ -451,6 +631,30 @@ export default function CallbackDetailPage() {
                   aria-label="Complete callback — transitions status to Completed"
                 >
                   {t('admin.callback.action.complete')}
+                </Button>
+              </Can>
+            )}
+            {canReschedule && (
+              <Can permission="callback.update">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<Calendar className="h-4 w-4" />}
+                  onClick={() => setRescheduleOpen(true)}
+                >
+                  {t('admin.callback.action.reschedule')}
+                </Button>
+              </Can>
+            )}
+            {canReassign && (
+              <Can permission="callback.update">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<RotateCcw className="h-4 w-4" />}
+                  onClick={() => setReassignOpen(true)}
+                >
+                  {t('admin.callback.action.reassign')}
                 </Button>
               </Can>
             )}
@@ -677,6 +881,27 @@ export default function CallbackDetailPage() {
         onClose={() => setConfirmModal({ type: null })}
         onConfirm={(reason) => void escalateMutation.mutate(reason)}
         isLoading={escalateMutation.isPending}
+      />
+
+      <RescheduleModal
+        callbackId={cb.id}
+        isOpen={rescheduleOpen}
+        onClose={() => setRescheduleOpen(false)}
+        onSuccess={() => {
+          void queryClient.invalidateQueries({ queryKey: ['callback', id] })
+          void queryClient.invalidateQueries({ queryKey: ['callbacks'] })
+        }}
+      />
+
+      <ReassignModal
+        callbackId={cb.id}
+        currentAgentId={cb.assignedAgentId}
+        isOpen={reassignOpen}
+        onClose={() => setReassignOpen(false)}
+        onSuccess={() => {
+          void queryClient.invalidateQueries({ queryKey: ['callback', id] })
+          void queryClient.invalidateQueries({ queryKey: ['callbacks'] })
+        }}
       />
     </div>
   )

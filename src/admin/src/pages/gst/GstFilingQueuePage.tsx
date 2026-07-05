@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { t } from '@/i18n'
 import { getAdminTeamMembers, type TeamMember } from '@/lib/dashboardApi'
 import { getFilingQueue, type FilingQueueItem } from '@/lib/gstApi'
+import { NoticesDueWidget } from '@/components/widgets/NoticesDueWidget'
 
 function DueDateChip({ dueDate }: { dueDate: string | null }) {
   if (!dueDate) return <span className="text-sm text-neutral-400">{t('common.na')}</span>
@@ -315,6 +316,9 @@ export default function GstFilingQueuePage() {
         title={t('gstQueue.title')}
         subtitle={`${overdueCount > 0 ? `${overdueCount} ${t('gstQueue.overdueSuffix')} · ` : ''}${dueTodayCount} ${t('gstQueue.dueTodaySuffix')} · ${(data ?? []).length} ${t('gstQueue.totalSuffix')}`}
       />
+
+      {/* GST notices due summary (P-38 — 2nd spec'd mount, alongside the dashboard) */}
+      <NoticesDueWidget />
 
       {/* Load error banner */}
       {isError && (

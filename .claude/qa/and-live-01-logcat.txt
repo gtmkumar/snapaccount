@@ -1,0 +1,34 @@
+=== AND-LIVE-01 capture: GST tab navigation, 2026-07-05 (RESUME after backend restore) ===
+RESULT THIS RUN: GST dashboard rendered FINE (no black surface) on fresh app restart + fresh login. AND-LIVE-01 did NOT recur.
+App PID: 23881. Buffer was cleared immediately before tapping the GST tab.
+
+=== filtered logcat (EGL|Surface|Fabric|Skia|GLThread|OutOfMemory|ReactNative|Reanimated|Exception) since GST tap ===
+07-05 21:20:12.832   625   663 E BluetoothPowerStatsCollector: java.util.concurrent.ExecutionException: java.lang.RuntimeException: error: 11
+07-05 21:20:12.832   625   663 E BluetoothPowerStatsCollector: Caused by: java.lang.RuntimeException: error: 11
+07-05 21:21:02.158  1206 22947 W GLSUser : [AppCertManager] Exception while requesting key: 
+07-05 21:21:02.158  1206 22947 W GLSUser : java.util.concurrent.ExecutionException: davb: Parsing Exception
+07-05 21:21:02.158  1206 22947 W GLSUser : Caused by: davb: Parsing Exception
+07-05 21:21:02.322  1206 24722 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+07-05 21:21:02.356  1206 24722 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+07-05 21:21:02.424 19179 19208 W appium  : Client socket connection not writable. Closing... java.net.SocketException: Broken pipe
+07-05 21:26:05.664  1206 24652 W GLSUser : [AppCertManager] Exception while requesting key: 
+07-05 21:26:05.664  1206 24652 W GLSUser : java.util.concurrent.ExecutionException: davb: Parsing Exception
+07-05 21:26:05.664  1206 24652 W GLSUser : Caused by: davb: Parsing Exception
+07-05 21:26:05.770  1206 22947 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+07-05 21:26:05.866  1206 22947 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+07-05 21:26:05.981 19179 19208 W appium  : Client socket connection not writable. Closing... java.net.SocketException: Broken pipe
+07-05 21:26:07.261   625   663 E BluetoothPowerStatsCollector: java.util.concurrent.ExecutionException: java.lang.RuntimeException: error: 11
+07-05 21:26:07.261   625   663 E BluetoothPowerStatsCollector: Caused by: java.lang.RuntimeException: error: 11
+07-05 21:26:10.845 24923 24923 W dumpsys : Thread Pool max thread count is 0. Cannot cache binder as linkToDeath cannot be implemented. serviceName: SurfaceFlinger
+07-05 21:26:12.206 24928 24928 W screencap: Thread Pool max thread count is 0. Cannot cache binder as linkToDeath cannot be implemented. serviceName: SurfaceFlingerAIDL
+07-05 21:26:12.207 24928 24928 W BpBinder: Linking to death on android.gui.ISurfaceComposer but there are no threads (yet?) listening to incoming transactions. See ProcessState::startThreadPool and ProcessState::setThreadPoolMaxThreadCount. Generally you should setup the binder threadpool before other initialization steps.
+07-05 21:26:32.926  1470  2571 W dpeo    : java.io.FileNotFoundException: /proc/1470/dmabuf_rss: open failed: ENOENT (No such file or directory)
+07-05 21:26:32.926  1470  2571 W dpeo    : Caused by: android.system.ErrnoException: open failed: ENOENT (No such file or directory)
+
+=== CONCLUSION (gate-1 verdict for mobile-build / mobile-dev) ===
+Captured on the CURRENT Android debug build (com.snapaccount.app, PID 23881), backend :6060 healthy, fresh login → GST tab.
+NO app-process crash of any kind: zero EGL / Surface / Fabric / Skia / GLThread / OutOfMemory / Reanimated / uncaught-Exception lines from the app PID. The only lines present are OS/system noise (Bluetooth power stats, GLSUser cert, Conscrypt socket timeouts, my own screencap's SurfaceFlinger threadpool warnings) — none originate from the RN app.
+
+Root cause of AND-LIVE-01 = FLAG_SECURE, NOT a GL-surface/Reanimated crash. useSensitiveScreen() (expo-screen-capture, SEC-015 DPDP screenshot-blocking) sets FLAG_SECURE on the Activity window for gst/itr/loan screens; on the Android emulator a FLAG_SECURE window composites to the framebuffer as fully BLACK and is also captured black by screencap/Appium — while the view hierarchy stays intact and interactive. This is why the a11y tree had content but the screenshot was black, why ONLY useSensitiveScreen callers went black, and why logcat is clean (FLAG_SECURE throws no exception). It is an emulator/QA-tooling artifact, fine on real devices. mobile-dev's fix gates FLAG_SECURE to !__DEV__ (Metro fast-refresh, no native rebuild) so dev/QA renders normally while release keeps SEC-015. That fix is already live here — GST rendered cleanly on this run.
+
+GATE 1 STATUS: CLEARED. There is no GL-surface-loss crash to chase; mobile-build's dep-alignment rebuild (task #24) is not gated on further AND-LIVE-01 diagnosis. A physical-device / release-build confirmation of the FLAG_SECURE gate remains a nice-to-have on the #24 aligned build.

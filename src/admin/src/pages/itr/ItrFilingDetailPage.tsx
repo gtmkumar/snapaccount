@@ -4,8 +4,9 @@
  */
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, FileText, CheckCircle, Clock, AlertCircle, ExternalLink } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, FileText, CheckCircle, Clock, AlertCircle, ExternalLink, Pencil } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -19,9 +20,64 @@ import {
   getComputationVersions,
   getRefundStatus,
   listItrNotices,
+  updateFilingDraft,
   type FilingStatus,
   type ComputationVersion,
 } from '@/lib/itrApi'
+
+// ---------------------------------------------------------------------------
+// Editable CA notes (CG-5) — was a read-only <p>; now a CA can edit + save,
+// persisted via PATCH updateFilingDraft({ caNotes }).
+// ---------------------------------------------------------------------------
+function CaNotesCard({ filingId, initialNotes, locked }: { filingId: string; initialNotes: string; locked: boolean }) {
+  const queryClient = useQueryClient()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(initialNotes)
+
+  const saveMutation = useMutation({
+    mutationFn: () => updateFilingDraft(filingId, { caNotes: draft }),
+    onSuccess: () => {
+      toast.success(t('itr.filingDetail.caNotes.saved'))
+      void queryClient.invalidateQueries({ queryKey: ['itr-filing', filingId] })
+      setEditing(false)
+    },
+    onError: () => toast.error(t('itr.admin.error.saveFailed')),
+  })
+
+  return (
+    <Card>
+      <CardHeader
+        title={t('itr.filingDetail.section.caNotes')}
+        actions={
+          !locked && !editing ? (
+            <Button variant="ghost" size="sm" leftIcon={<Pencil className="h-3.5 w-3.5" />} onClick={() => { setDraft(initialNotes); setEditing(true) }}>
+              {t('common.edit')}
+            </Button>
+          ) : undefined
+        }
+      />
+      {editing ? (
+        <div className="space-y-2">
+          <textarea
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            rows={5}
+            className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            placeholder={t('itr.filingDetail.caNotes.placeholder')}
+          />
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>{t('common.cancel')}</Button>
+            <Button size="sm" loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>{t('common.save')}</Button>
+          </div>
+        </div>
+      ) : initialNotes ? (
+        <p className="text-sm text-neutral-700 whitespace-pre-wrap">{initialNotes}</p>
+      ) : (
+        <p className="text-sm text-neutral-400 italic">{t('itr.filingDetail.caNotes.empty')}</p>
+      )}
+    </Card>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Horizontal status timeline
@@ -104,8 +160,20 @@ function HorizontalStatusTimeline({ current }: { current: FilingStatus }) {
 // Computation version card with expandable diff
 // ---------------------------------------------------------------------------
 
-function ComputationVersionCard({ version }: { version: ComputationVersion }) {
+function ComputationVersionCard({ version, previous }: { version: ComputationVersion; previous?: ComputationVersion }) {
   const [expanded, setExpanded] = useState(false)
+
+  // Diff vs the immediately-earlier version (CG-5 computation-history diff).
+  const headerDelta = previous ? version.result.payableOrRefund - previous.result.payableOrRefund : undefined
+
+  const rows: { label: string; value: number; prev?: number }[] = [
+    { label: t('itr.filingDetail.computation.row.grossIncome'), value: version.result.grossTotalIncome, prev: previous?.result.grossTotalIncome },
+    { label: t('itr.filingDetail.computation.row.deductions'), value: version.result.deductions, prev: previous?.result.deductions },
+    { label: t('itr.filingDetail.computation.row.taxable'), value: version.result.taxableIncome, prev: previous?.result.taxableIncome },
+    { label: t('itr.filingDetail.computation.row.netTax'), value: version.result.grossTaxLiability, prev: previous?.result.grossTaxLiability },
+    { label: t('itr.filingDetail.computation.row.credits'), value: version.result.totalCredits, prev: previous?.result.totalCredits },
+    { label: t('itr.filingDetail.computation.row.payableRefund'), value: version.result.payableOrRefund, prev: previous?.result.payableOrRefund },
+  ]
 
   return (
     <div className="border border-neutral-200 rounded-xl overflow-hidden">
@@ -123,25 +191,38 @@ function ComputationVersionCard({ version }: { version: ComputationVersion }) {
             {version.actorName} · {new Date(version.createdAt).toLocaleDateString('en-IN')}
           </p>
         </div>
-        <AmountDisplay amount={version.result.payableOrRefund} size="sm" colorCode />
+        <div className="flex items-center gap-2 shrink-0">
+          {headerDelta != null && headerDelta !== 0 && (
+            <span className={cn(
+              'text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded',
+              headerDelta > 0 ? 'bg-error-50 text-error-700' : 'bg-success-50 text-success-700',
+            )}>
+              {headerDelta > 0 ? '▲' : '▼'} ₹{Math.abs(headerDelta).toLocaleString('en-IN')}
+            </span>
+          )}
+          <AmountDisplay amount={version.result.payableOrRefund} size="sm" colorCode />
+        </div>
       </button>
 
       {expanded && (
         <div className="p-4 space-y-2">
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-            {[
-              { label: 'Gross income', value: version.result.grossTotalIncome },
-              { label: 'Deductions', value: version.result.deductions },
-              { label: 'Taxable income', value: version.result.taxableIncome },
-              { label: 'Net tax', value: version.result.grossTaxLiability },
-              { label: 'TDS/Adv tax', value: version.result.totalCredits },
-              { label: 'Payable / Refund', value: version.result.payableOrRefund },
-            ].map(row => (
-              <div key={row.label} className="flex justify-between border-b border-neutral-100 pb-1">
-                <span className="text-neutral-500">{row.label}</span>
-                <AmountDisplay amount={row.value} size="sm" colorCode />
-              </div>
-            ))}
+            {rows.map(row => {
+              const d = row.prev != null ? row.value - row.prev : undefined
+              return (
+                <div key={row.label} className="flex justify-between items-center border-b border-neutral-100 pb-1">
+                  <span className="text-neutral-500">{row.label}</span>
+                  <span className="flex items-center gap-1.5">
+                    {d != null && d !== 0 && (
+                      <span className={cn('text-[10px] tabular-nums', d > 0 ? 'text-error-600' : 'text-success-600')}>
+                        ({d > 0 ? '+' : '−'}₹{Math.abs(d).toLocaleString('en-IN')})
+                      </span>
+                    )}
+                    <AmountDisplay amount={row.value} size="sm" colorCode />
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -255,7 +336,10 @@ export default function ItrFilingDetailPage() {
               {t('itr.filingDetail.action.openComputation')}
             </Button>
           )}
-          <Button variant="secondary" size="sm">
+          {/* Reassign is disabled until a filing reassign-CA endpoint + CA registry
+              exist (backend-blocked, flagged to orchestrator). Shown disabled with a
+              tooltip rather than as a live button that silently does nothing. */}
+          <Button variant="secondary" size="sm" disabled title={t('itr.filingDetail.action.reassign.pending')}>
             {t('itr.filingDetail.action.reassign')}
           </Button>
         </div>
@@ -356,7 +440,11 @@ export default function ItrFilingDetailPage() {
           ) : (
             <div className="space-y-2">
               {versionsList.map(v => (
-                <ComputationVersionCard key={v.id} version={v} />
+                <ComputationVersionCard
+                  key={v.id}
+                  version={v}
+                  previous={versionsList.find(p => p.version === v.version - 1)}
+                />
               ))}
             </div>
           )}
@@ -459,13 +547,8 @@ export default function ItrFilingDetailPage() {
         </Card>
       )}
 
-      {/* CA Notes */}
-      {filing.caNotes && (
-        <Card>
-          <CardHeader title={t('itr.filingDetail.section.caNotes')} />
-          <p className="text-sm text-neutral-700 whitespace-pre-wrap">{filing.caNotes}</p>
-        </Card>
-      )}
+      {/* CA Notes — editable (CG-5) */}
+      <CaNotesCard filingId={filingId!} initialNotes={filing.caNotes ?? ''} locked={isLocked} />
     </div>
   )
 }

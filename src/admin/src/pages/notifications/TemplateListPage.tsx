@@ -238,7 +238,8 @@ export default function TemplateListPage() {
   const toggleMutation = useMutation({
     mutationFn: (tpl: NotificationTemplate) => {
       if (!tpl.id) return Promise.reject(new Error('No template ID'))
-      return updateNotificationTemplate(tpl.id, { body: tpl.body, subject: tpl.subject })
+      // Flip the active state (CG-11) — previously omitted isActive, so the toggle was a no-op.
+      return updateNotificationTemplate(tpl.id, { body: tpl.body, subject: tpl.subject, isActive: !tpl.isActive })
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['notification-templates'] })

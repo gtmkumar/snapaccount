@@ -29,6 +29,10 @@ public sealed class InboxNotificationConfiguration : IEntityTypeConfiguration<In
         builder.Property(n => n.DeletedAt).HasColumnName("deleted_at");
         builder.Property(n => n.ReferenceType).HasColumnName("reference_type");
         builder.Property(n => n.ReferenceId).HasColumnName("reference_id");
-        builder.Property(n => n.DataPayload).HasColumnName("data_payload");
+        // BUG-NOTIF-SEND-DEDUPE-LINQ (related InApp write-path divergence): notification.notification
+        // .data_payload is jsonb (migration 008), not text — without the explicit column type EF sends
+        // a text parameter and 42804s, so the InAppChannelAdapter insert failed and no inbox row was
+        // written. Surfaced once the dedupe fix let dispatch reach the InApp adapter.
+        builder.Property(n => n.DataPayload).HasColumnName("data_payload").HasColumnType("jsonb");
     }
 }

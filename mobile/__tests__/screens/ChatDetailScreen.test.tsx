@@ -16,7 +16,7 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '../../src/contexts/ThemeContext';
-import { usePreventScreenCapture } from 'expo-screen-capture';
+import { preventScreenCaptureAsync } from 'expo-screen-capture';
 import * as Haptics from 'expo-haptics';
 
 import '../../src/i18n';
@@ -166,13 +166,33 @@ describe('ChatDetailScreen', () => {
 
   // ── SEC-015: useSensitiveScreen ───────────────────────────────────────────
 
-  it('useSensitiveScreen (SEC-015) is called on mount', () => {
+  // AND-LIVE-01: protection is gated to production builds (FLAG_SECURE blacks out
+  // the Android emulator in dev/QA). It must NOT activate in dev, and MUST activate
+  // in a production build.
+  it('useSensitiveScreen (SEC-015) does NOT activate capture prevention in dev builds', () => {
+    (preventScreenCaptureAsync as jest.Mock).mockClear();
     render(
       <Wrapper>
         <ChatDetailScreen />
       </Wrapper>,
     );
-    expect(usePreventScreenCapture).toHaveBeenCalled();
+    expect(preventScreenCaptureAsync).not.toHaveBeenCalled();
+  });
+
+  it('useSensitiveScreen (SEC-015) activates capture prevention in production builds', () => {
+    (preventScreenCaptureAsync as jest.Mock).mockClear();
+    const prevDev = (globalThis as { __DEV__?: boolean }).__DEV__;
+    (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+    try {
+      render(
+        <Wrapper>
+          <ChatDetailScreen />
+        </Wrapper>,
+      );
+      expect(preventScreenCaptureAsync).toHaveBeenCalled();
+    } finally {
+      (globalThis as { __DEV__?: boolean }).__DEV__ = prevDev;
+    }
   });
 
   // ── BUG-W7-IOS-001: hub targets ChatService host, not apiBaseUrl ──────────

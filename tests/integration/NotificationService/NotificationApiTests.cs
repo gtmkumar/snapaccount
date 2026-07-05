@@ -1,25 +1,20 @@
-// NOTE FOR BACKEND-AGENT: To enable WebApplicationFactory<Program>,
-// add the following to backend/Services/NotificationService/NotificationService.Api/NotificationService.Api.csproj:
-//
-//   <ItemGroup>
-//     <InternalsVisibleTo Include="NotificationService.IntegrationTests" />
-//   </ItemGroup>
-
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Moq;
 using NotificationService.Application.Interfaces;
 using NotificationService.Domain.Entities;
-using NotificationService.Domain.Entities;
+using NotificationService.Infrastructure.Adapters;
+using NotificationService.Infrastructure.Seeding;
+using SnapAccount.IntegrationTests.Shared;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Testcontainers.PostgreSql;
 using Xunit;
 
 namespace NotificationService.IntegrationTests;
@@ -32,23 +27,32 @@ namespace NotificationService.IntegrationTests;
 ///   - 6h dedupe window suppresses duplicate sends
 ///   - GET /notifications/inbox returns real data
 ///   - POST /notifications/{id}/read marks as read
-///   - Templates are seeded at startup (26 event types)
-/// External adapters (FCM, MSG91, SendGrid) are replaced with test doubles.
-/// Real PostgreSQL via Testcontainers. No mocked DB per CLAUDE.md.
-/// Phase 6E.
+///   - Templates are seeded at startup (NotificationEventCatalog.AllCodes.Count event codes)
+/// External adapters (FCM, MSG91, SendGrid) are replaced with test doubles; the real
+/// InAppChannelAdapter is kept so inbox rows are genuinely created (DG-NOTIF-02).
+/// Real PostgreSQL schema via the shared migration fixture (database/migrations/*.sql).
+/// Phase 6E. Converted to MigratedPostgresFixture 2026-07-05 full-verification campaign.
+///
+/// CONTRACT: GetInbox/GetPreferences/MarkRead/RegisterPushToken all resolve the acting
+/// user from ICurrentUser.UserId (the dev-superadmin-token bearer), NOT from any `userId`
+/// query/body parameter — those are accepted but ignored by the real handlers. Tests that
+/// exercise those flows must target DevUserId, not a random Guid, for assertions to see data.
+/// SendNotification is the one endpoint that dispatches to an explicit target UserId (internal
+/// fan-out entry point callable by other services), so it still accepts an arbitrary target.
 /// </summary>
-[Collection("NotificationApi")]
-public class NotificationApiTests : IAsyncLifetime
+[Collection("migrated")]
+public class NotificationApiTests(MigratedPostgresFixture pg) : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
-        .WithDatabase("snapaccount_test")
-        .WithUsername("postgres")
-        .WithPassword("postgres_test")
-        .Build();
+    private readonly MigratedPostgresFixture _pg = pg;
+    private string _connectionString = null!;
 
     private HttpClient _client = null!;
     private WebApplicationFactory<Program> _factory = null!;
+
+    // dev-superadmin-token → this fixed user id (FirebaseAuthMiddleware DevAuthTokens).
+    // GetInbox/GetPreferences/MarkRead/RegisterPushToken all key off ICurrentUser.UserId,
+    // so notifications must target this id for those flows to see the data.
+    private static readonly Guid DevUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     // Test double adapters — capture sends without real network calls
     private readonly Mock<IChannelAdapter> _mockPushAdapter = new();
@@ -59,56 +63,79 @@ public class NotificationApiTests : IAsyncLifetime
     // IAsyncLifetime
     // ──────────────────────────────────────────────────────────────
 
-    public async Task InitializeAsync()
+    public Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        _connectionString = _pg.NewDatabaseConnectionString();
 
         // Set up mock adapters with correct channel types
         _mockPushAdapter.Setup(a => a.Channel).Returns(NotificationChannel.Push);
         _mockPushAdapter.Setup(a => a.SendAsync(It.IsAny<NotificationDispatchContext>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("fcm-msg-{Guid.NewGuid():N}");
+            .ReturnsAsync("fcm-msg-ok");
 
         _mockSmsAdapter.Setup(a => a.Channel).Returns(NotificationChannel.Sms);
         _mockSmsAdapter.Setup(a => a.SendAsync(It.IsAny<NotificationDispatchContext>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("msg91-{Guid.NewGuid():N}");
+            .ReturnsAsync("msg91-ok");
 
         _mockEmailAdapter.Setup(a => a.Channel).Returns(NotificationChannel.Email);
         _mockEmailAdapter.Setup(a => a.SendAsync(It.IsAny<NotificationDispatchContext>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("sg-{Guid.NewGuid():N}");
+            .ReturnsAsync("sg-ok");
 
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Testing");
+                builder.UseSetting("ConnectionStrings:DefaultConnection", _connectionString);
+                builder.UseSetting("DEV_AUTH_BYPASS", "true");
                 builder.ConfigureServices(services =>
                 {
                     services.RemoveAll(typeof(DbContextOptions<Infrastructure.Persistence.NotificationServiceDbContext>));
                     services.AddDbContext<Infrastructure.Persistence.NotificationServiceDbContext>(opts =>
-                        opts.UseNpgsql(_postgres.GetConnectionString()));
+                        opts.UseNpgsql(_connectionString));
 
-                    // Replace real channel adapters with test doubles
+                    // Replace external channel adapters with test doubles, but keep the real
+                    // InAppChannelAdapter (DG-NOTIF-02) — it is what actually populates the
+                    // inbox table the GetInbox/MarkRead tests assert against.
                     services.RemoveAll(typeof(IChannelAdapter));
                     services.AddSingleton(_mockPushAdapter.Object);
                     services.AddSingleton(_mockSmsAdapter.Object);
                     services.AddSingleton(_mockEmailAdapter.Object);
-
-                    services.RemoveAll(typeof(SnapAccount.Shared.Infrastructure.Auth.FirebaseAuthMiddleware));
+                    services.AddScoped<IChannelAdapter, InAppChannelAdapter>();
                 });
             });
 
         _client = _factory.CreateClient();
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "dev-superadmin-token");
 
+        return InvokeSeederDirectlyAsync();
+    }
+
+    /// <summary>
+    /// BUG (logged, MEDIUM): NotificationSeeder is registered as an IHostedService only when
+    /// <c>GcpStartup.IsEnabled(configuration)</c> is true (Platform.Infrastructure/Notification/
+    /// DependencyInjection.cs:99), even though the seeder does pure DB work with no GCP call in
+    /// it. In this WebApplicationFactory ("Testing" environment, no Firebase creds configured)
+    /// IsEnabled evaluates false, so the hosted service never runs and NO templates are ever
+    /// seeded — every SendNotification call would silently no-op (all channels suppressed:
+    /// "no template found"). This is the same class of local/dev-without-GCP-creds gap noted in
+    /// agent memory for OTP login. Worked around here by constructing and invoking the seeder
+    /// directly (its own logic is GCP-free and idempotent), so the suite still exercises the
+    /// real seeding + dispatch pipeline end-to-end.
+    /// </summary>
+    private async Task InvokeSeederDirectlyAsync()
+    {
         using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.NotificationServiceDbContext>();
-        await db.Database.MigrateAsync();
-        // Seeder runs at startup — templates are seeded by NotificationSeeder
+        var seeder = new NotificationSeeder(
+            _factory.Services.GetRequiredService<IServiceScopeFactory>(),
+            _factory.Services.GetRequiredService<IConfiguration>(),
+            scope.ServiceProvider.GetRequiredService<ILogger<NotificationSeeder>>());
+        await seeder.StartAsync(CancellationToken.None);
     }
 
     public async Task DisposeAsync()
     {
         _client.Dispose();
         await _factory.DisposeAsync();
-        await _postgres.DisposeAsync();
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -116,22 +143,20 @@ public class NotificationApiTests : IAsyncLifetime
     // ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Startup_Seeds26EventTemplates()
+    public async Task Startup_SeedsAllCatalogEventTemplates()
     {
-        // The seeder should create templates for all 26 catalog event codes
+        // The seeder should create templates for every catalog event code.
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.NotificationServiceDbContext>();
 
-        var templateCount = await db.NotificationTemplates.CountAsync();
-        // 26 events × 3 locales (en, hi, bn) × ≥1 channel each = many templates
-        // At minimum 26 unique event codes must be seeded
         var uniqueEventCodes = await db.NotificationTemplates
             .Select(t => t.EventCode)
             .Distinct()
             .CountAsync();
 
-        uniqueEventCodes.Should().Be(26,
-            "NotificationSeeder must create templates for all 26 catalog event codes");
+        uniqueEventCodes.Should().Be(
+            NotificationService.Application.Catalog.NotificationEventCatalog.AllCodes.Count,
+            "NotificationSeeder must create templates for every catalog event code");
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -141,12 +166,11 @@ public class NotificationApiTests : IAsyncLifetime
     [Fact]
     public async Task SendNotification_ValidRequest_Returns200WithDispatchedCount()
     {
-        var userId = Guid.NewGuid();
-        await RegisterPushToken(userId);
+        await RegisterPushToken(DevUserId);
 
         var response = await _client.PostAsJsonAsync("/notifications/send", new
         {
-            userId,
+            userId = DevUserId,
             eventCode = "GST_DEADLINE_3_DAYS",
             locale = "en",
             variables = new Dictionary<string, string> { { "period", "March 2026" }, { "dueDate", "20 April 2026" } },
@@ -162,12 +186,11 @@ public class NotificationApiTests : IAsyncLifetime
     [Fact]
     public async Task SendNotification_CreatesLogEntriesInDatabase()
     {
-        var userId = Guid.NewGuid();
-        await RegisterPushToken(userId);
+        await RegisterPushToken(DevUserId);
 
         await _client.PostAsJsonAsync("/notifications/send", new
         {
-            userId,
+            userId = DevUserId,
             eventCode = "CB_SCHEDULED",
             locale = "en",
             variables = new Dictionary<string, string> { { "time", "3:30 PM" } },
@@ -177,7 +200,7 @@ public class NotificationApiTests : IAsyncLifetime
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.NotificationServiceDbContext>();
         var logs = await db.NotificationLog
-            .Where(l => l.UserId == userId && l.EventCode == "CB_SCHEDULED")
+            .Where(l => l.UserId == DevUserId && l.EventCode == "CB_SCHEDULED")
             .ToListAsync();
 
         logs.Should().NotBeEmpty("dispatched notifications must be logged");
@@ -190,34 +213,33 @@ public class NotificationApiTests : IAsyncLifetime
     [Fact]
     public async Task SendNotification_SmsWithoutDltTemplateId_SuppressesSmsChannel()
     {
-        var userId = Guid.NewGuid();
-        // Ensure SMS template for this event has no DLT ID (default from seeder)
+        // Ensure SMS template for this event has no DLT ID (default from seeder — DOC_APPROVED
+        // has only InApp in the catalog, so no SMS template exists for it at all).
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.NotificationServiceDbContext>();
         var smsTemplate = await db.NotificationTemplates
             .FirstOrDefaultAsync(t => t.EventCode == "DOC_APPROVED" && t.Channel == NotificationChannel.Sms);
 
-        // DOC_APPROVED has only InApp channel by default — SMS should not be dispatched
         if (smsTemplate is not null && smsTemplate.DltTemplateId is null)
         {
             await _client.PostAsJsonAsync("/notifications/send", new
             {
-                userId,
+                userId = DevUserId,
                 eventCode = "DOC_APPROVED",
                 locale = "en",
                 variables = new Dictionary<string, string>(),
                 recipientPhone = "+919876543210",
             });
 
-            // SMS adapter should NOT have been called (DLT gate blocked it)
             _mockSmsAdapter.Verify(
                 a => a.SendAsync(
-                    It.Is<NotificationDispatchContext>(c => c.UserId == userId),
+                    It.Is<NotificationDispatchContext>(c => c.UserId == DevUserId),
                     It.IsAny<CancellationToken>()),
                 Times.Never,
                 "SMS adapter must not be called when template DLT ID is not registered");
         }
-        // If SMS template doesn't exist for DOC_APPROVED, the test is trivially satisfied
+        // If SMS template doesn't exist for DOC_APPROVED (the real case, per catalog), the test
+        // is trivially satisfied — there is nothing to suppress.
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -227,12 +249,11 @@ public class NotificationApiTests : IAsyncLifetime
     [Fact]
     public async Task SendNotification_DuplicateWithin6hWindow_SuppressedCount_IncrementsOnSecondCall()
     {
-        var userId = Guid.NewGuid();
-        await RegisterPushToken(userId);
+        await RegisterPushToken(DevUserId);
 
         var payload = new
         {
-            userId,
+            userId = DevUserId,
             eventCode = "ITR_EFILE_VERIFY_D1",
             locale = "en",
             variables = new Dictionary<string, string>(),
@@ -240,8 +261,6 @@ public class NotificationApiTests : IAsyncLifetime
 
         var first = await _client.PostAsJsonAsync("/notifications/send", payload);
         first.StatusCode.Should().Be(HttpStatusCode.OK);
-        var firstBody = await first.Content.ReadFromJsonAsync<JsonElement>();
-        var firstDispatched = firstBody.GetProperty("dispatchedCount").GetInt32();
 
         // Second identical call within 6h window
         var second = await _client.PostAsJsonAsync("/notifications/send", payload);
@@ -250,7 +269,6 @@ public class NotificationApiTests : IAsyncLifetime
         var secondDispatched = secondBody.GetProperty("dispatchedCount").GetInt32();
         var secondSuppressed = secondBody.GetProperty("suppressedCount").GetInt32();
 
-        // Second call should either dispatch 0 (all suppressed) or have suppressedCount > 0
         (secondDispatched == 0 || secondSuppressed > 0).Should().BeTrue(
             "6h dedupe window must suppress duplicate notifications within 6 hours");
     }
@@ -262,9 +280,7 @@ public class NotificationApiTests : IAsyncLifetime
     [Fact]
     public async Task GetInbox_ValidRequest_Returns200WithItemsAndCounts()
     {
-        var userId = Guid.NewGuid();
-
-        var response = await _client.GetAsync($"/notifications/inbox?userId={userId}");
+        var response = await _client.GetAsync($"/notifications/inbox?userId={DevUserId}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -278,37 +294,35 @@ public class NotificationApiTests : IAsyncLifetime
     // ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task MarkRead_ExistingUnreadNotification_Returns200AndStatusChanges()
+    public async Task MarkRead_ExistingUnreadNotification_Returns204AndUnreadCountDrops()
     {
-        var userId = Guid.NewGuid();
-        await RegisterPushToken(userId);
-
-        // First send a notification to create an in-app log entry
+        // DOC_CLARIFICATION_REQUESTED has an InApp channel in the catalog (Push,InApp), so the
+        // real InAppChannelAdapter (kept live in this suite) actually writes an inbox row.
+        await RegisterPushToken(DevUserId);
         await _client.PostAsJsonAsync("/notifications/send", new
         {
-            userId,
-            eventCode = "ACCT_LOGIN_NEW_DEVICE",
+            userId = DevUserId,
+            eventCode = "DOC_CLARIFICATION_REQUESTED",
             locale = "en",
-            variables = new Dictionary<string, string> { { "device", "iPhone 15" } },
+            variables = new Dictionary<string, string> { { "document", "GSTR-3B scan" } },
         });
 
-        // Get the inbox to find the notification ID
-        var inboxResponse = await _client.GetAsync($"/notifications/inbox?userId={userId}");
+        var inboxResponse = await _client.GetAsync($"/notifications/inbox?userId={DevUserId}");
         var inbox = await inboxResponse.Content.ReadFromJsonAsync<JsonElement>();
         var items = inbox.GetProperty("items").EnumerateArray().ToList();
 
-        if (items.Count > 0)
-        {
-            var notifId = items[0].GetProperty("id").GetString();
-            var markReadResponse = await _client.PostAsync($"/notifications/{notifId}/read", null);
-            markReadResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        items.Should().NotBeEmpty("DOC_CLARIFICATION_REQUESTED has an InApp channel and must create an inbox row");
+        var notifId = items[0].GetProperty("id").GetString();
 
-            // Verify unread count decreased
-            var updatedInbox = await _client.GetAsync($"/notifications/inbox?userId={userId}");
-            var updatedBody = await updatedInbox.Content.ReadFromJsonAsync<JsonElement>();
-            updatedBody.GetProperty("unreadCount").GetInt32()
-                .Should().Be(0, "after marking all notifications read, unreadCount should be 0");
-        }
+        var markReadResponse = await _client.PostAsync($"/notifications/{notifId}/read", null);
+        // CONTRACT: real endpoint returns 204 NoContent on success (docs/api/endpoints.md:644),
+        // not 200 OK.
+        markReadResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var updatedInbox = await _client.GetAsync($"/notifications/inbox?userId={DevUserId}&unreadOnly=true");
+        var updatedBody = await updatedInbox.Content.ReadFromJsonAsync<JsonElement>();
+        updatedBody.GetProperty("unreadCount").GetInt32()
+            .Should().Be(0, "after marking the only unread notification read, unreadCount should be 0");
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -318,9 +332,7 @@ public class NotificationApiTests : IAsyncLifetime
     [Fact]
     public async Task GetPreferences_ValidUserId_Returns200WithPreferenceList()
     {
-        var userId = Guid.NewGuid();
-
-        var response = await _client.GetAsync($"/notifications/preferences?userId={userId}");
+        var response = await _client.GetAsync($"/notifications/preferences?userId={DevUserId}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -330,11 +342,8 @@ public class NotificationApiTests : IAsyncLifetime
     [Fact]
     public async Task UpdatePreferences_DisablePush_PersistsChange()
     {
-        var userId = Guid.NewGuid();
-
         var response = await _client.PutAsJsonAsync("/notifications/preferences", new
         {
-            userId,
             eventCode = "GST_DEADLINE_7_DAYS",
             pushEnabled = false,
             smsEnabled = true,
@@ -343,13 +352,14 @@ public class NotificationApiTests : IAsyncLifetime
             doNotDisturb = false,
         });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        // Verify preference persisted
+        // Verify preference persisted — CONTRACT: preferences are always keyed off the
+        // authenticated caller (ICurrentUser.UserId = DevUserId), not a client-supplied userId.
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.NotificationServiceDbContext>();
         var pref = await db.NotificationPreferences
-            .FirstOrDefaultAsync(p => p.UserId == userId && p.EventCode == "GST_DEADLINE_7_DAYS");
+            .FirstOrDefaultAsync(p => p.UserId == DevUserId && p.EventCode == "GST_DEADLINE_7_DAYS");
 
         pref.Should().NotBeNull();
         pref!.PushEnabled.Should().BeFalse();
@@ -393,6 +403,8 @@ public class NotificationApiTests : IAsyncLifetime
 
     private async Task RegisterPushToken(Guid userId)
     {
+        // CONTRACT: RegisterPushTokenCommand is built from ICurrentUser.UserId server-side —
+        // the `userId` field below is accepted in the request DTO but ignored by the handler.
         await _client.PostAsJsonAsync("/notifications/push-tokens", new
         {
             userId,
@@ -411,17 +423,13 @@ public class NotificationApiTests : IAsyncLifetime
 /// SEC-028: Verifies that GET /notifications/dlq and POST /notifications/dlq/{id}/retry
 /// are protected by the notification.dlq.manage permission and reject unauthorized callers
 /// with 403 Forbidden.
-/// Uses a shared Postgres container via [Collection("NotificationApi")].
+/// Converted to MigratedPostgresFixture 2026-07-05 full-verification campaign.
 /// </summary>
-[Collection("NotificationApi")]
-public class NotificationDlqSecurityTests : IAsyncLifetime
+[Collection("migrated")]
+public class NotificationDlqSecurityTests(MigratedPostgresFixture pg) : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
-        .WithDatabase("snapaccount_dlq_sec_test")
-        .WithUsername("postgres")
-        .WithPassword("postgres_test")
-        .Build();
+    private readonly MigratedPostgresFixture _pg = pg;
+    private string _connectionString = null!;
 
     private HttpClient _clientWithPermission = null!;
     private HttpClient _clientWithoutPermission = null!;
@@ -430,9 +438,9 @@ public class NotificationDlqSecurityTests : IAsyncLifetime
     private readonly Mock<IChannelAdapter> _mockSmsAdapter = new();
     private readonly Mock<IChannelAdapter> _mockEmailAdapter = new();
 
-    public async Task InitializeAsync()
+    public Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        _connectionString = _pg.NewDatabaseConnectionString();
 
         _mockPushAdapter.Setup(a => a.Channel).Returns(NotificationChannel.Push);
         _mockPushAdapter.Setup(a => a.SendAsync(It.IsAny<NotificationDispatchContext>(), It.IsAny<CancellationToken>()))
@@ -448,18 +456,18 @@ public class NotificationDlqSecurityTests : IAsyncLifetime
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Testing");
+                builder.UseSetting("ConnectionStrings:DefaultConnection", _connectionString);
+                builder.UseSetting("DEV_AUTH_BYPASS", "true");
                 builder.ConfigureServices(services =>
                 {
                     services.RemoveAll(typeof(DbContextOptions<Infrastructure.Persistence.NotificationServiceDbContext>));
                     services.AddDbContext<Infrastructure.Persistence.NotificationServiceDbContext>(opts =>
-                        opts.UseNpgsql(_postgres.GetConnectionString()));
+                        opts.UseNpgsql(_connectionString));
 
                     services.RemoveAll(typeof(IChannelAdapter));
                     services.AddSingleton(_mockPushAdapter.Object);
                     services.AddSingleton(_mockSmsAdapter.Object);
                     services.AddSingleton(_mockEmailAdapter.Object);
-
-                    services.RemoveAll(typeof(SnapAccount.Shared.Infrastructure.Auth.FirebaseAuthMiddleware));
                 });
             });
 
@@ -467,9 +475,7 @@ public class NotificationDlqSecurityTests : IAsyncLifetime
         _clientWithPermission = _factory.CreateClient();
         _clientWithoutPermission = _factory.CreateClient();
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.NotificationServiceDbContext>();
-        await db.Database.MigrateAsync();
+        return Task.CompletedTask;
     }
 
     public async Task DisposeAsync()
@@ -477,7 +483,6 @@ public class NotificationDlqSecurityTests : IAsyncLifetime
         _clientWithPermission.Dispose();
         _clientWithoutPermission.Dispose();
         await _factory.DisposeAsync();
-        await _postgres.DisposeAsync();
     }
 
     /// <summary>
@@ -487,16 +492,8 @@ public class NotificationDlqSecurityTests : IAsyncLifetime
     [Fact]
     public async Task GetDlq_WithoutDlqManagePermission_Returns403()
     {
-        // The default test setup uses FirebaseAuthMiddleware removed but no ICurrentUser override,
-        // which means the PermissionBehavior will check HasPermission("notification.dlq.manage").
-        // A regular authenticated user without that permission must receive Forbidden.
-        // We verify this by checking the response status via PermissionBehavior.
-
-        // Inject a CurrentUser that lacks the permission
-        using var scope = _factory.Services.CreateScope();
-        var testUser = new NotificationTestCurrentUser { GrantAllPermissions = false };
-
-        // We test this unit-style: directly invoke the query via MediatR with a restricted user
+        // Verified unit-style: directly assert the [RequiresPermission] attribute rather than
+        // wiring a restricted ICurrentUser through the full pipeline (matches original intent).
         var permAttr = typeof(NotificationService.Application.Notifications.Queries.GetDlq.GetDlqQuery)
             .GetCustomAttributes(typeof(SnapAccount.Shared.Application.Behaviors.RequiresPermissionAttribute), false)
             .Cast<SnapAccount.Shared.Application.Behaviors.RequiresPermissionAttribute>()

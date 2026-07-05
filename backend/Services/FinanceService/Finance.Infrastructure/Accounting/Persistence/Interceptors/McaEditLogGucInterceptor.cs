@@ -65,7 +65,11 @@ public sealed class McaEditLogGucInterceptor : SaveChangesInterceptor
         try
         {
             var userId = GetUserIdString();
-            context.Database.ExecuteSqlRaw("SET LOCAL app.current_user_id = {0}", userId);
+            // Postgres `SET LOCAL x = $1` is a syntax error (SET does not accept bind parameters);
+            // the aborted statement poisons the transaction so the subsequent write 500s. Use the
+            // parameterizable set_config(key, value, is_local:=true) — equivalent to SET LOCAL.
+            context.Database.ExecuteSqlRaw(
+                "SELECT set_config('app.current_user_id', {0}, true)", userId);
         }
         catch (Exception ex)
         {
@@ -80,8 +84,9 @@ public sealed class McaEditLogGucInterceptor : SaveChangesInterceptor
         try
         {
             var userId = GetUserIdString();
+            // See SetGuc: SET LOCAL cannot be parameterized; use set_config (is_local:=true).
             await context.Database.ExecuteSqlRawAsync(
-                "SET LOCAL app.current_user_id = {0}", [userId], ct);
+                "SELECT set_config('app.current_user_id', {0}, true)", [userId], ct);
         }
         catch (Exception ex)
         {

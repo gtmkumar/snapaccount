@@ -418,7 +418,7 @@ public sealed class Gst : EndpointGroupBase
     {
         var result = await sender.Send(new CreateNoticeCommand(
             req.OrganizationId, req.NoticeNumber, req.NoticeType,
-            req.IssuedBy, req.IssuedDate, req.DueDate, req.Description, req.FormType));
+            req.IssuedBy, req.IssuedDate, req.DueDate, req.Description, req.FormType, req.Gstin));
         return result.IsSuccess
             ? Results.Created($"/gst/notices/{result.Value.NoticeId}", result.Value)
             : Results.BadRequest(new { error = result.Error.Message, code = result.Error.Code });
@@ -485,9 +485,20 @@ public sealed class Gst : EndpointGroupBase
     // ── HSN/SAC ───────────────────────────────────────────────────────────────
 
     private static async Task<IResult> SearchHsnSac(
-        ISender sender, string q, string? codeType = null, int limit = 20)
+        ISender sender,
+        [Microsoft.AspNetCore.Mvc.FromQuery(Name = "query")] string? query = null,
+        [Microsoft.AspNetCore.Mvc.FromQuery(Name = "q")] string? q = null,
+        string? codeType = null,
+        int limit = 20)
     {
-        var result = await sender.Send(new SearchHsnSacQuery(q, codeType, limit));
+        // BUG-GST-HSN-SEARCH-PARAM: docs/api/endpoints.md documents the term as ?query, while the
+        // original handler bound a required ?q. Accept both (documented "query" wins) so clients
+        // built to either contract work.
+        var term = !string.IsNullOrWhiteSpace(query) ? query : q;
+        if (string.IsNullOrWhiteSpace(term))
+            return Results.BadRequest(new { error = "The 'query' parameter is required." });
+
+        var result = await sender.Send(new SearchHsnSacQuery(term, codeType, limit));
         return result.IsSuccess ? Results.Ok(result.Value) : Results.BadRequest(new { error = result.Error.Message });
     }
 
@@ -548,7 +559,8 @@ internal record BulkImportInvoiceDto(
 internal record CreateNoticeRequest(
     Guid OrganizationId, string NoticeNumber, string NoticeType, string? IssuedBy,
     DateOnly IssuedDate, DateOnly? DueDate = null, string? Description = null,
-    GstService.Domain.Enums.GstNoticeFormType FormType = GstService.Domain.Enums.GstNoticeFormType.OTHER);
+    GstService.Domain.Enums.GstNoticeFormType FormType = GstService.Domain.Enums.GstNoticeFormType.OTHER,
+    string? Gstin = null);
 
 internal record RespondToNoticeRequest(
     Guid RespondedByUserId, string? ResponseText, string? ResponseAttachmentMetadataJson);

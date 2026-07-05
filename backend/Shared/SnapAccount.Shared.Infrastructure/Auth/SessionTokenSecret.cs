@@ -62,7 +62,12 @@ public static class SessionTokenSecret
     /// </exception>
     public static void ValidateOrThrow(IConfiguration configuration, string environmentName)
     {
-        if (string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase))
+        // Development and Testing are non-deployed, developer/CI-only environments.
+        // Integration tests run under the conventional "Testing" environment and never
+        // provision production secrets, so they are exempt exactly like Development.
+        // Only real deployment targets (Staging, Production, ...) are enforced.
+        if (string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(environmentName, "Testing", StringComparison.OrdinalIgnoreCase))
             return;
 
         var resolved = Resolve(configuration);

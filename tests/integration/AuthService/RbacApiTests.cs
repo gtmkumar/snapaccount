@@ -55,6 +55,7 @@ public class RbacApiTests(PostgresFixture pg) : IAsyncLifetime
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Testing");
+                builder.UseSetting("ConnectionStrings:DefaultConnection", _connectionString);
                 builder.UseSetting("Auth:SessionSecret", "it-session-secret-for-testing-min32!!");
                 builder.UseSetting("DEV_AUTH_BYPASS", "true");
                 builder.UseSetting("LOCAL_AUTH", "false");

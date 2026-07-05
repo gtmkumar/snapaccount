@@ -62,6 +62,13 @@ public class LedgerEntry : BaseAuditableEntity
     /// <summary>Owning batch identifier.</summary>
     public Guid? JournalBatchId { get; private set; }
 
+    /// <summary>
+    /// Accounting date of the entry. accounting.ledger_entries.entry_date is DATE NOT NULL with no
+    /// DB default (migration 016) — BUG-ACCT-COA-TEMPLATE-CODE (related write-path divergence): it
+    /// was never on the entity, so every posting 23502'd.
+    /// </summary>
+    public DateOnly EntryDate { get; private set; }
+
     private LedgerEntry() { }
 
     /// <summary>Creates a new ledger entry.</summary>
@@ -91,6 +98,7 @@ public class LedgerEntry : BaseAuditableEntity
             DocumentId = documentId,
             DedupeHash = dedupeHash,
             PostedAt = DateTimeOffset.UtcNow,
+            EntryDate = DateOnly.FromDateTime(DateTime.UtcNow),
             JournalBatchId = journalBatchId,
             Status = PostingStatus.PendingReview
         };

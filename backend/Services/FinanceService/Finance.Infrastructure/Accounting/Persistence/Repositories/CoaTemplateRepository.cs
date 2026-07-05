@@ -18,8 +18,12 @@ public sealed class CoaTemplateRepository(AccountingDbContext dbContext) : ICoaT
         if (connection.State != System.Data.ConnectionState.Open)
             await connection.OpenAsync(ct);
 
+        // BUG-ACCT-COA-TEMPLATE-CODE: accounting.coa_template (migration 016) has NO template_code
+        // column — account_code is the identifying column. Selecting template_code 42703'd on every
+        // bootstrap-coa call. There is only one seeded (Indian-standard) template, so the multi-template
+        // TemplateCode field was dead design; dropped from CoaTemplateRow and this query.
         var results = await connection.QueryAsync<CoaTemplateRow>(
-            "SELECT template_code AS TemplateCode, account_code AS AccountCode, " +
+            "SELECT account_code AS AccountCode, " +
             "account_name AS AccountName, account_type AS AccountType, " +
             "account_subtype AS AccountSubtype, parent_code AS ParentCode " +
             "FROM accounting.coa_template ORDER BY account_code");

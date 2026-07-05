@@ -34,8 +34,16 @@ public sealed class JournalBatchConfiguration : IEntityTypeConfiguration<Journal
         builder.Property(e => e.TotalDebit).HasColumnType("numeric(20,2)").HasColumnName("total_debit");
         builder.Property(e => e.TotalCredit).HasColumnType("numeric(20,2)").HasColumnName("total_credit");
 
-        // Source (PostingSource enum) → entry_type VARCHAR(50)
-        builder.Property(e => e.Source).HasConversion<string>().HasMaxLength(50).HasColumnName("entry_type");
+        // Source (PostingSource enum) → entry_type VARCHAR(50).
+        // BUG-ACCT-COA-TEMPLATE-CODE (related write-path divergence): journal_entry.entry_type has a
+        // CHECK (MANUAL/AUTO_OCR/OPENING_BALANCE/CLOSING/ADJUSTMENT/REVERSAL). The PostingSource enum
+        // members (Ocr/Manual/Import/System) do not match under .HasConversion<string>(), so every
+        // posting 23514'd. Map to the DB vocabulary. NOTE: Import/System have no exact CHECK slot —
+        // mapped to the nearest (ADJUSTMENT/CLOSING); flagged for db-engineer to widen if needed.
+        builder.Property(e => e.Source)
+            .HasMaxLength(50)
+            .HasColumnName("entry_type")
+            .HasConversion(v => EntryTypeToDb(v), v => EntryTypeFromDb(v));
 
         builder.Property(e => e.Status).HasMaxLength(50).IsRequired().HasColumnName("status");
 
@@ -49,4 +57,25 @@ public sealed class JournalBatchConfiguration : IEntityTypeConfiguration<Journal
         builder.HasIndex(e => e.OrgId).HasDatabaseName("idx_journal_entry_org_id");
         builder.HasIndex(e => new { e.OrgId, e.BatchNumber }).IsUnique();
     }
+
+    // Static so the converter lambdas stay method-call expressions (no switch expressions in trees).
+    private static string EntryTypeToDb(PostingSource v) => v switch
+    {
+        PostingSource.Manual => "MANUAL",
+        PostingSource.Ocr => "AUTO_OCR",
+        PostingSource.Import => "ADJUSTMENT",
+        PostingSource.System => "CLOSING",
+        _ => "MANUAL"
+    };
+
+    private static PostingSource EntryTypeFromDb(string v) => v switch
+    {
+        "MANUAL" => PostingSource.Manual,
+        "AUTO_OCR" => PostingSource.Ocr,
+        "ADJUSTMENT" => PostingSource.Import,
+        "CLOSING" => PostingSource.System,
+        "OPENING_BALANCE" => PostingSource.System,
+        "REVERSAL" => PostingSource.System,
+        _ => PostingSource.Manual
+    };
 }

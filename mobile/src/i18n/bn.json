@@ -974,9 +974,11 @@
           "tenureRange": "{{min}}–{{max}} মাস",
           "interestRange": "{{min}}% – {{max}}% প্রতি বছর",
           "indicative": "(ইঙ্গিতমূলক)",
+          "bank": "ঋণ অংশীদার",
           "qualified": "সম্ভবত যোগ্য",
           "nearMatch": "প্রায় যোগ্য",
           "notQualified": "যোগ্য নাও হতে পারে",
+          "unchecked": "যাচাই করা হয়নি",
           "cta": {
             "viewDetails": "বিস্তারিত দেখুন",
             "apply": "আবেদন করুন"

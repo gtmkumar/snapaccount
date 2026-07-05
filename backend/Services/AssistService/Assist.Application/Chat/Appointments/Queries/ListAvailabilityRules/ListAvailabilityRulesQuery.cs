@@ -47,6 +47,21 @@ public sealed class ListAvailabilityRulesQueryHandler(
 
         if (request.CaProfileId.HasValue)
         {
+            // ACM-04 (IDOR): a non-super caller may only target their OWN CA profile.
+            // Without this check any holder of chat.slots.manage could read another CA's
+            // availability rules simply by passing that CA's profile id.
+            if (!currentUser.HasPermission("*"))
+            {
+                var ownsProfile = await db.CaProfiles.AnyAsync(
+                    p => p.Id == request.CaProfileId.Value && p.UserId == currentUser.UserId,
+                    cancellationToken);
+
+                if (!ownsProfile)
+                    return Result<ListAvailabilityRulesResponse>.Failure(
+                        Error.Forbidden("CaProfile.NotOwner",
+                            "You may only view availability rules for your own CA profile."));
+            }
+
             targetProfileId = request.CaProfileId.Value;
         }
         else

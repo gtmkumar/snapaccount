@@ -82,7 +82,11 @@ public static class DependencyInjection
                         string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_BYPASS"), "true", StringComparison.OrdinalIgnoreCase);
         var localAuth = string.Equals(configuration["LOCAL_AUTH"], "true", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(Environment.GetEnvironmentVariable("LOCAL_AUTH"), "true", StringComparison.OrdinalIgnoreCase);
-        if (!devBypass && !localAuth && FirebaseApp.DefaultInstance == null)
+        // Also skip Firebase init when GCP is disabled (DISABLE_GCP / non-Firebase local dev
+        // + integration tests under the "Testing" environment). Otherwise GetApplicationDefault()
+        // throws at startup with no ADC, aborting the composite host.
+        var gcpEnabled = SnapAccount.Shared.Infrastructure.Gcp.GcpStartup.IsEnabled(configuration);
+        if (!devBypass && !localAuth && gcpEnabled && FirebaseApp.DefaultInstance == null)
         {
             var credentialJson = configuration["Firebase:ServiceAccountJson"];
 #pragma warning disable CS0618 // GoogleCredential.FromJson is deprecated in favour of CredentialFactory but we retain it here until Firebase Admin SDK ships a clean replacement

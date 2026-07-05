@@ -17,6 +17,12 @@ public class GstNotice : BaseAuditableEntity
     /// <summary>Organisation that received this notice.</summary>
     public Guid OrganizationId { get; private set; }
 
+    /// <summary>
+    /// GSTIN the notice was issued against. Real column gst.notices.gstin is NOT NULL with a
+    /// 15-char GSTIN-format CHECK constraint (migration 021). Captured on creation.
+    /// </summary>
+    public string Gstin { get; private set; } = string.Empty;
+
     /// <summary>Unique notice reference number from the GST portal.</summary>
     public string NoticeNumber { get; private set; } = string.Empty;
 
@@ -113,11 +119,15 @@ public class GstNotice : BaseAuditableEntity
         DateOnly issuedDate,
         DateOnly? dueDate = null,
         string? description = null,
-        GstNoticeFormType formType = GstNoticeFormType.OTHER)
+        GstNoticeFormType formType = GstNoticeFormType.OTHER,
+        // BUG-GST-NOTICE-GSTIN: gst.notices.gstin is NOT NULL. Trailing optional to preserve the
+        // existing call sites; the CreateNoticeCommandHandler always supplies a validated GSTIN.
+        string gstin = "")
     {
         var notice = new GstNotice
         {
             OrganizationId = orgId,
+            Gstin = gstin,
             NoticeNumber = noticeNumber,
             NoticeType = noticeType,
             FormType = formType,

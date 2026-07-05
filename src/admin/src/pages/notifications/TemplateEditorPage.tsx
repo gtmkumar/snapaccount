@@ -215,6 +215,7 @@ export default function TemplateEditorPage() {
       body,
       subject: subject || null,
       dltTemplateId: dltTemplateId || null,
+      isActive, // CG-11 — persist the Active toggle (was previously dropped)
     }),
     onSuccess: () => {
       toast.success(t('ntpl.editor.saved'))

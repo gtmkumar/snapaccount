@@ -5,6 +5,7 @@ import { ForbiddenPage } from '@/components/shared/RoleGuard'
 import { RoutePermissionGuard } from '@/components/shared/RoutePermissionGuard'
 import { CommandPaletteProvider } from '@/contexts/CommandPaletteContext'
 import { KeyboardShortcutsProvider } from '@/contexts/KeyboardShortcutsContext'
+import { WebMcpTools } from '@/hooks/useWebMcpTools'
 import LoginPage from '@/pages/auth/LoginPage'
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
@@ -72,6 +73,8 @@ import InvoiceManagementPage from '@/pages/subscriptions/InvoiceManagementPage'
 // Wave 7 — GAP-037 Notification Templates
 import TemplateListPage from '@/pages/notifications/TemplateListPage'
 import TemplateEditorPage from '@/pages/notifications/TemplateEditorPage'
+// CG-8 — full-page Notification Center (dropdown "View all", `g n`, palette all target this)
+import NotificationsPage from '@/pages/notifications/NotificationsPage'
 // Wave 7 — GAP-031 CA Appointments
 import CaAvailabilityPage from '@/pages/ca/CaAvailabilityPage'
 import CaAppointmentsPage from '@/pages/ca/CaAppointmentsPage'
@@ -84,6 +87,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
     <AuthGuard>
       <KeyboardShortcutsProvider>
         <CommandPaletteProvider>
+          <WebMcpTools />
           <AppShell>
             <RoutePermissionGuard>{children}</RoutePermissionGuard>
           </AppShell>
@@ -552,6 +556,16 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedLayout>
         <CallbackDetailPage />
+      </ProtectedLayout>
+    ),
+  },
+
+  // CG-8 — full-page Notification Center (any authenticated user; own inbox)
+  {
+    path: '/notifications',
+    element: (
+      <ProtectedLayout>
+        <NotificationsPage />
       </ProtectedLayout>
     ),
   },

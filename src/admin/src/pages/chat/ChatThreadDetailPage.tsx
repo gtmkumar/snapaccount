@@ -11,18 +11,21 @@ import { useParams, useNavigate } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { t } from '@/i18n'
 import {
-  ArrowLeft, Send, Paperclip, CheckCheck, MoreHorizontal,
-  UserPlus, CheckCircle, AlertTriangle, RefreshCw, Sparkles, X,
+  ArrowLeft, Send, Paperclip, Check, MoreHorizontal,
+  UserPlus, CheckCircle, AlertTriangle, RefreshCw, Sparkles, X, FileDown, FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { Modal } from '@/components/ui/Modal'
+import { NativeSelect } from '@/components/ui/NativeSelect'
 import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/DropdownMenu'
 import { useChatHub } from '@/hooks/useChatHub'
 import {
   getThread, getMessages, sendMessage, markThreadRead,
-  resolveThread, escalateThread, reopenThread, sendTypingPing,
+  resolveThread, escalateThread, reopenThread, sendTypingPing, assignThread,
   type Message,
 } from '@/lib/chatApi'
+import { getStaffList } from '@/lib/staffApi'
 import { generateAiDraft, DEFAULT_QUICK_REPLIES, type CannedTemplate } from '@/lib/aiApi'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
@@ -56,6 +59,9 @@ export default function ChatThreadDetailPage() {
   // "/" canned-response search overlay state
   const [showCannedOverlay, setShowCannedOverlay] = useState(false)
   const [cannedSearch, setCannedSearch] = useState('')
+
+  // Assign-thread modal
+  const [assignOpen, setAssignOpen] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -158,6 +164,39 @@ export default function ChatThreadDetailPage() {
     const text = messageText.trim()
     if (!text) return
     sendMutation.mutate(text)
+  }
+
+  /**
+   * Export the visible transcript as a print-to-PDF document. Opens a plain,
+   * print-friendly window and triggers the browser print dialog (Save as PDF).
+   * No external PDF dependency — the browser renders it.
+   */
+  const handleExportTranscript = () => {
+    const win = window.open('', '_blank', 'noopener,noreferrer')
+    if (!win) {
+      toast.error(t('chat.thread.export.popupBlocked'))
+      return
+    }
+    const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] ?? c))
+    const title = esc(thread?.subject ?? t('chat.thread.noSubject'))
+    const rows = messages
+      .map(m => {
+        const who = m.senderUserId === user?.uid ? t('chat.thread.export.agent') : t('chat.thread.export.user')
+        const when = m.createdAt ? new Date(m.createdAt).toLocaleString('en-IN') : ''
+        return `<div class="msg"><div class="meta"><b>${esc(who)}</b> · ${esc(when)}</div><div class="body">${esc(m.body)}</div></div>`
+      })
+      .join('')
+    win.document.write(
+      `<!doctype html><html><head><title>${title}</title><meta charset="utf-8"/>` +
+      `<style>body{font-family:system-ui,sans-serif;margin:32px;color:#111}h1{font-size:18px}` +
+      `.meta{font-size:12px;color:#666;margin-top:12px}.body{white-space:pre-wrap;font-size:14px;margin-top:2px}` +
+      `.hdr{font-size:12px;color:#888;margin-bottom:16px}</style></head><body>` +
+      `<h1>${title}</h1><div class="hdr">${esc(t('chat.thread.export.heading', { count: messages.length }))}</div>` +
+      `${rows}</body></html>`
+    )
+    win.document.close()
+    win.focus()
+    win.print()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -318,11 +357,26 @@ export default function ChatThreadDetailPage() {
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem icon={<UserPlus className="h-4 w-4" />}>
+          <DropdownMenuItem onClick={() => setAssignOpen(true)} icon={<UserPlus className="h-4 w-4" />}>
             {t('chat.thread.action.assign')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleExportTranscript} icon={<FileDown className="h-4 w-4" />}>
+            {t('chat.thread.action.export')}
           </DropdownMenuItem>
         </DropdownMenu>
       </div>
+
+      {assignOpen && threadId && (
+        <AssignThreadModal
+          threadId={threadId}
+          currentAssigneeId={thread?.assignedToUserId}
+          onClose={() => setAssignOpen(false)}
+          onDone={() => {
+            setAssignOpen(false)
+            void queryClient.invalidateQueries({ queryKey: ['chat', 'thread', threadId] })
+          }}
+        />
+      )}
 
       {/* Message list */}
       <div className="flex-1 overflow-y-auto space-y-3 mb-4 min-h-0">
@@ -474,9 +528,15 @@ export default function ChatThreadDetailPage() {
 
           {/* ── Input row ─────────────────────────────────────────────────────── */}
           <div className="flex items-end gap-2">
+            {/* Attachment upload has no chat-attachment backend endpoint yet;
+                received attachments ARE rendered (see MessageBubble). Disabled
+                rather than a silent no-op so the affordance isn't misleading. */}
             <button
+              type="button"
+              disabled
               aria-label={t('chat.thread.attach')}
-              className="p-2 rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--surface-sunken)] transition-colors shrink-0"
+              title={t('chat.thread.attach.unavailable')}
+              className="p-2 rounded-lg text-[var(--text-tertiary)] shrink-0 opacity-40 cursor-not-allowed"
             >
               <Paperclip className="h-4 w-4" />
             </button>
@@ -544,10 +604,34 @@ interface MessageBubbleProps {
   isMine: boolean
 }
 
+/** Parse a message's attachmentsJson defensively into a list of {name, url?}. */
+function parseAttachments(attachmentsJson: string | null | undefined): { name: string; url?: string }[] {
+  if (!attachmentsJson) return []
+  try {
+    const raw = JSON.parse(attachmentsJson) as unknown
+    const arr = Array.isArray(raw) ? raw : []
+    return arr
+      .map((a): { name: string; url?: string } | null => {
+        if (typeof a === 'string') return { name: a }
+        if (a && typeof a === 'object') {
+          const o = a as Record<string, unknown>
+          const name = (o.fileName ?? o.name ?? o.title) as string | undefined
+          const url = (o.url ?? o.uri ?? o.downloadUrl) as string | undefined
+          if (name) return { name, url }
+        }
+        return null
+      })
+      .filter((x): x is { name: string; url?: string } => x !== null)
+  } catch {
+    return []
+  }
+}
+
 function MessageBubble({ message, isMine }: MessageBubbleProps) {
   const time = message.createdAt
     ? format(new Date(message.createdAt), 'HH:mm')
     : ''
+  const attachments = parseAttachments(message.attachmentsJson)
 
   return (
     <div className={cn('flex', isMine ? 'justify-end' : 'justify-start')}>
@@ -560,13 +644,113 @@ function MessageBubble({ message, isMine }: MessageBubbleProps) {
         )}
       >
         <p className="whitespace-pre-wrap break-words">{message.body}</p>
+
+        {attachments.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {attachments.map((att, i) => {
+              const inner = (
+                <span className="inline-flex items-center gap-1.5 truncate">
+                  <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{att.name}</span>
+                </span>
+              )
+              return att.url ? (
+                <a
+                  key={i}
+                  href={att.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    'flex items-center rounded-lg px-2 py-1 text-xs font-medium underline',
+                    isMine ? 'bg-white/15 text-white' : 'bg-[var(--surface-raised)] text-[var(--text-link)]'
+                  )}
+                >
+                  {inner}
+                </a>
+              ) : (
+                <span
+                  key={i}
+                  className={cn(
+                    'flex items-center rounded-lg px-2 py-1 text-xs font-medium',
+                    isMine ? 'bg-white/15 text-white' : 'bg-[var(--surface-raised)] text-[var(--text-secondary)]'
+                  )}
+                >
+                  {inner}
+                </span>
+              )
+            })}
+          </div>
+        )}
+
         <div className={cn('flex items-center gap-1 mt-1', isMine ? 'justify-end' : 'justify-start')}>
           <span className={cn('text-xs', isMine ? 'text-white/70' : 'text-[var(--text-tertiary)]')}>
             {time}
           </span>
-          {isMine && <CheckCheck className="h-3 w-3 text-white/70" />}
+          {/* Honest receipt: we only know the message was sent, not delivered/read
+              (no read-receipt data on the message). A single check = "sent". */}
+          {isMine && <Check className="h-3 w-3 text-white/70" aria-label={t('chat.thread.receipt.sent')} />}
         </div>
       </div>
     </div>
+  )
+}
+
+// ── Assign thread modal ────────────────────────────────────────────────────────
+
+function AssignThreadModal({
+  threadId,
+  currentAssigneeId,
+  onClose,
+  onDone,
+}: {
+  threadId: string
+  currentAssigneeId?: string | null
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [agentId, setAgentId] = useState('')
+
+  const { data: staff, isLoading, isError } = useQuery({
+    queryKey: ['staffList'],
+    queryFn: () => getStaffList(),
+  })
+
+  const selectedRole = (staff ?? []).find(s => s.userId === agentId)?.role ?? 'agent'
+
+  const mutation = useMutation({
+    mutationFn: () => assignThread(threadId, { assignedToUserId: agentId, role: selectedRole }),
+    onSuccess: () => {
+      toast.success(t('chat.thread.assign.success'))
+      onDone()
+    },
+    onError: () => toast.error(t('chat.thread.assign.error')),
+  })
+
+  return (
+    <Modal open onClose={onClose} title={t('chat.thread.assign.title')} size="sm">
+      <div className="space-y-3">
+        <label htmlFor="thread-assign-agent" className="text-sm font-medium text-[var(--text-primary)] block mb-1">
+          {t('chat.thread.assign.agent')}
+        </label>
+        {isError ? (
+          <p className="text-sm text-error-600">{t('chat.thread.assign.loadError')}</p>
+        ) : (
+          <NativeSelect id="thread-assign-agent" value={agentId} onChange={e => setAgentId(e.target.value)} disabled={isLoading}>
+            <option value="">{t('chat.thread.assign.selectAgent')}</option>
+            {(staff ?? []).map(s => (
+              <option key={s.userId} value={s.userId} disabled={s.userId === currentAssigneeId}>
+                {s.name} · {s.roleDisplayName}{s.userId === currentAssigneeId ? ` (${t('chat.thread.assign.current')})` : ''}
+              </option>
+            ))}
+          </NativeSelect>
+        )}
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <Button variant="secondary" size="sm" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="primary" size="sm" disabled={!agentId || agentId === currentAssigneeId || mutation.isPending} onClick={() => void mutation.mutate()}>
+          {mutation.isPending ? t('common.saving') : t('chat.thread.assign.confirm')}
+        </Button>
+      </div>
+    </Modal>
   )
 }

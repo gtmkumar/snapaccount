@@ -3,8 +3,8 @@
  * Covers: CRUD drawer, write-only secret fields, LogoUploader, ProductChipsEditor,
  *         test-connection flow.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router'
 import * as loanApi from '@/lib/loanApi'
@@ -62,6 +62,12 @@ const mockListResponse = {
 beforeEach(() => {
   vi.spyOn(loanApi, 'listPartnerBanks').mockResolvedValue(mockListResponse)
   vi.spyOn(loanApi, 'registerPartnerBank').mockResolvedValue({ bankId: 'bank-new' })
+  vi.spyOn(loanApi, 'updatePartnerBank').mockResolvedValue(undefined)
+})
+
+afterEach(() => {
+  cleanup()
+  vi.clearAllMocks()
 })
 
 // ---------------------------------------------------------------------------
@@ -219,6 +225,62 @@ describe('PartnerBanksSettingsPage — CRUD drawer (Edit)', () => {
     const nameInputs = screen.getAllByRole('textbox') as HTMLInputElement[]
     const nameInput = nameInputs.find(i => i.value === 'HDFC Bank')
     expect(nameInput).toBeTruthy()
+  })
+
+  it('CG-7: saving an edit calls updatePartnerBank (PATCH), NOT registerPartnerBank (no duplicate)', async () => {
+    const updateSpy = vi.spyOn(loanApi, 'updatePartnerBank').mockResolvedValue(undefined)
+    const createSpy = vi.spyOn(loanApi, 'registerPartnerBank').mockResolvedValue({ bankId: 'x' })
+    renderPage()
+    await waitFor(() => screen.getByText('HDFC Bank'))
+    const editBtns = screen.getAllByRole('button').filter(b =>
+      b.textContent?.toLowerCase().includes('edit')
+    )
+    fireEvent.click(editBtns[0]) // HDFC (EMAIL adapter) — index 0
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+
+    // Save without re-entering the (server-held, un-echoed) recipient config.
+    const dialog = screen.getByRole('dialog')
+    const saveBtn = within(dialog).getAllByRole('button').find(b => {
+      const txt = b.textContent?.toLowerCase() ?? ''
+      return txt.includes('save') && !txt.includes('cancel')
+    })
+    expect(saveBtn).toBeTruthy()
+    fireEvent.click(saveBtn!)
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
+    expect(updateSpy).toHaveBeenCalledWith('bank-001', expect.objectContaining({
+      name: 'HDFC Bank',
+      isActive: true,
+    }))
+    // Editing must NOT create a new bank, and must NOT overwrite stored config with empties.
+    expect(createSpy).not.toHaveBeenCalled()
+    const patchBody = updateSpy.mock.calls[0][1]
+    expect(patchBody).not.toHaveProperty('apiConfigJson')
+  })
+
+  it('CG-7: adding a new bank still calls registerPartnerBank (create), NOT update', async () => {
+    const updateSpy = vi.spyOn(loanApi, 'updatePartnerBank').mockResolvedValue(undefined)
+    const createSpy = vi.spyOn(loanApi, 'registerPartnerBank').mockResolvedValue({ bankId: 'new' })
+    renderPage()
+    const addBtn = (await screen.findAllByRole('button')).find(b =>
+      b.textContent?.toLowerCase().includes('add') || b.textContent?.toLowerCase().includes('new')
+    )
+    fireEvent.click(addBtn!)
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+    // New EMAIL bank: fill required name + recipient email. Fill every email input
+    // so the required recipientEmail is set regardless of field order.
+    const dialog = screen.getByRole('dialog')
+    const nameInput = within(dialog).getAllByRole('textbox').find(i => i.getAttribute('type') !== 'email') as HTMLInputElement
+    fireEvent.change(nameInput, { target: { value: 'Axis Bank' } })
+    const emailInputs = Array.from(dialog.querySelectorAll('input[type="email"]')) as HTMLInputElement[]
+    emailInputs.forEach(inp => fireEvent.change(inp, { target: { value: 'ops@axis.com' } }))
+    const saveBtn = within(dialog).getAllByRole('button').find(b => {
+      const txt = b.textContent?.toLowerCase() ?? ''
+      return txt.includes('save') && !txt.includes('cancel')
+    })
+    fireEvent.click(saveBtn!)
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1))
+    expect(updateSpy).not.toHaveBeenCalled()
   })
 })
 

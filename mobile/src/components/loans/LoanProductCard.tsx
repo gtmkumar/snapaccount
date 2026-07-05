@@ -79,7 +79,7 @@ export function LoanProductCard({
           label={t(`mobile.loan.hub.card.${
             qualLevel === 'QUALIFIED' ? 'qualified' :
             qualLevel === 'NEAR_MATCH' ? 'nearMatch' :
-            qualLevel === 'NOT_QUALIFIED' ? 'notQualified' : 'notQualified'
+            qualLevel === 'NOT_QUALIFIED' ? 'notQualified' : 'unchecked'
           }`)}
         />
       </View>

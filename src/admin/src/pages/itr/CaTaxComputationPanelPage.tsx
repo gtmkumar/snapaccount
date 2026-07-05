@@ -2,7 +2,7 @@
  * CaTaxComputationPanelPage — dual-pane CA review + live recompute (Phase 6D)
  * Route: /itr/:filingId/computation
  */
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, XCircle, CheckCircle } from 'lucide-react'
@@ -178,6 +178,29 @@ export default function CaTaxComputationPanelPage() {
     staleTime: 30_000,
   })
 
+  // Baseline for the before/after delta pills = the assessee's SUBMITTED figures
+  // (from the filing summary). As the CA edits inputs and recomputes, each row's
+  // pill shows the change vs what the assessee originally filed (CG-4). Previously
+  // baseline was a hardcoded empty object, so no pill ever rendered.
+  const baseline = useMemo<Partial<ComputationResult>>(() => {
+    if (!filing) return {}
+    return {
+      grossTotalIncome: filing.totalIncome ?? undefined,
+      grossTaxLiability: filing.totalTax ?? undefined,
+      payableOrRefund: filing.payableOrRefund ?? undefined,
+    }
+  }, [filing])
+
+  // Seed the CA's existing notes + the filing's regime once, so the panel opens
+  // with prior context rather than blank/default.
+  const hydratedRef = useRef(false)
+  useEffect(() => {
+    if (!filing || hydratedRef.current) return
+    hydratedRef.current = true
+    if (filing.caNotes) setNotes(filing.caNotes)
+    if (filing.regime) setRegime(filing.regime)
+  }, [filing])
+
   // Debounced recompute on any input change
   const triggerRecompute = useCallback((inp: ComputationInput) => {
     if (!filingId) return
@@ -261,7 +284,6 @@ export default function CaTaxComputationPanelPage() {
   // Build computation rows from result
   function buildRows(): ComputationRow[] {
     if (!computation) return []
-    const baseline: Partial<ComputationResult> = {}
 
     function delta(key: keyof ComputationResult): number | undefined {
       const cur = computation?.[key] as number | undefined

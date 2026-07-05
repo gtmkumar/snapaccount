@@ -75,6 +75,7 @@ The resolved locale is stored in `loan.key_facts_statement.locale` (migration 07
 | Method | Route | Auth | Description | Request Body | Response |
 |--------|-------|------|-------------|-------------|----------|
 | GET | /auth/me/consents | Required | Current consent status per processing purpose | — | See aligned response below | 200 |
+| POST | /auth/me/consents/{purpose}/grant | Required | Record affirmative consent for a processing purpose (DPDP) | `{ noticeVersion: string, locale?: string }` | 200 (idempotent for an already-granted purpose; re-granting a withdrawn purpose appends a new granted row) |
 | POST | /auth/me/consents/{purpose}/withdraw | Required | Withdraw consent for a processing purpose | `{ noticeVersion: string, locale?: string }` | 204 |
 | POST | /auth/me/data-export | Required | Request a DPDP data portability export bundle | — | `{ requestId, status, estimatedReadyAt }` 202 |
 | GET | /auth/me/data-export | Required | Status of most-recent data export request | `?requestId` (optional) | `{ requestId, status, downloadUrl?, requestedAt }` 200; 404 if no export yet |
@@ -105,7 +106,7 @@ Each entry in `consents` / `items` contains both sets of keys:
 | `status` | `status` | `"granted"` or `"withdrawn"` |
 | `locale` | `locale` | BCP-47 |
 
-**Purpose values:** `ACCOUNT_MANAGEMENT`, `GST_FILING`, `ITR_FILING`, `LOAN_PROCESSING`, `MARKETING`, `ANALYTICS`.
+**Purpose values (`{purpose}` path segment):** dot-separated lowercase codes — `marketing.sms`, `analytics.usage`, `data.sharing.partner`, `loan.creditbureau`, `communication.whatsapp`, `communication.email`. The server validates against `^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)*$` (grant + withdraw share the same taxonomy in `AuthService.Application.Privacy.Common.ConsentPurposes`); an UPPER_SNAKE value returns `400`. Well-formed codes outside the predefined set are accepted and stored with the code as its own description.
 **Status values for consent:** `granted`, `withdrawn` (lowercase from entity; mobile uppercases on compare).
 
 ### Org Role Management — `/auth/org/roles`
@@ -677,7 +678,7 @@ Mobile LoanHubScreen calls `GET /loans/products?pageSize=50` on mount.
 | POST | /chat/threads/{id}/participants | `chat.threads.assign` | Add participant | `{ userId, role }` | 201 |
 | DELETE | /chat/threads/{id}/participants/{userId} | `chat.threads.assign` | Remove participant | — | 204 |
 | POST | /chat/threads/{id}/typing | Required | Record typing ping (SignalR broadcast) | — | 204 |
-| GET | /chat/threads/search | Required | Full-text search message history | `?q&page&pageSize` | `{ items:[{messageId,threadId,senderUserId,body,threadCategory,threadStatus,createdAt}], totalCount }` 200 |
+| GET | /chat/search | Required | Full-text search message history | `?q&page&pageSize` | `{ items:[{messageId,threadId,senderUserId,body,threadCategory,threadStatus,createdAt}], totalCount }` 200 |
 | GET | /chat/threads/unread-count | Required | Get unread thread count | — | `{ count }` 200 |
 
 **SignalR hub events (server → client):**

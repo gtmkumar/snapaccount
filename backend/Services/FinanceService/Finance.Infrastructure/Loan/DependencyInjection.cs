@@ -69,6 +69,12 @@ public static class DependencyInjection
                         "application_status_v2", "loan", EnumNameTranslator);
                     npgsql.MapEnum<Domain.Entities.BankAdapterType>(
                         "partner_bank_adapter_type", "loan", EnumNameTranslator);
+                    // BUG-LOAN-CONSENT-ENUM: loan.consents.consent_type is a native PG enum
+                    // (loan.consent_type: CREDIT_BUREAU/DATA_SHARE_WITH_BANK/DISBURSEMENT_MANDATE).
+                    // Without this mapping every consent write 500s (42804: column is of type
+                    // loan.consent_type but expression is of type character varying). RBI/DPDP-critical.
+                    npgsql.MapEnum<Domain.Entities.ConsentType>(
+                        "consent_type", "loan", EnumNameTranslator);
                 });
             options.ConfigureWarnings(w =>
                 w.Ignore(RelationalEventId.PendingModelChangesWarning));
