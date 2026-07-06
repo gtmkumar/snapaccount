@@ -276,7 +276,9 @@ export function BusinessProfileWizardScreen({ navigation }: Props) {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        // Android adjustResize already handles the keyboard; a 'height' KAV on top
+        // double-adjusts and flickers the screen while typing — undefined on Android.
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           style={styles.flex}

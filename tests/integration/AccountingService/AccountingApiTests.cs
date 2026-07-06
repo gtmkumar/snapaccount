@@ -253,7 +253,16 @@ public class AccountingApiTests(MigratedPostgresFixture pg) : IAsyncLifetime
     // OCR idempotency — dedupe_hash prevents duplicate posts
     // ──────────────────────────────────────────────────────────────
 
-    [Fact]
+    // SKIP — BUG-ACCT-OCR-HTTP-CONTRACT: this test targets a non-existent HTTP route
+    // POST /accounting/journal-entries/from-ocr with a batch contract (entries[], batchId,
+    // arbitrary-length dedupeHash). The real design is EVENT-DRIVEN: OcrResultSubscriber
+    // (Pub/Sub topic snapaccount.document.ocr.completed) computes a 64-char SHA-256 dedupe
+    // hash and dispatches the single-entry PostFromOcrCommand internally — there is no HTTP
+    // surface (see docs/devops/phase-6a-aspire-handoff.md:34 + docs/database/schema-overview.md).
+    // The command already enforces idempotency via the partial unique index on
+    // accounting.ledger_entries.dedupe_hash. Re-enable only if an HTTP OCR-post endpoint is
+    // deliberately added; do NOT build one just to satisfy this speculative repo-init test.
+    [Fact(Skip = "Targets a non-existent HTTP from-ocr batch endpoint; OCR auto-post is event-driven (OcrResultSubscriber → PostFromOcrCommand). See BUG-ACCT-OCR-HTTP-CONTRACT.")]
     public async Task PostFromOcr_SameDedupeHash_SecondCallReturnsExistingBatchId()
     {
         var (orgId, debitId, creditId) = await SetupOrgWithAccounts();

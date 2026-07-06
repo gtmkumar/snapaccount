@@ -167,6 +167,11 @@ public class MigratedPostgresFixture : IAsyncLifetime
                     'accounting.coa_template',
                     'gst.gst_tax_rate', 'gst.hsn_sac_code', 'gst.notice_deadline_rules',
                     'itr.tax_regime', 'itr.tax_slab',
+                    -- tax_slab_versions is the versioned config the TaxComputationEngine
+                    -- actually reads (FindSlabVersion); deduction_sections is the NEW-regime
+                    -- deduction catalog. Both are migration-seeded reference data — truncating
+                    -- them 404s /itr/filings/{id}/compute with TaxSlab.NotFound.
+                    'itr.tax_slab_versions', 'itr.deduction_sections',
                     'loan.loan_type',
                     'document.document_category',
                     'subscription.subscription_plan',

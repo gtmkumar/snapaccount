@@ -24,31 +24,15 @@
 import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { StyleSheet } from 'react-native';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { ForceUpdateGate } from './src/components/ForceUpdateGate';
 import { RootNavigator } from './src/navigation/RootNavigator';
+// Single shared query client (extracted so authStore.signOut can clear it).
+import { queryClient } from './src/lib/queryClient';
 // i18n — must be imported before any component that calls useTranslation()
 import './src/i18n';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TanStack Query client configuration
-// ─────────────────────────────────────────────────────────────────────────────
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 2,
-      staleTime: 5 * 60 * 1000,     // 5 minutes
-      gcTime: 10 * 60 * 1000,        // 10 minutes
-      refetchOnWindowFocus: false,
-    },
-    mutations: {
-      retry: 1,
-    },
-  },
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // App

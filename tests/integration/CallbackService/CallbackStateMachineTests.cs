@@ -81,10 +81,10 @@ public class CallbackStateMachineTests(MigratedPostgresFixture pg) : IAsyncLifet
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        // CONTRACT: Assist.WebApi has no JsonStringEnumConverter registered (unlike Platform/
-        // Finance.WebApi — see BUG-ASSIST-NO-ENUM-CONVERTER in bug-log), so CallbackStatus
-        // serializes as its raw int value, not a string. Pending = 0.
-        body.GetProperty("status").GetInt32().Should().Be((int)CallbackStatus.Pending);
+        // CONTRACT: Assist.WebApi now registers JsonStringEnumConverter (Program.cs) to match
+        // Platform/Finance.WebApi — BUG-ASSIST-NO-ENUM-CONVERTER is FIXED — so CallbackStatus
+        // serializes as its string name ("Pending"), not the raw int.
+        body.GetProperty("status").GetString().Should().Be(CallbackStatus.Pending.ToString());
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class CallbackStateMachineTests(MigratedPostgresFixture pg) : IAsyncLifet
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var detail = await _client.GetFromJsonAsync<JsonElement>($"/callbacks/{callbackId}");
-        detail.GetProperty("status").GetInt32().Should().Be((int)CallbackStatus.Assigned);
+        detail.GetProperty("status").GetString().Should().Be(CallbackStatus.Assigned.ToString());
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class CallbackStateMachineTests(MigratedPostgresFixture pg) : IAsyncLifet
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         var detail = await _client.GetFromJsonAsync<JsonElement>($"/callbacks/{callbackId}");
-        detail.GetProperty("status").GetInt32().Should().Be((int)CallbackStatus.Confirmed);
+        detail.GetProperty("status").GetString().Should().Be(CallbackStatus.Confirmed.ToString());
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public class CallbackStateMachineTests(MigratedPostgresFixture pg) : IAsyncLifet
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         var detail = await _client.GetFromJsonAsync<JsonElement>($"/callbacks/{callbackId}");
-        detail.GetProperty("status").GetInt32().Should().Be((int)CallbackStatus.Completed);
+        detail.GetProperty("status").GetString().Should().Be(CallbackStatus.Completed.ToString());
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ public class CallbackStateMachineTests(MigratedPostgresFixture pg) : IAsyncLifet
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         var detail = await _client.GetFromJsonAsync<JsonElement>($"/callbacks/{callbackId}");
-        detail.GetProperty("status").GetInt32().Should().Be((int)CallbackStatus.Escalated);
+        detail.GetProperty("status").GetString().Should().Be(CallbackStatus.Escalated.ToString());
     }
 
     // ──────────────────────────────────────────────────────────────

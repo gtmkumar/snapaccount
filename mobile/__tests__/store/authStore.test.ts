@@ -9,6 +9,7 @@
 // because the factory is itself subject to the mapper.
 
 import { useAuthStore } from '../../src/store/authStore';
+import { queryClient } from '../../src/lib/queryClient';
 
 const user = {
   id: 'u1',
@@ -77,6 +78,24 @@ describe('signOut', () => {
     expect(state.refreshToken).toBeNull();
     expect(state.user).toBeNull();
     expect(state.isAuthenticated).toBe(false);
+  });
+
+  // Regression: a fresh user signing in on the same running app instance must
+  // never see the previous user's cached server state ("fake data"). signOut
+  // must purge the TanStack Query cache, not just the auth fields.
+  it('clears the TanStack Query cache so the next user sees no stale data', () => {
+    queryClient.setQueryData(['dashboard-metrics', undefined, 'FY2025-26'], {
+      totalSales: 999999,
+    });
+    expect(
+      queryClient.getQueryData(['dashboard-metrics', undefined, 'FY2025-26']),
+    ).toBeDefined();
+
+    useAuthStore.getState().signOut();
+
+    expect(
+      queryClient.getQueryData(['dashboard-metrics', undefined, 'FY2025-26']),
+    ).toBeUndefined();
   });
 });
 

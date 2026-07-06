@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { secureStorage } from '../lib/secureStorage';
+import { queryClient } from '../lib/queryClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -148,7 +149,13 @@ export const useAuthStore = create<AuthState>()(
       swapAccessToken: (accessToken) =>
         set({ firebaseToken: accessToken }),
 
-      signOut: () =>
+      signOut: () => {
+        // Purge all cached server state so the NEXT user to sign in on this
+        // running app instance never sees the previous user's data (dashboard
+        // metrics, recent activity, org lists were keyed on an org id that is
+        // `undefined` for a brand-new user, so they otherwise collide). Without
+        // this, a fresh login shows the prior session's data ("fake data").
+        queryClient.clear();
         set({
           isAuthenticated: false,
           firebaseToken: null,
@@ -157,7 +164,8 @@ export const useAuthStore = create<AuthState>()(
           currentOrganization: null,
           organizations: [],
           isLoading: false,
-        }),
+        });
+      },
     }),
     {
       name: 'snapaccount-auth',

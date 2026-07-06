@@ -126,7 +126,9 @@ export function TwoFactorChallengeScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        // Android adjustResize already handles the keyboard; a 'height' KAV on top
+        // double-adjusts and flickers the screen while typing — undefined on Android.
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           contentContainerStyle={styles.scroll}

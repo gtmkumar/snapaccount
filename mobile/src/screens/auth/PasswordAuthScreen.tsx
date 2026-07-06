@@ -148,7 +148,8 @@ export function PasswordAuthScreen({ navigation }: { navigation: NavProp }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      {/* Android adjustResize handles the keyboard; 'height' KAV double-adjusts and flickers — undefined on Android. */}
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <TouchableOpacity
             onPress={() => navigation.goBack()}

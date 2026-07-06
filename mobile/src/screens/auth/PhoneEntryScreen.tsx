@@ -195,7 +195,11 @@ export function PhoneEntryScreen({ navigation }: PhoneEntryScreenProps) {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        // Android: manifest windowSoftInputMode=adjustResize already resizes the
+        // window for the keyboard; a 'height' KeyboardAvoidingView on top of that
+        // double-adjusts and makes the screen jump/flicker on each keystroke, so
+        // leave behavior undefined on Android and let the native resize handle it.
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           style={styles.flex}

@@ -72,9 +72,20 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
 
   const formattedPhone = formatPhoneDisplay(phone);
 
+  // In-flight guard: verifyOTP is triggered from THREE places — OTPInput's
+  // onComplete (6th digit), the Android SMS auto-reader, and the manual Verify
+  // button. When the SMS reader fills the boxes it both calls verify AND drives
+  // onComplete, firing two concurrent POST /auth/otp/verify for the same code
+  // (the second races/409s since the OTP is single-use). `loading` state can't
+  // guard this — setState is async, so both calls read the old value. A ref
+  // flips synchronously, so the second call returns immediately.
+  const inFlightRef = useRef(false);
+
   const verifyOTP = useCallback(
     async (otpValue: string) => {
       if (otpValue.length !== 6) return;
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
 
       setLoading(true);
       setError(false);
@@ -179,6 +190,7 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
         }
         // isAuthenticated is now true → RootNavigator swaps to the app automatically.
       } catch (err: unknown) {
+        inFlightRef.current = false; // allow retry after a failed attempt
         setLoading(false);
         setError(true);
         setOtp('');
@@ -247,7 +259,9 @@ export function OTPVerifyScreen({ navigation, route }: OTPVerifyScreenProps) {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        // Android adjustResize already handles the keyboard; a 'height' KAV on top
+        // double-adjusts and flickers the screen while typing — undefined on Android.
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           style={styles.flex}

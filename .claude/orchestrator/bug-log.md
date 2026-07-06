@@ -668,3 +668,45 @@ Fresh account 9876500003 → Individual persona → onboarding "Your tax profile
 | AND-LIVE-07 | High (corroborates task #23 + CG-1..3) | ItrDashboard "Your ITR Returns" | Persistent error "Couldn't load your returns. Try again." (red cloud-off + Retry) for a freshly-onboarded Individual user — should be an empty state, not an error. App calls `GET /itr/filings` (src/api/itr.ts:321; endpoint exists, 401 unauth). Authenticated call fails → error surfaced to user; Retry doesn't fix. Almost certainly the known backend ITR **assessee_profiles EF↔DB divergence** ("CRITICAL — breaks profile + filing-creation", task #23 fix wave in progress) and live-confirms the CG-1..3 "ITR filing chain wired-but-non-functional" flag. The rest of the ITR filing chain (FilingSummary computed values, e-verify, refund tracker) is likely gated by this same failing backend, so a definitive filing-chain pass should wait for task #23 to land. |
 
 NOT deep-covered (gated by AND-LIVE-07 backend failure; lower incremental value until task #23 lands): Form16Upload OCR (CG "simulated"), RegimeComparison actual old-vs-new computation, FilingSummary hardcoded-'—' (CG-1), EVerification, RefundTracker, ItrNoticeInbox. Recommend these in the post-task-#23 ITR pass.
+
+### BUG-ITR-SLAB-EFFECTIVE (High) — root cause of AND-LIVE-07 — FIXED (2026-07-05)
+
+`POST /itr/filings/{id}/compute` (and `/compare-regimes`) returned **404 `TaxSlab.NotFound`** for any *closed* assessment year — including AY2025-26, which is filed through mid-2026. This is the backend root cause behind **AND-LIVE-07** (mobile ITR dashboard "Couldn't load your returns") and the CG-1..3 "ITR filing chain wired-but-non-functional" cluster. Two independent defects, both fixed:
+
+1. **Production engine bug** — `TaxComputationEngine.FindSlabVersion` (`backend/Services/FinanceService/Finance.Application/Itr/Services/TaxComputationEngine.cs`) filtered `EffectiveUntil == null || EffectiveUntil >= today`. The AY2025-26 `itr.tax_slab_versions` rows carry `effective_to = 2025-03-31` (end of FY2024-25), so on any date after that the row is excluded → NotFound → 404. The query is already scoped to an exact `ay`, so `effective_from/effective_to` only distinguish amendments *within* that AY; `OrderByDescending(EffectiveFrom).FirstOrDefault()` already picks the latest amendment. Removed the `today`-guard clause — compute now works for current and historical AYs. (Deduction-catalog query uses `IsAvailable`, not an effective-date guard — not affected.)
+
+2. **Integration-fixture keep-list bug** — `tests/integration/_shared/MigrationSupport.cs` KEEP-LIST preserved the legacy `itr.tax_slab`/`itr.tax_regime` but **not** the versioned `itr.tax_slab_versions`/`itr.deduction_sections` the engine actually reads, so the suite truncated the migration-seeded slabs (the ItrServiceIntegrationTests comment claiming they were kept was aspirational). Added both to the keep-list.
+
+**Verification:** `tests/integration/ItrService` 6/6 pass (was 3/6 — the 3 failures were all compute/compare-regimes 404s); `tests/unit/ItrService` 80/80 (no regression from the engine change). Files: `TaxComputationEngine.cs`, `tests/integration/_shared/MigrationSupport.cs`. `itr.assessee_profiles` divergence (migration 111 + AssesseeConfiguration uuid/dob fixes) was already resolved and is confirmed applied to the live DB.
+
+### Full integration sweep (2026-07-06) — 9 suites, all green after 2 fixes
+
+First full run of every `tests/integration/*` suite under the fixed colima Testcontainers env (`DOCKER_HOST=unix:///Users/gtmkumar/.colima/default/docker.sock`). These suites could not run before this branch's fixture overhaul, so this sweep is their **first real execution** — it surfaced two pre-existing latent divergences (both repo-init tests, `51fbeb7`). Final result:
+
+| Suite | Result |
+|-------|--------|
+| Auth | 114/114 ✅ |
+| Accounting | 12 pass / 1 skip (BUG-ACCT-OCR-HTTP-CONTRACT) ✅ |
+| Gst | 9/9 ✅ |
+| Loan | 13 pass / 1 skip ✅ |
+| Subscription | 9/9 ✅ |
+| Notification | 16/16 ✅ |
+| Chat | 6/6 ✅ |
+| Callback | 18/18 ✅ (was 13/18) |
+| Itr | 6/6 ✅ |
+
+**BUG-ASSIST-ENUM-TEST-STALE (test-only) — FIXED.** 5 `CallbackStateMachineTests` failed reading `status` as an int (`GetInt32`) — but Assist.WebApi now registers `JsonStringEnumConverter` (`Assist.WebApi/Program.cs:113`, resolving BUG-ASSIST-NO-ENUM-CONVERTER), so `CallbackStatus` serializes as its string name. The production contract is correct (matches Platform/Finance); the tests encoded the old int behavior. Updated all 5 assertions to `GetString().Should().Be(CallbackStatus.X.ToString())` + the stale contract comment.
+
+**BUG-ACCT-OCR-HTTP-CONTRACT (test-vs-design divergence) — SKIPPED w/ documented reason.** `PostFromOcr_SameDedupeHash_SecondCallReturnsExistingBatchId` POSTs to a non-existent HTTP route `/accounting/journal-entries/from-ocr` with a batch contract (`entries[]`, `batchId`, 44-char `dedupeHash`). The real OCR auto-post is **event-driven**: `OcrResultSubscriber` (Pub/Sub `snapaccount.document.ocr.completed`) computes a 64-char SHA-256 dedupe hash and dispatches the **single-entry** `PostFromOcrCommand` internally (docs/devops/phase-6a-aspire-handoff.md:34). No HTTP surface exists or is documented; the command already enforces idempotency via the partial unique index on `accounting.ledger_entries.dedupe_hash`. Marked `[Fact(Skip=...)]` rather than building an undocumented feature to a speculative repo-init test. **TL decision open:** if an HTTP OCR-post endpoint IS wanted, this becomes a real backend gap; otherwise the test can be retired.
+
+### Mobile customer-app QA (2026-07-06) — 3 reported defects root-caused + FIXED
+
+User report: "registration screen flickers/jumps while typing letters; multiple API not integrated properly; a fresh user sees fake data." All three reproduced in code, fixed, and verified (mobile type-check clean, jest 864/864 incl. a new regression test).
+
+**BUG-MOBILE-KAV-FLICKER (High) — registration screen jumps/flickers while typing.** `AndroidManifest.xml` sets `windowSoftInputMode="adjustResize"` (window already resizes for the keyboard), and every auth/registration screen wrapped its form in `<KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>`. On Android the `'height'` behavior shrinks the view a SECOND time on top of the native resize → the layout double-adjusts and jumps/flickers on each keyboard frame (and per-keystroke as the suggestion bar toggles). Fixed: `behavior={... : undefined}` on Android (let adjustResize handle it) across all 7 offending screens — PhoneEntry, OTPVerify, BusinessProfileWizard, IndividualProfileWizard, TwoFactorChallenge, PasswordAuth, RequestCallbackModal. (7 other screens already used `undefined` — the correct established pattern.)
+
+**BUG-MOBILE-QUERY-CACHE-NOT-CLEARED (High) — fresh user sees the previous user's data ("fake data").** `authStore.signOut()` cleared the auth fields but never cleared the TanStack Query cache; no `queryClient.clear()` existed on any auth transition. The in-memory cache (dashboard-metrics, recent-activities, org lists) survived logout, and because a brand-new user has no org the query keys degrade to `['dashboard-metrics', undefined, …]` — colliding with the prior session — so the next sign-in on the same running app served stale data. Fixed: extracted the singleton to `src/lib/queryClient.ts` and call `queryClient.clear()` in `signOut()`. Regression test added (authStore.test.ts).
+
+**BUG-MOBILE-OTP-DOUBLE-VERIFY (Med) — duplicate POST /auth/otp/verify.** `verifyOTP` guarded only on `otpValue.length !== 6`, not on in-flight state. It fires from THREE sources — OTPInput `onComplete` (6th digit), the Android SMS auto-reader, and the manual Verify button — so an SMS auto-read both fills the boxes (→ onComplete) AND calls verify, racing two concurrent verifies for a single-use OTP (2nd 409s). Fixed with a synchronous `useRef` in-flight guard (state can't guard this — setState is async), released on the error path for retry. (The registration wizard's submit is already safe: its Button disables on `loading`.)
+
+**Verification:** `npm run type-check` clean; `npx jest` 95 suites / 864 tests green (was 863 + 1 new cache-clear regression). Live on-device confirmation (Android emulator: type in registration to see the jump gone; log out→log in as a new user to confirm empty state) recommended as the final sign-off.

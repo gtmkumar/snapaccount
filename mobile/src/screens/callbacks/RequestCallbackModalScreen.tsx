@@ -170,7 +170,9 @@ export function RequestCallbackModalScreen({ navigation, route }: Props) {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        // Android adjustResize already handles the keyboard; a 'height' KAV on top
+        // double-adjusts and flickers the screen while typing — undefined on Android.
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
       >
         {/* Header */}
