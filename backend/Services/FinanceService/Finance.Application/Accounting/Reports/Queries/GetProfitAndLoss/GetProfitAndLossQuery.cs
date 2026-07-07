@@ -60,8 +60,10 @@ public sealed class GetProfitAndLossQueryHandler(IAccountingDbContext dbContext)
             .Where(a => a.OrgId == request.OrgId && a.DeletedAt == null)
             .ToDictionaryAsync(a => a.Id, cancellationToken);
 
-        // Income = credit side of INCOME accounts
-        var incomeLines = BuildLines(entries, accounts, "INCOME", isCredit: true);
+        // Income = credit side of REVENUE accounts.
+        // BUG-ACCT-INCOME-VS-REVENUE: canonical account_type is "REVENUE" (DB
+        // CHECK constraint) — "INCOME" never matches, so income lines were empty.
+        var incomeLines = BuildLines(entries, accounts, "REVENUE", isCredit: true);
         var expenseLines = BuildLines(entries, accounts, "EXPENSE", isCredit: false);
 
         var totalIncome = incomeLines.Sum(l => l.Amount);

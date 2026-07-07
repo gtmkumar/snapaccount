@@ -26,7 +26,7 @@ public record GetComparativeAnalysisQuery(
     /// <summary>Prior financial year for YoY comparison (default: BaseYear - 1).</summary>
     int? PriorYear = null,
     /// <summary>
-    /// Optional filter: restrict to a specific ledger category (INCOME / EXPENSE / ASSET / LIABILITY).
+    /// Optional filter: restrict to a specific ledger category (REVENUE / EXPENSE / ASSET / LIABILITY; legacy "INCOME" accepted as REVENUE).
     /// Null = return all categories.
     /// </summary>
     string? CategoryFilter = null) : IQuery<ComparativeAnalysisResponse>;
@@ -40,7 +40,7 @@ public record ComparativeAnalysisResponse(
     int PriorYear,
     /// <summary>Month labels in Indian FY order: Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec, Jan, Feb, Mar.</summary>
     IReadOnlyList<string> Labels,
-    /// <summary>Revenue (INCOME accounts, credit side) for the base year per month.</summary>
+    /// <summary>Revenue (REVENUE accounts, credit side) for the base year per month.</summary>
     IReadOnlyList<decimal> BaseRevenue,
     /// <summary>Revenue for the prior year per month (aligned to Labels).</summary>
     IReadOnlyList<decimal> PriorRevenue,
@@ -83,8 +83,8 @@ public sealed class GetComparativeAnalysisQueryValidator : AbstractValidator<Get
             .LessThan(x => x.BaseYear)
             .When(x => x.PriorYear.HasValue);
         RuleFor(x => x.CategoryFilter)
-            .Must(c => c is null or "INCOME" or "EXPENSE" or "ASSET" or "LIABILITY")
-            .WithMessage("CategoryFilter must be one of: INCOME, EXPENSE, ASSET, LIABILITY.")
+            .Must(c => c is null or "REVENUE" or "INCOME" or "EXPENSE" or "ASSET" or "LIABILITY")
+            .WithMessage("CategoryFilter must be one of: REVENUE (or legacy INCOME), EXPENSE, ASSET, LIABILITY.")
             .When(x => x.CategoryFilter is not null);
     }
 }
@@ -110,15 +110,19 @@ public sealed class GetComparativeAnalysisQueryHandler(IAccountingDbContext db)
     {
         var priorYear = request.PriorYear ?? (request.BaseYear - 1);
 
+        // BUG-ACCT-INCOME-VS-REVENUE: canonical account_type is "REVENUE" (DB
+        // CHECK constraint) — normalize the legacy "INCOME" filter for back-compat.
+        var categoryFilter = request.CategoryFilter == "INCOME" ? "REVENUE" : request.CategoryFilter;
+
         // ── Pull approved ledger entries for both years ───────────────────────
         var baseEntries = await FetchMonthlyTotalsAsync(
-            request.OrgId, request.BaseYear, request.CategoryFilter, cancellationToken);
+            request.OrgId, request.BaseYear, categoryFilter, cancellationToken);
         var priorEntries = await FetchMonthlyTotalsAsync(
-            request.OrgId, priorYear, request.CategoryFilter, cancellationToken);
+            request.OrgId, priorYear, categoryFilter, cancellationToken);
 
         // ── Build 12-slot arrays (period 1..12) ───────────────────────────────
-        var baseRevenue = BuildSeries(baseEntries, "INCOME", isCredit: true);
-        var priorRevenue = BuildSeries(priorEntries, "INCOME", isCredit: true);
+        var baseRevenue = BuildSeries(baseEntries, "REVENUE", isCredit: true);
+        var priorRevenue = BuildSeries(priorEntries, "REVENUE", isCredit: true);
         var baseExpense = BuildSeries(baseEntries, "EXPENSE", isCredit: false);
         var priorExpense = BuildSeries(priorEntries, "EXPENSE", isCredit: false);
 
@@ -148,7 +152,7 @@ public sealed class GetComparativeAnalysisQueryHandler(IAccountingDbContext db)
 
         // ── Top movers by ledger category (up to 10) ─────────────────────────
         var topMovers = await BuildTopMoversAsync(
-            request.OrgId, request.BaseYear, priorYear, request.CategoryFilter, cancellationToken);
+            request.OrgId, request.BaseYear, priorYear, categoryFilter, cancellationToken);
 
         return new ComparativeAnalysisResponse(
             OrgId: request.OrgId,
@@ -174,7 +178,7 @@ public sealed class GetComparativeAnalysisQueryHandler(IAccountingDbContext db)
         Guid orgId, int fyYear, string? categoryFilter, CancellationToken ct)
     {
         string[] accountTypes = categoryFilter is null
-            ? ["INCOME", "EXPENSE", "ASSET", "LIABILITY"]
+            ? ["REVENUE", "EXPENSE", "ASSET", "LIABILITY"]
             : [categoryFilter];
 
         // Resolve relevant account IDs for the org
@@ -269,8 +273,8 @@ public sealed class GetComparativeAnalysisQueryHandler(IAccountingDbContext db)
         Guid orgId, int baseYear, int priorYear, string? categoryFilter, CancellationToken ct)
     {
         var accountTypes = categoryFilter is null
-            ? ["INCOME", "EXPENSE"]
-            : (categoryFilter is "INCOME" or "EXPENSE" ? [categoryFilter] : new string[0]);
+            ? ["REVENUE", "EXPENSE"]
+            : (categoryFilter is "REVENUE" or "EXPENSE" ? [categoryFilter] : new string[0]);
 
         if (accountTypes.Length == 0) return [];
 
@@ -304,7 +308,7 @@ public sealed class GetComparativeAnalysisQueryHandler(IAccountingDbContext db)
 
         var movers = accounts.Select(acc =>
         {
-            var isIncome = acc.AccountType == "INCOME";
+            var isIncome = acc.AccountType == "REVENUE";
             var baseTotal = GetAccountYearTotal(baseQuery, acc.Id, isIncome);
             var priorTotal = GetAccountYearTotal(priorQuery, acc.Id, isIncome);
             var change = baseTotal - priorTotal;

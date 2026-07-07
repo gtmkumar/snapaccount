@@ -35,6 +35,30 @@ permissions:
 jobs:
 
   # ─────────────────────────────────────────────
+  # Job 0: GCP configuration gate
+  # The repo has no GCP OIDC vars until infra is provisioned (TL-gated —
+  # see infra/README.md). Without this gate every push to main turned the run
+  # red at google-github-actions/auth. Deploy jobs are skipped (not failed)
+  # until GCP_WORKLOAD_IDENTITY_PROVIDER is set as a repository variable.
+  # ─────────────────────────────────────────────
+  gcp-config-check:
+    name: GCP Config Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report GCP OIDC configuration status
+        run: |
+          if [ -n "${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ]; then
+            echo "GCP OIDC is configured — deployment jobs will run."
+          else
+            echo "::notice title=Production deploy skipped::GCP OIDC is not configured (repo variable GCP_WORKLOAD_IDENTITY_PROVIDER is unset). Build & deploy jobs were skipped, not failed. Provision GCP infra per infra/README.md to enable CD."
+            {
+              echo "### Production deploy skipped"
+              echo "GCP OIDC is not configured (\`GCP_WORKLOAD_IDENTITY_PROVIDER\` repo variable is unset)."
+              echo "Provision GCP infra per \`infra/README.md\` to enable deployments."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ─────────────────────────────────────────────
   # Job 1: Resolve image tag
   # ─────────────────────────────────────────────
   prepare:
@@ -63,6 +87,8 @@ jobs:
     name: Build & Push — ${{ matrix.service.name }}
     runs-on: ubuntu-latest
     needs: prepare
+    # Skip (don't fail) until GCP OIDC is provisioned — see gcp-config-check.
+    if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != ''
 
     strategy:
       fail-fast: false
@@ -119,6 +145,8 @@ jobs:
     name: Build & Push — API Gateway
     runs-on: ubuntu-latest
     needs: prepare
+    # Skip (don't fail) until GCP OIDC is provisioned — see gcp-config-check.
+    if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != ''
 
     steps:
       - name: Checkout
@@ -159,6 +187,8 @@ jobs:
     name: Build & Push — Admin Panel
     runs-on: ubuntu-latest
     needs: prepare
+    # Skip (don't fail) until GCP OIDC is provisioned — see gcp-config-check.
+    if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != ''
 
     steps:
       - name: Checkout
@@ -211,7 +241,8 @@ jobs:
   approval-gate:
     name: Awaiting Production Approval
     runs-on: ubuntu-latest
-    needs: [build-push, build-push-gateway, build-push-admin]
+    # prepare included so needs.prepare.outputs.image_tag below actually resolves.
+    needs: [prepare, build-push, build-push-gateway, build-push-admin]
     environment: production   # <-- triggers approval requirement
 
     steps:
@@ -384,7 +415,8 @@ jobs:
   post-deploy-verify:
     name: Post-Deploy Health Checks
     runs-on: ubuntu-latest
-    needs: [deploy-production, deploy-gateway-production, deploy-admin-production]
+    # prepare included so needs.prepare.outputs.image_tag below actually resolves.
+    needs: [prepare, deploy-production, deploy-gateway-production, deploy-admin-production]
     if: success()
 
     steps:

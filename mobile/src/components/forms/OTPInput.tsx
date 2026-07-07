@@ -88,7 +88,12 @@ export function OTPInput({
         inputRefs.current[index + 1]?.focus();
       }
 
-      if (combined.length === length && !combined.includes('')) {
+      // BUG-MOBILE-OTP-ONCOMPLETE-NEVER-FIRES: this previously checked
+      // `!combined.includes('')` — but every string includes the empty string,
+      // so the condition was always false and onComplete NEVER fired for
+      // hand-typed OTPs (auto-verify only worked for paste/SMS auto-read).
+      // The empty-box check belongs on the ARRAY, not the joined string.
+      if (combined.length === length && !newValues.includes('')) {
         onComplete?.(combined);
         inputRefs.current[length - 1]?.blur();
       }

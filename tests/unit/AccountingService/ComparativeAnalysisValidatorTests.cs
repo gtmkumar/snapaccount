@@ -44,7 +44,8 @@ public sealed class ComparativeAnalysisValidatorTests
     }
 
     [Theory]
-    [InlineData("INCOME")]
+    [InlineData("REVENUE")]       // canonical (matches DB CHECK constraint)
+    [InlineData("INCOME")]        // legacy alias — normalized to REVENUE in the handler
     [InlineData("EXPENSE")]
     [InlineData("ASSET")]
     [InlineData("LIABILITY")]
@@ -119,7 +120,7 @@ public sealed class ComparativeAnalysisValidatorTests
 
     [Theory]
     [InlineData("income")]        // lowercase
-    [InlineData("Revenue")]       // wrong name
+    [InlineData("Revenue")]       // wrong case — must be uppercase REVENUE
     [InlineData("PROFIT")]        // not a valid account type
     [InlineData("CASH")]          // not in the allowed set
     [InlineData("")]              // empty string — use null for "all"

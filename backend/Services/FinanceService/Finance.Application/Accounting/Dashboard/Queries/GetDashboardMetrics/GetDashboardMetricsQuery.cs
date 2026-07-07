@@ -81,16 +81,19 @@ public sealed class GetDashboardMetricsQueryHandler(
 
         var periodLabel = $"FY {fyYear}-{(fyYear + 1) % 100:D2}";
 
-        // ── Resolve INCOME and EXPENSE account IDs for this org ──────────────
+        // ── Resolve REVENUE and EXPENSE account IDs for this org ─────────────
+        // BUG-ACCT-INCOME-VS-REVENUE: the canonical account_type is "REVENUE"
+        // (DB CHECK constraint + coa_template + Account entity doc) — "INCOME"
+        // accounts can never exist, so filtering on it made TotalSales always 0.
         var coaAccounts = await accountingDb.ChartOfAccounts
             .Where(a => a.OrgId == request.OrgId
                      && a.DeletedAt == null
-                     && (a.AccountType == "INCOME" || a.AccountType == "EXPENSE"))
+                     && (a.AccountType == "REVENUE" || a.AccountType == "EXPENSE"))
             .Select(a => new { a.Id, a.AccountType })
             .ToListAsync(cancellationToken);
 
         var incomeAccountIds = coaAccounts
-            .Where(a => a.AccountType == "INCOME")
+            .Where(a => a.AccountType == "REVENUE")
             .Select(a => a.Id)
             .ToHashSet();
 
