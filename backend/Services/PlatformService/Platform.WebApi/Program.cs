@@ -70,6 +70,7 @@ try
 
     builder.Services.AddOpenApi();
     builder.Services.AddHealthChecks();
+    builder.Services.AddDefaultResponseCompression();
 
     builder.Services.ConfigureHttpJsonOptions(opts =>
         opts.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -136,6 +137,10 @@ try
     builder.Services.AddProblemDetails();
 
     var app = builder.Build();
+
+    // First in the pipeline so it wraps every response body (gzip/brotli, negotiated via
+    // Accept-Encoding). Configured in ServiceDefaults.AddDefaultResponseCompression.
+    app.UseResponseCompression();
 
     app.UseSerilogRequestLogging();
     app.UseCors();

@@ -120,6 +120,12 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 
+// Compress the gateway's own responses (health, 429 bodies) and any proxied response that the
+// origin composite left uncompressed. Origin-compressed responses already carry a Content-Encoding
+// header, which this middleware detects and passes through untouched — no double-compression.
+// Configured in ServiceDefaults.AddDefaultResponseCompression.
+app.UseResponseCompression();
+
 // Mint/honour a correlation id, echo it on the response, and emit one structured access-log
 // line per request (method, path, status, latency, client-IP, correlation-id). Registered
 // first so it wraps the rate limiter — throttled (429) requests are logged and correlated too.

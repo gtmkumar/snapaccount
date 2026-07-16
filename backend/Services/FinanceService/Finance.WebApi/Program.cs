@@ -89,6 +89,7 @@ try
 
     builder.Services.AddOpenApi();
     builder.Services.AddHealthChecks();
+    builder.Services.AddDefaultResponseCompression();
 
     builder.Services.AddCors(options =>
         options.AddDefaultPolicy(p =>
@@ -157,6 +158,10 @@ try
         app.MapOpenApi();
         app.MapScalarApiReference();
     }
+
+    // First in the pipeline so it wraps every response body (gzip/brotli, negotiated via
+    // Accept-Encoding). Configured in ServiceDefaults.AddDefaultResponseCompression.
+    app.UseResponseCompression();
 
     app.UseSerilogRequestLogging();
     app.UseCors();

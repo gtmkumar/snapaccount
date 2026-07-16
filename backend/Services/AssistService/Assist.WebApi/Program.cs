@@ -107,6 +107,7 @@ try
 
     builder.Services.AddOpenApi();
     builder.Services.AddHealthChecks();
+    builder.Services.AddDefaultResponseCompression();
 
     // BUG-ASSIST-NO-ENUM-CONVERTER: match Platform/Finance so enum fields serialize as
     // string names (not ints) across Chat/AI/Callback endpoints — consistent API contract.
@@ -175,6 +176,10 @@ try
         app.MapOpenApi();
         app.MapScalarApiReference();
     }
+
+    // First in the pipeline so it wraps every response body (gzip/brotli, negotiated via
+    // Accept-Encoding). Configured in ServiceDefaults.AddDefaultResponseCompression.
+    app.UseResponseCompression();
 
     app.UseCors();
     app.UseRateLimiter();
