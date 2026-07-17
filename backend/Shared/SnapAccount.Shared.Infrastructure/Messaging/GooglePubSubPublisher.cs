@@ -52,15 +52,15 @@ public sealed class GooglePubSubPublisher(
         // Guarded so a Pub/Sub outage trips a circuit breaker and fails fast
         // instead of stalling every publishing request thread.
         var messageId = guard is null
-            ? await PublishCoreAsync(topicName, message)
-            : await guard.ExecuteAsync("pubsub", _ => PublishCoreAsync(topicName, message), ct);
+            ? await PublishCoreAsync(topicName, message, ct)
+            : await guard.ExecuteAsync("pubsub", token => PublishCoreAsync(topicName, message, token), ct);
 
         logger.LogInformation(
             "Published event {EventType} with id {EventId} to topic {Topic}, messageId: {MessageId}",
             typeof(TEvent).Name, domainEvent.EventId, topicName, messageId);
     }
 
-    private async Task<string> PublishCoreAsync(string topicName, PubsubMessage message)
+    private async Task<string> PublishCoreAsync(string topicName, PubsubMessage message, CancellationToken ct = default)
     {
         var publisherTask = _publishers.GetOrAdd(
             topicName,
@@ -78,6 +78,6 @@ public sealed class GooglePubSubPublisher(
             throw;
         }
 
-        return await publisher.PublishAsync(message);
+        return await publisher.PublishAsync(message).WaitAsync(ct);
     }
 }

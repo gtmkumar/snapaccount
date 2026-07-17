@@ -131,9 +131,12 @@ export default function NotificationsPage() {
     mutationFn: (id: string) => markNotificationRead(id),
     onMutate: async (id) => {
       const context = await snapshotCaches()
+      const wasUnread =
+        context.previousPages.some(([, data]) => data?.items.some(i => i.id === id && i.status === 'UNREAD')) ||
+        context.previousBadge?.items.some(i => i.id === id && i.status === 'UNREAD') ||
+        false
       queryClient.setQueriesData<NotificationInbox>({ queryKey: ['notifications-page'] }, (old) => {
         if (!old) return old
-        const wasUnread = old.items.some(i => i.id === id && i.status === 'UNREAD')
         return {
           ...old,
           items: old.items.map(i => (i.id === id ? { ...i, status: 'READ' as const } : i)),
@@ -141,7 +144,7 @@ export default function NotificationsPage() {
         }
       })
       queryClient.setQueryData<NotificationInbox>(['notification-badge'], (old) =>
-        old ? { ...old, unreadCount: Math.max(0, old.unreadCount - 1) } : old,
+        old && wasUnread ? { ...old, unreadCount: Math.max(0, old.unreadCount - 1) } : old,
       )
       return context
     },
