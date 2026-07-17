@@ -20,6 +20,7 @@ using Scalar.AspNetCore;
 using Serilog;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Infrastructure.Auth;
+using SnapAccount.Shared.Infrastructure.Resilience;
 using System.Reflection;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -91,6 +92,14 @@ try
     builder.Services.AddHealthChecks();
     builder.Services.AddDefaultResponseCompression();
 
+    // Output caching for org-agnostic master data (see Shared.Api.OutputCachingExtensions
+    // for the safety model). One tag per dataset; admin writes evict their tag.
+    builder.Services.AddMasterDataOutputCache(
+        "gst-tax-rates",
+        "loan-products",
+        "itr-config",
+        "hsn-sac");
+
     builder.Services.AddCors(options =>
         options.AddDefaultPolicy(p =>
             p.WithOrigins(
@@ -102,6 +111,11 @@ try
 
     builder.Services.AddSnapAuthentication();
     builder.Services.AddHttpContextAccessor();
+
+    // Cascade containment: per-dependency circuit breaker + timeout + concurrency cap
+    // on every outbound HttpClient (GSTN/IRP/EWB, OCR/Gemini, bank adapters, SendGrid, …)
+    // and on SDK dependencies (Firebase verify, Pub/Sub, GCS) via IExternalCallGuard.
+    builder.Services.AddExternalDependencyResilience(builder.Configuration);
 
     builder.Services.AddRateLimiter(options =>
     {
@@ -168,6 +182,9 @@ try
     app.UseRateLimiter();
     app.UseMiddleware<FirebaseAuthMiddleware>();
     app.UseAuthorization();
+    // AFTER auth on purpose: a cache hit still requires a valid token + endpoint
+    // authorization — only the rendered body of opted-in master-data endpoints is shared.
+    app.UseOutputCache();
     app.UseExceptionHandler();
 
     app.MapHealthChecks("/healthz");

@@ -401,6 +401,9 @@ public sealed class Itr : EndpointGroupBase
         .WithSummary("Get tax slabs for assessment year + regime")
         .WithDescription("Returns versioned slab config. AY format: AY2025-26. Regime: OLD or NEW.")
         .RequireAuthorization()
+        // Output-cached: slab config is global, seeded by migration (no runtime writer),
+        // and changes ~annually — the TTL alone is the regeneration schedule.
+        .CacheOutput(OutputCachingExtensions.MasterDataPolicyPrefix + "itr-config")
         .WithTags("Tax Configuration");
 
         group.MapGet("/deduction-catalog", async (
@@ -413,6 +416,8 @@ public sealed class Itr : EndpointGroupBase
         .WithSummary("Get deduction section catalog")
         .WithDescription("Returns all deduction sections (80C, 80D, etc.) with limits and regime availability.")
         .RequireAuthorization()
+        // Output-cached: same profile as /tax-slabs — global, seeded, ~annual changes.
+        .CacheOutput(OutputCachingExtensions.MasterDataPolicyPrefix + "itr-config")
         .WithTags("Tax Configuration");
 
         // ── Doc Checklist (P6-HANDOFF-23) ─────────────────────────────────────

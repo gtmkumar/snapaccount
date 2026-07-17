@@ -12,7 +12,7 @@ import { Toggle } from '@/components/ui/Toggle'
 import { Badge } from '@/components/ui/Badge'
 import { AlertBanner } from '@/components/shared/AlertBanner'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { getFeatureFlags, updateFeatureFlag } from '@/lib/settingsApi'
+import { getFeatureFlags, updateFeatureFlag, type FeatureFlags } from '@/lib/settingsApi'
 import { toast } from 'sonner'
 
 // Static metadata — keys must match what the API returns
@@ -50,12 +50,22 @@ export function FeatureFlagsSettings() {
   const toggleMutation = useMutation({
     mutationFn: ({ flag, enabled }: { flag: string; enabled: boolean }) =>
       updateFeatureFlag(flag, enabled),
+    onMutate: async ({ flag, enabled }) => {
+      await queryClient.cancelQueries({ queryKey: ['feature-flags'] })
+      const previous = queryClient.getQueryData<FeatureFlags>(['feature-flags'])
+      queryClient.setQueryData<FeatureFlags>(['feature-flags'], (old) =>
+        old ? { ...old, [flag]: enabled } : old,
+      )
+      return { previous }
+    },
     onSuccess: (_data, { flag, enabled }) => {
       toast.success(`Flag "${FLAG_META[flag]?.label ?? flag}" ${enabled ? 'enabled' : 'disabled'}`)
-      void queryClient.invalidateQueries({ queryKey: ['feature-flags'] })
     },
-    onError: (_err, { flag }) => {
-      toast.error(`Failed to update flag "${FLAG_META[flag]?.label ?? flag}"`)
+    onError: (_err, { flag, enabled }, context) => {
+      if (context?.previous) queryClient.setQueryData(['feature-flags'], context.previous)
+      toast.error(`Failed to ${enabled ? 'enable' : 'disable'} "${FLAG_META[flag]?.label ?? flag}" — change reverted`)
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['feature-flags'] })
     },
   })
@@ -143,7 +153,6 @@ export function FeatureFlagsSettings() {
                 <Toggle
                   checked={flag.enabled}
                   onChange={(val) => handleToggle(flag.key, val)}
-                  disabled={toggleMutation.isPending}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">

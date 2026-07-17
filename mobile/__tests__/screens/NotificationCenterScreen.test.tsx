@@ -154,4 +154,30 @@ describe('NotificationCenterScreen — states + Phase 6E', () => {
     expect(getByText('mobile.notifications.title')).toBeTruthy();
     expect(getByText('mobile.notifications.markAll')).toBeTruthy();
   });
+
+  it('Mark all read zeroes the unread state immediately while the call is pending', async () => {
+    mockGetInbox.mockResolvedValue({ items: [GST_ROW], totalCount: 1, unreadCount: 1 });
+    mockMarkAll.mockReturnValue(new Promise(() => undefined) as never); // never settles
+    const { getByLabelText, findByText, queryByText } = renderScreen();
+    await findByText('GST due');
+    expect(queryByText('1')).toBeTruthy(); // unread count badge
+    await act(async () => {
+      fireEvent.press(getByLabelText('mobile.notifications.markAll'));
+    });
+    // Server never responds — badge clearing proves the optimistic cache write
+    await waitFor(() => expect(queryByText('1')).toBeNull());
+  });
+
+  it('rolls back and shows the failure toast when Mark all read fails', async () => {
+    mockGetInbox.mockResolvedValue({ items: [GST_ROW], totalCount: 1, unreadCount: 1 });
+    mockMarkAll.mockRejectedValue(new Error('boom'));
+    const { getByLabelText, findByText, findByTestId, queryByText } = renderScreen();
+    await findByText('GST due');
+    await act(async () => {
+      fireEvent.press(getByLabelText('mobile.notifications.markAll'));
+    });
+    expect(await findByTestId('notif-error-toast')).toBeTruthy();
+    // Rollback (then invalidation refetch) restores the unread badge
+    await waitFor(() => expect(queryByText('1')).toBeTruthy());
+  });
 });

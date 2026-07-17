@@ -4,7 +4,7 @@
  * message. Trailing icon / accessibility action un-bookmarks.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -21,8 +21,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme, createThemedStyles, type ThemeTokens } from '../../contexts/ThemeContext';
 import { ListSkeleton, EmptyState, ErrorState } from '../../components/shared/ListStates';
 import { BookmarkRow } from '../../components/chat/BookmarkRow';
+import { ImsUndoToast } from '../../components/gst/ImsUndoToast';
 import { useHaptics } from '../../hooks/useHaptics';
-import { listBookmarks, toggleBookmark } from '../../api/chat';
+import { listBookmarks, toggleBookmark, type BookmarkedMessage } from '../../api/chat';
 import type { ChatStackParamList } from '../../navigation/ChatStack';
 
 type NavProp = NativeStackNavigationProp<ChatStackParamList, 'ChatBookmarks'>;
@@ -35,6 +36,8 @@ export function ChatBookmarksScreen({ navigation }: Props) {
   const haptics = useHaptics();
   const qc = useQueryClient();
 
+  const [removeFailed, setRemoveFailed] = useState(false);
+
   const { data, isLoading, isRefetching, error, refetch } = useQuery({
     queryKey: ['chat-bookmarks'],
     queryFn: listBookmarks,
@@ -43,12 +46,24 @@ export function ChatBookmarksScreen({ navigation }: Props) {
   const removeMutation = useMutation({
     // Server toggle: calling it on a bookmarked message un-bookmarks it.
     mutationFn: ({ messageId }: { messageId: string }) => toggleBookmark(messageId),
-    onSuccess: () => {
+    onMutate: async ({ messageId }) => {
+      await qc.cancelQueries({ queryKey: ['chat-bookmarks'] });
+      const previous = qc.getQueryData<{ items: BookmarkedMessage[] }>(['chat-bookmarks']);
+      qc.setQueryData<{ items: BookmarkedMessage[] }>(['chat-bookmarks'], (old) =>
+        old ? { ...old, items: old.items.filter((bm) => bm.messageId !== messageId) } : old,
+      );
       haptics.warning();
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) qc.setQueryData(['chat-bookmarks'], context.previous);
+      haptics.error();
+      setRemoveFailed(true);
+    },
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['chat-bookmarks'] });
       void qc.invalidateQueries({ queryKey: ['chat-messages'] });
     },
-    onError: () => haptics.error(),
   });
 
   const items = data?.items ?? [];
@@ -121,6 +136,14 @@ export function ChatBookmarksScreen({ navigation }: Props) {
           ))}
         </ScrollView>
       )}
+
+      {/* Optimistic-removal failure toast (row already restored) */}
+      <ImsUndoToast
+        visible={removeFailed}
+        message={t('mobile.chat.bookmarks.removeFailed')}
+        onDismiss={() => setRemoveFailed(false)}
+        testID="bookmarks-remove-error-toast"
+      />
     </SafeAreaView>
   );
 }

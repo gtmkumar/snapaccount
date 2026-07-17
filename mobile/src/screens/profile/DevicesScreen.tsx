@@ -88,11 +88,20 @@ export function DevicesScreen({ navigation }: Props) {
 
   const revokeMutation = useMutation({
     mutationFn: (id: string) => revokeDevice(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['auth', 'devices'] });
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['auth', 'devices'] });
+      const previous = queryClient.getQueryData<DeviceDto[]>(['auth', 'devices']);
+      queryClient.setQueryData<DeviceDto[]>(['auth', 'devices'], (old) =>
+        old?.filter((d) => d.id !== id),
+      );
+      return { previous };
     },
-    onError: () => {
+    onError: (_err, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(['auth', 'devices'], context.previous);
       Alert.alert('', t('mobile.auth.devices.revokeError'));
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'devices'] });
     },
   });
 

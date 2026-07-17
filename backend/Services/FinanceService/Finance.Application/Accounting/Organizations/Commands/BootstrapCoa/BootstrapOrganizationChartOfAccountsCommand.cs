@@ -54,10 +54,12 @@ public sealed class BootstrapOrganizationChartOfAccountsCommandHandler(
         var existing = await coaRepository.GetByOrganizationAsync(request.OrgId, cancellationToken);
         var existingCodes = existing.Select(a => a.AccountCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var created = 0;
-        foreach (var template in templates.Where(t => !existingCodes.Contains(t.AccountCode)))
-        {
-            var account = ChartOfAccount.CreateFromTemplate(
+        // Build every new account first, then persist them in a single batched write. This used
+        // to call AddAsync (one SaveChanges round trip) per template — dozens of round trips on
+        // every org bootstrap; now it is one batched insert.
+        var accounts = templates
+            .Where(t => !existingCodes.Contains(t.AccountCode))
+            .Select(template => ChartOfAccount.CreateFromTemplate(
                 request.OrgId,
                 template.AccountCode,
                 template.AccountName,
@@ -65,12 +67,12 @@ public sealed class BootstrapOrganizationChartOfAccountsCommandHandler(
                 template.AccountSubtype,
                 // BUG-ACCT-COA-TEMPLATE-CODE: no separate template_code column exists; the source
                 // account_code is the traceability identifier (ChartOfAccount.TemplateCode is EF-ignored).
-                templateCode: template.AccountCode);
+                templateCode: template.AccountCode))
+            .ToList();
 
-            await coaRepository.AddAsync(account, cancellationToken);
-            created++;
-        }
+        if (accounts.Count > 0)
+            await coaRepository.AddRangeAsync(accounts, cancellationToken);
 
-        return new BootstrapCoaResponse(request.OrgId, created);
+        return new BootstrapCoaResponse(request.OrgId, accounts.Count);
     }
 }

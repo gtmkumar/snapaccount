@@ -171,10 +171,21 @@ export function TeamScreen({ navigation }: Props) {
 
   const revokeMutation = useMutation({
     mutationFn: (id: string) => revokeInvite(id),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ['team', 'invites'] });
+      const previous = qc.getQueryData<OrgInvite[]>(['team', 'invites']);
+      qc.setQueryData<OrgInvite[]>(['team', 'invites'], (old) =>
+        old?.filter((i) => i.inviteId !== id),
+      );
+      return { previous };
+    },
+    onError: (err, _id, context) => {
+      if (context?.previous) qc.setQueryData(['team', 'invites'], context.previous);
+      Alert.alert(t('mobile.common.error'), getApiError(err).message);
+    },
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['team', 'invites'] });
     },
-    onError: (err) => Alert.alert(t('mobile.common.error'), getApiError(err).message),
   });
 
   const confirmRevoke = (invite: OrgInvite) => {

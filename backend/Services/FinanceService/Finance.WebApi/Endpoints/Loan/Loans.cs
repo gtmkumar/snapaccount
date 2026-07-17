@@ -69,6 +69,7 @@ public sealed class Loans : EndpointGroupBase
         /// </summary>
         groupBuilder.MapGet("/products", ListLoanProducts)
             .RequireAuthorization().RequireRateLimiting("standard")
+            .CacheOutput(OutputCachingExtensions.MasterDataPolicyPrefix + "loan-products")
             .WithName("ListLoanProducts")
             .WithSummary("Paginated catalog of active loan products")
             .WithDescription("Returns all active loan products ordered by name. Org-agnostic — every authenticated user sees the same catalog. Mobile LoanHubScreen queries pageSize=50.");
@@ -77,6 +78,8 @@ public sealed class Loans : EndpointGroupBase
         /// GET /loans/products/{id} — Single active loan product by ID.
         /// Mobile: getLoanProduct(productId) for product detail / pre-fill.
         /// </summary>
+        // NOT output-cached: GetLoanProductQuery enforces [RequiresPermission("loan.products.read")]
+        // in the MediatR pipeline — a cache hit would skip that check.
         groupBuilder.MapGet("/products/{id:guid}", GetLoanProduct)
             .RequireAuthorization().RequireRateLimiting("standard")
             .WithName("GetLoanProduct")

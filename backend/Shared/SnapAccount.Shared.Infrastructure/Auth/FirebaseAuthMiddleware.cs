@@ -2,7 +2,9 @@ using FirebaseAdmin;
 using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using SnapAccount.Shared.Infrastructure.Resilience;
 
 namespace SnapAccount.Shared.Infrastructure.Auth;
 
@@ -136,7 +138,18 @@ public sealed class FirebaseAuthMiddleware(
             {
                 try
                 {
-                    var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
+                    // Guarded (circuit breaker + timeout + concurrency cap): a slow or down
+                    // Firebase must fail fast and leave the request unauthenticated (the
+                    // endpoint's RequireAuthorization() returns 401) instead of stalling
+                    // every request thread in the service. Guard resolved lazily so hosts
+                    // that don't register resilience keep the direct call.
+                    var guard = context.RequestServices.GetService<IExternalCallGuard>();
+                    var decodedToken = guard is null
+                        ? await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken, context.RequestAborted)
+                        : await guard.ExecuteAsync(
+                            "firebase-auth",
+                            ct => FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken, ct),
+                            context.RequestAborted);
                     context.Items["FirebaseDecodedToken"] = decodedToken;
                     context.Items["FirebaseUid"] = decodedToken.Uid;
                     context.Items["FirebaseClaims"] = decodedToken.Claims;

@@ -11,6 +11,7 @@ using Scalar.AspNetCore;
 using Serilog;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Infrastructure.Auth;
+using SnapAccount.Shared.Infrastructure.Resilience;
 using SubscriptionService.Infrastructure;
 using System.Reflection;
 using System.Text.Json.Serialization;
@@ -72,6 +73,17 @@ try
     builder.Services.AddHealthChecks();
     builder.Services.AddDefaultResponseCompression();
 
+    // Output caching for org-agnostic master data (see Shared.Api.OutputCachingExtensions
+    // for the safety model). One tag per dataset; admin writes evict their tag.
+    // NOTE: the permission catalog (/auth/permissions, /auth/permission-meta) is deliberately
+    // NOT cached — its RBAC ([RequiresPermission]) runs inside the MediatR pipeline, which a
+    // cache hit would skip. Only cache endpoints whose auth is complete at the HTTP layer.
+    builder.Services.AddMasterDataOutputCache(
+        "reference-data",
+        "app-version",
+        "subscription-plans",
+        "ai-prices");
+
     builder.Services.ConfigureHttpJsonOptions(opts =>
         opts.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
@@ -93,6 +105,11 @@ try
 
     builder.Services.AddSnapAuthentication();
     builder.Services.AddHttpContextAccessor();
+
+    // Cascade containment: per-dependency circuit breaker + timeout + concurrency cap
+    // on every outbound HttpClient (Razorpay, MSG91, SendGrid, WhatsApp, FCM, KYC, …)
+    // and on SDK dependencies (Firebase verify, Pub/Sub, GCS) via IExternalCallGuard.
+    builder.Services.AddExternalDependencyResilience(builder.Configuration);
 
     builder.Services.AddRateLimiter(options =>
     {
@@ -148,6 +165,9 @@ try
     app.UseMiddleware<FirebaseAuthMiddleware>();
     app.UseMiddleware<DeviceIntegrityMiddleware>();
     app.UseAuthorization();
+    // AFTER auth on purpose: a cache hit still requires a valid token + endpoint
+    // authorization — only the rendered body of opted-in master-data endpoints is shared.
+    app.UseOutputCache();
     app.UseExceptionHandler();
 
     if (app.Environment.IsDevelopment())

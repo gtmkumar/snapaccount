@@ -20,6 +20,12 @@ public interface ILedgerEntryRepository
     /// <summary>Persists a new ledger entry.</summary>
     Task<LedgerEntry> AddAsync(LedgerEntry entry, CancellationToken ct = default);
 
+    /// <summary>
+    /// Persists many ledger entries in a single atomic transaction (one SaveChanges). Used when
+    /// posting a journal batch, whose double-entry lines must commit all-or-nothing.
+    /// </summary>
+    Task AddRangeAsync(IEnumerable<LedgerEntry> entries, CancellationToken ct = default);
+
     /// <summary>Persists changes to an existing ledger entry.</summary>
     Task UpdateAsync(LedgerEntry entry, CancellationToken ct = default);
 }

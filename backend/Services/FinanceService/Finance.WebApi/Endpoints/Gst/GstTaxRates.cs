@@ -3,6 +3,7 @@ using GstService.Application.TaxRates.Commands.DeactivateTaxRate;
 using GstService.Application.TaxRates.Queries.GetEffectiveTaxRate;
 using GstService.Application.TaxRates.Queries.ListTaxRates;
 using MediatR;
+using Microsoft.AspNetCore.OutputCaching;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Domain;
 
@@ -31,8 +32,11 @@ public sealed class GstTaxRates : EndpointGroupBase
         // ── Read endpoints (any authenticated user) ──────────────────────────
 
         // GET /gst/tax-rates — all rates (activeOnly=true for currently live rates)
+        // Output-cached: rate config is identical for every user and changes only via the
+        // admin writes below (which evict the "gst-tax-rates" tag). TTL bounds staleness.
         groupBuilder.MapGet("/", ListTaxRates)
             .RequireAuthorization().RequireRateLimiting("standard")
+            .CacheOutput(OutputCachingExtensions.MasterDataPolicyPrefix + "gst-tax-rates")
             .WithName("ListGstTaxRates")
             .WithSummary(
                 "GAP-022: List all GST tax rates, optionally filtered to currently active (valid_to IS NULL).");
@@ -40,6 +44,7 @@ public sealed class GstTaxRates : EndpointGroupBase
         // GET /gst/tax-rates/effective?rateName=GST+18%&asOfDate=2026-04-01
         groupBuilder.MapGet("/effective", GetEffectiveTaxRate)
             .RequireAuthorization().RequireRateLimiting("standard")
+            .CacheOutput(OutputCachingExtensions.MasterDataPolicyPrefix + "gst-tax-rates")
             .WithName("GetEffectiveGstTaxRate")
             .WithSummary(
                 "GAP-022: Resolve the effective rate for a given rate name and date. " +
@@ -85,19 +90,31 @@ public sealed class GstTaxRates : EndpointGroupBase
         return result.IsSuccess ? Results.Ok(result.Value) : MapError(result.Error);
     }
 
-    private static async Task<IResult> CreateTaxRate(CreateTaxRateRequest req, ISender sender, CancellationToken ct)
+    private static async Task<IResult> CreateTaxRate(
+        CreateTaxRateRequest req, ISender sender, IOutputCacheStore cacheStore,
+        ILogger<GstTaxRates> logger, CancellationToken ct)
     {
         var result = await sender.Send(
             new CreateTaxRateCommand(req.RateName, req.RatePct, req.ValidFrom, req.Notes), ct);
-        return result.IsSuccess
-            ? Results.Created($"/gst/tax-rates/{result.Value.TaxRateId}", result.Value)
-            : MapError(result.Error);
+        if (result.IsSuccess)
+        {
+            await cacheStore.EvictMasterDataAsync("gst-tax-rates", logger, ct);
+            return Results.Created($"/gst/tax-rates/{result.Value.TaxRateId}", result.Value);
+        }
+        return MapError(result.Error);
     }
 
-    private static async Task<IResult> DeactivateTaxRate(Guid id, ISender sender, CancellationToken ct)
+    private static async Task<IResult> DeactivateTaxRate(
+        Guid id, ISender sender, IOutputCacheStore cacheStore,
+        ILogger<GstTaxRates> logger, CancellationToken ct)
     {
         var result = await sender.Send(new DeactivateTaxRateCommand(id), ct);
-        return result.IsSuccess ? Results.Ok(new { message = "Tax rate deactivated." }) : MapError(result.Error);
+        if (result.IsSuccess)
+        {
+            await cacheStore.EvictMasterDataAsync("gst-tax-rates", logger, ct);
+            return Results.Ok(new { message = "Tax rate deactivated." });
+        }
+        return MapError(result.Error);
     }
 
     private static IResult MapError(Error error) => error.Type switch

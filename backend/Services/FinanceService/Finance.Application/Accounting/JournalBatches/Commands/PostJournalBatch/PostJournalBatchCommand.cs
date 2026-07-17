@@ -92,8 +92,8 @@ public sealed class PostJournalBatchCommandHandler(
 
         await batchRepository.AddAsync(batch, cancellationToken);
 
-        foreach (var entry in batch.Entries)
-            await ledgerRepository.AddAsync(entry, cancellationToken);
+        // Persist all ledger lines in one batched write instead of a SaveChanges per entry.
+        await ledgerRepository.AddRangeAsync(batch.Entries, cancellationToken);
 
         return new PostJournalBatchResponse(batch.Id, batch.BatchNumber, batch.TotalDebit);
     }

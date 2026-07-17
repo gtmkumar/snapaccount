@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.OutputCaching;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Domain;
 using SubscriptionService.Application.Config.Commands.UpdateRazorpayConfig;
@@ -44,9 +45,12 @@ public sealed class Subscriptions : EndpointGroupBase
         // ── Plans ───────────────────────────────────────────────────────────
 
         // GET /subscriptions/plans — list available plans
+        // Output-cached: the plan catalog is global (no org/user scoping, no pipeline
+        // [RequiresPermission] on ListPlansQuery); create/update below evict the tag.
         g.MapGet("/plans", ListPlans)
             .RequireAuthorization()
             .RequireRateLimiting("standard")
+            .CacheOutput(OutputCachingExtensions.MasterDataPolicyPrefix + "subscription-plans")
             .WithName("ListPlans")
             .WithSummary("List active subscription plans.");
 
@@ -242,21 +246,31 @@ public sealed class Subscriptions : EndpointGroupBase
     }
 
     private static async Task<IResult> CreatePlan(
-        CreatePlanRequest req, ISender sender, CancellationToken ct)
+        CreatePlanRequest req, ISender sender, IOutputCacheStore cacheStore,
+        ILogger<Subscriptions> logger, CancellationToken ct)
     {
         var result = await sender.Send(
             new CreatePlanCommand(req.Name, req.Tier, req.BillingCycle, req.PriceInr, req.TrialDays, req.Description), ct);
-        return result.IsSuccess
-            ? Results.Created($"/subscriptions/plans/{result.Value.PlanId}", result.Value)
-            : MapError(result.Error);
+        if (result.IsSuccess)
+        {
+            await cacheStore.EvictMasterDataAsync("subscription-plans", logger, ct);
+            return Results.Created($"/subscriptions/plans/{result.Value.PlanId}", result.Value);
+        }
+        return MapError(result.Error);
     }
 
     private static async Task<IResult> UpdatePlan(
-        Guid id, UpdatePlanRequest req, ISender sender, CancellationToken ct)
+        Guid id, UpdatePlanRequest req, ISender sender, IOutputCacheStore cacheStore,
+        ILogger<Subscriptions> logger, CancellationToken ct)
     {
         var result = await sender.Send(
             new UpdatePlanCommand(id, req.Name, req.PriceInr, req.Description, req.IsActive), ct);
-        return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
+        if (result.IsSuccess)
+        {
+            await cacheStore.EvictMasterDataAsync("subscription-plans", logger, ct);
+            return Results.NoContent();
+        }
+        return MapError(result.Error);
     }
 
     /// <summary>

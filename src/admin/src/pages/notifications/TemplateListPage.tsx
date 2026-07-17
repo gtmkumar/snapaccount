@@ -241,12 +241,31 @@ export default function TemplateListPage() {
       // Flip the active state (CG-11) — previously omitted isActive, so the toggle was a no-op.
       return updateNotificationTemplate(tpl.id, { body: tpl.body, subject: tpl.subject, isActive: !tpl.isActive })
     },
+    onMutate: async (tpl) => {
+      await queryClient.cancelQueries({ queryKey: ['notification-templates'] })
+      const previous = queryClient.getQueriesData<{ items: NotificationTemplate[]; totalCount: number }>({
+        queryKey: ['notification-templates'],
+      })
+      queryClient.setQueriesData<{ items: NotificationTemplate[]; totalCount: number }>(
+        { queryKey: ['notification-templates'] },
+        (old) =>
+          old
+            ? { ...old, items: old.items.map(i => (i.id === tpl.id ? { ...i, isActive: !tpl.isActive } : i)) }
+            : old,
+      )
+      return { previous }
+    },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['notification-templates'] })
       toast.success('Template updated')
     },
-    onError: () => toast.error('Failed to update template'),
-    onSettled: () => setTogglingId(null),
+    onError: (_err, _tpl, context) => {
+      context?.previous.forEach(([key, cached]) => queryClient.setQueryData(key, cached))
+      toast.error('Failed to update template — change reverted')
+    },
+    onSettled: () => {
+      setTogglingId(null)
+      void queryClient.invalidateQueries({ queryKey: ['notification-templates'] })
+    },
   })
 
   const deleteMutation = useMutation({

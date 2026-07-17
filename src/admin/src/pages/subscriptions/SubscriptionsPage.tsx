@@ -505,8 +505,22 @@ export default function SubscriptionsPage() {
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, isActive, plan }: { id: string; isActive: boolean; plan: Plan }) =>
       updatePlan(id, { name: plan.name, priceInr: plan.priceInr, isActive }),
+    onMutate: async ({ id, isActive }) => {
+      await queryClient.cancelQueries({ queryKey: ['subscriptions', 'plans'] })
+      const previous = queryClient.getQueryData<Plan[]>(['subscriptions', 'plans'])
+      queryClient.setQueryData<Plan[]>(['subscriptions', 'plans'], (old) =>
+        old?.map(p => (p.planId === id ? { ...p, isActive } : p)),
+      )
+      return { previous }
+    },
     onSuccess: () => {
       toast.success(t('subscriptions.planUpdated'))
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['subscriptions', 'plans'], context.previous)
+      toast.error(t('subscriptions.planUpdateFailed'))
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['subscriptions', 'plans'] })
     },
   })

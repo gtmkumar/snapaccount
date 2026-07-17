@@ -121,4 +121,28 @@ describe('ChatBookmarksScreen', () => {
     });
     await waitFor(() => expect(getByTestId('bookmarks-error')).toBeTruthy());
   });
+
+  it('optimistically removes the row while the server call is still pending', async () => {
+    mockToggleBookmark.mockReturnValue(new Promise(() => {})); // never settles
+    const { getByTestId, queryByTestId } = render(
+      <ChatBookmarksScreen navigation={navigation} />,
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(getByTestId('m1-remove')).toBeTruthy());
+    fireEvent.press(getByTestId('m1-remove'));
+    // Server never responds — the row disappearing proves the optimistic cache write
+    await waitFor(() => expect(queryByTestId('bookmark-row-m1')).toBeNull());
+  });
+
+  it('restores the row and shows the failure toast when removal fails', async () => {
+    mockToggleBookmark.mockRejectedValue(new Error('boom'));
+    const { getByTestId, queryByTestId } = render(
+      <ChatBookmarksScreen navigation={navigation} />,
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(getByTestId('m1-remove')).toBeTruthy());
+    fireEvent.press(getByTestId('m1-remove'));
+    await waitFor(() => expect(getByTestId('bookmarks-remove-error-toast')).toBeTruthy());
+    expect(queryByTestId('bookmark-row-m1')).toBeTruthy();
+  });
 });

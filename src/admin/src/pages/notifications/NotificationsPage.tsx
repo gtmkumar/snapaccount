@@ -21,9 +21,11 @@ import {
   getNotificationInbox,
   markNotificationRead,
   markAllNotificationsRead,
+  type NotificationInbox,
   type NotificationItem,
   type NotificationCategory,
 } from '@/lib/notificationApi'
+import { toast } from 'sonner'
 
 const PAGE_SIZE = 20
 
@@ -100,20 +102,79 @@ export default function NotificationsPage() {
     staleTime: 30_000,
   })
 
+  // Snapshot both caches so a failed write can restore exactly what was shown
+  async function snapshotCaches() {
+    await Promise.all([
+      queryClient.cancelQueries({ queryKey: ['notifications-page'] }),
+      queryClient.cancelQueries({ queryKey: ['notification-badge'] }),
+    ])
+    return {
+      previousPages: queryClient.getQueriesData<NotificationInbox>({ queryKey: ['notifications-page'] }),
+      previousBadge: queryClient.getQueryData<NotificationInbox>(['notification-badge']),
+    }
+  }
+
+  function restoreCaches(context?: {
+    previousPages: Array<[readonly unknown[], NotificationInbox | undefined]>
+    previousBadge: NotificationInbox | undefined
+  }) {
+    context?.previousPages.forEach(([key, cached]) => queryClient.setQueryData(key, cached))
+    if (context?.previousBadge) queryClient.setQueryData(['notification-badge'], context.previousBadge)
+  }
+
+  function invalidateCaches() {
+    void queryClient.invalidateQueries({ queryKey: ['notifications-page'] })
+    void queryClient.invalidateQueries({ queryKey: ['notification-badge'] })
+  }
+
   const readMutation = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['notifications-page'] })
-      void queryClient.invalidateQueries({ queryKey: ['notification-badge'] })
+    onMutate: async (id) => {
+      const context = await snapshotCaches()
+      queryClient.setQueriesData<NotificationInbox>({ queryKey: ['notifications-page'] }, (old) => {
+        if (!old) return old
+        const wasUnread = old.items.some(i => i.id === id && i.status === 'UNREAD')
+        return {
+          ...old,
+          items: old.items.map(i => (i.id === id ? { ...i, status: 'READ' as const } : i)),
+          unreadCount: wasUnread ? Math.max(0, old.unreadCount - 1) : old.unreadCount,
+        }
+      })
+      queryClient.setQueryData<NotificationInbox>(['notification-badge'], (old) =>
+        old ? { ...old, unreadCount: Math.max(0, old.unreadCount - 1) } : old,
+      )
+      return context
     },
+    onError: (_err, _id, context) => {
+      restoreCaches(context)
+      toast.error(t('notifications.markRead.error'))
+    },
+    onSettled: invalidateCaches,
   })
 
   const readAllMutation = useMutation({
     mutationFn: () => markAllNotificationsRead(),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['notifications-page'] })
-      void queryClient.invalidateQueries({ queryKey: ['notification-badge'] })
+    onMutate: async () => {
+      const context = await snapshotCaches()
+      queryClient.setQueriesData<NotificationInbox>({ queryKey: ['notifications-page'] }, (old) =>
+        old
+          ? {
+              ...old,
+              items: old.items.map(i => ({ ...i, status: 'READ' as const })),
+              unreadCount: 0,
+            }
+          : old,
+      )
+      queryClient.setQueryData<NotificationInbox>(['notification-badge'], (old) =>
+        old ? { ...old, unreadCount: 0 } : old,
+      )
+      return context
     },
+    onError: (_err, _vars, context) => {
+      restoreCaches(context)
+      toast.error(t('notifications.markAllRead.error'))
+    },
+    onSettled: invalidateCaches,
   })
 
   const items = data?.items ?? []

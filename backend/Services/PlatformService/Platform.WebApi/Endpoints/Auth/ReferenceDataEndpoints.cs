@@ -3,6 +3,7 @@ using AuthService.Application.ReferenceData.Commands.DeleteReferenceData;
 using AuthService.Application.ReferenceData.Commands.UpdateReferenceData;
 using AuthService.Application.ReferenceData.Queries.GetReferenceData;
 using MediatR;
+using Microsoft.AspNetCore.OutputCaching;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Domain;
 
@@ -26,8 +27,11 @@ public sealed class ReferenceDataEndpoints : EndpointGroupBase
     public override void Map(RouteGroupBuilder group)
     {
         // GET /auth/reference-data
+        // Output-cached: lookup data is identical for every user; the writes below evict
+        // the "reference-data" tag so dropdowns refresh immediately after an admin edit.
         group.MapGet("/reference-data", GetAll)
             .RequireAuthorization()
+            .CacheOutput(OutputCachingExtensions.MasterDataPolicyPrefix + "reference-data")
             .WithSummary(
                 "List reference-data entries. Optional ?category= and ?activeOnly=true|false. " +
                 "Defaults: all categories, activeOnly=true (dropdown-safe). " +
@@ -68,31 +72,47 @@ public sealed class ReferenceDataEndpoints : EndpointGroupBase
 
     // POST /auth/reference-data
     private static async Task<IResult> Create(
-        CreateReferenceDataRequest req, ISender sender, CancellationToken ct)
+        CreateReferenceDataRequest req, ISender sender, IOutputCacheStore cacheStore,
+        ILogger<ReferenceDataEndpoints> logger, CancellationToken ct)
     {
         var result = await sender.Send(
             new CreateReferenceDataCommand(
                 req.Category, req.Code, req.Name, req.ParentCode, req.SortOrder ?? 0), ct);
-        return result.IsSuccess
-            ? Results.Created($"/auth/reference-data/{result.Value.Id}", result.Value)
-            : MapError(result.Error);
+        if (result.IsSuccess)
+        {
+            await cacheStore.EvictMasterDataAsync("reference-data", logger, ct);
+            return Results.Created($"/auth/reference-data/{result.Value.Id}", result.Value);
+        }
+        return MapError(result.Error);
     }
 
     // PUT /auth/reference-data/{id}
     private static async Task<IResult> Update(
-        Guid id, UpdateReferenceDataRequest req, ISender sender, CancellationToken ct)
+        Guid id, UpdateReferenceDataRequest req, ISender sender, IOutputCacheStore cacheStore,
+        ILogger<ReferenceDataEndpoints> logger, CancellationToken ct)
     {
         var result = await sender.Send(
             new UpdateReferenceDataCommand(id, req.Name, req.ParentCode, req.SortOrder, req.IsActive), ct);
-        return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
+        if (result.IsSuccess)
+        {
+            await cacheStore.EvictMasterDataAsync("reference-data", logger, ct);
+            return Results.NoContent();
+        }
+        return MapError(result.Error);
     }
 
     // DELETE /auth/reference-data/{id}
     private static async Task<IResult> Delete(
-        Guid id, ISender sender, CancellationToken ct)
+        Guid id, ISender sender, IOutputCacheStore cacheStore,
+        ILogger<ReferenceDataEndpoints> logger, CancellationToken ct)
     {
         var result = await sender.Send(new DeleteReferenceDataCommand(id), ct);
-        return result.IsSuccess ? Results.NoContent() : MapError(result.Error);
+        if (result.IsSuccess)
+        {
+            await cacheStore.EvictMasterDataAsync("reference-data", logger, ct);
+            return Results.NoContent();
+        }
+        return MapError(result.Error);
     }
 
     private static IResult MapError(Error error) => error.Type switch

@@ -24,6 +24,17 @@ public sealed class LedgerEntryRepository(AccountingDbContext dbContext) : ILedg
     }
 
     /// <inheritdoc />
+    public async Task AddRangeAsync(IEnumerable<LedgerEntry> entries, CancellationToken ct = default)
+    {
+        // Double-entry postings must commit atomically, so all lines go in ONE transaction (one
+        // SaveChanges) — never chunked into separate commits. EF Core + Npgsql still batch the
+        // INSERTs into multi-row commands under the hood (MaxBatchSize), so this is a handful of
+        // round trips rather than one-per-entry (the previous foreach + AddAsync behaviour).
+        dbContext.LedgerEntries.AddRange(entries);
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
     public async Task UpdateAsync(LedgerEntry entry, CancellationToken ct = default)
     {
         dbContext.LedgerEntries.Update(entry);

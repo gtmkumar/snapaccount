@@ -24,7 +24,10 @@ public sealed class AppVersion : EndpointGroupBase
     {
         // Anonymous by design: the mobile app must be able to query the version floor BEFORE
         // the user authenticates (the block screen can appear on a fresh install).
+        // Output-cached: called on every app launch by every device, answer is global and
+        // config-driven (no write endpoint) — the 10-min TTL is the regeneration schedule.
         groupBuilder.MapGet("/min-version", GetMinVersion)
+            .CacheOutput(OutputCachingExtensions.MasterDataPolicyPrefix + "app-version")
             .WithSummary("Return the minimum-supported and latest app version for a client platform, "
                        + "plus update-required / update-available verdicts for the supplied current version.");
     }

@@ -15,6 +15,7 @@ using Scalar.AspNetCore;
 using Serilog;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Infrastructure.Auth;
+using SnapAccount.Shared.Infrastructure.Resilience;
 using System.Reflection;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -125,6 +126,11 @@ try
 
     builder.Services.AddSnapAuthentication();
     builder.Services.AddHttpContextAccessor();
+
+    // Cascade containment: per-dependency circuit breaker + timeout + concurrency cap
+    // on every outbound HttpClient (Gemini/Vertex via IAiProviderResolver, Sarvam, …)
+    // and on SDK dependencies (Firebase verify, Pub/Sub, GCS) via IExternalCallGuard.
+    builder.Services.AddExternalDependencyResilience(builder.Configuration);
 
     // Rate limits: union of Chat + AI + Callback policies (register each name once).
     builder.Services.AddRateLimiter(options =>

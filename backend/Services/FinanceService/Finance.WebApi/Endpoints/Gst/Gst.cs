@@ -174,8 +174,12 @@ public sealed class Gst : EndpointGroupBase
             .RequireAuthorization().RequireRateLimiting("standard");
 
         // ── HSN/SAC (Phase 6B) ────────────────────────────────────────────────
+        // Output-cached: the HSN/SAC master is national, seeded, effectively static.
+        // Keys are search-term-shaped (high cardinality) but the store is size-capped
+        // and the 10-min TTL expires cold entries; common invoice-entry terms repeat.
         groupBuilder.MapGet("/hsn-sac/search", SearchHsnSac)
-            .RequireAuthorization().RequireRateLimiting("standard");
+            .RequireAuthorization().RequireRateLimiting("standard")
+            .CacheOutput(OutputCachingExtensions.MasterDataPolicyPrefix + "hsn-sac");
 
         // GET /gst/admin/dashboard-stats — admin-only count for cross-service dashboard
         groupBuilder.MapGet("/admin/dashboard-stats", static async (ISender sender, CancellationToken ct) =>

@@ -78,8 +78,28 @@ public sealed class IngestDocumentCommandHandler(
         var provider = resolved.Provider.ProviderId;
         var model = resolved.EffectiveModel;
 
-        // 3. Embed + persist each chunk (text is already redacted + delimiter-safe).
+        // 3. Embed each chunk, then persist chunks + their embeddings in batched writes.
+        //    Ids are client-generated (Guid.NewGuid in Create), so an embedding can reference its
+        //    chunk without an intermediate save — the previous code did TWO SaveChanges round trips
+        //    per chunk (2N total). We now buffer and flush every `flushEvery` chunks, which also
+        //    bounds transaction/statement size for large documents. Within each SaveChanges EF
+        //    orders the chunk INSERTs before their embeddings (mapped 1:1 FK), so FKs stay satisfied.
+        const int flushEvery = 100;
+        var pendingChunks = new List<AiChunk>(flushEvery);
+        var pendingEmbeddings = new List<AiEmbedding>(flushEvery);
         var chunkIndex = 0;
+
+        async Task FlushAsync()
+        {
+            if (pendingChunks.Count == 0)
+                return;
+            db.AiChunks.AddRange(pendingChunks);
+            db.AiEmbeddings.AddRange(pendingEmbeddings);
+            await db.SaveChangesAsync(cancellationToken);
+            pendingChunks.Clear();
+            pendingEmbeddings.Clear();
+        }
+
         foreach (var chunkText in chunks)
         {
             var embedResult = await resolved.Provider.EmbedAsync(chunkText, cancellationToken);
@@ -101,15 +121,15 @@ public sealed class IngestDocumentCommandHandler(
                 embeddingProvider: provider,
                 embeddingModel: model);
 
-            db.AiChunks.Add(aiChunk);
-            await db.SaveChangesAsync(cancellationToken); // Save chunk to get its Id.
-
-            var embedding = AiEmbedding.Create(aiChunk.Id, request.OrganizationId, embedResult.Value);
-            db.AiEmbeddings.Add(embedding);
-            await db.SaveChangesAsync(cancellationToken);
-
+            pendingChunks.Add(aiChunk);
+            pendingEmbeddings.Add(AiEmbedding.Create(aiChunk.Id, request.OrganizationId, embedResult.Value));
             chunkIndex++;
+
+            if (pendingChunks.Count >= flushEvery)
+                await FlushAsync();
         }
+
+        await FlushAsync();
 
         logger.LogInformation(
             "RAG ingestion complete for document {DocumentId}: {Count} chunks ingested.",

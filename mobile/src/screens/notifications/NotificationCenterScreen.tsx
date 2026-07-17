@@ -50,6 +50,7 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   type InboxNotification,
+  type InboxResponse,
   type NotificationCategory,
 } from '../../api/notifications';
 import type { MoreStackParamList } from '../../navigation/MoreStack';
@@ -101,6 +102,9 @@ export function NotificationCenterScreen({ navigation }: Props) {
   // §4.4 long-press preview target.
   const [previewItem, setPreviewItem] = useState<InboxNotification | null>(null);
 
+  // Failure toast for optimistic mark-read rollbacks.
+  const [errorToast, setErrorToast] = useState<string | null>(null);
+
   const { data, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: [...INBOX_KEY, filter, unreadOnly],
     queryFn: () =>
@@ -112,18 +116,68 @@ export function NotificationCenterScreen({ navigation }: Props) {
       }),
   });
 
+  // Optimistic helpers: every filter/unreadOnly variant lives under INBOX_KEY,
+  // so snapshot them all, patch them all, and restore them all on failure.
+  const snapshotInbox = async () => {
+    await qc.cancelQueries({ queryKey: INBOX_KEY });
+    return { previous: qc.getQueriesData<InboxResponse>({ queryKey: INBOX_KEY }) };
+  };
+
+  const restoreInbox = (context?: {
+    previous: [readonly unknown[], InboxResponse | undefined][];
+  }) => {
+    context?.previous.forEach(([key, cached]) => qc.setQueryData(key, cached));
+  };
+
   const markReadMutation = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      const context = await snapshotInbox();
+      qc.setQueriesData<InboxResponse>({ queryKey: INBOX_KEY }, (old) => {
+        if (!old) return old;
+        const wasUnread = old.items.some((n) => n.id === id && n.status === 'UNREAD');
+        if (!wasUnread) return old;
+        return {
+          ...old,
+          items: old.items.map((n) => (n.id === id ? { ...n, status: 'READ' as const } : n)),
+          unreadCount: Math.max(0, old.unreadCount - 1),
+        };
+      });
       haptics.success();
+      return context;
+    },
+    onError: (_err, _id, context) => {
+      restoreInbox(context);
+      haptics.error();
+      setErrorToast(t('mobile.notifications.error.markReadFailed'));
+    },
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: INBOX_KEY });
     },
   });
 
   const markAllMutation = useMutation({
     mutationFn: () => markAllNotificationsRead(),
-    onSuccess: () => {
+    onMutate: async () => {
+      const context = await snapshotInbox();
+      qc.setQueriesData<InboxResponse>({ queryKey: INBOX_KEY }, (old) =>
+        old
+          ? {
+              ...old,
+              items: old.items.map((n) => ({ ...n, status: 'READ' as const })),
+              unreadCount: 0,
+            }
+          : old,
+      );
       haptics.success();
+      return context;
+    },
+    onError: (_err, _vars, context) => {
+      restoreInbox(context);
+      haptics.error();
+      setErrorToast(t('mobile.notifications.error.markAllFailed'));
+    },
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: INBOX_KEY });
     },
   });
@@ -353,6 +407,14 @@ export function NotificationCenterScreen({ navigation }: Props) {
         onUndo={handleUndoDismiss}
         onDismiss={() => setUndoItem(null)}
         testID="notif-undo-toast"
+      />
+
+      {/* Optimistic-update failure toast (state already rolled back) */}
+      <ImsUndoToast
+        visible={errorToast !== null}
+        message={errorToast ?? ''}
+        onDismiss={() => setErrorToast(null)}
+        testID="notif-error-toast"
       />
     </SafeAreaView>
   );

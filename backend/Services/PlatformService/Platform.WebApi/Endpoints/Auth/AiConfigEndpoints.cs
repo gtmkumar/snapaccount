@@ -8,6 +8,7 @@ using AuthService.Application.AiConfig.Queries.GetAiPrices;
 using AuthService.Application.AiConfig.Queries.GetAiUsage;
 using AuthService.Application.AiConfig.Queries.GetEffectiveAiConfig;
 using MediatR;
+using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.Extensions.Configuration;
 using SnapAccount.Shared.Api;
 using SnapAccount.Shared.Domain;
@@ -103,17 +104,27 @@ public sealed class AiConfigEndpoints : EndpointGroupBase
         }).RequireAuthorization().WithName("RecordAiUsage");
 
         // GET /auth/config/ai/prices — maintained price catalog
+        // Output-cached: global USD rate catalog, no org/user scoping; PUT below evicts.
         group.MapGet("/config/ai/prices", static async (ISender sender, CancellationToken ct) =>
         {
             var result = await sender.Send(new GetAiPricesQuery(), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem(result.Error.Message);
-        }).RequireAuthorization().WithName("GetAiPrices");
+        }).RequireAuthorization()
+          .CacheOutput(OutputCachingExtensions.MasterDataPolicyPrefix + "ai-prices")
+          .WithName("GetAiPrices");
 
         // PUT /auth/config/ai/prices — upsert a catalog rate (Super Admin)
-        group.MapPut("/config/ai/prices", static async (UpsertAiPriceCommand body, ISender sender, CancellationToken ct) =>
+        group.MapPut("/config/ai/prices", static async (
+            UpsertAiPriceCommand body, ISender sender, IOutputCacheStore cacheStore,
+            ILogger<AiConfigEndpoints> logger, CancellationToken ct) =>
         {
             var result = await sender.Send(body, ct);
-            return result.IsSuccess ? Results.Ok(new { id = result.Value }) : MapError(result.Error);
+            if (result.IsSuccess)
+            {
+                await cacheStore.EvictMasterDataAsync("ai-prices", logger, ct);
+                return Results.Ok(new { id = result.Value });
+            }
+            return MapError(result.Error);
         }).RequireAuthorization().WithName("UpsertAiPrice");
 
         // POST /auth/config/ai/test — validate the active provider's credentials (cheap, no tokens)

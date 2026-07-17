@@ -266,6 +266,9 @@ public sealed class LocalAuthService(
         }
 
         // ── Step 8: Seed ManagerPermissions onto DEV_LIMITED_MANAGER ─────────────────
+        // Resolve + existence-check each permission (reads), collect the missing grants, then
+        // persist them in one batched write instead of a SaveChanges per permission.
+        var newGrants = new List<RolePermission>();
         foreach (var permName in ManagerPermissions)
         {
             var perm = await db.Permissions
@@ -285,10 +288,13 @@ public sealed class LocalAuthService(
                     rp.PermissionId == perm.Id &&
                     rp.DeletedAt == null, ct);
             if (!alreadyGranted)
-            {
-                db.RolePermissions.Add(RolePermission.Create(limitedRole.Id, perm.Id));
-                await db.SaveChangesAsync(ct);
-            }
+                newGrants.Add(RolePermission.Create(limitedRole.Id, perm.Id));
+        }
+
+        if (newGrants.Count > 0)
+        {
+            db.RolePermissions.AddRange(newGrants);
+            await db.SaveChangesAsync(ct);
         }
 
         // ── Step 9: Manager user (manager@snapaccount.local) ─────────────────────────

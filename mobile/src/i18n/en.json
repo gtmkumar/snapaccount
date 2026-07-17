@@ -1419,7 +1419,8 @@
           "admin": "SnapAccount team",
           "system": "System",
           "ai": "AI assistant"
-        }
+        },
+        "removeFailed": "Couldn't remove bookmark — restored"
       },
       "export": {
         "action": "Export chat as PDF",
@@ -2330,7 +2331,9 @@
         "body": "No notifications match this filter. Try clearing it."
       },
       "error": {
-        "loadFailed": "Couldn't load notifications. Check your connection and try again."
+        "loadFailed": "Couldn't load notifications. Check your connection and try again.",
+        "markReadFailed": "Couldn't mark as read — restored",
+        "markAllFailed": "Couldn't mark all as read — restored"
       }
     },
     "ca": {

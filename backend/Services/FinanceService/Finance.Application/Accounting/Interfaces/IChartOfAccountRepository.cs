@@ -12,6 +12,12 @@ public interface IChartOfAccountRepository
     Task<ChartOfAccount> AddAsync(ChartOfAccount account, CancellationToken ct = default);
 
     /// <summary>
+    /// Bulk-persists many COA entries in one batched write (used by org bootstrap, which
+    /// seeds a whole chart of accounts at once). Chunks internally to bound statement size.
+    /// </summary>
+    Task AddRangeAsync(IEnumerable<ChartOfAccount> accounts, CancellationToken ct = default);
+
+    /// <summary>
     /// SEC-037: Looks up a single account by (org, account_code) for OCR
     /// posting fallback. Returns null if missing — caller must fail-loud
     /// rather than post to a wrong (cross-org) account.
